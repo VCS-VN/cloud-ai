@@ -1,6 +1,6 @@
 import type { ProjectFileNode } from './types'
 import { buildTree } from './project-service'
-import type { ProjectFileNodeRepository, StorefrontBuilderProjectRepository } from '../../projects/repositories'
+import type { ProjectFileNodeRepository, StorefrontBuilderProjectRepository } from '@/projects/repositories'
 
 export class StorefrontBuilderFileTreeService {
   constructor(

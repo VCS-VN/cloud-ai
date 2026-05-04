@@ -16,13 +16,13 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { EmptyState } from "../../components/common/EmptyState";
-import { ProjectList } from "../../components/projects/ProjectList";
-import type { Project } from "../../features/storefront-builder/types";
-import { UserMenu } from "../../components/auth/UserMenu";
-import { getCurrentUser } from "../../server/functions/auth";
-import { getProjectWorkspace } from "../../server/functions/projects";
-import { useTheme, type AppTheme } from "../../theme";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ProjectList } from "@/components/projects/ProjectList";
+import type { Project } from "@/features/storefront-builder/types";
+import { UserMenu } from "@/components/auth/UserMenu";
+import { getCurrentUser } from "@/server/functions/auth";
+import { getProjectWorkspace } from "@/server/functions/projects";
+import { useTheme, type AppTheme } from "@/theme";
 
 type ProjectFilter = "all" | "recent" | "ready" | "draft" | "failed";
 type ViewMode = "grid" | "list";

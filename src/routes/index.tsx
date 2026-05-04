@@ -2,11 +2,11 @@ import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowRight } from "lucide-react";
-import { LoginModal } from "../components/auth/LoginModal";
-import { UserMenu } from "../components/auth/UserMenu";
-import { HomePromptForm } from "../components/home/HomePromptForm";
-import { createProjectFromPrompt } from "../server/functions/projects";
-import { getCurrentUser } from "../server/functions/auth";
+import { LoginModal } from "@/components/auth/LoginModal";
+import { UserMenu } from "@/components/auth/UserMenu";
+import { HomePromptForm } from "@/components/home/HomePromptForm";
+import { createProjectFromPrompt } from "@/server/functions/projects";
+import { getCurrentUser } from "@/server/functions/auth";
 
 export const Route = createFileRoute("/")({
   loader: () => getCurrentUser(),

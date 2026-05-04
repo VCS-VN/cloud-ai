@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { requireServerUser } from './auth'
-import { getStorefrontBuilderServices } from '../../features/storefront-builder/runtime'
+import { getStorefrontBuilderServices } from '../services/storefront-builder-services'
 
 export const listProjects = createServerFn({ method: 'GET' }).handler(async () => {
   const user = await requireServerUser()

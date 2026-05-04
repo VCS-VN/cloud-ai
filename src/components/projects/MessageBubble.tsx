@@ -1,5 +1,5 @@
 import { CheckCircle2, Clock3 } from 'lucide-react'
-import type { Message } from '../../features/storefront-builder/types'
+import type { Message } from '@/features/storefront-builder/types'
 
 type MessageBubbleProps = {
   message: Message

@@ -1,8 +1,8 @@
 import { createServerFn } from '@tanstack/react-start'
-import { toSafeAuthError } from '../../auth/auth-errors'
+import { toSafeAuthError } from '@/auth/auth-errors'
 
 async function loadAuthService() {
-  const { getAuthService } = await import('../../auth/auth-service')
+  const { getAuthService } = await import('@/auth/auth-service')
   return getAuthService()
 }
 

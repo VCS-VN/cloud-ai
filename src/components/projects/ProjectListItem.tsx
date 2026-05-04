@@ -1,5 +1,5 @@
 import { Clock3, ExternalLink, Heart } from 'lucide-react'
-import type { Project } from '../../features/storefront-builder/types'
+import type { Project } from '@/features/storefront-builder/types'
 
 type ProjectListItemProps = {
   project: Project

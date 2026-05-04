@@ -1,7 +1,7 @@
 import { EmptyState } from '../common/EmptyState'
 import { ErrorState } from '../common/ErrorState'
 import { LoadingState } from '../common/LoadingState'
-import type { Message } from '../../features/storefront-builder/types'
+import type { Message } from '@/features/storefront-builder/types'
 import { MessageBubble } from './MessageBubble'
 
 type ProjectMessagesPanelProps = {

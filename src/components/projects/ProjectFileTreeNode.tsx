@@ -1,5 +1,5 @@
 import { ChevronRight, FileText, Folder, FolderOpen, Image } from 'lucide-react'
-import type { ProjectFileNode } from '../../features/storefront-builder/types'
+import type { ProjectFileNode } from '@/features/storefront-builder/types'
 
 type ProjectFileTreeNodeProps = {
   node: ProjectFileNode

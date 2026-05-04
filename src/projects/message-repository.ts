@@ -1,7 +1,7 @@
 import { asc, and, eq } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
-import { projectMessages } from '../db/schema'
-import type { Message } from '../features/storefront-builder/types'
+import { projectMessages } from '@/db/schema'
+import type { Message } from '@/features/storefront-builder/types'
 import type { ProjectMessageRepository } from './repositories'
 
 type ProjectMessageRow = typeof projectMessages.$inferSelect

@@ -1,5 +1,5 @@
 import type { Message } from './types'
-import type { ProjectMessageRepository, StorefrontBuilderProjectRepository } from '../../projects/repositories'
+import type { ProjectMessageRepository, StorefrontBuilderProjectRepository } from '@/projects/repositories'
 
 function assertMessageContent(content: string) {
   const trimmed = content.trim()

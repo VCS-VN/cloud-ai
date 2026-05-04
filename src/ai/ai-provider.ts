@@ -1,4 +1,4 @@
-import type { BusinessProfile, BrandProfile, GenerationScope, Product, StorefrontProject } from '../storefront/types'
+import type { BusinessProfile, BrandProfile, GenerationScope, Product, StorefrontProject } from '@/storefront/types'
 
 export type ContentSafetyPolicy = { blockUnsupportedClaims: boolean; blockFakeReviews: boolean }
 export type GenerationRequest = {

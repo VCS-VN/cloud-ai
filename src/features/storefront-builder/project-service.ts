@@ -9,7 +9,7 @@ import type {
   ProjectFileNodeRepository,
   ProjectMessageRepository,
   StorefrontBuilderProjectRepository
-} from '../../projects/repositories'
+} from '@/projects/repositories'
 
 function assertPrompt(prompt: string) {
   const trimmed = prompt.trim()

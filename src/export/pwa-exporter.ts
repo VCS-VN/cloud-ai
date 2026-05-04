@@ -1,4 +1,4 @@
-import type { PwaIcon, StorefrontProject } from '../storefront/types'
+import type { PwaIcon, StorefrontProject } from '@/storefront/types'
 
 export type GeneratedPwaFile = {
   fileName: 'manifest.webmanifest' | 'service-worker.js'

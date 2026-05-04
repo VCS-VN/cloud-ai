@@ -1,0 +1,9 @@
+DROP INDEX IF EXISTS "users_email_idx";
+DROP INDEX IF EXISTS "users_firebase_uid_idx";
+DROP TABLE IF EXISTS "project_file_nodes";
+DROP TABLE IF EXISTS "project_messages";
+DROP TABLE IF EXISTS "preview_tokens";
+DROP TABLE IF EXISTS "generation_records";
+DROP TABLE IF EXISTS "project_revisions";
+DROP TABLE IF EXISTS "storefront_projects";
+DROP TABLE IF EXISTS "users";

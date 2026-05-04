@@ -1,4 +1,4 @@
-import type { StorefrontProject, Product, ThemeConfig } from '../storefront/types'
+import type { StorefrontProject, Product, ThemeConfig } from '@/storefront/types'
 
 export type EditOperation =
   | { kind: 'update-section-content'; sectionId: string; field: string; value: unknown }

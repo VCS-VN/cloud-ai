@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getSafeAuthMessage } from '../../src/auth/auth-errors'
+import { getSafeAuthMessage } from '@/auth/auth-errors'
 
 describe('session safety messages', () => {
   it('uses a safe message when session creation fails', () => {

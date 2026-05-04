@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { LogoutResult } from '../../src/auth/types'
+import type { LogoutResult } from '@/auth/types'
 
 describe('LogoutResult', () => {
   it('redirects to home after logout', () => {

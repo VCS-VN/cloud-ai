@@ -1,4 +1,4 @@
-import type { StorefrontProject } from '../storefront/types'
+import type { StorefrontProject } from '@/storefront/types'
 import { resolveSectionComponent } from './section-registry'
 
 export function StorefrontRenderer({ project, draft = false }: { project: StorefrontProject; draft?: boolean }) {

@@ -1,4 +1,4 @@
-import { redactSecrets } from '../security/redaction'
+import { redactSecrets } from '@/security/redaction'
 import type { ProjectRepository } from './repositories'
 export class OperatorService {
   constructor(private readonly repository: ProjectRepository) {}

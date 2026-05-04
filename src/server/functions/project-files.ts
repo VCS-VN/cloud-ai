@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { requireServerUser } from './auth'
-import { getStorefrontBuilderServices } from '../../features/storefront-builder/runtime'
+import { getStorefrontBuilderServices } from '../services/storefront-builder-services'
 
 export const getProjectFileTree = createServerFn({ method: 'GET' })
   .inputValidator((data: { projectId: string }) => data)

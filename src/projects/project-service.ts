@@ -1,6 +1,6 @@
-import { GenerationService, createProjectFromOutput } from '../ai/generation-service'
-import type { GenerationRequest } from '../ai/ai-provider'
-import type { StorefrontProject } from '../storefront/types'
+import { GenerationService, createProjectFromOutput } from '@/ai/generation-service'
+import type { GenerationRequest } from '@/ai/ai-provider'
+import type { StorefrontProject } from '@/storefront/types'
 import type { ProjectRepository } from './repositories'
 
 export class ProjectService {

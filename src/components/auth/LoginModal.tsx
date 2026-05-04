@@ -5,10 +5,10 @@ import { X } from "lucide-react";
 import {
   getSafeAuthMessage,
   mapFirebaseClientError,
-} from "../../auth/auth-errors";
-import { signInWithGoogleAndGetIdToken } from "../../auth/firebase-client";
-import type { LoginErrorCode } from "../../auth/types";
-import { loginWithFirebaseToken } from "../../server/functions/auth";
+} from "@/auth/auth-errors";
+import { signInWithGoogleAndGetIdToken } from "@/auth/firebase-client";
+import type { LoginErrorCode } from "@/auth/types";
+import { loginWithFirebaseToken } from "@/server/functions/auth";
 import { GoogleLoginButton } from "./GoogleLoginButton";
 
 type LoginModalProps = {

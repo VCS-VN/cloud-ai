@@ -1,7 +1,7 @@
 import type { AIProvider, GenerationRequest } from './ai-provider'
 import { parseStructuredOutput } from './output-parser'
-import { validateAIOutput } from '../storefront/validation'
-import type { StorefrontAIOutput, StorefrontProject, ValidationResult } from '../storefront/types'
+import { validateAIOutput } from '@/storefront/validation'
+import type { StorefrontAIOutput, StorefrontProject, ValidationResult } from '@/storefront/types'
 
 export type GenerationServiceResult = { applied: boolean; output?: StorefrontAIOutput; validation: ValidationResult; record: { warnings: string[]; assumptions: string[]; errors: string[] } }
 

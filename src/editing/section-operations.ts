@@ -1,4 +1,4 @@
-import type { StorefrontPage, StorefrontSection } from '../storefront/types'
+import type { StorefrontPage, StorefrontSection } from '@/storefront/types'
 
 export function addSection(page: StorefrontPage, section: StorefrontSection): StorefrontPage { return { ...page, sections: [...page.sections, section] } }
 export function deleteSection(page: StorefrontPage, sectionId: string): StorefrontPage { return { ...page, sections: page.sections.filter((section) => section.id !== sectionId) } }

@@ -1,5 +1,5 @@
 import type { OutputProvider } from './output-provider'
-import { PreviewService } from '../projects/preview-service'
+import { PreviewService } from '@/projects/preview-service'
 
 export class PreviewUrlProvider implements OutputProvider {
   constructor(private readonly previewService: PreviewService) {}

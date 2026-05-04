@@ -1,7 +1,7 @@
 import { asc, and, eq } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
-import { projectFileNodes } from '../db/schema'
-import type { ProjectFileNode } from '../features/storefront-builder/types'
+import { projectFileNodes } from '@/db/schema'
+import type { ProjectFileNode } from '@/features/storefront-builder/types'
 import type { ProjectFileNodeRepository } from './repositories'
 
 type ProjectFileNodeRow = typeof projectFileNodes.$inferSelect

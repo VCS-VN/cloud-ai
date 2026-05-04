@@ -1,7 +1,7 @@
 import { EmptyState } from '../common/EmptyState'
 import { ErrorState } from '../common/ErrorState'
 import { LoadingState } from '../common/LoadingState'
-import type { Project } from '../../features/storefront-builder/types'
+import type { Project } from '@/features/storefront-builder/types'
 import { ProjectListItem } from './ProjectListItem'
 
 type ProjectListProps = {

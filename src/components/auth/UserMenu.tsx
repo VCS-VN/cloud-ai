@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { LogOut, Loader2, UserRound } from 'lucide-react'
-import { signOutFirebaseClient } from '../../auth/firebase-client'
-import type { AuthUserSummary } from '../../auth/types'
-import { logout } from '../../server/functions/auth'
+import { signOutFirebaseClient } from '@/auth/firebase-client'
+import type { AuthUserSummary } from '@/auth/types'
+import { logout } from '@/server/functions/auth'
 
 type UserMenuProps = {
   user?: AuthUserSummary | null

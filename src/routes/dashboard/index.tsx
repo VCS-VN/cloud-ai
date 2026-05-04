@@ -1,6 +1,6 @@
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
-import { UserMenu } from '../../components/auth/UserMenu'
-import { getCurrentUser } from '../../server/functions/auth'
+import { UserMenu } from '@/components/auth/UserMenu'
+import { getCurrentUser } from '@/server/functions/auth'
 
 export const Route = createFileRoute('/dashboard/')({
   beforeLoad: async () => {

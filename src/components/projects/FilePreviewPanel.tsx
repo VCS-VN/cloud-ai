@@ -1,5 +1,5 @@
 import { EmptyState } from '../common/EmptyState'
-import type { ProjectFileNode } from '../../features/storefront-builder/types'
+import type { ProjectFileNode } from '@/features/storefront-builder/types'
 
 type FilePreviewPanelProps = {
   node?: ProjectFileNode

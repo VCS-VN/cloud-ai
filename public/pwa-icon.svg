@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Cloud AI</title>
+  <desc id="desc">Cloud AI app icon</desc>
+  <defs>
+    <linearGradient id="bg" x1="70" y1="34" x2="442" y2="484" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3d6ff0"/>
+      <stop offset="0.52" stop-color="#d984ef"/>
+      <stop offset="1" stop-color="#ff2076"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(254 162) rotate(90) scale(220)">
+      <stop stop-color="#ffffff" stop-opacity="0.36"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="#101216"/>
+  <rect x="28" y="28" width="456" height="456" rx="96" fill="url(#bg)"/>
+  <rect x="28" y="28" width="456" height="456" rx="96" fill="url(#glow)"/>
+  <path fill="#fff7ed" d="M165 318c-30 0-55-24-55-54 0-27 20-50 46-54 12-40 49-68 92-68 48 0 88 35 95 81 34 5 60 34 60 69 0 39-31 70-70 70H165c-24 0-44-20-44-44 0-23 18-42 41-44 5 0 9 3 10 8 0 5-3 9-8 10-14 1-25 12-25 26 0 15 12 27 26 27h168c29 0 52-24 52-53 0-28-22-52-50-53-5 0-9-4-9-9-2-39-36-70-78-70-36 0-68 25-76 60-1 4-5 7-9 7-20 1-36 17-36 37 0 21 17 38 38 38h34c5 0 9 4 9 9s-4 9-9 9h-34Z"/>
+  <circle cx="323" cy="319" r="18" fill="#fff7ed"/>
+</svg>

@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
-import { getDb } from '../db/client'
-import { users } from '../db/schema'
+import { getDb } from '@/db/client'
+import { users } from '@/db/schema'
 import { AuthError } from './auth-errors'
 import type { AuthUser, FirebaseUserProfile } from './types'
 

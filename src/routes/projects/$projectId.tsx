@@ -14,20 +14,20 @@ import {
   PanelLeftOpen,
   RefreshCw,
 } from "lucide-react";
-import { EmptyState } from "../../components/common/EmptyState";
-import { FilePreviewPanel } from "../../components/projects/FilePreviewPanel";
-import { MessageComposer } from "../../components/projects/MessageComposer";
-import { ProjectFileExplorer } from "../../components/projects/ProjectFileExplorer";
-import { ProjectMessagesPanel } from "../../components/projects/ProjectMessagesPanel";
+import { EmptyState } from "@/components/common/EmptyState";
+import { FilePreviewPanel } from "@/components/projects/FilePreviewPanel";
+import { MessageComposer } from "@/components/projects/MessageComposer";
+import { ProjectFileExplorer } from "@/components/projects/ProjectFileExplorer";
+import { ProjectMessagesPanel } from "@/components/projects/ProjectMessagesPanel";
 import type {
   Message,
   Project,
   ProjectFileNode,
-} from "../../features/storefront-builder/types";
-import { sendProjectMessage } from "../../server/functions/project-messages";
-import { UserMenu } from "../../components/auth/UserMenu";
-import { getCurrentUser } from "../../server/functions/auth";
-import { getProjectWorkspace } from "../../server/functions/projects";
+} from "@/features/storefront-builder/types";
+import { sendProjectMessage } from "@/server/functions/project-messages";
+import { UserMenu } from "@/components/auth/UserMenu";
+import { getCurrentUser } from "@/server/functions/auth";
+import { getProjectWorkspace } from "@/server/functions/projects";
 
 type DetailMode = "preview" | "code";
 
@@ -346,7 +346,7 @@ function PreviewToolbar({
   onToggleChat: () => void;
   onModeChange: (mode: DetailMode) => void;
   onPathChange: (path: string) => void;
-  user?: import("../../auth/types").AuthUserSummary;
+  user?: import("@/auth/types").AuthUserSummary;
 }) {
   return (
     <header className="flex min-h-14 items-center gap-sm border-b border-[var(--app-border)] px-sm py-xs">

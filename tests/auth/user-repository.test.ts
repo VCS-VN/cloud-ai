@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { AuthError } from '../../src/auth/auth-errors'
-import { toAuthUserSummary } from '../../src/auth/user-repository'
-import type { AuthUser } from '../../src/auth/types'
+import { AuthError } from '@/auth/auth-errors'
+import { toAuthUserSummary } from '@/auth/user-repository'
+import type { AuthUser } from '@/auth/types'
 
 const baseUser: AuthUser = {
   id: 'user_1',

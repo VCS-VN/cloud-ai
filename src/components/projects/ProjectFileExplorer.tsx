@@ -2,7 +2,7 @@ import { Search } from 'lucide-react'
 import { EmptyState } from '../common/EmptyState'
 import { ErrorState } from '../common/ErrorState'
 import { LoadingState } from '../common/LoadingState'
-import type { ProjectFileNode } from '../../features/storefront-builder/types'
+import type { ProjectFileNode } from '@/features/storefront-builder/types'
 import { ProjectFileTreeNode } from './ProjectFileTreeNode'
 
 type ProjectFileExplorerProps = {

@@ -8,7 +8,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "build": "vite build",
-    "dev": "tsr generate && vite dev"
+    "dev": "tsr generate && vite dev",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:rollback": "tsx src/db/migrate-down.ts"
   },
   "dependencies": {
     "@tanstack/react-router": "^1.169.1",
@@ -33,7 +36,10 @@
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "drizzle-kit": "^0.31.10",
     "jsdom": "latest",
-    "tailwindcss": "latest"
+    "tailwindcss": "latest",
+    "tsx": "^4.21.0",
+    "vite-plugin-pwa": "^1.2.0"
   }
 }

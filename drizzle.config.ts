@@ -1,3 +1,5 @@
+import type { Config } from 'drizzle-kit'
+
 export default {
   schema: './src/db/schema.ts',
   out: './src/db/migrations',
@@ -5,4 +7,4 @@ export default {
   dbCredentials: {
     url: process.env.DATABASE_URL ?? 'postgres://user:password@localhost:5432/cloud_ai'
   }
-}
+} satisfies Config
