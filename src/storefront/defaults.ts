@@ -1,4 +1,4 @@
-import type { Product, ThemeConfig } from './types'
+import type { Product, PwaConfig, StorefrontProject, ThemeConfig } from './types'
 
 export const placeholderImage = 'https://placehold.co/800x600?text=Product+Image'
 
@@ -34,5 +34,26 @@ export function normalizeProduct(product: Partial<Product> & { id?: string; name
     missingFields,
     source: product.source || 'ai',
     editedFields: product.editedFields || []
+  }
+}
+
+
+export function deriveDefaultPwaConfig(project: Pick<StorefrontProject, 'name' | 'tagline' | 'businessProfile' | 'theme'>): PwaConfig {
+  const appName = project.businessProfile.businessName || project.name
+  return {
+    enabled: true,
+    name: appName,
+    shortName: appName.slice(0, 24) || 'Storefront',
+    description: project.tagline || project.businessProfile.shortDescription,
+    themeColor: project.theme.colors.primary ?? '#000000',
+    backgroundColor: project.theme.colors.canvas ?? '#ffffff',
+    display: 'standalone',
+    startUrl: '/',
+    scope: '/',
+    offlineFallbackEnabled: false,
+    icons: [
+      { src: '/assets/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/assets/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }
+    ]
   }
 }

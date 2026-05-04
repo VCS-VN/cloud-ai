@@ -111,6 +111,32 @@ export const generationRecordSchema = z.object({
   createdAt: z.string()
 })
 
+export const pwaIconSchema = z.object({
+  src: z.string().min(1),
+  sizes: z.string().min(1),
+  type: z.string().min(1),
+  purpose: z.enum(['any', 'maskable', 'monochrome']).optional()
+})
+
+export const pwaConfigSchema = z.object({
+  enabled: z.boolean(),
+  name: z.string().min(1),
+  shortName: z.string().min(1),
+  description: z.string().optional(),
+  themeColor: z.string().min(1),
+  backgroundColor: z.string().min(1),
+  display: z.enum(['standalone', 'fullscreen', 'minimal-ui', 'browser']),
+  startUrl: z.string().min(1),
+  scope: z.string().min(1),
+  icons: z.array(pwaIconSchema),
+  offlineFallbackEnabled: z.boolean()
+}).superRefine((config, context) => {
+  if (!config.enabled) return
+  if (config.icons.length === 0) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['icons'], message: 'PWA icons are required when PWA is enabled' })
+  }
+})
+
 export const exportPublishStateSchema = z.object({
   method: z.enum(['preview-url', 'static-export', 'deployable-build', 'hosted-publish', 'none']).default('none'),
   status: z.enum(['not-started', 'draft-preview', 'success', 'failed']).default('not-started'),
@@ -134,6 +160,7 @@ export const storefrontProjectSchema = z.object({
   theme: themeConfigSchema,
   generationHistory: z.array(generationRecordSchema).default([]),
   exportPublishState: exportPublishStateSchema,
+  pwa: pwaConfigSchema,
   currentRevisionId: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string()

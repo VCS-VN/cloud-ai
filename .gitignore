@@ -4,3 +4,12 @@ coverage/
 .env
 .env.*
 !.env.example
+build/
+*.log
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/
+

@@ -1,2 +1,0 @@
-export const invalidAIOutput = { siteTitle: '', pages: [] }
-export const unsafeAIOutput = { siteTitle: 'Bad', tagline: 'Bad', products: [], pages: [], theme: {}, seo: { title: 'Bad', metaDescription: 'Bad' }, businessProfile: { businessName: 'Bad', industry: 'Bad', shortDescription: 'doctor approved guaranteed cure', targetAudience: 'All', brandVoice: 'Bold', missingFields: [] }, brandProfile: { styleKeywords: [], preferredColors: [], assumptions: [] } }

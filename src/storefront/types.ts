@@ -100,6 +100,27 @@ export type GenerationRecord = {
   createdAt: string
 }
 
+export type PwaIcon = {
+  src: string
+  sizes: string
+  type: string
+  purpose?: 'any' | 'maskable' | 'monochrome'
+}
+
+export type PwaConfig = {
+  enabled: boolean
+  name: string
+  shortName: string
+  description?: string
+  themeColor: string
+  backgroundColor: string
+  display: 'standalone' | 'fullscreen' | 'minimal-ui' | 'browser'
+  startUrl: string
+  scope: string
+  icons: PwaIcon[]
+  offlineFallbackEnabled: boolean
+}
+
 export type ExportPublishState = {
   method: 'preview-url' | 'static-export' | 'deployable-build' | 'hosted-publish' | 'none'
   status: 'not-started' | 'draft-preview' | 'success' | 'failed'
@@ -123,6 +144,7 @@ export type StorefrontProject = {
   theme: ThemeConfig
   generationHistory: GenerationRecord[]
   exportPublishState: ExportPublishState
+  pwa: PwaConfig
   currentRevisionId?: string
   createdAt: string
   updatedAt: string

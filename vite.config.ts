@@ -1,8 +1,13 @@
+import { tanstackStart } from '@tanstack/react-start/plugin/vite'
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [tanstackStart(), tailwindcss(), react()],
+  resolve: {
+    tsconfigPaths: true
+  },
   test: {
     environment: 'jsdom',
     globals: true,

@@ -7,20 +7,24 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
-    "build": "tsc --noEmit"
+    "build": "vite build",
+    "dev": "vite dev"
   },
   "dependencies": {
+    "@tanstack/react-router": "^1.169.1",
+    "@tanstack/react-start": "^1.167.62",
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
-    "vitest": "latest",
-    "react": "latest",
-    "react-dom": "latest",
     "drizzle-orm": "latest",
     "postgres": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest",
     "zod": "latest"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
