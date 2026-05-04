@@ -12,7 +12,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <article className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`builder-truncate-safe max-w-[min(380px,92%)] rounded-md border px-sm py-xs ${
+        className={`builder-truncate-safe max-w-[min(380px,92%)] rounded-sm border px-sm py-xs ${
           isUser
             ? 'border-[var(--app-accent)] bg-[color-mix(in_srgb,var(--app-accent)_18%,var(--app-panel))] text-[var(--app-text)]'
             : 'border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-text)]'
@@ -25,9 +25,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           </span>
           <span>{message.status}</span>
         </div>
-        <p className="m-0 whitespace-pre-wrap text-[14px] leading-5 tracking-[-0.01em]">{message.content}</p>
+        <p className="m-0 whitespace-pre-wrap text-[12px] leading-4 tracking-[-0.01em]">{message.content}</p>
         {!isUser ? (
-          <div className="mt-sm rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] p-xs text-[12px] leading-4 text-[var(--app-muted)]">
+          <div className="mt-sm rounded-sm border border-[var(--app-border)] bg-[var(--app-panel)] p-xs text-[12px] leading-4 text-[var(--app-muted)]">
             Result ready · Use Preview or Code to inspect the generated output.
           </div>
         ) : null}

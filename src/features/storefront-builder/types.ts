@@ -28,6 +28,7 @@ export type PwaConfig = {
 
 export type Project = {
   id: string
+  userId?: string
   name: string
   description?: string
   initialPrompt: string
@@ -39,6 +40,7 @@ export type Project = {
 
 export type Message = {
   id: string
+  userId?: string
   projectId: string
   role: MessageRole
   content: string
@@ -48,6 +50,7 @@ export type Message = {
 
 export type ProjectFileNode = {
   id: string
+  userId?: string
   projectId: string
   name: string
   type: ProjectFileNodeType

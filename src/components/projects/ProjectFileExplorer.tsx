@@ -28,16 +28,16 @@ export function ProjectFileExplorer({ fileTree, selectedNodeId, loading = false,
   const isCode = variant === 'code'
 
   return (
-    <section className={`min-w-0 rounded-md border p-sm ${isCode ? 'border-[var(--app-border)] bg-[var(--app-panel)] text-[var(--app-text)]' : 'border-hairline bg-canvas'}`} aria-label="Project file explorer">
+    <section className={`min-w-0 rounded-sm border p-sm ${isCode ? 'border-[var(--app-border)] bg-[var(--app-panel)] text-[var(--app-text)]' : 'border-hairline bg-canvas'}`} aria-label="Project file explorer">
       <div className="mb-sm flex items-center justify-between gap-sm px-xs">
-        <h2 className="m-0 text-[16px] font-[540] leading-tight tracking-[-0.02em]">{isCode ? 'Files' : 'Structure'}</h2>
+        <h2 className="m-0 text-[14px] font-[520] leading-tight tracking-[-0.015em]">{isCode ? 'Files' : 'Structure'}</h2>
         {!isCode ? <span className="rounded-pill bg-surface-soft px-sm py-xxs font-mono text-caption uppercase tracking-[0.12em]">Virtual</span> : null}
       </div>
       {isCode ? (
-        <label className="mb-sm flex h-9 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm text-[13px] text-[var(--app-muted)]">
+        <label className="mb-sm flex h-9 items-center gap-xs rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] px-sm text-[12px] text-[var(--app-muted)]">
           <Search aria-hidden="true" size={15} />
           <span className="sr-only">Search code</span>
-          <input className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[var(--app-text)] outline-none placeholder:text-[var(--app-subtle)]" value={query} placeholder="Search code" onChange={(event) => onQueryChange?.(event.target.value)} />
+          <input className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] text-[var(--app-text)] outline-none placeholder:text-[var(--app-subtle)]" value={query} placeholder="Search code" onChange={(event) => onQueryChange?.(event.target.value)} />
         </label>
       ) : null}
       <ul className="m-0 flex flex-col gap-xxs p-0">

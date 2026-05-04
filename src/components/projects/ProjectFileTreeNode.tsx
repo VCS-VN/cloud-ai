@@ -37,14 +37,14 @@ export function ProjectFileTreeNode({ node, selectedNodeId, expandedFolderIds, d
     <li className="list-none">
       <button
         type="button"
-        className={`flex w-full min-w-0 items-center gap-xs rounded-md px-sm py-xs text-left text-[14px] leading-5 transition ${
+        className={`flex w-full min-w-0 items-center gap-xs rounded-sm px-sm py-xs text-left text-[12px] leading-4 transition-all duration-200 ${
           selected && !isFolder ? 'bg-[color-mix(in_srgb,var(--app-accent)_18%,transparent)] text-[var(--app-text)]' : isCode ? 'text-[var(--app-muted)] hover:bg-[var(--app-control)] hover:text-[var(--app-text)]' : 'text-ink hover:bg-surface-soft'
         }`}
         style={{ paddingLeft: `calc(var(--space-sm) + ${depth} * var(--space-md))` }}
         aria-pressed={selected}
         onClick={handleClick}
       >
-        {isFolder && isCode ? <ChevronRight className={`shrink-0 transition ${expanded ? 'rotate-90' : ''}`} aria-hidden="true" size={14} /> : null}
+        {isFolder && isCode ? <ChevronRight className={`shrink-0 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} aria-hidden="true" size={14} /> : null}
         <Icon aria-hidden="true" className="shrink-0" size={15} />
         <span className="min-w-0 flex-1 truncate">{node.name}</span>
       </button>

@@ -11,6 +11,7 @@ type ProjectFileNodeDatabase = PostgresJsDatabase<Record<string, never>>
 function toFileNode(row: ProjectFileNodeRow): ProjectFileNode {
   return {
     id: row.id,
+    userId: row.userId ?? undefined,
     projectId: row.projectId,
     name: row.name,
     type: row.type as ProjectFileNode['type'],
@@ -27,11 +28,12 @@ function toFileNode(row: ProjectFileNodeRow): ProjectFileNode {
 export class PgProjectFileNodeRepository implements ProjectFileNodeRepository {
   constructor(private readonly db: ProjectFileNodeDatabase) {}
 
-  async saveFileNode(node: ProjectFileNode): Promise<ProjectFileNode> {
+  async saveFileNode(node: ProjectFileNode, userId?: string): Promise<ProjectFileNode> {
     const [row] = await this.db
       .insert(projectFileNodes)
       .values({
         id: node.id,
+        userId: userId ?? node.userId,
         projectId: node.projectId,
         name: node.name,
         type: node.type,
@@ -48,22 +50,17 @@ export class PgProjectFileNodeRepository implements ProjectFileNodeRepository {
     return toFileNode(row)
   }
 
-  async getFileNode(projectId: string, nodeId: string): Promise<ProjectFileNode | undefined> {
-    const [row] = await this.db
-      .select()
-      .from(projectFileNodes)
-      .where(and(eq(projectFileNodes.projectId, projectId), eq(projectFileNodes.id, nodeId)))
-
+  async getFileNode(projectId: string, nodeId: string, userId?: string): Promise<ProjectFileNode | undefined> {
+    const filter = userId
+      ? and(eq(projectFileNodes.projectId, projectId), eq(projectFileNodes.id, nodeId), eq(projectFileNodes.userId, userId))
+      : and(eq(projectFileNodes.projectId, projectId), eq(projectFileNodes.id, nodeId))
+    const [row] = await this.db.select().from(projectFileNodes).where(filter)
     return row ? toFileNode(row) : undefined
   }
 
-  async listFileNodes(projectId: string): Promise<ProjectFileNode[]> {
-    const rows = await this.db
-      .select()
-      .from(projectFileNodes)
-      .where(eq(projectFileNodes.projectId, projectId))
-      .orderBy(asc(projectFileNodes.path))
-
+  async listFileNodes(projectId: string, userId?: string): Promise<ProjectFileNode[]> {
+    const filter = userId ? and(eq(projectFileNodes.projectId, projectId), eq(projectFileNodes.userId, userId)) : eq(projectFileNodes.projectId, projectId)
+    const rows = await this.db.select().from(projectFileNodes).where(filter).orderBy(asc(projectFileNodes.path))
     return rows.map(toFileNode)
   }
 }

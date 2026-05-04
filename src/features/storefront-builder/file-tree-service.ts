@@ -8,17 +8,17 @@ export class StorefrontBuilderFileTreeService {
     private readonly fileNodeRepository: ProjectFileNodeRepository
   ) {}
 
-  async getProjectFileTree(projectId: string): Promise<ProjectFileNode[]> {
-    const project = await this.projectRepository.getBuilderProject(projectId)
+  async getProjectFileTree(projectId: string, userId?: string): Promise<ProjectFileNode[]> {
+    const project = await this.projectRepository.getBuilderProject(projectId, userId)
     if (!project) throw new Error('Không tìm thấy project.')
 
-    const nodes = await this.fileNodeRepository.listFileNodes(projectId)
+    const nodes = await this.fileNodeRepository.listFileNodes(projectId, userId)
     return buildTree(nodes)
   }
 
-  async getProjectFileNode(projectId: string, nodeId: string): Promise<ProjectFileNode | undefined> {
-    const project = await this.projectRepository.getBuilderProject(projectId)
+  async getProjectFileNode(projectId: string, nodeId: string, userId?: string): Promise<ProjectFileNode | undefined> {
+    const project = await this.projectRepository.getBuilderProject(projectId, userId)
     if (!project) throw new Error('Không tìm thấy project.')
-    return this.fileNodeRepository.getFileNode(projectId, nodeId)
+    return this.fileNodeRepository.getFileNode(projectId, nodeId, userId)
   }
 }

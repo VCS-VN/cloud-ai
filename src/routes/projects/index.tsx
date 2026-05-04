@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
   Clock3,
@@ -19,6 +19,8 @@ import {
 import { EmptyState } from "../../components/common/EmptyState";
 import { ProjectList } from "../../components/projects/ProjectList";
 import type { Project } from "../../features/storefront-builder/types";
+import { UserMenu } from "../../components/auth/UserMenu";
+import { getCurrentUser } from "../../server/functions/auth";
 import { getProjectWorkspace } from "../../server/functions/projects";
 import { useTheme, type AppTheme } from "../../theme";
 
@@ -40,6 +42,11 @@ const projectFilters: Array<{
 ];
 
 export const Route = createFileRoute("/projects/")({
+  beforeLoad: async () => {
+    const { user } = await getCurrentUser()
+    if (!user) throw redirect({ to: "/" })
+    return { user }
+  },
   loader: () => getProjectWorkspace({ data: {} }),
   component: ProjectsPage,
 });
@@ -91,10 +98,10 @@ function ProjectsPage() {
       <div
         className={`grid min-h-[calc(100vh-16px)] gap-sm transition-[grid-template-columns] duration-200 ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[290px_minmax(0,1fr)]"}`}
       >
-        <aside className="flex min-w-0 flex-col rounded-md border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-sm text-[var(--app-text)]">
+        <aside className="flex min-w-0 flex-col rounded-sm border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-sm text-[var(--app-text)]">
           <div className="mb-md flex items-center justify-between gap-sm">
             <button
-              className="flex min-w-0 items-center gap-xs border-0 bg-transparent p-0 text-left text-[14px] font-[540] text-[var(--app-text)]"
+              className="flex min-w-0 items-center gap-xs border-0 bg-transparent p-0 text-left text-[12px] font-[520] text-[var(--app-text)]"
               type="button"
               onClick={goHome}
               aria-label="Home"
@@ -106,7 +113,7 @@ function ProjectsPage() {
               {!collapsed ? <span className="truncate">Cloud AI</span> : null}
             </button>
             <button
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
               type="button"
               onClick={toggleSidebar}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -140,6 +147,9 @@ function ProjectsPage() {
               collapsed={collapsed}
               onClick={() => setSettingsOpen(true)}
             />
+            <div className={collapsed ? "mt-xs flex justify-center" : "mt-xs"}>
+              <UserMenu compact={collapsed} onProfile={() => setSettingsOpen(true)} />
+            </div>
             <SidebarButton
               icon={Home}
               label="Home"
@@ -167,8 +177,8 @@ function ProjectsPage() {
           </SidebarSection>
 
           {!collapsed ? (
-            <div className="mt-auto rounded-md border border-[var(--app-border)] bg-[var(--app-control)] p-sm">
-              <p className="m-0 text-[13px] font-[540]">Create faster</p>
+            <div className="mt-auto rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] p-sm">
+              <p className="m-0 text-[12px] font-[520]">Create faster</p>
               <p className="m-0 mt-xxs text-[12px] leading-4 text-[var(--app-muted)]">
                 Use prompts to turn ideas into editable website projects.
               </p>
@@ -176,13 +186,13 @@ function ProjectsPage() {
           ) : null}
         </aside>
 
-        <section className="min-w-0 rounded-md bg-[var(--app-surface)] p-sm sm:p-md">
+        <section className="min-w-0 rounded-sm bg-[var(--app-surface)] p-sm sm:p-md">
           <header className="mb-md flex flex-col gap-sm xl:flex-row xl:items-start xl:justify-between">
             <div>
-              <h1 className="m-0 text-[26px] font-[620] leading-tight tracking-[-0.03em]">
+              <h1 className="m-0 text-[20px] font-[580] leading-tight tracking-[-0.015em]">
                 Projects
               </h1>
-              <p className="m-0 mt-xxs text-[13px] leading-5 text-[var(--app-muted)]">
+              <p className="m-0 mt-xxs text-[12px] leading-4 text-[var(--app-muted)]">
                 Manage your AI website projects.
               </p>
             </div>
@@ -206,7 +216,7 @@ function ProjectsPage() {
               />
               <input
                 id="project-search"
-                className="h-9 w-full rounded-md border border-[var(--app-border)] bg-[var(--app-control)] py-xs pl-9 pr-sm text-[14px] text-[var(--app-text)] outline-none placeholder:text-[var(--app-subtle)] focus:border-[var(--app-border-strong)]"
+                className="h-9 w-full rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] py-xs pl-9 pr-sm text-[12px] text-[var(--app-text)] outline-none placeholder:text-[var(--app-subtle)] focus:border-[var(--app-border-strong)]"
                 value={projectSearch}
                 placeholder="Search projects..."
                 onChange={(event) => setProjectSearch(event.target.value)}
@@ -214,13 +224,13 @@ function ProjectsPage() {
             </label>
             <div className="flex items-center gap-xs">
               <button
-                className="inline-flex h-9 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm text-[13px] text-[var(--app-muted)]"
+                className="inline-flex h-9 items-center gap-xs rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] px-sm text-[12px] text-[var(--app-muted)]"
                 type="button"
               >
                 Last edited
               </button>
               <button
-                className={`inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--app-border)] ${viewMode === "grid" ? "bg-[var(--app-text)] text-[var(--app-bg)]" : "bg-transparent text-[var(--app-muted)]"}`}
+                className={`inline-flex h-9 w-9 items-center justify-center rounded-sm border border-[var(--app-border)] ${viewMode === "grid" ? "bg-[var(--app-text)] text-[var(--app-bg)]" : "bg-transparent text-[var(--app-muted)]"}`}
                 type="button"
                 onClick={() => setViewMode("grid")}
                 aria-label="Grid view"
@@ -228,7 +238,7 @@ function ProjectsPage() {
                 <Grid2X2 aria-hidden="true" size={16} />
               </button>
               <button
-                className={`inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--app-border)] ${viewMode === "list" ? "bg-[var(--app-text)] text-[var(--app-bg)]" : "bg-transparent text-[var(--app-muted)]"}`}
+                className={`inline-flex h-9 w-9 items-center justify-center rounded-sm border border-[var(--app-border)] ${viewMode === "list" ? "bg-[var(--app-text)] text-[var(--app-bg)]" : "bg-transparent text-[var(--app-muted)]"}`}
                 type="button"
                 onClick={() => setViewMode("list")}
                 aria-label="List view"
@@ -238,7 +248,7 @@ function ProjectsPage() {
             </div>
           </div>
 
-          <p className="mb-sm mt-0 text-[13px] font-[540] text-[var(--app-muted)]">
+          <p className="mb-sm mt-0 text-[12px] font-[520] text-[var(--app-muted)]">
             {projectFilter === "recent" ? "Recently edited" : "Projects"} ·{" "}
             {filteredProjects.length}
           </p>
@@ -277,7 +287,7 @@ function SidebarSection({
   return (
     <section className={`mb-md ${className}`} aria-label={title}>
       {!collapsed ? (
-        <p className="mb-xs mt-0 px-xs text-[13px] font-[540] text-[var(--app-subtle)]">
+        <p className="mb-xs mt-0 px-xs text-[12px] font-[520] text-[var(--app-subtle)]">
           {title}
         </p>
       ) : null}
@@ -303,7 +313,7 @@ function SidebarButton({
 }) {
   return (
     <button
-      className={`flex h-9 w-full min-w-0 items-center gap-sm rounded-md border-0 px-sm text-left text-[14px] transition ${selected ? "bg-[color-mix(in_srgb,var(--app-accent)_22%,transparent)] text-[var(--app-text)]" : "bg-transparent text-[var(--app-muted)] hover:bg-[var(--app-control)] hover:text-[var(--app-text)]"} ${collapsed ? "justify-center px-0" : ""}`}
+      className={`flex h-9 w-full min-w-0 items-center gap-sm rounded-sm border-0 px-sm text-left text-[12px] transition ${selected ? "bg-[color-mix(in_srgb,var(--app-accent)_22%,transparent)] text-[var(--app-text)]" : "bg-transparent text-[var(--app-muted)] hover:bg-[var(--app-control)] hover:text-[var(--app-text)]"} ${collapsed ? "justify-center px-0" : ""}`}
       type="button"
       title={collapsed ? label : undefined}
       aria-label={label}
@@ -314,7 +324,7 @@ function SidebarButton({
         <span className="min-w-0 flex-1 truncate">{label}</span>
       ) : null}
       {!collapsed && typeof count === "number" ? (
-        <span className="font-mono text-[11px] text-[var(--app-subtle)]">
+        <span className="font-mono text-[12px] text-[var(--app-subtle)]">
           {count}
         </span>
       ) : null}
@@ -380,7 +390,7 @@ function ProfileSettingsModal({
       onMouseDown={onClose}
     >
       <section
-        className="w-full max-w-sm rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] p-md text-[var(--app-text)] shadow-panel"
+        className="w-full max-w-sm rounded-sm border border-[var(--app-border)] bg-[var(--app-panel)] p-md text-[var(--app-text)] shadow-panel"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="mb-md flex items-start justify-between gap-md">
@@ -388,13 +398,13 @@ function ProfileSettingsModal({
             <p className="builder-kicker text-[var(--app-subtle)]">Profile</p>
             <h2
               id="profile-settings-title"
-              className="m-0 mt-xs text-[20px] font-[620] leading-tight tracking-[-0.02em]"
+              className="m-0 mt-xs text-[18px] font-[580] leading-tight tracking-[-0.015em]"
             >
               Settings
             </h2>
           </div>
           <button
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)]"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)]"
             type="button"
             onClick={onClose}
             aria-label="Close settings"
@@ -402,16 +412,16 @@ function ProfileSettingsModal({
             <X aria-hidden="true" size={16} />
           </button>
         </div>
-        <div className="rounded-md border border-[var(--app-border)] bg-[var(--app-control)] p-sm">
-          <p className="m-0 text-[14px] font-[540]">Theme</p>
+        <div className="rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] p-sm">
+          <p className="m-0 text-[12px] font-[520]">Theme</p>
           <p className="m-0 mt-xxs text-[12px] leading-4 text-[var(--app-muted)]">
             Apply theme to the entire builder UI.
           </p>
-          <div className="mt-sm grid grid-cols-2 gap-xs rounded-md bg-[var(--app-panel-strong)] p-xxs">
+          <div className="mt-sm grid grid-cols-2 gap-xs rounded-sm bg-[var(--app-panel-strong)] p-xxs">
             {(["dark", "light"] as const).map((nextTheme) => (
               <button
                 key={nextTheme}
-                className={`h-8 rounded-md border-0 text-[13px] capitalize ${theme === nextTheme ? "bg-[var(--app-accent)] text-white" : "bg-transparent text-[var(--app-muted)]"}`}
+                className={`h-8 rounded-sm border-0 text-[12px] capitalize ${theme === nextTheme ? "bg-[var(--app-accent)] text-white" : "bg-transparent text-[var(--app-muted)]"}`}
                 type="button"
                 onClick={() => onThemeChange(nextTheme)}
               >

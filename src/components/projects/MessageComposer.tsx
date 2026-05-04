@@ -20,17 +20,17 @@ export function MessageComposer({ value, sending = false, error, disabled = fals
   }
 
   return (
-    <form className="rounded-lg border border-[var(--app-border)] bg-[var(--app-control)] p-sm" onSubmit={handleSubmit}>
+    <form className="rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] p-sm" onSubmit={handleSubmit}>
       <label className="sr-only" htmlFor="project-message">Nhập tin nhắn</label>
       <textarea
         id="project-message"
-        className="min-h-20 w-full resize-none border-0 bg-transparent p-0 text-[14px] leading-5 text-[var(--app-text)] outline-none placeholder:text-[var(--app-subtle)] disabled:cursor-not-allowed disabled:opacity-60"
+        className="min-h-20 w-full resize-none border-0 bg-transparent p-0 text-[12px] leading-4 text-[var(--app-text)] outline-none placeholder:text-[var(--app-subtle)] disabled:cursor-not-allowed disabled:opacity-60"
         value={value}
         placeholder="Ask Cloud AI..."
         disabled={sending || disabled}
         onChange={(event) => onChange(event.target.value)}
       />
-      {error ? <p className="builder-truncate-safe mt-xs rounded-md bg-coral p-sm text-[13px] leading-5 text-ink" role="alert">{error}</p> : null}
+      {error ? <p className="builder-truncate-safe mt-xs rounded-sm bg-coral p-sm text-[12px] leading-4 text-ink" role="alert">{error}</p> : null}
       <div className="mt-sm flex items-center justify-between gap-sm">
         <div className="flex items-center gap-xs">
           <button className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-panel)] text-[var(--app-muted)]" type="button" aria-label="Add context">

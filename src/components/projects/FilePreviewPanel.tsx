@@ -14,10 +14,10 @@ export function FilePreviewPanel({ node }: FilePreviewPanelProps) {
   const canPreviewText = node.type === 'file' && node.content && node.contentType && safeTextTypes.has(node.contentType)
 
   return (
-    <section className="builder-truncate-safe min-w-0 rounded-md border border-hairline bg-surface-soft p-md text-ink" aria-label="File metadata">
+    <section className="builder-truncate-safe min-w-0 rounded-sm border border-hairline bg-surface-soft p-md text-ink" aria-label="File metadata">
       <p className="builder-kicker text-ink/55">{node.type === 'folder' ? 'Folder metadata' : 'File metadata'}</p>
-      <h2 className="m-0 mt-xs text-[20px] font-[540] leading-tight tracking-[-0.02em]">{node.name}</h2>
-      <dl className="mt-md grid gap-sm text-[14px] leading-5">
+      <h2 className="m-0 mt-xs text-[16px] font-[520] leading-tight tracking-[-0.015em]">{node.name}</h2>
+      <dl className="mt-md grid gap-sm text-[12px] leading-4">
         <div>
           <dt className="font-mono text-caption uppercase tracking-[0.12em] text-ink/48">Path</dt>
           <dd className="m-0 break-all">{node.path}</dd>
@@ -45,11 +45,11 @@ export function FilePreviewPanel({ node }: FilePreviewPanelProps) {
       </dl>
 
       {canPreviewText ? (
-        <pre className="mt-md max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md border border-hairline bg-canvas p-md font-mono text-[12px] leading-5 text-ink">
+        <pre className="mt-md max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-sm border border-hairline bg-canvas p-md font-mono text-[12px] leading-4 text-ink">
           {node.content}
         </pre>
       ) : node.type === 'file' ? (
-        <p className="mt-md rounded-md bg-canvas p-md text-[14px] leading-5 text-ink/70">Preview text không khả dụng cho file này. Metadata vẫn an toàn để xem.</p>
+        <p className="mt-md rounded-sm bg-canvas p-md text-[12px] leading-4 text-ink/70">Preview text không khả dụng cho file này. Metadata vẫn an toàn để xem.</p>
       ) : null}
     </section>
   )

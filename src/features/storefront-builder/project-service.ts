@@ -29,11 +29,11 @@ export class StorefrontBuilderProjectService {
     private readonly fileNodeRepository: ProjectFileNodeRepository
   ) {}
 
-  async listProjects(): Promise<Project[]> {
-    return this.projectRepository.listBuilderProjects()
+  async listProjects(userId?: string): Promise<Project[]> {
+    return this.projectRepository.listBuilderProjects(userId)
   }
 
-  async createProjectFromPrompt(prompt: string): Promise<ProjectWorkspace> {
+  async createProjectFromPrompt(prompt: string, userId?: string): Promise<ProjectWorkspace> {
     const initialPrompt = assertPrompt(prompt)
     const now = new Date().toISOString()
     const projectName = deriveProjectName(initialPrompt)
@@ -48,55 +48,57 @@ export class StorefrontBuilderProjectService {
       pwa: createDefaultPwaConfig(projectName, initialPrompt)
     }
 
-    await this.projectRepository.saveBuilderProject(project)
+    await this.projectRepository.saveBuilderProject(project, userId)
 
     const userMessage = await this.messageRepository.saveMessage({
       id: crypto.randomUUID(),
+      userId,
       projectId: project.id,
       role: 'user',
       content: initialPrompt,
       status: 'completed',
       createdAt: now
-    })
+    }, userId)
 
     const agentMessage = await this.messageRepository.saveMessage({
       id: crypto.randomUUID(),
+      userId,
       projectId: project.id,
       role: 'agent',
       content: 'Mình đã tạo workspace storefront ban đầu với cấu trúc file ảo và cấu hình PWA mặc định để bạn tiếp tục tinh chỉnh.',
       status: 'completed',
       createdAt: new Date(Date.parse(now) + 1).toISOString()
-    })
+    }, userId)
 
-    const fileTree = await this.saveInitialFileTree(project)
+    const fileTree = await this.saveInitialFileTree(project, userId)
 
     return { project, messages: [userMessage, agentMessage], fileTree }
   }
 
-  async getProjectWorkspace(projectId: string): Promise<ProjectWorkspace | undefined> {
-    const project = await this.projectRepository.getBuilderProject(projectId)
+  async getProjectWorkspace(projectId: string, userId?: string): Promise<ProjectWorkspace | undefined> {
+    const project = await this.projectRepository.getBuilderProject(projectId, userId)
     if (!project) return undefined
 
     const [messages, fileTree] = await Promise.all([
-      this.messageRepository.listMessages(projectId),
-      this.fileNodeRepository.listFileNodes(projectId)
+      this.messageRepository.listMessages(projectId, userId),
+      this.fileNodeRepository.listFileNodes(projectId, userId)
     ])
 
     return { project, messages, fileTree: buildTree(fileTree) }
   }
 
-  async getWorkspace(selectedProjectId?: string): Promise<WorkspaceResult> {
-    const projects = await this.listProjects()
+  async getWorkspace(selectedProjectId?: string, userId?: string): Promise<WorkspaceResult> {
+    const projects = await this.listProjects(userId)
     const projectId = selectedProjectId ?? projects[0]?.id
-    const workspace = projectId ? await this.getProjectWorkspace(projectId) : undefined
+    const workspace = projectId ? await this.getProjectWorkspace(projectId, userId) : undefined
     return { projects, selectedProjectId: workspace?.project.id, workspace }
   }
 
-  private async saveInitialFileTree(project: Project): Promise<ProjectFileNode[]> {
+  private async saveInitialFileTree(project: Project, userId?: string): Promise<ProjectFileNode[]> {
     const nodes = createSeedFileTree(project)
     const saved = []
     for (const node of nodes) {
-      saved.push(await this.fileNodeRepository.saveFileNode(node))
+      saved.push(await this.fileNodeRepository.saveFileNode({ ...node, userId }, userId))
     }
     return buildTree(saved)
   }

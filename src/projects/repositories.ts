@@ -19,21 +19,21 @@ export interface PreviewTokenRepository {
 }
 
 export interface StorefrontBuilderProjectRepository {
-  saveBuilderProject(project: Project): Promise<Project>
-  getBuilderProject(id: string): Promise<Project | undefined>
-  listBuilderProjects(): Promise<Project[]>
+  saveBuilderProject(project: Project, userId?: string): Promise<Project>
+  getBuilderProject(id: string, userId?: string): Promise<Project | undefined>
+  listBuilderProjects(userId?: string): Promise<Project[]>
 }
 
 export interface ProjectMessageRepository {
-  saveMessage(message: Message): Promise<Message>
+  saveMessage(message: Message, userId?: string): Promise<Message>
   updateMessageStatus(id: string, status: Message['status']): Promise<Message | undefined>
-  listMessages(projectId: string): Promise<Message[]>
+  listMessages(projectId: string, userId?: string): Promise<Message[]>
 }
 
 export interface ProjectFileNodeRepository {
-  saveFileNode(node: ProjectFileNode): Promise<ProjectFileNode>
-  getFileNode(projectId: string, nodeId: string): Promise<ProjectFileNode | undefined>
-  listFileNodes(projectId: string): Promise<ProjectFileNode[]>
+  saveFileNode(node: ProjectFileNode, userId?: string): Promise<ProjectFileNode>
+  getFileNode(projectId: string, nodeId: string, userId?: string): Promise<ProjectFileNode | undefined>
+  listFileNodes(projectId: string, userId?: string): Promise<ProjectFileNode[]>
 }
 
 export class InMemoryProjectRepository
@@ -88,22 +88,29 @@ export class InMemoryProjectRepository
     return this.tokens.get(token)
   }
 
-  async saveBuilderProject(project: Project) {
-    this.builderProjects.set(project.id, project)
+  async saveBuilderProject(project: Project, userId?: string) {
+    const scoped = userId ? { ...project, userId } : project
+    this.builderProjects.set(scoped.id, scoped)
+    return scoped
+  }
+
+  async getBuilderProject(id: string, userId?: string) {
+    const project = this.builderProjects.get(id)
+    if (!project) return undefined
+    if (userId && project.userId !== userId) return undefined
     return project
   }
 
-  async getBuilderProject(id: string) {
-    return this.builderProjects.get(id)
+  async listBuilderProjects(userId?: string) {
+    return [...this.builderProjects.values()]
+      .filter((project) => !userId || project.userId === userId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
   }
 
-  async listBuilderProjects() {
-    return [...this.builderProjects.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-  }
-
-  async saveMessage(message: Message) {
-    this.messages.set(message.id, message)
-    return message
+  async saveMessage(message: Message, userId?: string) {
+    const scoped = userId ? { ...message, userId } : message
+    this.messages.set(scoped.id, scoped)
+    return scoped
   }
 
   async updateMessageStatus(id: string, status: Message['status']) {
@@ -114,25 +121,28 @@ export class InMemoryProjectRepository
     return updated
   }
 
-  async listMessages(projectId: string) {
+  async listMessages(projectId: string, userId?: string) {
     return [...this.messages.values()]
-      .filter((message) => message.projectId === projectId)
+      .filter((message) => message.projectId === projectId && (!userId || message.userId === userId))
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
   }
 
-  async saveFileNode(node: ProjectFileNode) {
-    this.fileNodes.set(node.id, node)
+  async saveFileNode(node: ProjectFileNode, userId?: string) {
+    const scoped = userId ? { ...node, userId } : node
+    this.fileNodes.set(scoped.id, scoped)
+    return scoped
+  }
+
+  async getFileNode(projectId: string, nodeId: string, userId?: string) {
+    const node = this.fileNodes.get(nodeId)
+    if (!node || node.projectId !== projectId) return undefined
+    if (userId && node.userId !== userId) return undefined
     return node
   }
 
-  async getFileNode(projectId: string, nodeId: string) {
-    const node = this.fileNodes.get(nodeId)
-    return node?.projectId === projectId ? node : undefined
-  }
-
-  async listFileNodes(projectId: string) {
+  async listFileNodes(projectId: string, userId?: string) {
     return [...this.fileNodes.values()]
-      .filter((node) => node.projectId === projectId)
+      .filter((node) => node.projectId === projectId && (!userId || node.userId === userId))
       .sort((left, right) => left.path.localeCompare(right.path))
   }
 }

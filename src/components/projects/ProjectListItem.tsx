@@ -9,27 +9,27 @@ type ProjectListItemProps = {
 }
 
 const statusLabel: Record<Project['status'], string> = {
-  draft: 'Nháp',
-  generating: 'Đang tạo',
-  ready: 'Sẵn sàng',
-  failed: 'Lỗi'
+  draft: 'Draft',
+  generating: 'Generating',
+  ready: 'Ready',
+  failed: 'Failed'
 }
 
 export function ProjectListItem({ project, selected = false, variant = 'grid', onSelect }: ProjectListItemProps) {
-  const summary = project.description || project.initialPrompt || 'Chưa có mô tả cho project này.'
+  const summary = project.description || project.initialPrompt || 'No description yet.'
   const editedDate = new Date(project.updatedAt).toLocaleDateString('vi-VN')
 
   if (variant === 'list') {
     return (
       <button
         type="button"
-        className={`flex w-full min-w-0 items-center gap-sm rounded-md border p-sm text-left transition ${selected ? 'border-[var(--app-accent)] bg-[color-mix(in_srgb,var(--app-accent)_14%,transparent)]' : 'border-[var(--app-border)] bg-[var(--app-panel)] hover:border-[var(--app-border-strong)] hover:bg-[var(--app-control)]'}`}
+        className={`flex w-full min-w-0 items-center gap-sm rounded-sm border p-sm text-left transition ${selected ? 'border-[var(--app-accent)] bg-[color-mix(in_srgb,var(--app-accent)_14%,transparent)]' : 'border-[var(--app-border)] bg-[var(--app-panel)] hover:border-[var(--app-border-strong)] hover:bg-[var(--app-control)]'}`}
         aria-pressed={selected}
         onClick={() => onSelect(project.id)}
       >
         <ProjectThumb name={project.name} compact />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-[540] leading-5 text-[var(--app-text)]">{project.name}</span>
+          <span className="block truncate text-[13px] font-[520] leading-4 text-[var(--app-text)]">{project.name}</span>
           <span className="mt-xxs flex items-center gap-xs text-[12px] leading-4 text-[var(--app-muted)]">
             <Clock3 aria-hidden="true" size={13} />
             Edited {editedDate}
@@ -49,8 +49,8 @@ export function ProjectListItem({ project, selected = false, variant = 'grid', o
           {project.name.slice(0, 1).toUpperCase()}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[16px] font-[540] leading-5 text-[var(--app-text)]">{project.name}</span>
-          <span className="mt-xxs line-clamp-1 block text-[13px] leading-5 text-[var(--app-muted)]">Edited {editedDate} · {statusLabel[project.status]}</span>
+          <span className="block truncate text-[13px] font-[520] leading-4 text-[var(--app-text)]">{project.name}</span>
+          <span className="mt-xxs line-clamp-1 block text-[12px] leading-4 text-[var(--app-muted)]">Edited {editedDate} · {statusLabel[project.status]}</span>
           <span className="sr-only">{summary}</span>
         </span>
       </span>
@@ -60,7 +60,7 @@ export function ProjectListItem({ project, selected = false, variant = 'grid', o
 
 function ProjectThumb({ name, compact = false }: { name: string; compact?: boolean }) {
   return (
-    <span className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] ${compact ? 'h-16 w-24' : 'aspect-[16/9] w-full'}`}>
+    <span className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] ${compact ? 'h-16 w-24' : 'aspect-[16/9] w-full'}`}>
       <span className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(255,255,255,0.08),transparent_34%)]" aria-hidden="true" />
       <Heart aria-hidden="true" className="opacity-55" size={compact ? 18 : 24} />
       <span className="sr-only">Preview for {name}</span>

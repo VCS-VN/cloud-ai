@@ -13,34 +13,36 @@ export class StorefrontBuilderMessageService {
     private readonly messageRepository: ProjectMessageRepository
   ) {}
 
-  async getProjectMessages(projectId: string): Promise<Message[]> {
-    const project = await this.projectRepository.getBuilderProject(projectId)
+  async getProjectMessages(projectId: string, userId?: string): Promise<Message[]> {
+    const project = await this.projectRepository.getBuilderProject(projectId, userId)
     if (!project) throw new Error('Không tìm thấy project.')
-    return this.messageRepository.listMessages(projectId)
+    return this.messageRepository.listMessages(projectId, userId)
   }
 
-  async sendProjectMessage(projectId: string, content: string): Promise<Message[]> {
-    const project = await this.projectRepository.getBuilderProject(projectId)
+  async sendProjectMessage(projectId: string, content: string, userId?: string): Promise<Message[]> {
+    const project = await this.projectRepository.getBuilderProject(projectId, userId)
     if (!project) throw new Error('Không tìm thấy project.')
 
     const now = new Date().toISOString()
     const userMessage = await this.messageRepository.saveMessage({
       id: crypto.randomUUID(),
+      userId,
       projectId,
       role: 'user',
       content: assertMessageContent(content),
       status: 'completed',
       createdAt: now
-    })
+    }, userId)
 
     const agentMessage = await this.messageRepository.saveMessage({
       id: crypto.randomUUID(),
+      userId,
       projectId,
       role: 'agent',
       content: 'Mình đã ghi nhận yêu cầu mới. Ở MVP này, phản hồi agent là placeholder an toàn để mô phỏng luồng hội thoại.',
       status: 'completed',
       createdAt: new Date(Date.parse(now) + 1).toISOString()
-    })
+    }, userId)
 
     return [userMessage, agentMessage]
   }

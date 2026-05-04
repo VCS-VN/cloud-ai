@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowLeft,
@@ -25,6 +25,8 @@ import type {
   ProjectFileNode,
 } from "../../features/storefront-builder/types";
 import { sendProjectMessage } from "../../server/functions/project-messages";
+import { UserMenu } from "../../components/auth/UserMenu";
+import { getCurrentUser } from "../../server/functions/auth";
 import { getProjectWorkspace } from "../../server/functions/projects";
 
 type DetailMode = "preview" | "code";
@@ -42,6 +44,11 @@ const statusLabel: Record<Project["status"], string> = {
 };
 
 export const Route = createFileRoute("/projects/$projectId")({
+  beforeLoad: async () => {
+    const { user } = await getCurrentUser()
+    if (!user) throw redirect({ to: "/" })
+    return { user }
+  },
   loader: ({ params }) =>
     getProjectWorkspace({ data: { projectId: params.projectId } }),
   component: ProjectDetailPage,
@@ -51,6 +58,7 @@ function ProjectDetailPage() {
   const navigate = useNavigate();
   const sendMessage = useServerFn(sendProjectMessage);
   const { workspace } = Route.useLoaderData();
+  const { user } = Route.useRouteContext();
   const [messages, setMessages] = useState<Message[]>(
     workspace?.messages ?? [],
   );
@@ -196,7 +204,7 @@ function ProjectDetailPage() {
             >
               <ChatHeader
                 project={workspace.project}
-                onBack={() => void navigate({ to: "/projects" })}
+                onBack={() => void navigate({ to: "/projects" as never })}
                 onToggleChat={toggleChat}
               />
               <div className="min-h-0 flex-1 overflow-hidden px-sm py-md">
@@ -239,9 +247,10 @@ function ProjectDetailPage() {
               onToggleChat={toggleChat}
               onModeChange={setDetailMode}
               onPathChange={setPreviewPath}
+              user={user}
             />
             <div className="min-h-0 flex-1 p-sm">
-              <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-md border border-[var(--app-border)] bg-[var(--app-panel)]">
+              <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-sm border border-[var(--app-border)] bg-[var(--app-panel)]">
                 {detailMode === "preview" ? (
                   <PreviewWorkspace
                     selectedNode={selectedNode}
@@ -287,7 +296,7 @@ function ChatHeader({
   return (
     <header className="flex items-start gap-sm border-b border-[var(--app-border)] p-sm">
       <button
-        className="mt-xxs inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
+        className="mt-xxs inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
         type="button"
         onClick={onBack}
         aria-label="Back to projects"
@@ -295,13 +304,13 @@ function ChatHeader({
         <ArrowLeft aria-hidden="true" size={16} />
       </button>
       <div className="min-w-0 flex-1">
-        <h1 className="m-0 truncate text-[16px] font-[620] leading-5 tracking-[-0.02em]">
+        <h1 className="m-0 truncate text-[14px] font-[580] leading-4 tracking-[-0.015em]">
           {project.name}
         </h1>
         <p className="m-0 mt-xxs text-[12px] leading-4 text-[var(--app-muted)]">
           Previewing last saved version
         </p>
-        <div className="mt-xs flex flex-wrap gap-xs text-[11px] leading-4 text-[var(--app-muted)]">
+        <div className="mt-xs flex flex-wrap gap-xs text-[12px] leading-4 text-[var(--app-muted)]">
           <span className="rounded-pill bg-[var(--app-control)] px-xs py-xxs">
             {statusLabel[project.status]}
           </span>
@@ -311,7 +320,7 @@ function ChatHeader({
         </div>
       </div>
       <button
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
         type="button"
         onClick={onToggleChat}
         aria-label="Hide chat"
@@ -329,6 +338,7 @@ function PreviewToolbar({
   onToggleChat,
   onModeChange,
   onPathChange,
+  user,
 }: {
   chatVisible: boolean;
   mode: DetailMode;
@@ -336,12 +346,13 @@ function PreviewToolbar({
   onToggleChat: () => void;
   onModeChange: (mode: DetailMode) => void;
   onPathChange: (path: string) => void;
+  user?: import("../../auth/types").AuthUserSummary;
 }) {
   return (
     <header className="flex min-h-14 items-center gap-sm border-b border-[var(--app-border)] px-sm py-xs">
       {!chatVisible ? (
         <button
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
           type="button"
           onClick={onToggleChat}
           aria-label="Show chat"
@@ -351,12 +362,12 @@ function PreviewToolbar({
       ) : null}
 
       <div
-        className="flex shrink-0 rounded-md border border-[var(--app-border)] bg-[var(--app-control)] p-xxs"
+        className="flex shrink-0 rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] p-xxs"
         role="group"
         aria-label="Chọn chế độ xem"
       >
         <button
-          className={`inline-flex h-8 items-center gap-xs rounded-md border-0 px-sm text-[13px] transition ${mode === "preview" ? "bg-[color-mix(in_srgb,var(--app-accent)_22%,transparent)] text-[var(--app-text)] ring-1 ring-[var(--app-accent)]" : "bg-transparent text-[var(--app-muted)] hover:text-[var(--app-text)]"}`}
+          className={`inline-flex h-8 items-center gap-xs rounded-sm border-0 px-sm text-[12px] transition ${mode === "preview" ? "bg-[color-mix(in_srgb,var(--app-accent)_22%,transparent)] text-[var(--app-text)] ring-1 ring-[var(--app-accent)]" : "bg-transparent text-[var(--app-muted)] hover:text-[var(--app-text)]"}`}
           type="button"
           aria-pressed={mode === "preview"}
           onClick={() => onModeChange("preview")}
@@ -365,7 +376,7 @@ function PreviewToolbar({
           Preview
         </button>
         <button
-          className={`inline-flex h-8 items-center gap-xs rounded-md border-0 px-sm text-[13px] transition ${mode === "code" ? "bg-[color-mix(in_srgb,var(--app-accent)_22%,transparent)] text-[var(--app-text)] ring-1 ring-[var(--app-accent)]" : "bg-transparent text-[var(--app-muted)] hover:text-[var(--app-text)]"}`}
+          className={`inline-flex h-8 items-center gap-xs rounded-sm border-0 px-sm text-[12px] transition ${mode === "code" ? "bg-[color-mix(in_srgb,var(--app-accent)_22%,transparent)] text-[var(--app-text)] ring-1 ring-[var(--app-accent)]" : "bg-transparent text-[var(--app-muted)] hover:text-[var(--app-text)]"}`}
           type="button"
           aria-pressed={mode === "code"}
           onClick={() => onModeChange("code")}
@@ -376,7 +387,7 @@ function PreviewToolbar({
       </div>
 
       <label
-        className="mx-auto flex h-9 w-full max-w-[640px] items-center gap-xs rounded-pill border border-[var(--app-border)] bg-[var(--app-control)] px-sm text-[13px] text-[var(--app-text)]"
+        className="mx-auto flex h-9 w-full max-w-[640px] items-center gap-xs rounded-pill border border-[var(--app-border)] bg-[var(--app-control)] px-sm text-[12px] text-[var(--app-text)]"
         htmlFor="preview-path"
       >
         <Globe
@@ -387,7 +398,7 @@ function PreviewToolbar({
         <span className="sr-only">Preview path</span>
         <input
           id="preview-path"
-          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[var(--app-text)] outline-none placeholder:text-[var(--app-subtle)]"
+          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] text-[var(--app-text)] outline-none placeholder:text-[var(--app-subtle)]"
           value={previewPath}
           placeholder="/"
           onChange={(event) => onPathChange(event.target.value)}
@@ -395,15 +406,16 @@ function PreviewToolbar({
       </label>
 
       <div className="flex shrink-0 items-center gap-xs">
+        <UserMenu user={user} compact />
         <button
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
           type="button"
           aria-label="Open preview"
         >
           <ExternalLink aria-hidden="true" size={15} />
         </button>
         <button
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
           type="button"
           aria-label="Refresh preview"
         >
@@ -427,7 +439,7 @@ function PreviewWorkspace({
         <span className="truncate">Preview path: {previewPath || "/"}</span>
         <Eye aria-hidden="true" size={14} />
       </div>
-      <div className="min-h-0 flex-1 overflow-auto rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] p-sm">
+      <div className="min-h-0 flex-1 overflow-auto rounded-sm border border-[var(--app-border)] bg-[var(--app-surface)] p-sm">
         <FilePreviewPanel node={selectedNode} />
       </div>
     </section>
@@ -477,26 +489,26 @@ function CodeContentPanel({ node }: { node?: ProjectFileNode }) {
     <section className="flex min-h-0 min-w-0 flex-col bg-[var(--app-panel)]">
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-control)] px-sm">
         <div className="flex min-w-0 items-center gap-xs">
-          <span className="truncate rounded-t-md bg-[var(--app-panel)] px-sm py-xs text-[14px] font-[540]">
+          <span className="truncate rounded-t-sm bg-[var(--app-panel)] px-sm py-xs text-[12px] font-[520]">
             {node?.path ?? "Select a file"}
           </span>
         </div>
-        <div className="flex items-center gap-sm text-[13px] text-[var(--app-muted)]">
+        <div className="flex items-center gap-sm text-[12px] text-[var(--app-muted)]">
           <span>Read only</span>
           <button
-            className="inline-flex h-8 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
+            className="inline-flex h-8 items-center gap-xs rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
             type="button"
           >
             <MessageSquarePlus aria-hidden="true" size={14} />
           </button>
           <button
-            className="inline-flex h-8 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
+            className="inline-flex h-8 items-center gap-xs rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
             type="button"
           >
             <Copy aria-hidden="true" size={14} />
           </button>
           <button
-            className="inline-flex h-8 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
+            className="inline-flex h-8 items-center gap-xs rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
             type="button"
           >
             <Download aria-hidden="true" size={14} />
@@ -513,12 +525,12 @@ function CodeContentPanel({ node }: { node?: ProjectFileNode }) {
               </pre>
             </div>
           ) : (
-            <pre className="builder-truncate-safe min-h-full whitespace-pre-wrap rounded-md bg-[var(--app-control)] p-sm font-mono text-[12px] leading-5 text-[var(--app-text)]">
+            <pre className="builder-truncate-safe min-h-full whitespace-pre-wrap rounded-sm bg-[var(--app-control)] p-sm font-mono text-[12px] leading-4 text-[var(--app-text)]">
               {node.content}
             </pre>
           )
         ) : (
-          <p className="m-0 rounded-md border border-[var(--app-border)] bg-[var(--app-control)] p-sm text-[13px] leading-5 text-[var(--app-muted)]">
+          <p className="m-0 rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] p-sm text-[12px] leading-4 text-[var(--app-muted)]">
             Select a file to inspect its content. Folders expand in the file
             tree and do not show content here.
           </p>
