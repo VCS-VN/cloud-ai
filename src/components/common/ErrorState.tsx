@@ -8,10 +8,10 @@ type ErrorStateProps = {
 
 export function ErrorState({ title = 'Có lỗi xảy ra', message, action }: ErrorStateProps) {
   return (
-    <section className="rounded-lg border border-ink bg-coral p-lg text-ink" role="alert">
-      <p className="m-0 font-mono text-caption uppercase tracking-[0.16em]">Lỗi</p>
-      <h2 className="mb-xs mt-sm text-headline">{title}</h2>
-      <p className="m-0 text-body-sm">{message}</p>
+    <section className="builder-truncate-safe rounded-md border border-ink bg-coral p-md text-ink" role="alert">
+      <p className="builder-kicker">Lỗi</p>
+      <h2 className="mb-xs mt-sm text-[20px] font-[540] leading-tight tracking-[-0.02em]">{title}</h2>
+      <p className="m-0 text-[15px] leading-6 tracking-[-0.01em]">{message}</p>
       {action ? <div className="mt-md">{action}</div> : null}
     </section>
   )

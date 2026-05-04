@@ -22,6 +22,18 @@
   --color-semantic-success: #1ea64a;
   --color-overlay-scrim: #000000;
 
+  --app-bg: #181818;
+  --app-surface: #1f1f1d;
+  --app-panel: #1b1b1a;
+  --app-panel-strong: #0b0b0b;
+  --app-control: #121211;
+  --app-text: #f5f5f2;
+  --app-muted: rgb(245 245 242 / 0.58);
+  --app-subtle: rgb(245 245 242 / 0.42);
+  --app-border: rgb(255 255 255 / 0.10);
+  --app-border-strong: rgb(255 255 255 / 0.18);
+  --app-accent: #5b7cfa;
+
   --radius-xs: 2px;
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -41,6 +53,25 @@
   --space-section: 96px;
 
   font-feature-settings: 'kern';
+}
+
+
+:root[data-theme="light"] {
+  --app-bg: #f6f6f3;
+  --app-surface: #ffffff;
+  --app-panel: #ffffff;
+  --app-panel-strong: #f0f0ec;
+  --app-control: #ffffff;
+  --app-text: #171717;
+  --app-muted: rgb(23 23 23 / 0.62);
+  --app-subtle: rgb(23 23 23 / 0.42);
+  --app-border: rgb(23 23 23 / 0.12);
+  --app-border-strong: rgb(23 23 23 / 0.20);
+  --app-accent: #315eea;
+  --color-ink: #171717;
+  --color-canvas: #ffffff;
+  --color-surface-soft: #f6f6f3;
+  --color-hairline: #deded8;
 }
 
 @theme inline {
@@ -155,7 +186,7 @@
 
 html {
   color: var(--color-ink);
-  background: var(--color-canvas);
+  background: var(--app-control);
   font-family: figmaSans, Inter, system-ui, sans-serif;
 }
 
@@ -163,12 +194,12 @@ body {
   margin: 0;
   min-width: 320px;
   color: var(--color-ink);
-  background: var(--color-canvas);
+  background: var(--app-control);
   font-family: figmaSans, Inter, system-ui, sans-serif;
-  font-size: 18px;
-  font-weight: 320;
+  font-size: 16px;
+  font-weight: 330;
   line-height: 1.45;
-  letter-spacing: -0.26px;
+  letter-spacing: -0.18px;
 }
 
 button,
@@ -190,4 +221,103 @@ a {
 textarea,
 input {
   max-width: 100%;
+}
+
+.builder-shell {
+  min-height: 100vh;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--app-accent) 16%, transparent), transparent 30%),
+    linear-gradient(180deg, var(--app-bg) 0%, var(--app-panel) 100%);
+  color: var(--app-text);
+}
+
+.builder-page {
+  width: min(100%, 1180px);
+  margin-inline: auto;
+  padding: clamp(18px, 3vw, 40px) clamp(14px, 2.5vw, 32px);
+}
+
+.builder-kicker {
+  margin: 0;
+  font-family: figmaMono, ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.builder-title {
+  margin: 0;
+  font-size: clamp(34px, 5.8vw, 58px);
+  font-weight: 340;
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+}
+
+.builder-copy {
+  margin: 0;
+  font-size: clamp(14px, 1.5vw, 17px);
+  font-weight: 330;
+  line-height: 1.45;
+  letter-spacing: -0.014em;
+}
+
+.builder-panel {
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background: var(--app-panel);
+  box-shadow: var(--shadow-panel);
+}
+
+.builder-card {
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background: var(--app-control);
+}
+
+.builder-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  min-height: 36px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  padding: 8px 14px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 14px;
+  font-weight: 480;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+}
+
+.builder-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.builder-input {
+  width: 100%;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background: var(--app-control);
+  color: var(--color-ink);
+  font-size: 14px;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  outline: none;
+}
+
+.builder-input:focus {
+  border-color: var(--color-ink);
+  box-shadow: 0 0 0 3px rgb(0 0 0 / 0.08);
+}
+
+.builder-truncate-safe {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }

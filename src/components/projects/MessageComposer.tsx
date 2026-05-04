@@ -1,3 +1,4 @@
+import { ArrowUp, Plus, Wand2 } from 'lucide-react'
 import type { FormEvent } from 'react'
 
 type MessageComposerProps = {
@@ -19,20 +20,29 @@ export function MessageComposer({ value, sending = false, error, disabled = fals
   }
 
   return (
-    <form className="border-t border-hairline pt-md" onSubmit={handleSubmit}>
-      <label className="sr-only" htmlFor="project-message">Nhập message</label>
+    <form className="rounded-lg border border-[var(--app-border)] bg-[var(--app-control)] p-sm" onSubmit={handleSubmit}>
+      <label className="sr-only" htmlFor="project-message">Nhập tin nhắn</label>
       <textarea
         id="project-message"
-        className="min-h-28 w-full resize-y rounded-md border border-hairline bg-canvas px-md py-sm text-body-sm text-ink outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 disabled:opacity-60"
+        className="min-h-20 w-full resize-none border-0 bg-transparent p-0 text-[14px] leading-5 text-[var(--app-text)] outline-none placeholder:text-[var(--app-subtle)] disabled:cursor-not-allowed disabled:opacity-60"
         value={value}
-        placeholder="Nhắn tiếp để tinh chỉnh storefront..."
+        placeholder="Ask Cloud AI..."
         disabled={sending || disabled}
         onChange={(event) => onChange(event.target.value)}
       />
-      {error ? <p className="mt-xs rounded-md bg-coral p-sm text-body-sm text-ink" role="alert">{error}</p> : null}
-      <div className="mt-sm flex justify-end">
-        <button className="rounded-pill bg-primary px-lg py-sm text-button text-on-primary disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={!canSend}>
-          {sending ? 'Đang gửi...' : 'Gửi'}
+      {error ? <p className="builder-truncate-safe mt-xs rounded-md bg-coral p-sm text-[13px] leading-5 text-ink" role="alert">{error}</p> : null}
+      <div className="mt-sm flex items-center justify-between gap-sm">
+        <div className="flex items-center gap-xs">
+          <button className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-panel)] text-[var(--app-muted)]" type="button" aria-label="Add context">
+            <Plus aria-hidden="true" size={15} />
+          </button>
+          <span className="inline-flex h-8 items-center gap-xs rounded-pill bg-[var(--app-panel)] px-sm text-[12px] text-[var(--app-muted)]">
+            <Wand2 aria-hidden="true" size={14} />
+            Visual edits
+          </span>
+        </div>
+        <button className="inline-flex h-8 w-8 items-center justify-center rounded-full border-0 bg-[var(--app-text)] text-[var(--app-bg)] disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={!canSend} aria-label="Send message">
+          <ArrowUp aria-hidden="true" size={16} />
         </button>
       </div>
     </form>

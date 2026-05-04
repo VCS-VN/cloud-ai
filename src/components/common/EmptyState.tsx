@@ -18,11 +18,11 @@ const toneClassName: Record<NonNullable<EmptyStateProps['tone']>, string> = {
 
 export function EmptyState({ title, description, action, tone = 'plain' }: EmptyStateProps) {
   return (
-    <section className={`${toneClassName[tone]} rounded-lg border border-hairline p-xl text-ink`}>
-      <p className="m-0 font-mono text-caption uppercase tracking-[0.16em]">Trạng thái trống</p>
-      <h2 className="mb-sm mt-md text-headline">{title}</h2>
-      {description ? <p className="m-0 max-w-2xl text-body-sm">{description}</p> : null}
-      {action ? <div className="mt-lg">{action}</div> : null}
+    <section className={`${toneClassName[tone]} builder-truncate-safe rounded-md border border-hairline p-md text-ink`}>
+      <p className="builder-kicker">Trạng thái trống</p>
+      <h2 className="mb-xs mt-sm text-[20px] font-[540] leading-tight tracking-[-0.02em]">{title}</h2>
+      {description ? <p className="m-0 max-w-2xl text-[15px] leading-6 tracking-[-0.01em]">{description}</p> : null}
+      {action ? <div className="mt-md">{action}</div> : null}
     </section>
   )
 }

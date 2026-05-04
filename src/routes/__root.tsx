@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
+import { ThemeProvider } from '../theme'
 import '../../app/styles/globals.css'
 
 export const Route = createRootRoute({
@@ -16,7 +17,9 @@ export const Route = createRootRoute({
 function RootComponent() {
   return (
     <RootDocument>
-      <Outlet />
+      <ThemeProvider>
+        <Outlet />
+      </ThemeProvider>
     </RootDocument>
   )
 }
