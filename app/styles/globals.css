@@ -1,0 +1,10 @@
+:root {
+  --color-ink: #000000;
+  --color-canvas: #ffffff;
+  --color-lime: #dceeb1;
+  --color-lilac: #c5b0f4;
+  --color-cream: #f4ecd6;
+  --radius-pill: 50px;
+}
+body { margin: 0; color: var(--color-ink); background: var(--color-canvas); font-family: figmaSans, Inter, system-ui, sans-serif; }
+button, .btn { border-radius: var(--radius-pill); }

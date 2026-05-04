@@ -1,0 +1,2 @@
+import type { StorefrontSection } from '../../../src/storefront/types'
+export function FaqSection({ section }: { section: StorefrontSection }) { const items = Array.isArray(section.content.items) ? section.content.items : []; return <section><h2>{section.title}</h2>{items.map((item, index) => <details key={index}><summary>{String((item as any).question ?? 'Question')}</summary><p>{String((item as any).answer ?? '')}</p></details>)}</section> }
