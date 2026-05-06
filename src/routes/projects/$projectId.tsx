@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -23,11 +23,11 @@ import type {
   Message,
   Project,
   ProjectFileNode,
-} from "@/features/storefront-builder/types";
-import { sendProjectMessage } from "@/server/functions/project-messages";
+} from "@/shared/storefront-builder-types";
+import { listProjectMessages, retryProjectMessage, sendProjectMessage } from "@/server/functions/project-messages";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { getCurrentUser } from "@/server/functions/auth";
-import { getProjectWorkspace } from "@/server/functions/projects";
+import { deleteProject, getProjectWorkspace } from "@/server/functions/projects";
 
 type DetailMode = "preview" | "code";
 
@@ -37,10 +37,11 @@ const DEFAULT_CHAT_WIDTH = 420;
 const MIN_CHAT_WIDTH = 320;
 
 const statusLabel: Record<Project["status"], string> = {
-  draft: "Nháp",
-  generating: "Đang tạo",
-  ready: "Sẵn sàng",
-  failed: "Lỗi",
+  0: "Inactive",
+  draft: "Draft",
+  generating: "Generating",
+  ready: "Ready",
+  failed: "Failed",
 };
 
 export const Route = createFileRoute("/projects/$projectId")({
@@ -57,6 +58,9 @@ export const Route = createFileRoute("/projects/$projectId")({
 function ProjectDetailPage() {
   const navigate = useNavigate();
   const sendMessage = useServerFn(sendProjectMessage);
+  const listMessages = useServerFn(listProjectMessages);
+  const retryMessage = useServerFn(retryProjectMessage);
+  const removeProject = useServerFn(deleteProject);
   const { workspace } = Route.useLoaderData();
   const { user } = Route.useRouteContext();
   const [messages, setMessages] = useState<Message[]>(
@@ -65,6 +69,8 @@ function ProjectDetailPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | undefined>();
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
   const [detailMode, setDetailMode] = useState<DetailMode>("preview");
   const [previewPath, setPreviewPath] = useState("/");
@@ -104,12 +110,20 @@ function ProjectDetailPage() {
           .map((node) => node.id),
       ),
     );
+    setHasMoreMessages(true);
   }, [workspace?.project.id, workspace?.messages, workspace?.fileTree]);
 
   const selectedNode = useMemo(
     () => findNode(workspace?.fileTree ?? [], selectedNodeId),
     [workspace?.fileTree, selectedNodeId],
   );
+
+  function handleDeletedProject() {
+    if (!workspace) return;
+    void removeProject({ data: { projectId: workspace.project.id } }).finally(() => {
+      void navigate({ to: "/projects" as never });
+    });
+  }
 
   function toggleChat() {
     setChatVisible((current) => {
@@ -168,25 +182,83 @@ function ProjectDetailPage() {
     if (node.type === "file") setSelectedNodeId(node.id);
   }
 
+  const loadOlderMessages = useCallback(async () => {
+    if (!workspace || loadingOlder || !hasMoreMessages) return;
+    setLoadingOlder(true);
+    try {
+      const oldestMessage = messages[0];
+      const pageResult = await listMessages({ data: { projectId: workspace.project.id, beforeCreatedAt: oldestMessage?.createdAt, beforeId: oldestMessage?.id, limit: 20 } });
+      const existingIds = new Set(messages.map((message) => message.id));
+      const olderMessages = pageResult.messages.filter((message) => !existingIds.has(message.id));
+
+      if (olderMessages.length === 0) {
+        setHasMoreMessages(false);
+      } else {
+        // Find the scroll container and current child
+        const container = document.getElementById("project-messages-viewport");
+        const oldScrollHeight = container ? container.scrollHeight : 0;
+        
+        setMessages((currentMessages) => [...olderMessages, ...currentMessages]);
+        
+        // Restore scroll position after React updates the DOM in the next frame
+        if (container) {
+          requestAnimationFrame(() => {
+            const newScrollHeight = container.scrollHeight;
+            container.scrollTop = container.scrollTop + (newScrollHeight - oldScrollHeight);
+          });
+        }
+      }
+      if (!pageResult.nextCursor) setHasMoreMessages(false);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [workspace, loadingOlder, hasMoreMessages, messages, listMessages]);
+
+  async function handleRetryMessage(messageId: string) {
+    if (!workspace) return;
+    const retriedMessage = await retryMessage({ data: { projectId: workspace.project.id, messageId } });
+    setMessages((currentMessages) => currentMessages.map((message) => message.id === retriedMessage.id ? retriedMessage : message));
+  }
+
   async function handleSendMessage(content: string) {
     if (!workspace) return;
     setSending(true);
     setSendError(undefined);
+    setDraft(""); // clear immediately for snappy typing
+
+    const clientId = `client-${crypto.randomUUID()}`;
+    const optimisticMessage: Message = {
+      id: clientId,
+      projectId: workspace.project.id,
+      role: 'user',
+      content,
+      status: 'pending',
+      processingStatus: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages((current) => [...current, optimisticMessage]);
 
     try {
       const appendedMessages = await sendMessage({
         data: { projectId: workspace.project.id, content },
       });
-      setMessages((currentMessages) => [
-        ...currentMessages,
-        ...appendedMessages,
-      ]);
-      setDraft("");
+      setMessages((currentMessages) => {
+        // replace the optimistic message with the server user message, then append the rest
+        const serverUserMessage = appendedMessages.find(m => m.role === 'user');
+        const otherMessages = appendedMessages.filter(m => m !== serverUserMessage);
+        
+        return currentMessages.map(m => m.id === clientId ? (serverUserMessage ?? m) : m).concat(otherMessages);
+      });
     } catch (cause) {
+      // Mark optimistic message as failed
+      setMessages((currentMessages) => 
+        currentMessages.map(m => m.id === clientId ? { ...m, status: 'failed', processingStatus: 'failed' } : m)
+      );
       setSendError(
         cause instanceof Error
           ? cause.message
-          : "Không gửi được message. Vui lòng thử lại.",
+          : "Unable to send message. Please try again.",
       );
     } finally {
       setSending(false);
@@ -199,16 +271,23 @@ function ProjectDetailPage() {
         <div className="flex h-screen min-w-0 overflow-hidden">
           {chatVisible ? (
             <aside
-              className="flex min-w-[320px] shrink-0 flex-col border-r border-[var(--app-border)] bg-[var(--app-panel)]"
+              className="flex min-w-[320px] shrink-0 flex-col border-r border-[var(--app-border)] bg-[var(--app-panel)] transition-colors duration-300"
               style={{ width: chatWidth }}
             >
               <ChatHeader
                 project={workspace.project}
                 onBack={() => void navigate({ to: "/projects" as never })}
+                onDelete={handleDeletedProject}
                 onToggleChat={toggleChat}
               />
               <div className="min-h-0 flex-1 overflow-hidden px-sm py-md">
-                <ProjectMessagesPanel messages={messages} />
+                <ProjectMessagesPanel
+                  messages={messages}
+                  loadingOlder={loadingOlder}
+                  hasMore={hasMoreMessages}
+                  onLoadOlder={loadOlderMessages}
+                  onRetryMessage={handleRetryMessage}
+                />
               </div>
               <div className="p-sm">
                 <MessageComposer
@@ -225,7 +304,7 @@ function ProjectDetailPage() {
           {chatVisible ? (
             <button
               type="button"
-              className="group relative z-10 w-2 shrink-0 cursor-col-resize touch-none border-0 bg-transparent p-0 outline-none"
+              className="group relative z-10 w-2 shrink-0 cursor-col-resize touch-none border-0 bg-transparent p-0 outline-none transition-colors duration-200"
               aria-label="Resize chat panel"
               onPointerDown={beginResize}
               onPointerMove={resize}
@@ -233,13 +312,13 @@ function ProjectDetailPage() {
               onPointerCancel={endResize}
             >
               <span
-                className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--app-border-strong)] group-hover:bg-[var(--app-accent)]"
+                className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--app-border-strong)] transition-colors duration-200 group-hover:bg-[var(--app-accent)]"
                 aria-hidden="true"
               />
             </button>
           ) : null}
 
-          <section className="flex min-w-0 flex-1 flex-col bg-[var(--app-panel)]">
+          <section className="flex min-w-0 flex-1 flex-col bg-[var(--app-panel)] transition-colors duration-300">
             <PreviewToolbar
               chatVisible={chatVisible}
               mode={detailMode}
@@ -250,7 +329,7 @@ function ProjectDetailPage() {
               user={user}
             />
             <div className="min-h-0 flex-1 p-sm">
-              <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-sm border border-[var(--app-border)] bg-[var(--app-panel)]">
+              <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] transition-colors duration-300">
                 {detailMode === "preview" ? (
                   <PreviewWorkspace
                     selectedNode={selectedNode}
@@ -275,8 +354,8 @@ function ProjectDetailPage() {
       ) : (
         <div className="p-md">
           <EmptyState
-            title="Không tìm thấy project"
-            description="Project này không còn khả dụng hoặc bạn chưa chọn project hợp lệ."
+            title="Project not found"
+            description="This project is no longer available or no valid project is selected."
           />
         </div>
       )}
@@ -287,16 +366,25 @@ function ProjectDetailPage() {
 function ChatHeader({
   project,
   onBack,
+  onDelete,
   onToggleChat,
 }: {
   project: Project;
   onBack: () => void;
+  onDelete: () => void;
   onToggleChat: () => void;
 }) {
   return (
     <header className="flex items-start gap-sm border-b border-[var(--app-border)] p-sm">
       <button
-        className="mt-xxs inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
+        className="inline-flex h-8 shrink-0 items-center rounded-pill border border-[var(--app-border)] bg-[var(--app-control)] px-sm text-[12px] text-[var(--app-danger-text)] transition-colors duration-200 hover:border-[var(--app-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+        type="button"
+        onClick={onDelete}
+      >
+        Delete
+      </button>
+      <button
+        className="mt-xxs inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
         type="button"
         onClick={onBack}
         aria-label="Back to projects"
@@ -312,15 +400,15 @@ function ChatHeader({
         </p>
         <div className="mt-xs flex flex-wrap gap-xs text-[12px] leading-4 text-[var(--app-muted)]">
           <span className="rounded-pill bg-[var(--app-control)] px-xs py-xxs">
-            {statusLabel[project.status]}
+            {project.status !== 0 ? statusLabel[project.status] : "Inactive"}
           </span>
           <span className="rounded-pill bg-[var(--app-control)] px-xs py-xxs">
-            Edited {new Date(project.updatedAt).toLocaleDateString("vi-VN")}
+            Edited {new Date(project.updatedAt).toLocaleDateString("en-US")}
           </span>
         </div>
       </div>
       <button
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
         type="button"
         onClick={onToggleChat}
         aria-label="Hide chat"
@@ -352,7 +440,7 @@ function PreviewToolbar({
     <header className="flex min-h-14 items-center gap-sm border-b border-[var(--app-border)] px-sm py-xs">
       {!chatVisible ? (
         <button
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
           type="button"
           onClick={onToggleChat}
           aria-label="Show chat"
@@ -362,12 +450,12 @@ function PreviewToolbar({
       ) : null}
 
       <div
-        className="flex shrink-0 rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] p-xxs"
+        className="flex shrink-0 rounded-md border border-[var(--app-border)] bg-[var(--app-control)] p-xxs"
         role="group"
-        aria-label="Chọn chế độ xem"
+        aria-label="Choose view mode"
       >
         <button
-          className={`inline-flex h-8 items-center gap-xs rounded-sm border-0 px-sm text-[12px] transition ${mode === "preview" ? "bg-[color-mix(in_srgb,var(--app-accent)_22%,transparent)] text-[var(--app-text)] ring-1 ring-[var(--app-accent)]" : "bg-transparent text-[var(--app-muted)] hover:text-[var(--app-text)]"}`}
+          className={`inline-flex h-8 items-center gap-xs rounded-sm border-0 px-sm text-[12px] transition ${mode === "preview" ? "bg-[var(--color-block-lime)] text-[var(--app-on-color-block)] [&_svg]:text-[var(--app-icon-on-color-block)] ring-1 ring-[var(--color-primary)]" : "bg-transparent text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"}`}
           type="button"
           aria-pressed={mode === "preview"}
           onClick={() => onModeChange("preview")}
@@ -376,7 +464,7 @@ function PreviewToolbar({
           Preview
         </button>
         <button
-          className={`inline-flex h-8 items-center gap-xs rounded-sm border-0 px-sm text-[12px] transition ${mode === "code" ? "bg-[color-mix(in_srgb,var(--app-accent)_22%,transparent)] text-[var(--app-text)] ring-1 ring-[var(--app-accent)]" : "bg-transparent text-[var(--app-muted)] hover:text-[var(--app-text)]"}`}
+          className={`inline-flex h-8 items-center gap-xs rounded-sm border-0 px-sm text-[12px] transition ${mode === "code" ? "bg-[var(--color-block-lime)] text-[var(--app-on-color-block)] [&_svg]:text-[var(--app-icon-on-color-block)] ring-1 ring-[var(--color-primary)]" : "bg-transparent text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"}`}
           type="button"
           aria-pressed={mode === "code"}
           onClick={() => onModeChange("code")}
@@ -392,13 +480,13 @@ function PreviewToolbar({
       >
         <Globe
           aria-hidden="true"
-          className="text-[var(--app-subtle)]"
+          className="text-[var(--app-icon-subtle)]"
           size={14}
         />
         <span className="sr-only">Preview path</span>
         <input
           id="preview-path"
-          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] text-[var(--app-text)] outline-none placeholder:text-[var(--app-subtle)]"
+          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] text-[var(--app-page-text)] outline-none placeholder:text-[var(--app-subtle-text)]"
           value={previewPath}
           placeholder="/"
           onChange={(event) => onPathChange(event.target.value)}
@@ -408,14 +496,14 @@ function PreviewToolbar({
       <div className="flex shrink-0 items-center gap-xs">
         <UserMenu user={user} compact />
         <button
-          className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
           type="button"
           aria-label="Open preview"
         >
           <ExternalLink aria-hidden="true" size={15} />
         </button>
         <button
-          className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:text-[var(--app-text)]"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
           type="button"
           aria-label="Refresh preview"
         >
@@ -439,7 +527,7 @@ function PreviewWorkspace({
         <span className="truncate">Preview path: {previewPath || "/"}</span>
         <Eye aria-hidden="true" size={14} />
       </div>
-      <div className="min-h-0 flex-1 overflow-auto rounded-sm border border-[var(--app-border)] bg-[var(--app-surface)] p-sm">
+      <div className="min-h-0 flex-1 overflow-auto rounded-sm border border-[var(--app-border)] bg-[var(--app-surface)] p-sm transition-colors duration-300">
         <FilePreviewPanel node={selectedNode} />
       </div>
     </section>
@@ -467,7 +555,7 @@ function CodeView({
 }) {
   return (
     <div className="grid min-h-0 flex-1 gap-0 overflow-hidden xl:grid-cols-[360px_minmax(0,1fr)]">
-      <div className="min-h-0 overflow-auto border-r border-[var(--app-border)] p-sm">
+      <div className="min-h-0 overflow-auto border-r border-[var(--app-border)] bg-[var(--app-panel)] p-sm transition-colors duration-300">
         <ProjectFileExplorer
           fileTree={fileTree}
           selectedNodeId={selectedNodeId}
@@ -486,29 +574,29 @@ function CodeView({
 
 function CodeContentPanel({ node }: { node?: ProjectFileNode }) {
   return (
-    <section className="flex min-h-0 min-w-0 flex-col bg-[var(--app-panel)]">
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-control)] px-sm">
+    <section className="flex min-h-0 min-w-0 flex-col bg-[var(--app-panel)] transition-colors duration-300">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-control)] px-sm transition-colors duration-300">
         <div className="flex min-w-0 items-center gap-xs">
-          <span className="truncate rounded-t-sm bg-[var(--app-panel)] px-sm py-xs text-[12px] font-[520]">
+          <span className="truncate rounded-t-md bg-[var(--app-panel)] px-sm py-xs text-[12px] font-[520]">
             {node?.path ?? "Select a file"}
           </span>
         </div>
         <div className="flex items-center gap-sm text-[12px] text-[var(--app-muted)]">
           <span>Read only</span>
           <button
-            className="inline-flex h-8 items-center gap-xs rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
+            className="inline-flex h-8 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
             type="button"
           >
             <MessageSquarePlus aria-hidden="true" size={14} />
           </button>
           <button
-            className="inline-flex h-8 items-center gap-xs rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
+            className="inline-flex h-8 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
             type="button"
           >
             <Copy aria-hidden="true" size={14} />
           </button>
           <button
-            className="inline-flex h-8 items-center gap-xs rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
+            className="inline-flex h-8 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
             type="button"
           >
             <Download aria-hidden="true" size={14} />
@@ -519,18 +607,18 @@ function CodeContentPanel({ node }: { node?: ProjectFileNode }) {
       <div className="min-h-0 flex-1 overflow-auto p-md">
         {node?.content ? (
           node.contentType?.startsWith("image/") ? (
-            <div className="flex min-h-full items-center justify-center bg-white p-md">
-              <pre className="whitespace-pre-wrap break-words text-[12px] text-black">
+            <div className="flex min-h-full items-center justify-center bg-[var(--app-control)] p-md">
+              <pre className="whitespace-pre-wrap break-words text-[12px] text-[var(--app-text)]">
                 {node.content}
               </pre>
             </div>
           ) : (
-            <pre className="builder-truncate-safe min-h-full whitespace-pre-wrap rounded-sm bg-[var(--app-control)] p-sm font-mono text-[12px] leading-4 text-[var(--app-text)]">
+            <pre className="builder-truncate-safe min-h-full whitespace-pre-wrap rounded-md bg-[var(--app-control)] p-sm font-mono text-[12px] leading-4 text-[var(--app-text)] transition-colors duration-300">
               {node.content}
             </pre>
           )
         ) : (
-          <p className="m-0 rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] p-sm text-[12px] leading-4 text-[var(--app-muted)]">
+          <p className="m-0 rounded-md border border-[var(--app-border)] bg-[var(--app-control)] p-sm text-[12px] leading-4 text-[var(--app-icon-muted)] transition-colors duration-300">
             Select a file to inspect its content. Folders expand in the file
             tree and do not show content here.
           </p>

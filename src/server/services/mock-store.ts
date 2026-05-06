@@ -1,4 +1,4 @@
-import type { Message, Project, ProjectFileNode, PwaConfig } from './types'
+import type { Message, Project, ProjectFileNode, PwaConfig } from '@/shared/storefront-builder-types'
 
 const seedTimestamp = '2026-05-04T00:00:00.000Z'
 
@@ -26,10 +26,10 @@ export function createSeedProject(overrides: Partial<Project> = {}): Project {
   return {
     id: overrides.id ?? 'project-luxury-heels',
     name,
-    description: overrides.description ?? 'Storefront sang trọng cho giày cao gót nữ công sở.',
+    description: overrides.description ?? 'Luxury storefront for professional women’s high heels.',
     initialPrompt:
       overrides.initialPrompt ??
-      'Tạo website bán giày cao gót phong cách sang trọng, màu đen vàng, dành cho khách hàng nữ công sở.',
+      'Create a luxury black-and-gold high heels storefront for professional women.',
     status: overrides.status ?? 'ready',
     createdAt: overrides.createdAt ?? seedTimestamp,
     updatedAt: overrides.updatedAt ?? seedTimestamp,
@@ -44,16 +44,18 @@ export function createSeedMessages(projectId = 'project-luxury-heels'): Message[
       id: `${projectId}-message-user-initial`,
       projectId,
       role: 'user',
-      content: 'Tạo website bán giày cao gót phong cách sang trọng, màu đen vàng, dành cho khách hàng nữ công sở.',
+      content: 'Create a luxury black-and-gold high heels storefront for professional women.',
       status: 'completed',
+      processingStatus: 'completed',
       createdAt: seedTimestamp
     },
     {
       id: `${projectId}-message-agent-initial`,
       projectId,
       role: 'agent',
-      content: 'Mình đã tạo bản nháp storefront với hero sang trọng, lưới sản phẩm nổi bật và cấu trúc PWA cơ bản.',
+      content: 'I created a storefront draft with a luxury hero, featured product grid, and basic PWA structure.',
       status: 'completed',
+      processingStatus: 'completed',
       createdAt: '2026-05-04T00:00:01.000Z'
     }
   ]
@@ -86,7 +88,7 @@ export function createSeedFileTree(project: Project): ProjectFileNode[] {
 
   const baseNodes: ProjectFileNode[] = [
     folder(rootId, project.id, 'storefront', 'storefront', null, now),
-    file(`${project.id}-node-index`, project.id, 'index.html', 'storefront/index.html', rootId, 'text/html', '<!doctype html>\n<html lang="vi">\n  <head></head>\n  <body>Generated storefront preview</body>\n</html>', now, { virtual: true, safePreview: false }),
+    file(`${project.id}-node-index`, project.id, 'index.html', 'storefront/index.html', rootId, 'text/html', '<!doctype html>\n<html lang="en">\n  <head></head>\n  <body>Generated storefront preview</body>\n</html>', now, { virtual: true, safePreview: false }),
     folder(srcId, project.id, 'src', 'storefront/src', rootId, now),
     folder(sectionsId, project.id, 'sections', 'storefront/src/sections', srcId, now),
     file(`${project.id}-node-hero`, project.id, 'Hero.tsx', 'storefront/src/sections/Hero.tsx', sectionsId, 'text/plain', 'Hero section: headline, subhead, CTA, luxury editorial styling.', now, { sectionType: 'hero', virtual: true }),

@@ -1,6 +1,6 @@
-import type { ProjectFileNode } from './types'
+import type { ProjectFileNode } from '@/shared/storefront-builder-types'
 import { buildTree } from './project-service'
-import type { ProjectFileNodeRepository, StorefrontBuilderProjectRepository } from '@/projects/repositories'
+import type { ProjectFileNodeRepository, StorefrontBuilderProjectRepository } from '@/shared/storefront-builder-types'
 
 export class StorefrontBuilderFileTreeService {
   constructor(
@@ -10,7 +10,7 @@ export class StorefrontBuilderFileTreeService {
 
   async getProjectFileTree(projectId: string, userId?: string): Promise<ProjectFileNode[]> {
     const project = await this.projectRepository.getBuilderProject(projectId, userId)
-    if (!project) throw new Error('Không tìm thấy project.')
+    if (!project) throw new Error('Project not found.')
 
     const nodes = await this.fileNodeRepository.listFileNodes(projectId, userId)
     return buildTree(nodes)
@@ -18,7 +18,7 @@ export class StorefrontBuilderFileTreeService {
 
   async getProjectFileNode(projectId: string, nodeId: string, userId?: string): Promise<ProjectFileNode | undefined> {
     const project = await this.projectRepository.getBuilderProject(projectId, userId)
-    if (!project) throw new Error('Không tìm thấy project.')
+    if (!project) throw new Error('Project not found.')
     return this.fileNodeRepository.getFileNode(projectId, nodeId, userId)
   }
 }

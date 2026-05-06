@@ -49,12 +49,12 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgb(0_0_0_/_0.62)] p-md backdrop-blur-sm transition-opacity duration-200 ease-out"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[color-mix(in_srgb,var(--color-overlay-scrim)_48%,transparent)] p-md transition-opacity duration-200 ease-out"
       role="dialog"
       aria-modal="true"
       aria-labelledby="login-title"
     >
-      <div className="w-full max-w-[420px] rounded-xl border border-[var(--app-border)] bg-[var(--app-panel)] p-lg text-[var(--app-text)] shadow-editorial transition-all duration-200 ease-out">
+      <div className="w-full max-w-[420px] rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] p-lg text-[var(--app-text)] shadow-none transition-all duration-200 ease-out">
         <div className="flex items-start justify-between gap-md">
           <div>
             <p className="m-0 text-[12px] font-[620] uppercase tracking-[0.14em] text-[var(--app-muted)]">
@@ -64,7 +64,7 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
               id="login-title"
               className="m-0 mt-xs text-[28px] font-[680] leading-tight tracking-[-0.04em]"
             >
-              Login in your account
+              Sign in to manage your projects
             </h2>
           </div>
           <button
@@ -79,7 +79,7 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
         </div>
 
         <p className="mb-lg mt-sm text-[14px] leading-6 text-[var(--app-muted)]">
-          Login in continue to your projects.
+          Sign in with Google to continue to your projects.
         </p>
 
         <GoogleLoginButton
@@ -90,7 +90,7 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
 
         {error ? (
           <p
-            className="mt-sm rounded-md border border-[rgb(255_61_139_/_0.35)] bg-[rgb(255_61_139_/_0.10)] p-sm text-[13px] leading-5 text-[var(--app-text)]"
+            className="mt-sm rounded-md border border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] p-sm text-[13px] leading-5 text-[var(--app-danger-text)]"
             role="alert"
           >
             {error}

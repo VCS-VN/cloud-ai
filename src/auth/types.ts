@@ -32,7 +32,7 @@ export type CurrentUserResult = {
 export type LoginSuccess = {
   ok: true
   user: AuthUserSummary
-  redirectTo: '/projects'
+  redirectTo: '/dashboard'
 }
 
 export type LoginErrorCode =

@@ -15,7 +15,7 @@ function rowToAuthUser(row: typeof users.$inferSelect): AuthUser {
     authProvider: row.authProvider === 'google' ? 'google' : 'google',
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    lastLoginAt: row.lastLoginAt
+    lastLoginAt: row.lastLoginAt ?? row.updatedAt ?? row.createdAt
   }
 }
 

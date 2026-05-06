@@ -19,7 +19,7 @@ export class AuthService {
       const profile = mapDecodedTokenToUserProfile(decoded)
       const user = await this.users.upsertFromFirebase(profile)
       await this.sessions.createSessionCookie(user)
-      return { ok: true, user: toAuthUserSummary(user), redirectTo: '/projects' }
+      return { ok: true, user: toAuthUserSummary(user), redirectTo: '/dashboard' }
     } catch (error) {
       return toSafeAuthError(error)
     }

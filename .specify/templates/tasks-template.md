@@ -147,6 +147,8 @@ Examples of foundational tasks (adjust based on your project):
 ---
 
 ## Phase N: Polish & Cross-Cutting Concerns
+- [ ] TXXX Use code-graph-review to perform Impact Analysis across linked features and flows first, then review specific routes and components.
+- [ ] TXXX Run ESLint/code formatter to ensure style consistency across all changed files before final merge.
 
 **Purpose**: Improvements that affect multiple user stories
 

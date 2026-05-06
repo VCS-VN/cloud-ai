@@ -1,12 +1,13 @@
 import { asc, and, eq } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { projectFileNodes } from '@/db/schema'
-import type { ProjectFileNode } from '@/features/storefront-builder/types'
-import type { ProjectFileNodeRepository } from './repositories'
+import type * as schema from '@/db/schema'
+import type { ProjectFileNode } from '@/shared/storefront-builder-types'
+import type { ProjectFileNodeRepository } from '@/shared/storefront-builder-types'
 
 type ProjectFileNodeRow = typeof projectFileNodes.$inferSelect
 
-type ProjectFileNodeDatabase = PostgresJsDatabase<Record<string, never>>
+type ProjectFileNodeDatabase = PostgresJsDatabase<typeof schema>
 
 function toFileNode(row: ProjectFileNodeRow): ProjectFileNode {
   return {

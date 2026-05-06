@@ -1,39 +1,32 @@
-import { StorefrontBuilderFileTreeService } from "@/features/storefront-builder/file-tree-service";
-import { StorefrontBuilderMessageService } from "@/features/storefront-builder/message-service";
-import {
-  seedFileNodes,
-  seedMessages,
-  seedProjects,
-} from "@/features/storefront-builder/mock-store";
-import { StorefrontBuilderProjectService } from "@/features/storefront-builder/project-service";
-import { InMemoryProjectRepository } from "@/projects/in-memory-project-repository";
-
-const repository = new InMemoryProjectRepository();
-let seeded = false;
-
-async function ensureSeedData() {
-  if (seeded) return;
-  seeded = true;
-
-  for (const project of seedProjects)
-    await repository.saveBuilderProject(project);
-  for (const message of seedMessages) await repository.saveMessage(message);
-  for (const node of seedFileNodes) await repository.saveFileNode(node);
-}
+import { StorefrontBuilderFileTreeService } from "@/server/services/file-tree-service";
+import { StorefrontBuilderMessageService } from "@/server/services/message-service";
+import { StorefrontBuilderProjectService } from "@/server/services/project-service";
+import { getDb } from "@/db/client";
+import { PgProjectFileNodeRepository } from "@/server/repositories/file-node-repository";
+import { PgProjectMessageRepository } from "@/server/repositories/message-repository";
+import { PgStorefrontBuilderProjectRepository } from "@/server/repositories/storefront-project-repository";
 
 export async function getStorefrontBuilderServices() {
-  await ensureSeedData();
+  const db = getDb();
+  const projectRepo = new PgStorefrontBuilderProjectRepository(db);
+  const messageRepo = new PgProjectMessageRepository(db);
+  const fileNodeRepo = new PgProjectFileNodeRepository(db);
+
   return {
-    repository,
     projectService: new StorefrontBuilderProjectService(
-      repository,
-      repository,
-      repository,
+      projectRepo,
+      messageRepo,
+      fileNodeRepo,
     ),
-    messageService: new StorefrontBuilderMessageService(repository, repository),
+
+    messageService: new StorefrontBuilderMessageService(
+      projectRepo,
+      messageRepo,
+    ),
+
     fileTreeService: new StorefrontBuilderFileTreeService(
-      repository,
-      repository,
+      projectRepo,
+      fileNodeRepo,
     ),
   };
 }

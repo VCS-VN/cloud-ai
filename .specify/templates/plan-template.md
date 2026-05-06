@@ -31,7 +31,12 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- [ ] Requirements are clear, confirmed, with explicit code flow (UI client, flow service, repository, database)
+- [ ] Architecture is simple (không over-engineer)
+- [ ] API responses follow consistent error formats
+- [ ] Security/Roles are checked
+- [ ] UX/Transitions are smooth and strictly use semantic tokens from DESIGN.md (không hardcode, even for images)
+- [ ] Code formatting (ESLint) and code-graph-review priorities are acknowledged for final stages
 
 ## Project Structure
 

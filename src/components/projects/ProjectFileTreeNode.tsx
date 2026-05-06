@@ -1,5 +1,5 @@
 import { ChevronRight, FileText, Folder, FolderOpen, Image } from 'lucide-react'
-import type { ProjectFileNode } from '@/features/storefront-builder/types'
+import type { ProjectFileNode } from '@/shared/storefront-builder-types'
 
 type ProjectFileTreeNodeProps = {
   node: ProjectFileNode
@@ -17,8 +17,8 @@ export function ProjectFileTreeNode({ node, selectedNodeId, expandedFolderIds, d
   const isFolder = node.type === 'folder'
   const expanded = isFolder ? (expandedFolderIds?.has(node.id) ?? true) : false
   const isCode = variant === 'code'
-  const lowerQuery = query.trim().toLocaleLowerCase('vi-VN')
-  const selfMatches = !lowerQuery || `${node.name} ${node.path}`.toLocaleLowerCase('vi-VN').includes(lowerQuery)
+  const lowerQuery = query.trim().toLocaleLowerCase('en-US')
+  const selfMatches = !lowerQuery || `${node.name} ${node.path}`.toLocaleLowerCase('en-US').includes(lowerQuery)
   const childMatches = node.children?.some((child) => matchesQuery(child, lowerQuery)) ?? false
 
   if (lowerQuery && !selfMatches && !childMatches) return null
@@ -37,8 +37,8 @@ export function ProjectFileTreeNode({ node, selectedNodeId, expandedFolderIds, d
     <li className="list-none">
       <button
         type="button"
-        className={`flex w-full min-w-0 items-center gap-xs rounded-sm px-sm py-xs text-left text-[12px] leading-4 transition-all duration-200 ${
-          selected && !isFolder ? 'bg-[color-mix(in_srgb,var(--app-accent)_18%,transparent)] text-[var(--app-text)]' : isCode ? 'text-[var(--app-muted)] hover:bg-[var(--app-control)] hover:text-[var(--app-text)]' : 'text-ink hover:bg-surface-soft'
+        className={`flex w-full min-w-0 items-center gap-xs rounded-md px-sm py-xs text-left text-[12px] leading-4 transition-all duration-200 ${
+          selected && !isFolder ? 'bg-[var(--app-selected-bg)] text-[var(--app-selected-text)] [&_svg]:text-[var(--app-icon-selected)]' : isCode ? 'text-[var(--app-muted)] hover:bg-[var(--app-panel-strong)] hover:text-[var(--app-panel-text)] [&_svg]:text-[var(--app-icon-muted)] hover:[&_svg]:text-[var(--app-icon)]' : 'text-[var(--app-muted)] hover:bg-[var(--app-panel-strong)] hover:text-[var(--app-panel-text)] [&_svg]:text-[var(--app-icon-muted)] hover:[&_svg]:text-[var(--app-icon)]'
         }`}
         style={{ paddingLeft: `calc(var(--space-sm) + ${depth} * var(--space-md))` }}
         aria-pressed={selected}
@@ -61,6 +61,6 @@ export function ProjectFileTreeNode({ node, selectedNodeId, expandedFolderIds, d
 
 function matchesQuery(node: ProjectFileNode, query: string): boolean {
   if (!query) return true
-  if (`${node.name} ${node.path}`.toLocaleLowerCase('vi-VN').includes(query)) return true
+  if (`${node.name} ${node.path}`.toLocaleLowerCase('en-US').includes(query)) return true
   return node.children?.some((child) => matchesQuery(child, query)) ?? false
 }

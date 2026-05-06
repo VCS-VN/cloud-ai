@@ -83,6 +83,11 @@
 -->
 
 ### Functional Requirements
+- **FR-SEC**: System MUST check roles/permissions for sensitive actions.
+- **FR-API**: All APIs MUST return standardized error formats.
+- **FR-VAL**: All user inputs MUST be validated on both Client and Server.
+- **FR-FLOW**: System MUST define clear implementation flow across UI client, flow service, repository, and database layers when data or business logic is involved.
+- **FR-UX**: UI MUST follow DESIGN.md rules for components, tokens, theme colors, icons, and smooth transitions. Image references MAY guide layout/frame only; theme tokens and colors MUST come from DESIGN.md.
 
 - **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]
 - **FR-002**: System MUST [specific capability, e.g., "validate email addresses"]  

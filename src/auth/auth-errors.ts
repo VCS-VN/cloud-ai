@@ -1,17 +1,17 @@
 import type { LoginErrorCode } from './types'
 
 const safeMessages: Record<LoginErrorCode, string> = {
-  'missing-token': 'Không thể đăng nhập. Vui lòng thử lại.',
-  'invalid-token': 'Phiên đăng nhập Google không hợp lệ hoặc đã hết hạn. Vui lòng thử lại.',
-  'email-not-verified': 'Tài khoản Google cần có email đã xác minh để đăng nhập.',
-  'auth-config-error': 'Đăng nhập tạm thời chưa sẵn sàng. Vui lòng thử lại sau.',
-  'user-upsert-failed': 'Không thể lưu thông tin người dùng. Vui lòng thử lại.',
-  'session-create-failed': 'Không thể tạo phiên đăng nhập. Vui lòng thử lại.',
-  unauthorized: 'Bạn cần đăng nhập để tiếp tục.',
-  'network-error': 'Kết nối gặp sự cố. Vui lòng kiểm tra mạng và thử lại.',
-  'popup-cancelled': 'Bạn đã hủy đăng nhập Google.',
-  'popup-blocked': 'Trình duyệt đã chặn cửa sổ đăng nhập. Vui lòng cho phép popup và thử lại.',
-  unknown: 'Có lỗi xảy ra. Vui lòng thử lại.'
+  'missing-token': 'Unable to sign in. Please try again.',
+  'invalid-token': 'Your Google sign-in session is invalid or expired. Please try again.',
+  'email-not-verified': 'Your Google account must have a verified email address to sign in.',
+  'auth-config-error': 'Sign-in is temporarily unavailable. Please try again later.',
+  'user-upsert-failed': 'Unable to save user information. Please try again.',
+  'session-create-failed': 'Unable to create a sign-in session. Please try again.',
+  unauthorized: 'You need to sign in to continue.',
+  'network-error': 'A connection issue occurred. Please check your network and try again.',
+  'popup-cancelled': 'You cancelled Google sign-in.',
+  'popup-blocked': 'Your browser blocked the sign-in window. Please allow popups and try again.',
+  unknown: 'Something went wrong. Please try again.'
 }
 
 export class AuthError extends Error {

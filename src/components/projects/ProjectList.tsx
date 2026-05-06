@@ -1,7 +1,7 @@
 import { EmptyState } from '../common/EmptyState'
 import { ErrorState } from '../common/ErrorState'
 import { LoadingState } from '../common/LoadingState'
-import type { Project } from '@/features/storefront-builder/types'
+import type { Project } from '@/shared/storefront-builder-types'
 import { ProjectListItem } from './ProjectListItem'
 
 type ProjectListProps = {
@@ -12,6 +12,7 @@ type ProjectListProps = {
   searchQuery?: string
   variant?: 'grid' | 'list'
   onSelectProject: (projectId: string) => void
+  onDeleteProject?: (projectId: string) => Promise<void> | void
   onCreateProject?: () => void
   onClearSearch?: () => void
 }
@@ -24,12 +25,13 @@ export function ProjectList({
   searchQuery = '',
   variant = 'grid',
   onSelectProject,
+  onDeleteProject,
   onCreateProject,
   onClearSearch
 }: ProjectListProps) {
-  if (loading) return <LoadingState label="Đang tải projects..." />
+  if (loading) return <LoadingState label="Loading projects..." />
 
-  if (error) return <ErrorState title="Không tải được projects" message={error} />
+  if (error) return <ErrorState title="Unable to load projects" message={error} />
 
   if (projects.length === 0) {
     const hasSearch = searchQuery.trim().length > 0
@@ -37,20 +39,20 @@ export function ProjectList({
     return (
       <EmptyState
         tone={hasSearch ? 'plain' : 'cream'}
-        title={hasSearch ? 'Không tìm thấy project' : 'Chưa có website project'}
+        title={hasSearch ? 'No projects found' : 'No website projects yet'}
         description={
           hasSearch
-            ? 'Thử từ khóa khác hoặc xóa tìm kiếm để xem lại toàn bộ dự án.'
-            : 'Bắt đầu bằng một mô tả ngắn về website bạn muốn tạo.'
+            ? 'Try another keyword or clear search to see all projects.'
+            : 'Start with a short description of the website you want to create.'
         }
         action={
           hasSearch && onClearSearch ? (
-            <button className="builder-button bg-canvas text-ink ring-1 ring-hairline" type="button" onClick={onClearSearch}>
-              Xóa tìm kiếm
+            <button className="builder-button bg-[var(--app-panel)] text-[var(--app-text)] ring-1 ring-[var(--app-border)]" type="button" onClick={onClearSearch}>
+              Clear search
             </button>
           ) : onCreateProject ? (
             <button className="builder-button" type="button" onClick={onCreateProject}>
-              Tạo project đầu tiên
+              Create first project
             </button>
           ) : null
         }
@@ -59,9 +61,9 @@ export function ProjectList({
   }
 
   return (
-    <section className={variant === 'grid' ? 'grid gap-md md:grid-cols-2 2xl:grid-cols-3' : 'flex flex-col gap-sm'} aria-label="Danh sách projects">
+    <section className={variant === 'grid' ? 'grid gap-md md:grid-cols-2 2xl:grid-cols-3' : 'flex flex-col gap-sm'} aria-label="Project list">
       {projects.map((project) => (
-        <ProjectListItem key={project.id} project={project} selected={project.id === selectedProjectId} variant={variant} onSelect={onSelectProject} />
+        <ProjectListItem key={project.id} project={project} selected={project.id === selectedProjectId} variant={variant} onSelect={onSelectProject} onDelete={onDeleteProject} />
       ))}
     </section>
   )
