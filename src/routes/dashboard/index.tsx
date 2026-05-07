@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowRight } from "lucide-react";
+
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { HomePromptForm } from "@/components/home/HomePromptForm";
 import { getCurrentUser } from "@/server/functions/auth";

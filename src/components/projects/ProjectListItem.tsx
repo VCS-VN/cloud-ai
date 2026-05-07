@@ -1,6 +1,6 @@
 import { Clock3, ExternalLink, Heart, Loader2, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
-import type { Project } from '@/shared/storefront-builder-types'
+import type { Project } from '@/shared/project-types'
 
 type ProjectListItemProps = {
   project: Project

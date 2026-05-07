@@ -1,11 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireServerUser } from "./auth";
-import { getStorefrontBuilderServices } from "../services/storefront-builder-services";
+import { getProjectServices } from "../services/project-services";
 
 export const listProjects = createServerFn({ method: "GET" }).handler(
   async () => {
     const user = await requireServerUser();
-    const { projectService } = await getStorefrontBuilderServices();
+    const { projectService } = await getProjectServices();
     return projectService.listProjects(user.id);
   },
 );
@@ -14,7 +14,7 @@ export const getProjectWorkspace = createServerFn({ method: "GET" })
   .inputValidator((data: { projectId?: string } | undefined) => data ?? {})
   .handler(async ({ data }) => {
     const user = await requireServerUser();
-    const { projectService } = await getStorefrontBuilderServices();
+    const { projectService } = await getProjectServices();
     return projectService.getWorkspace(data.projectId, user.id);
   });
 
@@ -23,7 +23,7 @@ export const createProjectFromPrompt = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const user = await requireServerUser();
 
-    const { projectService } = await getStorefrontBuilderServices();
+    const { projectService } = await getProjectServices();
 
     return projectService.createProjectFromPrompt(data.prompt, user.id);
   });
@@ -33,7 +33,7 @@ export const deleteProject = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const user = await requireServerUser();
 
-    const { projectService } = await getStorefrontBuilderServices();
+    const { projectService } = await getProjectServices();
 
     return projectService.deleteProject(data.projectId, user.id);
   });

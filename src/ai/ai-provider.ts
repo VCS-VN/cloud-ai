@@ -1,46 +1,45 @@
 import type {
-  BusinessProfile,
-  BrandProfile,
-  GenerationScope,
-  Product,
-  StorefrontProject,
-} from "@/storefront/types";
+  Message,
+  MessageDeltaEvent,
+  MessageHeartbeatEvent,
+  MessageStartedEvent,
+  MessageTerminalEvent,
+  StreamErrorCode,
+} from "@/shared/project-types";
 
-export type ContentSafetyPolicy = {
-  blockUnsupportedClaims: boolean;
-  blockFakeReviews: boolean;
-};
-export type GenerationRequest = {
-  projectId?: string;
-  businessProfile: BusinessProfile;
-  brandProfile: BrandProfile;
-  products: Product[];
-  currentProject?: StorefrontProject;
-  scope: GenerationScope;
-  overwrite: boolean;
-  safetyPolicy: ContentSafetyPolicy;
-};
-export type GenerationCandidate = {
-  structuredOutput: unknown;
-  warnings: string[];
-  assumptions: string[];
-  providerMetadata: Record<string, unknown>;
+export type ProjectMessageGenerationRequest = {
+  projectId: string;
+  messageId: string;
+  prompt: string;
+  history: Array<Pick<Message, "role" | "content">>;
+  planMode?: boolean;
+  reasoningEffort?: ReasoningEffort;
+  signal?: AbortSignal;
 };
 
-export interface AIProvider {
-  generateStorefront(request: GenerationRequest): Promise<GenerationCandidate>;
+export type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
+
+export type ProjectMessageStreamHandlers = {
+  onStarted?: (event: MessageStartedEvent) => Promise<void> | void;
+  onDelta?: (event: MessageDeltaEvent) => Promise<void> | void;
+  onCompleted?: (event: MessageTerminalEvent) => Promise<void> | void;
+  onFailed?: (event: MessageTerminalEvent) => Promise<void> | void;
+  onStopped?: (event: MessageTerminalEvent) => Promise<void> | void;
+  onHeartbeat?: (event: MessageHeartbeatEvent) => Promise<void> | void;
+};
+
+export class AIProviderConfigurationError extends Error {
+  constructor(readonly code: StreamErrorCode, message: string) {
+    super(message);
+    this.name = "AIProviderConfigurationError";
+  }
 }
 
-export class FakeAIProvider implements AIProvider {
-  constructor(private readonly output: unknown) {}
-  async generateStorefront(): Promise<GenerationCandidate> {
-    return {
-      structuredOutput: this.output,
-      warnings: [],
-      assumptions: [],
-      providerMetadata: { fake: true },
-    };
-  }
+export interface AIProvider {
+  streamProjectMessage?(
+    request: ProjectMessageGenerationRequest,
+    handlers: ProjectMessageStreamHandlers,
+  ): Promise<void>;
 }
 
 export {

@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
 import { ThemeProvider } from '@/theme'
 import '@app/styles/globals.css'
@@ -20,11 +21,15 @@ export const Route = createRootRoute({
 })
 
 function RootComponent() {
+  const [queryClient] = useState(() => new QueryClient())
+
   return (
     <RootDocument>
-      <ThemeProvider>
-        <Outlet />
-      </ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <Outlet />
+        </ThemeProvider>
+      </QueryClientProvider>
     </RootDocument>
   )
 }

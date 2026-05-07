@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { type LucideIcon, AlertCircle, Clock3, FolderKanban, Grid2X2, Home, PanelLeftClose, PanelLeftOpen, Star } from 'lucide-react'
 import { UserMenu } from '@/components/auth/UserMenu'
 import type { AuthUserSummary } from '@/auth/types'
-import type { Project } from '@/shared/storefront-builder-types'
+import type { Project } from '@/shared/project-types'
 
 export type AppSidebarItem = 'dashboard' | 'projects'
 export type ProjectFilter = 'all' | 'recent' | 'ready' | 'draft' | 'failed'

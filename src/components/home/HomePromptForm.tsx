@@ -1,31 +1,39 @@
-import type { FormEvent } from 'react'
-import { ChevronDown, Mic, Plus, SendHorizonal } from 'lucide-react'
+import type { FormEvent } from "react";
+import { ChevronDown, Mic, Plus, SendHorizonal } from "lucide-react";
 
 type HomePromptFormProps = {
-  prompt: string
-  loading?: boolean
-  error?: string
-  onPromptChange: (prompt: string) => void
-  onSubmit: (prompt: string) => Promise<void> | void
-}
+  prompt: string;
+  loading?: boolean;
+  error?: string;
+  onPromptChange: (prompt: string) => void;
+  onSubmit: (prompt: string) => Promise<void> | void;
+};
 
-const placeholder = 'Ask Cloud AI to create a'
+const placeholder = "Ask Cloud AI to create a";
 
-export function HomePromptForm({ prompt, loading = false, error, onPromptChange, onSubmit }: HomePromptFormProps) {
-  const canSubmit = prompt.trim().length > 0 && !loading
+export function HomePromptForm({
+  prompt,
+  loading = false,
+  error,
+  onPromptChange,
+  onSubmit,
+}: HomePromptFormProps) {
+  const canSubmit = prompt.trim().length > 0 && !loading;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!canSubmit) return
-    await onSubmit(prompt)
+    event.preventDefault();
+    if (!canSubmit) return;
+    await onSubmit(prompt);
   }
 
   return (
     <form className="mx-auto w-full max-w-[1040px]" onSubmit={handleSubmit}>
       <div className="rounded-md border border-[var(--app-composer-border)] bg-[var(--app-composer-bg)] p-md text-[var(--app-composer-text)] transition-colors duration-200 focus-within:border-[var(--app-composer-border-focus)] sm:p-lg">
-        <label className="sr-only" htmlFor="storefront-prompt">Describe what you want to build</label>
+        <label className="sr-only" htmlFor="project-prompt">
+          Describe what you want to build
+        </label>
         <textarea
-          id="storefront-prompt"
+          id="project-prompt"
           className="min-h-[112px] w-full resize-none border-0 bg-transparent p-0 text-body font-[330] leading-[1.45] text-[var(--app-composer-text)] outline-none placeholder:text-[var(--app-subtle-text)] disabled:cursor-not-allowed disabled:opacity-60"
           value={prompt}
           placeholder={placeholder}
@@ -64,24 +72,34 @@ export function HomePromptForm({ prompt, loading = false, error, onPromptChange,
               className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[var(--app-pill-bg)] text-[var(--app-pill-text)] [&_svg]:text-[var(--app-icon-selected)] outline-none transition-colors duration-200 hover:bg-[var(--app-pill-hover)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45"
               type="submit"
               disabled={!canSubmit}
-              aria-label={loading ? 'Building project...' : 'Build project'}
+              aria-label={loading ? "Building project..." : "Build project"}
               aria-busy={loading}
             >
-              <SendHorizonal aria-hidden="true" className={loading ? 'animate-pulse' : ''} size={22} />
-              {loading ? <span className="sr-only">Building project...</span> : null}
+              <SendHorizonal
+                aria-hidden="true"
+                className={loading ? "animate-pulse" : ""}
+                size={22}
+              />
+              {loading ? (
+                <span className="sr-only">Building project...</span>
+              ) : null}
             </button>
           </div>
         </div>
       </div>
 
       {error ? (
-        <p className="mx-auto mt-sm max-w-[1040px] rounded-md border border-[var(--app-border)] bg-[var(--app-danger-bg)] p-sm text-[14px] leading-5 text-[var(--app-danger-text)]" role="alert" aria-live="assertive">
+        <p
+          className="mx-auto mt-sm max-w-[1040px] rounded-md border border-[var(--app-border)] bg-[var(--app-danger-bg)] p-sm text-[14px] leading-5 text-[var(--app-danger-text)]"
+          role="alert"
+          aria-live="assertive"
+        >
           {error}
         </p>
       ) : null}
       <p className="sr-only" aria-live="polite">
-        {loading ? 'Creating your project and preparing the workspace.' : ''}
+        {loading ? "Creating your project and preparing the workspace." : ""}
       </p>
     </form>
-  )
+  );
 }

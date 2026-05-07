@@ -1,16 +1,15 @@
+import { ProjectWorkspaceService } from "@/agent/project-workspace-service";
 import type {
   Project,
   ProjectFileNode,
   ProjectWorkspace,
   WorkspaceResult,
-} from "@/shared/storefront-builder-types";
-import { createDefaultPwaConfig, createSeedFileTree } from "./mock-store";
-import { initializeChatGptProvider } from "@/ai/ai-provider";
+} from "@/shared/project-types";
 import type {
   ProjectFileNodeRepository,
   ProjectMessageRepository,
-  StorefrontBuilderProjectRepository,
-} from "@/shared/storefront-builder-types";
+  ProjectRepository,
+} from "@/shared/project-types";
 
 function assertPrompt(prompt: string) {
   const trimmed = prompt.trim();
@@ -27,18 +26,38 @@ function deriveProjectName(prompt: string) {
     .join(" ");
   return words
     ? `${words}${prompt.split(/\s+/).length > 7 ? "..." : ""}`
-    : "New storefront";
+    : "New project";
 }
 
-export class StorefrontBuilderProjectService {
+function createDefaultPwaConfig(projectName: string, description?: string) {
+  return {
+    enabled: false,
+    name: projectName,
+    shortName: projectName.slice(0, 24) || "Project",
+    description,
+    themeColor: "#000000",
+    backgroundColor: "#ffffff",
+    display: "standalone" as const,
+    startUrl: "/",
+    scope: "/",
+    offlineFallbackEnabled: false,
+    icons: [],
+  };
+}
+
+export class ProjectService {
+  private readonly workspaceService: ProjectWorkspaceService;
+
   constructor(
-    private readonly projectRepository: StorefrontBuilderProjectRepository,
+    private readonly projectRepository: ProjectRepository,
     private readonly messageRepository: ProjectMessageRepository,
     private readonly fileNodeRepository: ProjectFileNodeRepository,
-  ) {}
+  ) {
+    this.workspaceService = new ProjectWorkspaceService(fileNodeRepository);
+  }
 
   async listProjects(userId?: string): Promise<Project[]> {
-    return this.projectRepository.listBuilderProjects(userId);
+    return this.projectRepository.listProjects(userId);
   }
 
   async createProjectFromPrompt(
@@ -58,12 +77,14 @@ export class StorefrontBuilderProjectService {
           : initialPrompt,
       initialPrompt,
       status: "ready",
+      processingStatus: "processing",
       createdAt: now,
       updatedAt: now,
       pwa: createDefaultPwaConfig(projectName, initialPrompt),
     };
 
-    await this.projectRepository.saveBuilderProject(project, userId);
+    await this.projectRepository.saveProject(project, userId);
+    await this.workspaceService.ensureWorkspace(project.id);
 
     const userMessage = await this.messageRepository.saveMessage(
       {
@@ -75,17 +96,10 @@ export class StorefrontBuilderProjectService {
         status: "completed",
         processingStatus: "completed",
         createdAt: now,
+        updatedAt: now,
       },
       userId,
     );
-
-    const providerInit = initializeChatGptProvider();
-    const agentProcessingStatus =
-      providerInit.status === "configured" ? "completed" : "failed";
-    const agentContent =
-      agentProcessingStatus === "completed"
-        ? "I created the initial storefront workspace with a virtual file structure and default PWA settings so you can continue refining it."
-        : "The workspace was created, but ChatGPT processing is waiting for provider configuration. You can retry this message once the configuration is ready.";
 
     const agentMessage = await this.messageRepository.saveMessage(
       {
@@ -93,27 +107,42 @@ export class StorefrontBuilderProjectService {
         userId,
         projectId: project.id,
         role: "agent",
-        content: agentContent,
-        status: "completed",
-        processingStatus: agentProcessingStatus,
+        content: "",
+        status: "pending",
+        processingStatus: "pending",
+        parentMessageId: userMessage.id,
+        provider: "workspace-agent",
         createdAt: new Date(Date.parse(now) + 1).toISOString(),
+        updatedAt: new Date(Date.parse(now) + 1).toISOString(),
       },
       userId,
     );
 
-    const fileTree = await this.saveInitialFileTree(project, userId);
+    const nextProject = await this.projectRepository.updateProjectProcessingState(
+      project.id,
+      "processing",
+      userId,
+      agentMessage.id,
+      now,
+    );
 
-    return { project, messages: [userMessage, agentMessage], fileTree };
+    return {
+      project:
+        nextProject ?? {
+          ...project,
+          activeAgentMessageId: agentMessage.id,
+          processingStartedAt: now,
+        },
+      messages: [userMessage, agentMessage],
+      fileTree: [],
+    };
   }
 
   async getProjectWorkspace(
     projectId: string,
     userId?: string,
   ): Promise<ProjectWorkspace | undefined> {
-    const project = await this.projectRepository.getBuilderProject(
-      projectId,
-      userId,
-    );
+    const project = await this.projectRepository.getProject(projectId, userId);
     if (!project) return undefined;
 
     const [messages, fileTree] = await Promise.all([
@@ -140,28 +169,11 @@ export class StorefrontBuilderProjectService {
     return { projects, selectedProjectId: workspace?.project.id, workspace };
   }
 
-  private async saveInitialFileTree(
-    project: Project,
-    userId?: string,
-  ): Promise<ProjectFileNode[]> {
-    const nodes = createSeedFileTree(project);
-    const saved = [];
-    for (const node of nodes) {
-      saved.push(
-        await this.fileNodeRepository.saveFileNode({ ...node, userId }, userId),
-      );
-    }
-    return buildTree(saved);
-  }
-
   async deleteProject(
     projectId: string,
     userId?: string,
   ): Promise<{ success: true }> {
-    const deleted = await this.projectRepository.deleteBuilderProject(
-      projectId,
-      userId,
-    );
+    const deleted = await this.projectRepository.deleteProject(projectId, userId);
     if (!deleted) throw new Error("Project not found.");
     await this.messageRepository.bulkUpdateMessageStatusByProject(
       projectId,

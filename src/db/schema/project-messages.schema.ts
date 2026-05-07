@@ -8,5 +8,12 @@ export const projectMessages = pgTable('project_messages', {
   content: text('content').notNull(),
   status: integer('status').notNull().default(1),
   processingStatus: text('processing_status').notNull().default('completed'),
-  createdAt: timestamp('created_at').notNull()
+  parentMessageId: text('parent_message_id'),
+  provider: text('provider'),
+  providerResponseId: text('provider_response_id'),
+  errorMessage: text('error_message'),
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  createdAt: timestamp('created_at').notNull(),
+  updatedAt: timestamp('updated_at')
 })

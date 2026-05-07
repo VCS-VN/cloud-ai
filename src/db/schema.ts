@@ -5,3 +5,4 @@ export * from "./schema/generation-records.schema";
 export * from "./schema/preview-tokens.schema";
 export * from "./schema/project-messages.schema";
 export * from "./schema/project-file-nodes.schema";
+export * from "./schema/agent-message-chunks.schema";
