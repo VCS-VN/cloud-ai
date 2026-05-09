@@ -164,6 +164,17 @@ export type AgentRun = {
   plan?: ChangePlan;
   status: AgentRunStatus;
   modelUsage?: Record<string, unknown>;
+  thinking?: {
+    thinkingResultId: string;
+    userFacingUnderstanding: string;
+    lifecycleIntent: string;
+    normalizedGoal: string;
+    extractedWishCount: number;
+    riskLevel: "low" | "medium" | "high";
+    requiresUserConfirmation: boolean;
+    downstreamTaskType: string;
+    createdAt: string;
+  };
   affectedFiles: string[];
   validationResult?: ValidationResult;
   startedAt: string;
@@ -295,6 +306,34 @@ export type ProjectSnapshot = {
 export type AgentStreamEvent =
   | { type: "agent_started"; runId: string; projectId: string; message: string }
   | { type: "state_loaded"; status: ProjectStatus }
+  | { type: "thinking_started"; runId: string; message: string }
+  | { type: "thinking_context_loaded"; runId: string; projectStatus: string }
+  | {
+      type: "user_wish_extracted";
+      runId: string;
+      understanding: string;
+      wishes: Array<{
+        type: "explicit" | "implicit" | "inferred";
+        description: string;
+        priority: "must_have" | "should_have" | "nice_to_have";
+      }>;
+    }
+  | { type: "thinking_needs_clarification"; runId: string; question: string; reason: string }
+  | {
+      type: "thinking_completed";
+      runId: string;
+      taskType:
+        | "init_storefront_project"
+        | "incremental_source_update"
+        | "content_update"
+        | "design_update"
+        | "product_data_update"
+        | "bug_fix"
+        | "answer_question"
+        | "needs_clarification";
+      normalizedGoal: string;
+      riskLevel: "low" | "medium" | "high";
+    }
   | { type: "intent_detected"; intent: BuilderIntent }
   | { type: "clarification_required"; question: string }
   | { type: "context_retrieved"; files: Array<{ path: string; reason: string }> }

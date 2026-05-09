@@ -38,10 +38,15 @@ export class ProjectRunStore {
     });
   }
 
+  async saveThinking(run: AgentRun, thinking: NonNullable<AgentRun["thinking"]>): Promise<AgentRun> {
+    return this.update(run, { thinking });
+  }
+
   async waitForClarification(run: AgentRun, updates: Partial<AgentRun> = {}): Promise<AgentRun> {
     return this.repository.save({
       ...run,
       ...updates,
+      thinking: updates.thinking ?? run.thinking,
       status: "waiting_for_clarification",
       updatedAt: new Date().toISOString(),
     });
@@ -54,6 +59,7 @@ export class ProjectRunStore {
       ...updates,
       affectedFiles: updates.affectedFiles ?? run.affectedFiles,
       validationResult: updates.validationResult ?? run.validationResult,
+      thinking: updates.thinking ?? run.thinking,
       status: "completed",
       completedAt: now,
       updatedAt: now,
@@ -71,6 +77,7 @@ export class ProjectRunStore {
       ...updates,
       affectedFiles: updates.affectedFiles ?? run.affectedFiles,
       validationResult: updates.validationResult ?? run.validationResult,
+      thinking: updates.thinking ?? run.thinking,
       status: "failed",
       error,
       completedAt: now,

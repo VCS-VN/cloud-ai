@@ -1,4 +1,11 @@
-import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  json,
+} from "drizzle-orm/pg-core";
 
 export const agentRuns = pgTable(
   "agent_runs",
@@ -13,6 +20,7 @@ export const agentRuns = pgTable(
     plan: jsonb("plan"),
     status: text("status").notNull(),
     modelUsage: jsonb("model_usage"),
+    thinking: json("thinking"),
     affectedFiles: jsonb("affected_files").notNull(),
     validationResult: jsonb("validation_result"),
     error: jsonb("error"),

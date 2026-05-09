@@ -18,6 +18,9 @@ import { retrieveRelevantContext } from "../source/retrieve-context.server";
 import { selectTemplate, slugifyProjectName } from "../source/template-registry.server";
 import { ValidationService } from "../source/validation-service.server";
 import { toSafeAgentError } from "./agent-errors";
+import { runThinkingLayer } from "../thinking/thinking-orchestrator.server";
+import { mapThinkingToCompletedEvent, mapThinkingToUserWishEvent } from "../thinking/thinking-events.mapper";
+import { toThinkingRunSummary } from "../thinking/thinking.repository.server";
 import { redactSecrets } from "../security/secret-redactor";
 
 export type HandlePromptInput = {
@@ -64,6 +67,31 @@ export class AgentOrchestrator {
       const projectState = await this.deps.projectStateStore.loadOrCreate(input.projectId, input.userId);
       yield { type: "state_loaded", status: projectState.status };
 
+      yield { type: "thinking_started", runId: run.id, message: "Đang hiểu yêu cầu của bạn..." };
+      yield { type: "thinking_context_loaded", runId: run.id, projectStatus: projectState.status };
+      const thinking = await runThinkingLayer({
+        projectId: input.projectId,
+        run,
+        userId: input.userId,
+        userPrompt: input.prompt,
+        projectState,
+        provider: this.deps.openAIProvider,
+        agentConfig: this.deps.agentConfig,
+        runStore: this.deps.runStore,
+      });
+      yield mapThinkingToUserWishEvent(thinking);
+      if (thinking.downstreamTask.taskType === "needs_clarification") {
+        yield {
+          type: "thinking_needs_clarification",
+          runId: run.id,
+          question: thinking.downstreamTask.clarification?.question ?? "Vui lòng xác nhận trước khi tiếp tục.",
+          reason: thinking.downstreamTask.clarification?.reason ?? "Thinking layer requires clarification.",
+        };
+        await this.deps.runStore.waitForClarification(run, { thinking: toThinkingRunSummary(thinking) });
+        return;
+      }
+      yield mapThinkingToCompletedEvent(thinking);
+
       const intent = await classifyIntent({ prompt: input.prompt, projectState });
       yield { type: "intent_detected", intent };
 
@@ -80,7 +108,7 @@ export class AgentOrchestrator {
       if (shouldInitializeProject(projectState, intent)) {
         yield* this.initProjectWorkflow({ input, runId: run.id, projectState, intent });
         const plan = createInitPlan(intent);
-        await this.deps.runStore.complete(run, { intent, plan, affectedFiles: [] });
+        await this.deps.runStore.complete(run, { intent, plan, affectedFiles: [], thinking: toThinkingRunSummary(thinking) });
         return;
       }
 
@@ -90,6 +118,7 @@ export class AgentOrchestrator {
         plan: updateResult.plan,
         affectedFiles: updateResult.changedFiles,
         validationResult: updateResult.validation,
+        thinking: toThinkingRunSummary(thinking),
       });
     } catch (error) {
       const safeError = toSafeAgentError(error, "AGENT_STREAM_FAILED");

@@ -1,11 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { Grid2X2, List, Plus, Search } from "lucide-react";
-import {
-  AppSidebar,
-  filterProjects,
-  type ProjectFilter,
-} from "@/components/layout/AppSidebar";
+import { AppSidebar, filterProjects } from "@/components/layout/AppSidebar";
 import { ProjectList } from "@/components/projects/ProjectList";
 import { getCurrentUser } from "@/server/functions/auth";
 import {
@@ -32,13 +28,12 @@ function ProjectsPage() {
   const { projects } = Route.useLoaderData();
   const { user } = Route.useRouteContext();
   const [activeProjects, setActiveProjects] = useState(projects);
-  const [projectFilter, setProjectFilter] = useState<ProjectFilter>("all");
   const [projectSearch, setProjectSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
   const filteredProjects = useMemo(
-    () => filterProjects(activeProjects, projectFilter, projectSearch),
-    [activeProjects, projectFilter, projectSearch],
+    () => filterProjects(activeProjects, "all", projectSearch),
+    [activeProjects, projectSearch],
   );
 
   function openProject(projectId: string) {
@@ -63,8 +58,6 @@ function ProjectsPage() {
           user={user}
           activeItem="projects"
           projects={projects}
-          projectFilter={projectFilter}
-          onProjectFilterChange={setProjectFilter}
           onOpenProject={openProject}
         />
 
@@ -131,8 +124,7 @@ function ProjectsPage() {
           </div>
 
           <p className="mb-sm mt-0 text-[12px] font-[520] text-[var(--app-muted)]">
-            {projectFilter === "recent" ? "Recently edited" : "Projects"} ·{" "}
-            {filteredProjects.length}
+            Projects · {filteredProjects.length}
           </p>
           <ProjectList
             projects={filteredProjects}

@@ -653,6 +653,14 @@ function createAgentMessageDeltaPresenter() {
 
 export function agentEventToUserFacingMessage(event: AgentStreamEvent) {
   switch (event.type) {
+    case "thinking_started":
+      return event.message;
+    case "user_wish_extracted":
+      return `Đã hiểu: ${event.understanding}`;
+    case "thinking_completed":
+      return "Đã xác định task. Đang lập kế hoạch...";
+    case "thinking_needs_clarification":
+      return `Cần làm rõ: ${event.question}`;
     case "intent_detected":
       if (event.intent.intent === "init_project") return "Đang khởi tạo dự án...";
       if (event.intent.intent === "explain_project") return "Đang kiểm tra dự án...";
