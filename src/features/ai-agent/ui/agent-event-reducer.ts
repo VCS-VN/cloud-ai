@@ -13,6 +13,14 @@ export type AgentEventState = {
   clarification?: Extract<AgentStreamEvent, { type: "clarification_required" }>;
   changedFiles: string[];
   validation?: Pick<ValidationResult, "ok" | "summary" | "errors">;
+  codeTool?: {
+    active: boolean;
+    taskTitle?: string;
+    lastTool?: string;
+    repairAttempt?: number;
+    humanReviewReason?: string;
+    validationStatus?: "passed" | "failed" | "skipped";
+  };
   done: boolean;
   doneSummary?: string;
   previewUrl?: string;
@@ -40,7 +48,22 @@ export function agentEventReducer(state: AgentEventState, event: AgentStreamEven
   }
   if (event.type === "clarification_required") next.clarification = event;
   if (event.type === "file_changed") next.changedFiles = [...new Set([...next.changedFiles, event.path])];
-  if (event.type === "validation_finished") next.validation = { ok: event.ok, summary: event.summary, errors: event.errors ?? [] };
+  if (event.type === "validation_finished") next.validation = { ok: event.ok ?? event.status === "passed", summary: event.summary, errors: event.errors ?? [] };
+  if (event.type === "code_tool_loop_started") next.codeTool = { ...next.codeTool, active: true, taskTitle: event.taskTitle };
+  if (event.type === "tool_call_requested") next.codeTool = { ...next.codeTool, active: true, lastTool: event.toolName };
+  if (event.type === "patch_applied") next.changedFiles = [...new Set([...next.changedFiles, ...event.changedFiles])];
+  if (event.type === "repair_started") next.codeTool = { ...next.codeTool, active: true, repairAttempt: event.attempt };
+  if (event.type === "human_review_required") {
+    next.done = true;
+    next.codeTool = { ...next.codeTool, active: false, humanReviewReason: event.reason };
+    next.changedFiles = [...new Set([...next.changedFiles, ...event.changedFiles])];
+  }
+  if (event.type === "code_tool_loop_completed") {
+    next.done = true;
+    next.doneSummary = event.summary;
+    next.codeTool = { ...next.codeTool, active: false, validationStatus: event.validationStatus };
+    next.changedFiles = [...new Set([...next.changedFiles, ...event.changedFiles])];
+  }
   if (event.type === "done") {
     next.done = true;
     next.doneSummary = event.summary;

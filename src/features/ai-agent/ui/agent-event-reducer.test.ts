@@ -37,6 +37,29 @@ describe("agentEventReducer thinking events", () => {
     expect(JSON.stringify(state)).not.toContain("provider");
   });
 
+  it("tracks sanitized code tool progress", () => {
+    const state = reduceEvents([
+      { type: "code_tool_loop_started", projectId: "project_1", messageId: "msg_1", taskTitle: "Add filters" },
+      { type: "tool_call_requested", projectId: "project_1", messageId: "msg_1", toolName: "project_search_code", category: "inspect", safeSummary: "Searching source" },
+      { type: "patch_applied", projectId: "project_1", messageId: "msg_1", changedFiles: ["src/App.tsx"], insertions: 2, deletions: 1 },
+      { type: "code_tool_loop_completed", projectId: "project_1", messageId: "msg_1", summary: "Done", changedFiles: ["src/App.tsx"], validationStatus: "passed" },
+    ]);
+
+    expect(state.codeTool).toMatchObject({ active: false, taskTitle: "Add filters", lastTool: "project_search_code", validationStatus: "passed" });
+    expect(state.changedFiles).toEqual(["src/App.tsx"]);
+    expect(state.doneSummary).toBe("Done");
+  });
+
+  it("tracks human review as a final recoverable state", () => {
+    const state = reduceEvents([
+      { type: "human_review_required", projectId: "project_1", messageId: "msg_1", reason: "Sensitive files", changedFiles: ["package.json"] },
+    ]);
+
+    expect(state.done).toBe(true);
+    expect(state.codeTool?.humanReviewReason).toBe("Sensitive files");
+    expect(state.changedFiles).toEqual(["package.json"]);
+  });
+
   it("tracks sanitized clarification requests", () => {
     const state = reduceEvents([
       {

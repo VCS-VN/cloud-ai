@@ -23,6 +23,7 @@ export const agentRuns = pgTable(
     thinking: json("thinking"),
     affectedFiles: jsonb("affected_files").notNull(),
     validationResult: jsonb("validation_result"),
+    codeToolRunState: jsonb("code_tool_run_state"),
     error: jsonb("error"),
     startedAt: timestamp("started_at").notNull(),
     completedAt: timestamp("completed_at"),

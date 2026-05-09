@@ -1,6 +1,8 @@
 import type OpenAI from "openai";
 import { redactSecrets } from "../security/secret-redactor";
 import { parseStructuredText, type StructuredOutputSource } from "./structured-output-parser";
+import type { CodeToolDefinition, ProjectToolResult, ProviderFunctionToolCall } from "../code-tools/code-agent-types";
+import { buildOpenAIFunctionTools } from "../code-tools/code-tool-registry.server";
 
 export type OpenAITextStreamEvent = { type: "delta" | "done"; text?: string };
 
@@ -24,6 +26,44 @@ export class OpenAIProvider {
     private readonly client: OpenAI,
     private readonly logger: OpenAIProviderLogger = defaultOpenAIProviderLogger,
   ) {}
+
+  async createCodeToolResponse(args: {
+    model: string;
+    input: unknown[];
+    tools: CodeToolDefinition[];
+    toolChoice?: "auto" | "required";
+  }): Promise<{ raw: unknown; toolCalls: ProviderFunctionToolCall[]; outputText: string }> {
+    const response = await this.client.responses.create({
+      model: args.model,
+      input: args.input as never,
+      tools: buildOpenAIFunctionTools(args.tools) as never,
+      tool_choice: args.toolChoice ?? "auto",
+      parallel_tool_calls: false,
+    } as never);
+    return { raw: response, toolCalls: extractFunctionToolCalls(response), outputText: selectResponseOutputText(response) };
+  }
+
+  async continueCodeToolResponse(args: {
+    model: string;
+    input: unknown[];
+    tools: CodeToolDefinition[];
+    toolCall: ProviderFunctionToolCall;
+    toolOutput: ProjectToolResult;
+  }): Promise<{ raw: unknown; toolCalls: ProviderFunctionToolCall[]; outputText: string }> {
+    return this.createCodeToolResponse({
+      model: args.model,
+      input: [
+        ...args.input,
+        {
+          type: "function_call_output",
+          call_id: args.toolCall.callId,
+          output: JSON.stringify(args.toolOutput),
+        },
+      ],
+      tools: args.tools,
+      toolChoice: "auto",
+    });
+  }
 
   async parseStructured<TInput, TOutput>(args: {
     model: string;
@@ -276,4 +316,31 @@ function isJsonSchemaObject(value: unknown) {
 function normalizeProviderError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : fallback;
   return new Error(redactSecrets(message), { cause: error });
+}
+
+function extractFunctionToolCalls(response: unknown): ProviderFunctionToolCall[] {
+  const output = Array.isArray((response as { output?: unknown }).output) ? (response as { output: unknown[] }).output : [];
+  return output.flatMap((item) => {
+    const candidate = item as { type?: string; name?: unknown; call_id?: unknown; id?: unknown; arguments?: unknown };
+    if (candidate.type !== "function_call" || typeof candidate.name !== "string") return [];
+    return [{
+      callId: String(candidate.call_id ?? candidate.id ?? ""),
+      name: candidate.name,
+      arguments: candidate.arguments ?? {},
+    }];
+  });
+}
+
+function selectResponseOutputText(response: unknown) {
+  const direct = (response as { output_text?: unknown }).output_text;
+  if (typeof direct === "string") return direct;
+  const output = Array.isArray((response as { output?: unknown }).output) ? (response as { output: unknown[] }).output : [];
+  return output
+    .flatMap((item) => {
+      const content = (item as { content?: unknown }).content;
+      return Array.isArray(content) ? content : [];
+    })
+    .map((content) => (content as { text?: unknown }).text)
+    .filter((text): text is string => typeof text === "string")
+    .join("");
 }

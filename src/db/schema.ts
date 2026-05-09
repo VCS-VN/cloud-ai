@@ -9,3 +9,4 @@ export * from "./schema/agent-message-chunks.schema";
 export * from "./schema/project-states.schema";
 export * from "./schema/agent-runs.schema";
 export * from "./schema/project-snapshots.schema";
+export * from "./schema/project-tool-execution-logs.schema";

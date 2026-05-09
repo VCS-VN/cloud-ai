@@ -1,5 +1,13 @@
-import { createEmptyProjectState, type ProjectState } from "./project-state.schema";
+import { createEmptyProjectState, type FileManifestEntry, type ProjectState } from "./project-state.schema";
 import type { PgProjectStateRepository, ProjectStateRecord } from "@/server/repositories/project-state-repository";
+
+export type CodeChangeRecordInput = {
+  runId: string;
+  userPrompt: string;
+  summary: string;
+  changedFiles: string[];
+  validationStatus: "passed" | "failed" | "skipped";
+};
 
 export class ProjectStateStore {
   constructor(private readonly repository: PgProjectStateRepository) {}
@@ -36,6 +44,31 @@ export class ProjectStateStore {
   async patch(projectId: string, patch: Partial<ProjectState>, userId?: string): Promise<ProjectState> {
     const current = await this.loadOrCreate(projectId, userId);
     return this.save(mergeProjectStatePatch(current, patch, projectId), userId);
+  }
+
+  async appendCodeChangeRecord(projectId: string, record: CodeChangeRecordInput, userId?: string): Promise<ProjectState> {
+    const current = await this.loadOrCreate(projectId, userId);
+    return this.save({
+      ...current,
+      recentChanges: [
+        ...current.recentChanges,
+        {
+          at: new Date().toISOString(),
+          runId: record.runId,
+          userPrompt: record.userPrompt,
+          summary: record.summary,
+          changedFiles: record.changedFiles,
+          validationStatus: record.validationStatus,
+        },
+      ].slice(-10),
+    }, userId);
+  }
+
+  async updateFileManifest(projectId: string, entries: FileManifestEntry[], userId?: string): Promise<ProjectState> {
+    const current = await this.loadOrCreate(projectId, userId);
+    const manifest = new Map(current.fileManifest.map((entry) => [entry.path, entry]));
+    for (const entry of entries) manifest.set(entry.path, entry);
+    return this.save({ ...current, fileManifest: [...manifest.values()] }, userId);
   }
 }
 

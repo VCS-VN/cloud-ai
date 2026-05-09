@@ -99,3 +99,7 @@ export function toStreamFailureEvent(args: {
     },
   };
 }
+
+export function shouldPreserveProjectMessageStream(error: { recoverable?: boolean; code?: string }) {
+  return error.recoverable === true || error.code === "HUMAN_REVIEW_REQUIRED";
+}

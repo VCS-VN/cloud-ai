@@ -18,6 +18,16 @@ const EVENT_LABELS: Record<AgentStreamEvent["type"], string> = {
   file_changed: "File changed",
   validation_started: "Validation started",
   validation_finished: "Validation finished",
+  code_tool_loop_started: "Code tool started",
+  code_context_loaded: "Code context loaded",
+  tool_call_requested: "Tool requested",
+  tool_call_completed: "Tool completed",
+  snapshot_created: "Snapshot created",
+  patch_applied: "Patch applied",
+  repair_started: "Repair started",
+  preview_restart_required: "Preview restart required",
+  code_tool_loop_completed: "Code tool completed",
+  human_review_required: "Human review required",
   project_state_updated: "Project state updated",
   done: "Done",
   error: "Error",
@@ -42,10 +52,10 @@ export function AgentEventTimeline({ events }: { events: AgentStreamEvent[] }) {
 
 function iconFor(event: AgentStreamEvent) {
   if ((event.type === "clarification_required" || event.type === "thinking_needs_clarification")) return <TriangleAlert aria-hidden="true" size={14} className="text-[var(--app-icon-selected)]" />;
-  if (event.type === "error") return <TriangleAlert aria-hidden="true" size={14} className="text-[var(--app-icon)]" />;
-  if (event.type === "done" || event.type === "validation_finished" || event.type === "project_state_updated" || event.type === "thinking_completed") return <CheckCircle2 aria-hidden="true" size={14} className="text-[var(--app-icon-selected)]" />;
-  if (event.type === "file_changed") return <FileText aria-hidden="true" size={14} className="text-[var(--app-icon-muted)]" />;
-  if (event.type === "source_generation_started" || event.type === "validation_started" || event.type === "thinking_started") return <Loader2 aria-hidden="true" size={14} className="animate-spin text-[var(--app-icon-muted)]" />;
+  if (event.type === "error" || event.type === "human_review_required") return <TriangleAlert aria-hidden="true" size={14} className="text-[var(--app-icon)]" />;
+  if (event.type === "done" || event.type === "validation_finished" || event.type === "project_state_updated" || event.type === "thinking_completed" || event.type === "code_tool_loop_completed") return <CheckCircle2 aria-hidden="true" size={14} className="text-[var(--app-icon-selected)]" />;
+  if (event.type === "file_changed" || event.type === "patch_applied") return <FileText aria-hidden="true" size={14} className="text-[var(--app-icon-muted)]" />;
+  if (event.type === "source_generation_started" || event.type === "validation_started" || event.type === "thinking_started" || event.type === "code_tool_loop_started" || event.type === "tool_call_requested" || event.type === "repair_started") return <Loader2 aria-hidden="true" size={14} className="animate-spin text-[var(--app-icon-muted)]" />;
   return <CircleDashed aria-hidden="true" size={14} className="text-[var(--app-icon-subtle)]" />;
 }
 
@@ -63,6 +73,16 @@ function detailFor(event: AgentStreamEvent) {
     case "source_generation_started": return event.message;
     case "file_changed": return `${event.operation}: ${event.path}`;
     case "validation_finished": return `${event.ok ? "Validation passed" : "Validation failed"}: ${event.summary}${event.errors?.length ? ` (${event.errors.length} errors)` : ""}`;
+    case "code_tool_loop_started": return event.taskTitle;
+    case "code_context_loaded": return `${event.summary} • ${event.fileCount} files`;
+    case "tool_call_requested": return `${event.toolName}: ${event.safeSummary}`;
+    case "tool_call_completed": return `${event.toolName}: ${event.summary}`;
+    case "snapshot_created": return event.snapshotId;
+    case "patch_applied": return `${event.changedFiles.length} files changed • +${event.insertions} -${event.deletions}`;
+    case "repair_started": return `${event.reason} • Attempt ${event.attempt}`;
+    case "preview_restart_required": return `${event.reason} • ${event.changedFiles.length} files`;
+    case "code_tool_loop_completed": return `${event.summary} • Validation: ${event.validationStatus}`;
+    case "human_review_required": return `${event.reason}${event.changedFiles.length ? ` • ${event.changedFiles.length} files` : ""}`;
     case "done": return `${event.summary}${event.changedFiles.length ? ` • ${event.changedFiles.length} files changed` : ""}${event.previewUrl ? ` • Preview: ${event.previewUrl}` : ""}`;
     case "error": return event.message;
     case "project_state_updated": return event.projectState.status;

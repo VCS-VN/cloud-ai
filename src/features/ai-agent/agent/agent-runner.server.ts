@@ -31,10 +31,45 @@ export function createAgentRunLogFields(fields: AgentRunLogFields): AgentRunLogF
   };
 }
 
+const projectMutationLocks = new Map<string, Promise<void>>();
+
+export async function withProjectMutationLock<T>(input: {
+  projectId: string;
+  run: () => Promise<T>;
+}): Promise<T> {
+  const previous = projectMutationLocks.get(input.projectId) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  projectMutationLocks.set(input.projectId, previous.then(() => current));
+
+  await previous;
+  try {
+    return await input.run();
+  } finally {
+    release();
+    if (projectMutationLocks.get(input.projectId) === current) {
+      projectMutationLocks.delete(input.projectId);
+    }
+  }
+}
+
 export class AgentRunner {
   constructor(private readonly orchestrator: AgentOrchestrator) {}
 
-  handlePromptStream(input: HandlePromptInput): AsyncGenerator<AgentStreamEvent> {
-    return this.orchestrator.handlePromptStream(input);
+  async *handlePromptStream(input: HandlePromptInput): AsyncGenerator<AgentStreamEvent> {
+    const events = await withProjectMutationLock({
+      projectId: input.projectId,
+      run: async () => {
+        const collected: AgentStreamEvent[] = [];
+        for await (const event of this.orchestrator.handlePromptStream(input)) {
+          collected.push(event);
+        }
+        return collected;
+      },
+    });
+
+    for (const event of events) yield event;
   }
 }

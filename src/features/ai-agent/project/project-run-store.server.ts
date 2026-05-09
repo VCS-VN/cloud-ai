@@ -1,5 +1,5 @@
 import type { ListProjectRunsOptions, PgAgentRunRepository } from "@/server/repositories/agent-run-repository";
-import type { AgentRun, AgentRunStatus } from "./project-state.schema";
+import type { AgentRun, AgentRunStatus, ProjectMessageRunState, ProjectToolExecutionLog } from "./project-state.schema";
 
 export type CreateAgentRunInput = {
   projectId: string;
@@ -42,6 +42,14 @@ export class ProjectRunStore {
     return this.update(run, { thinking });
   }
 
+  async savePatchMetadata(run: AgentRun, changedFiles: string[]): Promise<AgentRun> {
+    return this.update(run, { affectedFiles: Array.from(new Set([...run.affectedFiles, ...changedFiles])) });
+  }
+
+  async saveSnapshotMetadata(run: AgentRun, snapshotId: string): Promise<AgentRun> {
+    return this.update(run, { modelUsage: { ...run.modelUsage, snapshotId } });
+  }
+
   async waitForClarification(run: AgentRun, updates: Partial<AgentRun> = {}): Promise<AgentRun> {
     return this.repository.save({
       ...run,
@@ -64,6 +72,32 @@ export class ProjectRunStore {
       completedAt: now,
       updatedAt: now,
     });
+  }
+
+  async saveValidationStatus(run: AgentRun, validationResult: NonNullable<AgentRun["validationResult"]>): Promise<AgentRun> {
+    return this.update(run, { validationResult });
+  }
+
+  async waitForHumanReview(run: AgentRun, input: { reason: string; affectedFiles?: string[] }): Promise<AgentRun> {
+    return this.repository.save({
+      ...run,
+      affectedFiles: input.affectedFiles ?? run.affectedFiles,
+      status: "waiting_for_clarification",
+      error: {
+        code: "HUMAN_REVIEW_REQUIRED",
+        message: input.reason,
+        recoverable: true,
+      },
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async saveMessageRunState(run: AgentRun, state: ProjectMessageRunState): Promise<AgentRun> {
+    return this.update(run, { codeToolRunState: state });
+  }
+
+  async saveToolExecutionLog(log: ProjectToolExecutionLog): Promise<ProjectToolExecutionLog> {
+    return this.repository.saveToolExecutionLog(log);
   }
 
   async listByProject(projectId: string, userId?: string, options: ListProjectRunsOptions = {}) {

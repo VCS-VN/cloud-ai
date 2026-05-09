@@ -35,6 +35,15 @@ import {
 import { toThinkingRunSummary } from "../thinking/thinking.repository.server";
 import type { ThinkingResult } from "../thinking/thinking.schema";
 import { redactSecrets } from "../security/secret-redactor";
+import { runBoundedCodeToolLoop } from "../code-tools/code-tool-loop.server";
+import {
+  buildCodeContextLoadedEvent,
+  buildPatchAppliedEvent,
+  buildPreviewRestartRequiredEvent,
+  buildSnapshotCreatedEvent,
+  buildValidationStartedEvent,
+} from "../code-tools/code-tool-events.server";
+import { getPreviewRestartRequirement } from "../code-tools/services/preview-restart-policy.server";
 
 export type HandlePromptInput = {
   projectId: string;
@@ -354,6 +363,13 @@ export class AgentOrchestrator {
       type: "context_retrieved",
       files: relevantFiles.map(({ path, reason }) => ({ path, reason })),
     };
+    yield buildCodeContextLoadedEvent({
+      projectId: input.projectId,
+      messageId: input.messageId ?? args.runId,
+      summary: "Relevant project context loaded for code update.",
+      stack: Object.values(projectState.stack),
+      fileCount: projectState.fileManifest.length,
+    });
 
     const plan = await createChangePlan({
       prompt: normalizedRequirement,
@@ -390,11 +406,48 @@ export class AgentOrchestrator {
       provider: this.deps.openAIProvider,
       model: this.deps.agentConfig?.coderModel,
     });
+    const snapshot = await this.deps.snapshotService?.createSnapshot({
+      projectId: input.projectId,
+      userId: input.userId,
+      runId: args.runId,
+      kind: "pre_change",
+      summary: "Pre-change snapshot before code tool mutation.",
+      projectState,
+      fileManifest: projectState.fileManifest,
+    });
+    if (snapshot) {
+      yield buildSnapshotCreatedEvent({
+        projectId: input.projectId,
+        messageId: input.messageId ?? args.runId,
+        snapshotId: snapshot.id,
+      });
+    }
+
     const patchService = new PatchService(this.deps.projectFileStore);
     const applyResult = await patchService.apply(
       input.projectId,
       patch.operations,
     );
+    const insertions = patch.operations
+      .filter((operation) => operation.type !== "delete_file")
+      .reduce((total, operation) => total + operation.content.split("\n").length, 0);
+    const deletions = patch.operations.filter((operation) => operation.type === "delete_file").length;
+    yield buildPatchAppliedEvent({
+      projectId: input.projectId,
+      messageId: input.messageId ?? args.runId,
+      changedFiles: applyResult.changedFiles,
+      insertions,
+      deletions,
+    });
+    const previewRestart = getPreviewRestartRequirement(applyResult.changedFiles);
+    if (previewRestart.required) {
+      yield buildPreviewRestartRequiredEvent({
+        projectId: input.projectId,
+        messageId: input.messageId ?? args.runId,
+        reason: previewRestart.reason,
+        changedFiles: previewRestart.changedFiles,
+      });
+    }
 
     for (const operation of patch.operations) {
       yield {
@@ -405,6 +458,11 @@ export class AgentOrchestrator {
     }
 
     yield { type: "validation_started", commands: plan.validationCommands };
+    yield buildValidationStartedEvent({
+      projectId: input.projectId,
+      messageId: input.messageId ?? args.runId,
+      commands: plan.validationCommands,
+    });
     const validation = await this.validate(
       input.projectId,
       plan.validationCommands,
@@ -415,6 +473,13 @@ export class AgentOrchestrator {
       summary: validation.summary,
       errors: validation.errors,
     };
+    yield* streamCodeToolLoopEvents({
+      projectId: input.projectId,
+      messageId: input.messageId ?? args.runId,
+      taskTitle: plan.summary,
+      changedFiles: applyResult.changedFiles,
+      validation,
+    });
 
     if (!validation.ok) {
       await this.deps.snapshotService?.rollbackToLatestStable({
@@ -714,4 +779,34 @@ function logAgentPhase(
     return;
   }
   console.info(JSON.stringify(payload));
+}
+
+async function* streamCodeToolLoopEvents(input: {
+  projectId: string;
+  messageId: string;
+  taskTitle: string;
+  changedFiles: string[];
+  validation: ValidationResult;
+}): AsyncGenerator<AgentStreamEvent> {
+  const events: AgentStreamEvent[] = [];
+  await runBoundedCodeToolLoop({
+    projectId: input.projectId,
+    messageId: input.messageId,
+    taskTitle: input.taskTitle,
+    changedFiles: input.changedFiles,
+    validate: async () => ({
+      status: input.validation.ok ? "passed" : "failed",
+      commands: input.validation.commands.map((command) => ({
+        command: command.command,
+        status: command.exitCode === 0 ? "passed" : "failed",
+        exitCode: command.exitCode,
+        stdoutSummary: command.stdout,
+        stderrSummary: command.stderr,
+        durationMs: command.durationMs,
+      })),
+      canRepair: false,
+    }),
+    sendEvent: (event) => { events.push(event as AgentStreamEvent); },
+  });
+  for (const event of events) yield event;
 }

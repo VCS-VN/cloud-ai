@@ -145,6 +145,45 @@ export type FileManifestEntry = {
   lastModifiedByAgentAt?: string;
 };
 
+
+export type ProjectMessageRunState = {
+  projectId: string;
+  messageId: string;
+  phase:
+    | "created"
+    | "thinking"
+    | "code_context"
+    | "code_tool_loop"
+    | "patching"
+    | "validating"
+    | "repairing"
+    | "preview_sync"
+    | "completed"
+    | "failed"
+    | "human_review_required";
+  currentTool?: string;
+  changedFiles: string[];
+  validationStatus?: "passed" | "failed" | "skipped";
+  snapshotId?: string;
+  updatedAt: string;
+};
+
+export type ProjectToolExecutionLog = {
+  id: string;
+  projectId: string;
+  messageId: string;
+  toolName: string;
+  category: "inspect" | "mutate" | "validate" | "snapshot" | "preview";
+  status: "started" | "completed" | "failed" | "blocked";
+  safeArgsSummary: string;
+  safeResultSummary?: string;
+  errorCode?: string;
+  recoverable?: boolean;
+  startedAt: string;
+  completedAt?: string;
+  durationMs?: number;
+};
+
 export type AgentRunStatus =
   | "queued"
   | "running"
@@ -177,6 +216,7 @@ export type AgentRun = {
   };
   affectedFiles: string[];
   validationResult?: ValidationResult;
+  codeToolRunState?: ProjectMessageRunState;
   startedAt: string;
   completedAt?: string;
   createdAt: string;

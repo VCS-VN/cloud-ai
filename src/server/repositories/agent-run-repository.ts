@@ -1,8 +1,8 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { agentRuns } from "@/db/schema";
+import { agentRuns, projectToolExecutionLogs } from "@/db/schema";
 import type * as schema from "@/db/schema";
-import type { AgentRun, AgentRunStatus, BuilderIntent, ChangePlan, ValidationResult } from "@/features/ai-agent/project/project-state.schema";
+import type { AgentRun, AgentRunStatus, BuilderIntent, ChangePlan, ProjectToolExecutionLog, ValidationResult } from "@/features/ai-agent/project/project-state.schema";
 
 type AgentRunDatabase = PostgresJsDatabase<typeof schema>;
 type AgentRunRow = typeof agentRuns.$inferSelect;
@@ -22,6 +22,7 @@ function toRun(row: AgentRunRow): AgentRun {
     thinking: row.thinking as AgentRun["thinking"],
     affectedFiles: row.affectedFiles as string[],
     validationResult: row.validationResult as ValidationResult | undefined,
+    codeToolRunState: row.codeToolRunState as AgentRun["codeToolRunState"],
     error: row.error as AgentRun["error"],
     startedAt: row.startedAt.toISOString(),
     completedAt: row.completedAt?.toISOString(),
@@ -45,6 +46,7 @@ function toValues(run: AgentRun) {
     thinking: run.thinking,
     affectedFiles: run.affectedFiles,
     validationResult: run.validationResult,
+    codeToolRunState: run.codeToolRunState,
     error: run.error,
     startedAt: new Date(run.startedAt),
     completedAt: run.completedAt ? new Date(run.completedAt) : null,
@@ -80,6 +82,44 @@ export class PgAgentRunRepository {
       : eq(agentRuns.id, id);
     const [row] = await this.db.select().from(agentRuns).where(filter);
     return row ? toRun(row) : undefined;
+  }
+
+  async saveToolExecutionLog(log: ProjectToolExecutionLog): Promise<ProjectToolExecutionLog> {
+    const values = {
+      id: log.id,
+      projectId: log.projectId,
+      messageId: log.messageId,
+      toolName: log.toolName,
+      category: log.category,
+      status: log.status,
+      safeArgsSummary: log.safeArgsSummary,
+      safeResultSummary: log.safeResultSummary,
+      errorCode: log.errorCode,
+      recoverable: log.recoverable,
+      startedAt: new Date(log.startedAt),
+      completedAt: log.completedAt ? new Date(log.completedAt) : null,
+      durationMs: log.durationMs,
+    };
+    const [row] = await this.db
+      .insert(projectToolExecutionLogs)
+      .values(values)
+      .onConflictDoUpdate({ target: projectToolExecutionLogs.id, set: { ...values, id: undefined } })
+      .returning();
+    return {
+      id: row.id,
+      projectId: row.projectId,
+      messageId: row.messageId,
+      toolName: row.toolName,
+      category: row.category as ProjectToolExecutionLog["category"],
+      status: row.status as ProjectToolExecutionLog["status"],
+      safeArgsSummary: row.safeArgsSummary,
+      safeResultSummary: row.safeResultSummary ?? undefined,
+      errorCode: row.errorCode ?? undefined,
+      recoverable: row.recoverable ?? undefined,
+      startedAt: row.startedAt.toISOString(),
+      completedAt: row.completedAt?.toISOString(),
+      durationMs: row.durationMs ?? undefined,
+    };
   }
 
   async listByProject(projectId: string, userId?: string, options: ListProjectRunsOptions = {}): Promise<AgentRun[]> {
