@@ -3,6 +3,7 @@ import path from "node:path";
 import type { PatchResult } from "../code-agent-types";
 import { CODE_TOOL_LIMITS } from "../code-tool-registry.server";
 import { evaluateProjectRiskPolicy } from "./project-risk-policy.server";
+import { guardProjectPath } from "./project-path-guard.server";
 import { getPreviewRestartRequirement } from "./preview-restart-policy.server";
 
 const PROTECTED_FILES = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb"]);
@@ -111,6 +112,23 @@ export class ProjectPatchService {
     };
   }
 
+  async deleteFile(input: { workspaceRoot: string; relativePath: string }): Promise<PatchResult> {
+    const guarded = guardProjectPath({ workspaceRoot: input.workspaceRoot, path: input.relativePath });
+    if (!guarded.ok) throw new ProjectPatchPolicyError("FORBIDDEN_PATH", guarded.message);
+    const { rm } = await import("node:fs/promises");
+    await rm(guarded.absolutePath, { force: true });
+    return {
+      changedFiles: [guarded.relativePath],
+      createdFiles: [],
+      modifiedFiles: [],
+      deletedFiles: [guarded.relativePath],
+      insertions: 0,
+      deletions: 1,
+      requiresPreviewRestart: false,
+      requiresPackageInstall: false,
+      warnings: [],
+    };
+  }
   async getDiff(input: { workspaceRoot: string; baselineRoot?: string; includePatch?: boolean; maxBytes?: number }) {
     if (!input.baselineRoot) return { changedFiles: [], patch: input.includePatch ? "" : undefined, truncated: false };
     const changedFiles = await diffDirectories(input.baselineRoot, input.workspaceRoot);

@@ -50,7 +50,7 @@ export type ProjectToolResult<TData = unknown> = {
   };
 };
 
-export type CodeToolPhase = "bootstrap" | "planning" | "mutation" | "validation" | "repair";
+export type CodeToolPhase = "context_bootstrap" | "inspection" | "planning" | "mutation" | "validation" | "repair" | "finalize";
 
 export type CodeToolLoopStatus =
   | "completed"

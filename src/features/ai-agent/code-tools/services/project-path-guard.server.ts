@@ -5,6 +5,8 @@ export type ProjectPathGuardResult =
   | { ok: false; code: "UNSAFE_PROJECT_PATH" | "FORBIDDEN_PROJECT_PATH"; message: string };
 
 const FORBIDDEN_EXACT_NAMES = new Set([
+  ".env.*",
+  "routeTree.gen.ts",
   ".env",
   ".env.local",
   ".env.development",

@@ -93,7 +93,34 @@ export class ProjectWorkspaceService {
       "src/lib/axios-instance.ts": `import axios from 'axios'\n\nexport const apiClient = axios.create({\n  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',\n  headers: { 'Content-Type': 'application/json' },\n})\n`,
       "src/schemas/lead-form.schema.ts": `import { z } from 'zod'\n\nexport const leadFormSchema = z.object({\n  email: z.string().email(),\n})\n\nexport type LeadFormValues = z.infer<typeof leadFormSchema>\n`,
       "src/stores/lead.store.ts": `import { atom } from 'jotai'\nimport type { LeadFormValues } from '../schemas/lead-form.schema'\n\nexport const leadAtom = atom<LeadFormValues>({ email: '' })\n`,
-      "src/components/ui/button.tsx": `import type { ButtonHTMLAttributes } from 'react'\n\nexport function Button(props: ButtonHTMLAttributes<HTMLButtonElement>) {\n  return <button {...props} className={['rounded-md px-4 py-2 transition', props.className].filter(Boolean).join(' ')} />\n}\n`,
+      "AGENTS.md": `# Storefront Project Instructions
+
+This is a generated e-commerce storefront.
+
+## Stack
+
+- TanStack Start
+- TanStack Router
+- TanStack Query
+- Tailwind CSS v3
+- shadcn/ui
+- Jotai
+- React Hook Form
+- Zod
+
+## Rules
+
+- Do not edit \`src/routeTree.gen.ts\`.
+- Keep changes minimal and focused.
+- Reuse existing components first.
+- Use Tailwind v3 classes.
+- Use Jotai for local UI state.
+- Use TanStack Query/useMutation for async data and mutations.
+- Use React Hook Form + Zod for forms.
+- Run validation after code changes.
+- Preserve current brand direction unless the user requests a redesign.
+`,
+        "src/components/ui/button.tsx": `import type { ButtonHTMLAttributes } from 'react'\n\nexport function Button(props: ButtonHTMLAttributes<HTMLButtonElement>) {\n  return <button {...props} className={['rounded-md px-4 py-2 transition', props.className].filter(Boolean).join(' ')} />\n}\n`,
     };
 
     for (const [relativePath, content] of Object.entries(files)) {

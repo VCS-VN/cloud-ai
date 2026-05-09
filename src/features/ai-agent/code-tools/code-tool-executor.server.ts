@@ -13,12 +13,41 @@ export async function executeProjectTool(input: {
   toolCall: ProviderFunctionToolCall;
   inspectionCompleted: boolean;
   mutationCompleted: boolean;
+  phase?: import("./code-agent-types").CodeToolPhase;
+  sandboxMode?: "read-only" | "workspace-write";
 }): Promise<ProjectToolResult> {
   const startedAt = Date.now();
   const tool = input.registry.get(input.toolCall.name);
 
   if (!tool) {
     return toolError(input.context, input.toolCall.name, "inspect", startedAt, "TOOL_NOT_FOUND", "Unknown tool requested by provider.", true);
+  }
+
+  if (input.sandboxMode === "read-only" && tool.category === "mutate") {
+    return toolError(
+      input.context,
+      tool.name,
+      tool.category,
+      startedAt,
+      "POLICY_FORBIDDEN",
+      "Mutation tools are not allowed in read-only mode.",
+      true,
+    );
+  }
+
+  if (input.phase) {
+    const allowedForPhase = input.registry.listForPhase(input.phase).some((t) => t.name === tool.name);
+    if (!allowedForPhase) {
+      return toolError(
+        input.context,
+        tool.name,
+        tool.category,
+        startedAt,
+        "PHASE_FORBIDDEN",
+        `Tool "${tool.name}" is not allowed in phase "${input.phase}".`,
+        true,
+      );
+    }
   }
 
   if (tool.requiresInspection && !input.inspectionCompleted) {

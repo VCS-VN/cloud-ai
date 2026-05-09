@@ -1,6 +1,7 @@
 import type { CodeToolDefinition, CodeToolPhase } from "./code-agent-types";
 import { createProjectApplyPatchTool } from "./tools/project-apply-patch.tool.server";
 import { createProjectCreateFileTool } from "./tools/project-create-file.tool.server";
+import { createProjectDeleteFileTool } from "./tools/project-delete-file.tool.server";
 import { createProjectCreateSnapshotTool } from "./tools/project-create-snapshot.tool.server";
 import { createProjectGetDiffTool } from "./tools/project-get-diff.tool.server";
 import { createProjectRollbackSnapshotTool } from "./tools/project-rollback-snapshot.tool.server";
@@ -10,6 +11,8 @@ import { projectGetFileTreeTool } from "./tools/project-get-file-tree.tool.serve
 import { projectReadFileRangeTool } from "./tools/project-read-file-range.tool.server";
 import { projectReadFileTool } from "./tools/project-read-file.tool.server";
 import { projectSearchCodeTool } from "./tools/project-search-code.tool.server";
+import { projectPreviewStatusTool } from "./tools/project-preview-status.tool.server";
+import { projectPreviewRestartTool } from "./tools/project-preview-restart.tool.server";
 
 export const CODE_TOOL_LIMITS = {
   maxToolLoopIterations: 40,
@@ -22,37 +25,32 @@ export const CODE_TOOL_LIMITS = {
 } as const;
 
 const PHASE_TOOL_NAMES: Record<CodeToolPhase, string[]> = {
-  bootstrap: [
+  context_bootstrap: [
     "project_get_context",
     "project_get_file_tree",
+  ],
+  inspection: [
     "project_search_code",
     "project_read_file",
     "project_read_file_range",
   ],
   planning: [
     "project_get_context",
-    "project_get_file_tree",
     "project_search_code",
     "project_read_file",
     "project_read_file_range",
   ],
   mutation: [
-    "project_get_context",
-    "project_get_file_tree",
-    "project_search_code",
-    "project_read_file",
-    "project_read_file_range",
     "project_create_snapshot",
+    "project_delete_file",
     "project_apply_patch",
     "project_create_file",
-    "project_get_diff",
   ],
   validation: [
     "project_run_validation",
     "project_get_diff",
-    "project_read_file",
-    "project_read_file_range",
-    "project_search_code",
+    "project_preview_status",
+    "project_preview_restart",
   ],
   repair: [
     "project_search_code",
@@ -61,7 +59,10 @@ const PHASE_TOOL_NAMES: Record<CodeToolPhase, string[]> = {
     "project_apply_patch",
     "project_run_validation",
     "project_get_diff",
-    "project_rollback_snapshot",
+  ],
+  finalize: [
+    "project_get_diff",
+    "project_preview_status",
   ],
 };
 
@@ -103,18 +104,15 @@ export function createDefaultCodeToolRegistry() {
     .register(projectGetFileTreeTool)
     .register(projectSearchCodeTool)
     .register(projectReadFileTool)
-    .register(projectReadFileRangeTool));
+    .register(projectReadFileRangeTool)
+    .register(projectPreviewStatusTool)
+    .register(projectPreviewRestartTool));
 }
 
 export function selectAllowedToolNames(input: {
-  inspectionCompleted: boolean;
-  mutationCompleted: boolean;
-  repairMode?: boolean;
+  phase: CodeToolPhase;
 }) {
-  if (!input.inspectionCompleted) return PHASE_TOOL_NAMES.bootstrap;
-  if (input.repairMode) return PHASE_TOOL_NAMES.repair;
-  if (!input.mutationCompleted) return PHASE_TOOL_NAMES.mutation;
-  return PHASE_TOOL_NAMES.validation;
+  return PHASE_TOOL_NAMES[input.phase] ?? PHASE_TOOL_NAMES.context_bootstrap;
 }
 
 export function buildOpenAIFunctionTools(tools: CodeToolDefinition[]) {
