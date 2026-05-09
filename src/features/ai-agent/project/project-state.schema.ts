@@ -381,6 +381,8 @@ export type AgentStreamEvent =
       summary?: string;
       intent?: BuilderIntent["intent"];
       confidence?: number;
+      executionMode?: "apply" | "plan" | "explain" | "review";
+      shouldApplyCode?: boolean;
       affectedPages?: string[];
       affectedFeatures?: string[];
       conversionGoal?: string;

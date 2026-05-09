@@ -31,5 +31,19 @@ export function thinkingResultToAgentTask(input: {
       previewRefresh: thinkingResult.projectAction.requiresPreviewRefresh,
       clarification: thinkingResult.projectAction.shouldAskClarification,
     },
+    executionMode: thinkingResult.projectAction.requiresPatchGeneration ? "apply" : thinkingResult.downstream.recommendedNextStep === "explain_only" ? "explain" : thinkingResult.downstream.recommendedNextStep === "create_plan" ? "plan" : undefined,
+    actionPolicy: {
+      shouldApplyCode: thinkingResult.projectAction.requiresPatchGeneration,
+      shouldCreatePlanOnly: thinkingResult.downstream.recommendedNextStep === "create_plan",
+      shouldAskClarification: thinkingResult.projectAction.shouldAskClarification,
+      clarificationQuestion: thinkingResult.projectAction.clarificationQuestion,
+      clarificationReason: thinkingResult.risk.reasons.join("; ") || null,
+    },
+    implementationBias: {
+      preferMinimalPatch: true,
+      preserveExistingDesignDirection: thinkingResult.constraints.preserveExistingDesign,
+      useExistingComponentsFirst: true,
+      avoidFullRewrite: !thinkingResult.constraints.requestedDestructiveChange,
+    },
   };
 }

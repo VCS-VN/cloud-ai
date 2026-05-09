@@ -18,7 +18,7 @@ export type CodeToolEventType =
   | "human_review_required";
 
 export function buildCodeToolLoopStartedEvent(input: { projectId: string; messageId: string; taskTitle: string }) {
-  return { type: "code_tool_loop_started", projectId: input.projectId, messageId: input.messageId, taskTitle: sanitize(input.taskTitle) } as const;
+  return { type: "code_tool_loop_started", projectId: input.projectId, messageId: input.messageId, taskTitle: sanitize(input.taskTitle), message: "Đang kiểm tra code hiện tại của storefront..." } as const;
 }
 
 export function buildToolCallRequestedEvent(input: { projectId: string; messageId: string; toolName: string; category: CodeToolCategory; safeSummary: string }) {

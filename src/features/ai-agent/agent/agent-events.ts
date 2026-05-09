@@ -15,7 +15,7 @@ export type {
 import type { AgentStreamEvent as BaseAgentStreamEvent } from "../project/project-state.schema";
 
 export type CodeToolAgentStreamEvent =
-  | { type: "code_tool_loop_started"; projectId: string; messageId: string; taskTitle: string }
+  | { type: "code_tool_loop_started"; projectId: string; messageId: string; taskTitle: string; message?: string }
   | { type: "code_context_loaded"; projectId: string; messageId: string; summary: string; stack: string[]; fileCount: number }
   | { type: "tool_call_requested"; projectId: string; messageId: string; toolName: string; category: string; safeSummary: string }
   | { type: "tool_call_completed"; projectId: string; messageId: string; toolName: string; ok: boolean; summary: string; recoverable: boolean }

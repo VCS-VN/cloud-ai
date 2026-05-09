@@ -15,12 +15,23 @@ export function mapThinkingToUserWishEvent(thinking: ThinkingResult): AgentStrea
 }
 
 export function mapThinkingToCompletedEvent(thinking: ThinkingResult): AgentStreamEvent {
+  const storefront = thinking.downstreamTask.storefront;
   return {
     type: "thinking_completed",
     runId: thinking.runId,
     taskType: thinking.downstreamTask.taskType,
     normalizedGoal: thinking.downstreamTask.normalizedGoal,
     riskLevel: thinking.riskAssessment.level,
+    summary: storefront?.actionPolicy.shouldAskClarification
+      ? storefront.actionPolicy.clarificationQuestion ?? thinking.userFacingUnderstanding
+      : thinking.userFacingUnderstanding,
+    intent: builderIntentNameFromThinking(thinking),
+    confidence: thinking.promptClassification.confidence,
+    executionMode: storefront?.executionMode,
+    shouldApplyCode: storefront?.actionPolicy.shouldApplyCode,
+    affectedPages: thinking.ecommerceInterpretation.affectedPages,
+    affectedFeatures: thinking.ecommerceInterpretation.affectedFeatures,
+    conversionGoal: thinking.ecommerceInterpretation.primaryGoal,
   };
 }
 
@@ -34,4 +45,16 @@ export function toSanitizedThinkingEvent(result: StructuredThinkingResult) {
     conversionGoal: result.ecommerceContext.conversionGoal,
     riskLevel: result.risk.level,
   };
+}
+
+function builderIntentNameFromThinking(thinking: ThinkingResult) {
+  const taskType = thinking.downstreamTask.taskType;
+  if (taskType === "init_storefront_project") return "init_project";
+  if (taskType === "content_update") return "modify_content";
+  if (taskType === "design_update") return "modify_design";
+  if (taskType === "product_data_update") return "modify_products";
+  if (taskType === "bug_fix") return "fix_bug";
+  if (taskType === "answer_question") return "explain_project";
+  if (taskType === "needs_clarification") return "unknown";
+  return "add_feature";
 }

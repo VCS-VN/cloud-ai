@@ -91,7 +91,9 @@ export class OpenAIProvider {
       const stream = await this.client.responses.create({
         model: args.model,
         instructions: `${args.system}
-Return exactly one JSON value matching schema ${args.schemaName}. Do not include markdown fences, prose, comments, or explanations.`,
+Return exactly one JSON value matching schema ${args.schemaName}.
+The JSON value must be the schema root object itself, not nested under "${args.schemaName}", "thinking_result", "result", "data", "output", or "response".
+Do not include markdown fences, prose, comments, or explanations.`,
         input: JSON.stringify(args.user),
         text: { format: createStreamingJsonSchemaTextFormat(args.schema, args.schemaName) },
         stream: true,

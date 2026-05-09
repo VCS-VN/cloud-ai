@@ -72,7 +72,8 @@ export function createMessageStreamHeaders() {
 }
 
 export function serializeMessageStreamEvent(event: MessageStreamEvent) {
-  return `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
+  const safeEvent = redactJson(event);
+  return `event: ${safeEvent.type}\ndata: ${JSON.stringify(safeEvent)}\n\n`;
 }
 
 export function encodeMessageStreamEvent(event: MessageStreamEvent) {

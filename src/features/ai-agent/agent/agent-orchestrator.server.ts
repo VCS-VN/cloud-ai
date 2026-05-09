@@ -26,7 +26,7 @@ import {
   slugifyProjectName,
 } from "../source/template-registry.server";
 import { ValidationService } from "../source/validation-service.server";
-import { toSafeAgentError } from "./agent-errors";
+import { AgentError, toSafeAgentError } from "./agent-errors";
 import { runThinkingLayer } from "../thinking/thinking-orchestrator.server";
 import {
   mapThinkingToCompletedEvent,
@@ -38,6 +38,7 @@ import { redactSecrets } from "../security/secret-redactor";
 import { runBoundedCodeToolLoop } from "../code-tools/code-tool-loop.server";
 import {
   buildCodeContextLoadedEvent,
+  buildCodeToolLoopStartedEvent,
   buildPatchAppliedEvent,
   buildPreviewRestartRequiredEvent,
   buildSnapshotCreatedEvent,
@@ -133,6 +134,21 @@ export class AgentOrchestrator {
         return;
       }
       yield mapThinkingToCompletedEvent(thinking);
+
+      const storefrontMode = getStorefrontExecutionMode(thinking);
+      if (storefrontMode && storefrontMode !== "apply") {
+        const plan = createNonApplyPlan(thinking, storefrontMode);
+        yield { type: "plan_created", plan };
+        const summary = nonApplySummary(storefrontMode, thinking);
+        yield { type: "assistant_message_delta", delta: summary };
+        yield { type: "done", runId: run.id, summary, changedFiles: [] };
+        await this.deps.runStore.complete(run, {
+          plan,
+          affectedFiles: [],
+          thinking: toThinkingRunSummary(thinking),
+        });
+        return;
+      }
 
       const intent = builderIntentFromThinking(thinking);
       yield { type: "intent_detected", intent };
@@ -353,6 +369,11 @@ export class AgentOrchestrator {
       prompt: intent.normalizedRequirement || input.prompt,
     });
     const normalizedIntent = { ...intent, normalizedRequirement };
+    yield buildCodeToolLoopStartedEvent({
+      projectId: input.projectId,
+      messageId: input.messageId ?? args.runId,
+      taskTitle: normalizedRequirement,
+    });
     const relevantFiles = await retrieveRelevantContext({
       prompt: normalizedRequirement,
       projectState,
@@ -379,6 +400,12 @@ export class AgentOrchestrator {
       provider: this.deps.openAIProvider,
       model: this.deps.agentConfig?.plannerModel,
     });
+    if (plan.operations.length === 0) {
+      plan.operations.push({
+        type: "run_validation",
+        reason: "Validate the implicit apply-mode storefront task.",
+      });
+    }
     yield { type: "plan_created", plan };
 
     if (plan.requiresUserConfirmation && plan.riskLevel === "high") {
@@ -439,6 +466,13 @@ export class AgentOrchestrator {
       insertions,
       deletions,
     });
+    if (isApplyModeStorefrontUpdate(intent) && applyResult.changedFiles.length === 0) {
+      throw new AgentError(
+        "APPLY_MODE_EMPTY_DIFF",
+        "Chưa áp dụng được thay đổi vào source. Apply-mode cần có file thay đổi hoặc blocker rõ ràng thay vì báo hoàn tất.",
+        true,
+      );
+    }
     const previewRestart = getPreviewRestartRequirement(applyResult.changedFiles);
     if (previewRestart.required) {
       yield buildPreviewRestartRequiredEvent({
@@ -682,6 +716,42 @@ function createClarificationPlan(intent: BuilderIntent): ChangePlan {
     riskLevel: intent.riskLevel,
     requiresUserConfirmation: true,
   };
+}
+
+function getStorefrontExecutionMode(thinking: ThinkingResult) {
+  return thinking.downstreamTask.storefront?.executionMode;
+}
+
+function isApplyModeStorefrontUpdate(intent: BuilderIntent) {
+  return intent.intent !== "init_project" && intent.intent !== "explain_project" && intent.riskLevel !== "high";
+}
+
+function createNonApplyPlan(
+  thinking: ThinkingResult,
+  mode: NonNullable<ReturnType<typeof getStorefrontExecutionMode>>,
+): ChangePlan {
+  return {
+    summary: nonApplySummary(mode, thinking),
+    changeType: "explain_only",
+    affectedFiles: [],
+    operations: [],
+    acceptanceCriteria:
+      thinking.downstreamTask.storefront?.acceptanceCriteria.length
+        ? thinking.downstreamTask.storefront.acceptanceCriteria
+        : ["No project files are mutated for explicit non-apply requests."],
+    validationCommands: [],
+    riskLevel: thinking.riskAssessment.level,
+    requiresUserConfirmation: false,
+  };
+}
+
+function nonApplySummary(
+  mode: NonNullable<ReturnType<typeof getStorefrontExecutionMode>>,
+  thinking: ThinkingResult,
+) {
+  if (mode === "plan") return `Mình sẽ chỉ lập kế hoạch, chưa sửa code: ${thinking.downstreamTask.normalizedGoal}`;
+  if (mode === "review") return `Mình sẽ chỉ review/đánh giá, không sửa code: ${thinking.downstreamTask.normalizedGoal}`;
+  return `Mình sẽ giải thích, không sửa code: ${thinking.downstreamTask.normalizedGoal}`;
 }
 
 function toChangedOperation(

@@ -21,6 +21,14 @@ export function validateThinkingBusinessRules(input: {
     errors.push("Clarification question is required when shouldAskClarification is true.");
   }
 
+  if (result.projectAction.shouldAskClarification && result.projectAction.requiresPatchGeneration) {
+    errors.push("Clarification-blocked requests must not require patch generation.");
+  }
+
+  if (result.projectAction.shouldAskClarification && result.projectAction.shouldModifyExistingProject) {
+    errors.push("Clarification-blocked requests must not modify the existing project.");
+  }
+
   if (result.confidence < THINKING_LAYER_CONFIG.confidence.askClarificationBelow && !result.projectAction.shouldAskClarification) {
     errors.push("Low-confidence requests require clarification.");
   }

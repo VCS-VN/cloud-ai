@@ -57,7 +57,7 @@ export function buildInitialCodeAgentInput(input: {
       content: JSON.stringify({
         agentTask: input.agentTask,
         projectStateSummary: summarizeProjectStateForCodeAgent(input.projectState),
-        instruction: "Inspect the project with tools before applying any code change. Start with project_get_context.",
+        instruction: "Inspect the project with tools before applying any code change. Minimum sequence: project_get_context, project_get_file_tree, then project_search_code or project_read_file for relevant files before project_apply_patch or project_create_file. Do not patch blindly.",
       }),
     },
   ];
