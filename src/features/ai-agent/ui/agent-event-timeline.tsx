@@ -54,10 +54,10 @@ function detailFor(event: AgentStreamEvent) {
     case "agent_started": return event.message;
     case "state_loaded": return event.status;
     case "thinking_started": return event.message;
-    case "thinking_context_loaded": return event.projectStatus;
+    case "thinking_context_loaded": return event.hasInitializedSource === undefined ? event.projectStatus : `${event.projectStatus} • Source ${event.hasInitializedSource ? "ready" : "not initialized"}`;
     case "user_wish_extracted": return `${event.understanding} (${event.wishes.length} wishes)`;
     case "thinking_needs_clarification": return `${event.question} — ${event.reason}`;
-    case "thinking_completed": return `${event.taskType}: ${event.normalizedGoal} • Risk: ${event.riskLevel}`;
+    case "thinking_completed": return `${event.summary ?? event.normalizedGoal} • Risk: ${event.riskLevel}`;
     case "intent_detected": return `${event.intent.intent} (${Math.round(event.intent.confidence * 100)}%)`;
     case "plan_created": return event.plan.summary;
     case "source_generation_started": return event.message;
@@ -67,7 +67,7 @@ function detailFor(event: AgentStreamEvent) {
     case "error": return event.message;
     case "project_state_updated": return event.projectState.status;
     case "context_retrieved": return `${event.files.length} files`;
-    case "clarification_required": return `Needs confirmation: ${event.question}`;
+    case "clarification_required": return `${event.question}${event.reason ? ` — ${event.reason}` : ""}`;
     default: return "";
   }
 }

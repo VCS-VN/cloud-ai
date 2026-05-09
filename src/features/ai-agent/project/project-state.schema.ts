@@ -307,7 +307,12 @@ export type AgentStreamEvent =
   | { type: "agent_started"; runId: string; projectId: string; message: string }
   | { type: "state_loaded"; status: ProjectStatus }
   | { type: "thinking_started"; runId: string; message: string }
-  | { type: "thinking_context_loaded"; runId: string; projectStatus: string }
+  | {
+      type: "thinking_context_loaded";
+      runId: string;
+      projectStatus: ProjectStatus;
+      hasInitializedSource?: boolean;
+    }
   | {
       type: "user_wish_extracted";
       runId: string;
@@ -333,9 +338,15 @@ export type AgentStreamEvent =
         | "needs_clarification";
       normalizedGoal: string;
       riskLevel: "low" | "medium" | "high";
+      summary?: string;
+      intent?: BuilderIntent["intent"];
+      confidence?: number;
+      affectedPages?: string[];
+      affectedFeatures?: string[];
+      conversionGoal?: string;
     }
   | { type: "intent_detected"; intent: BuilderIntent }
-  | { type: "clarification_required"; question: string }
+  | { type: "clarification_required"; runId?: string; question: string; reason?: string }
   | { type: "context_retrieved"; files: Array<{ path: string; reason: string }> }
   | { type: "plan_created"; plan: ChangePlan }
   | { type: "source_generation_started"; message: string }

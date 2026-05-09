@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { createEmptyProjectState } from "../project/project-state.schema";
 import { mapThinkingToCompletedEvent, mapThinkingToUserWishEvent } from "./thinking-events.mapper";
-import { preflightUserPrompt } from "./thinking-preflight";
-import { runThinkingLayer } from "./thinking-runner";
 import { createHeuristicThinkingResult } from "./thinking-fallback";
-import { thinkingResultProviderSchema, thinkingResultSchema, type ThinkingInput } from "./thinking.schema";
+import { ThinkingResultJsonSchema } from "./thinking-json-schema";
+import { preflightUserPrompt } from "./thinking-preflight";
+import { buildStructuredThinkingInput, runThinkingLayer } from "./thinking-runner";
+import { structuredThinkingResultSchema, thinkingResultSchema, type StructuredThinkingResult, type ThinkingInput } from "./thinking.schema";
 
 function baseThinkingInput(overrides: Partial<ThinkingInput> = {}): ThinkingInput {
   return {
@@ -19,9 +20,67 @@ function baseThinkingInput(overrides: Partial<ThinkingInput> = {}): ThinkingInpu
   };
 }
 
+function baseRun(input: ThinkingInput) {
+  return { id: input.runId, projectId: input.projectId, userId: input.userId, userPrompt: input.userPrompt, status: "running" as const, affectedFiles: [], startedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+}
+
+function structuredResult(overrides: Partial<StructuredThinkingResult> = {}): StructuredThinkingResult {
+  return {
+    intent: "init_project",
+    confidence: 0.88,
+    language: "vi",
+    userWish: {
+      rawPrompt: "Tạo shop thời trang",
+      explicitRequests: ["Tạo shop thời trang"],
+      implicitRequests: [],
+      inferredEcommerceGoals: ["Launch storefront"],
+      outOfScopeRequests: [],
+    },
+    ecommerceContext: {
+      storeType: "fashion",
+      affectedPages: ["/"],
+      affectedSections: ["hero"],
+      affectedFeatures: ["product_grid"],
+      affectedEntities: ["product"],
+      conversionGoal: "increase_add_to_cart",
+    },
+    projectAction: {
+      shouldInitProject: true,
+      shouldModifyExistingProject: false,
+      shouldAskClarification: false,
+      clarificationQuestion: null,
+      requiresSourceInit: true,
+      requiresPatchGeneration: false,
+      requiresValidation: true,
+      requiresPreviewRefresh: true,
+    },
+    constraints: {
+      preserveExistingDesign: false,
+      preserveExistingFeatures: false,
+      requestedStackChange: false,
+      requestedDestructiveChange: false,
+      forbiddenActions: [],
+    },
+    risk: { level: "low", reasons: ["New project initialization"] },
+    normalizedTask: {
+      title: "Initialize fashion storefront",
+      description: "Create a fashion storefront with trust-focused customer feedback.",
+      acceptanceCriteria: ["Storefront can be initialized safely."],
+      implementationHints: ["Use existing starter stack."],
+    },
+    downstream: { recommendedNextStep: "init_source", priority: "high" },
+    ...overrides,
+  };
+}
+
 describe("thinking schemas", () => {
+  it("accepts a valid init_project structured Thinking Result", () => {
+    expect(structuredThinkingResultSchema.safeParse(structuredResult()).success).toBe(true);
+  });
+
   it("rejects invalid thinking results", () => {
     expect(thinkingResultSchema.safeParse({}).success).toBe(false);
+    expect(structuredThinkingResultSchema.safeParse({ intent: "init_project" }).success).toBe(false);
   });
 });
 
@@ -78,34 +137,51 @@ describe("thinking event mapping", () => {
 });
 
 describe("runThinkingLayer", () => {
+  it("builds structured ThinkingInput with runtime context", () => {
+    const input = baseThinkingInput({
+      projectContext: {
+        status: "ready",
+        fileManifest: [{ path: "src/routes/index.tsx", purpose: "Home page", kind: "route" }],
+        recentChanges: [],
+        previewStatus: { status: "running", previewUrl: "http://localhost:5173" },
+      },
+    });
+
+    expect(buildStructuredThinkingInput(input)).toMatchObject({
+      projectId: "project_1",
+      userId: "user_1",
+      runtimeContext: {
+        hasInitializedSource: true,
+        hasRunningPreview: true,
+        currentPreviewUrl: "http://localhost:5173",
+        builderStack: { framework: "tanstack-start", viteMajorVersion: 8 },
+      },
+    });
+  });
+
   it("uses a strict structured provider result when available", async () => {
     const input = baseThinkingInput();
-    const expected = createHeuristicThinkingResult(input);
-    const provider = { parseStructured: vi.fn().mockResolvedValue(expected) };
+    const provider = { parseStructured: vi.fn().mockResolvedValue(structuredResult()) };
     const result = await runThinkingLayer({
       projectId: input.projectId,
       userId: input.userId,
       userPrompt: input.userPrompt,
       projectState: input.projectState,
-      run: { id: input.runId, projectId: input.projectId, userId: input.userId, userPrompt: input.userPrompt, status: "running", affectedFiles: [], startedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      run: baseRun(input),
       provider: provider as never,
     });
 
-    expect(provider.parseStructured).toHaveBeenCalledWith(expect.objectContaining({ schemaName: "thinking_result", schema: thinkingResultProviderSchema }));
-    expect(result.id).toBe(expected.id);
+    expect(provider.parseStructured).toHaveBeenCalledWith(expect.objectContaining({ schemaName: "thinking_result", schema: ThinkingResultJsonSchema }));
+    expect(result.downstreamTask.taskType).toBe("init_storefront_project");
+    expect(result.downstreamTask.executionPolicy.allowInitSource).toBe(true);
   });
 
-
-
-  it("falls back when provider returns wrapped invalid thinking_result shape", async () => {
+  it("repairs once when provider returns a business-invalid Thinking Result", async () => {
     const input = baseThinkingInput();
     const provider = {
-      parseStructured: vi.fn().mockResolvedValue({
-        thinking_result: {
-          requestType: "init",
-          summary: "Build e-commerce storefront for Buy Rich brand with product search functionality.",
-        },
-      }),
+      parseStructured: vi.fn()
+        .mockResolvedValueOnce(structuredResult({ projectAction: { ...structuredResult().projectAction, shouldAskClarification: true, clarificationQuestion: null }, downstream: { recommendedNextStep: "ask_clarification", priority: "normal" } }))
+        .mockResolvedValueOnce(structuredResult()),
     };
 
     const result = await runThinkingLayer({
@@ -113,14 +189,31 @@ describe("runThinkingLayer", () => {
       userId: input.userId,
       userPrompt: input.userPrompt,
       projectState: input.projectState,
-      run: { id: input.runId, projectId: input.projectId, userId: input.userId, userPrompt: input.userPrompt, status: "running", affectedFiles: [], startedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      run: baseRun(input),
       provider: provider as never,
     });
 
-    expect(result.id).toMatch(/^thinking_/);
-    expect(result.projectId).toBe(input.projectId);
+    expect(provider.parseStructured).toHaveBeenCalledTimes(2);
+    expect(provider.parseStructured).toHaveBeenLastCalledWith(expect.objectContaining({ system: expect.stringContaining("Repair the previous ThinkingResult") }));
     expect(result.downstreamTask.taskType).toBe("init_storefront_project");
-    expect(result.userFacingUnderstanding).toContain("Mình hiểu");
+  });
+
+  it("falls back to clarification when structured output cannot be validated", async () => {
+    const input = baseThinkingInput();
+    const provider = { parseStructured: vi.fn().mockResolvedValue({ thinking_result: { requestType: "init" } }) };
+
+    const result = await runThinkingLayer({
+      projectId: input.projectId,
+      userId: input.userId,
+      userPrompt: input.userPrompt,
+      projectState: input.projectState,
+      run: baseRun(input),
+      provider: provider as never,
+    });
+
+    expect(provider.parseStructured).toHaveBeenCalledTimes(1);
+    expect(result.downstreamTask.taskType).toBe("needs_clarification");
+    expect(result.riskAssessment.requiresUserConfirmation).toBe(true);
   });
 
   it("returns a blocked clarification task for unsafe prompts", async () => {

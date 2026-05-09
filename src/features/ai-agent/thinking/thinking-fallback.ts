@@ -1,4 +1,4 @@
-import type { ThinkingInput, ThinkingResult } from "./thinking.schema";
+import type { StructuredThinkingInput, StructuredThinkingResult, ThinkingInput, ThinkingResult } from "./thinking.schema";
 
 export function createHeuristicThinkingResult(input: ThinkingInput): ThinkingResult {
   const now = Date.now().toString(36);
@@ -52,6 +52,60 @@ export function createHeuristicThinkingResult(input: ThinkingInput): ThinkingRes
       requirements: [{ id: `req_${now}`, description: normalizedGoal, sourceWishId: wishId, priority: "must_have", acceptanceCriteria: ["A safe understanding summary is available before downstream planning."] }],
       targetScope: { pages: isInit ? [] : ["/"], sections: [], features: [], filesHint: [], dataModels: [] },
       executionPolicy: { allowInitSource: isInit, allowPatchSource: !isInit, allowPackageChange: false, allowConfigChange: false, allowPreviewRestart: false, requireHumanConfirmation: false },
+    },
+  };
+}
+
+export function createClarificationStructuredThinkingResult(input: StructuredThinkingInput, reason: string): StructuredThinkingResult {
+  return {
+    intent: "unknown",
+    confidence: 1,
+    language: "unknown",
+    userWish: {
+      rawPrompt: input.userPrompt,
+      explicitRequests: [input.userPrompt],
+      implicitRequests: [],
+      inferredEcommerceGoals: [],
+      outOfScopeRequests: [],
+    },
+    ecommerceContext: {
+      storeType: "unknown",
+      affectedPages: [],
+      affectedSections: [],
+      affectedFeatures: [],
+      affectedEntities: [],
+      conversionGoal: "unknown",
+    },
+    projectAction: {
+      shouldInitProject: false,
+      shouldModifyExistingProject: false,
+      shouldAskClarification: true,
+      clarificationQuestion: "Bạn có thể mô tả rõ hơn thay đổi storefront bạn muốn thực hiện không?",
+      requiresSourceInit: false,
+      requiresPatchGeneration: false,
+      requiresValidation: false,
+      requiresPreviewRefresh: false,
+    },
+    constraints: {
+      preserveExistingDesign: true,
+      preserveExistingFeatures: true,
+      requestedStackChange: false,
+      requestedDestructiveChange: false,
+      forbiddenActions: [],
+    },
+    risk: {
+      level: "medium",
+      reasons: [reason],
+    },
+    normalizedTask: {
+      title: "Clarify storefront request",
+      description: "Ask for clarification before any downstream planning or source execution.",
+      acceptanceCriteria: ["No downstream execution starts until the user clarifies the request."],
+      implementationHints: [],
+    },
+    downstream: {
+      recommendedNextStep: "ask_clarification",
+      priority: "normal",
     },
   };
 }

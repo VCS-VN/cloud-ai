@@ -1,4 +1,11 @@
-import type { AgentStreamEvent, BuilderIntent, ChangePlan, FileOperation, ProjectState, ValidationResult } from "./agent-events";
+import type {
+  AgentStreamEvent,
+  BuilderIntent,
+  ChangePlan,
+  FileOperation,
+  ProjectState,
+  ValidationResult,
+} from "./agent-events";
 import type { ProjectRunStore } from "../project/project-run-store.server";
 import type { ProjectStateStore } from "../project/project-state-store.server";
 import type { ProjectFileStore } from "../project/project-file-store.server";
@@ -6,7 +13,6 @@ import type { SnapshotService } from "../project/snapshot-service.server";
 import type { AgentConfig } from "./agent-config";
 import type { OpenAIProvider } from "../openai/openai-provider.server";
 import { ECOMMERCE_AGENT_SYSTEM_PROMPT } from "../openai/prompts";
-import { classifyIntent } from "../planning/classify-intent.server";
 import { createChangePlan } from "../planning/create-change-plan.server";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { normalizeRequirement } from "../planning/normalize-requirement.server";
@@ -15,12 +21,19 @@ import { initSource } from "../source/init-source.server";
 import { generatePatch } from "../source/patch-generator.server";
 import { PatchService } from "../source/patch-service.server";
 import { retrieveRelevantContext } from "../source/retrieve-context.server";
-import { selectTemplate, slugifyProjectName } from "../source/template-registry.server";
+import {
+  selectTemplate,
+  slugifyProjectName,
+} from "../source/template-registry.server";
 import { ValidationService } from "../source/validation-service.server";
 import { toSafeAgentError } from "./agent-errors";
 import { runThinkingLayer } from "../thinking/thinking-orchestrator.server";
-import { mapThinkingToCompletedEvent, mapThinkingToUserWishEvent } from "../thinking/thinking-events.mapper";
+import {
+  mapThinkingToCompletedEvent,
+  mapThinkingToUserWishEvent,
+} from "../thinking/thinking-events.mapper";
 import { toThinkingRunSummary } from "../thinking/thinking.repository.server";
+import type { ThinkingResult } from "../thinking/thinking.schema";
 import { redactSecrets } from "../security/secret-redactor";
 
 export type HandlePromptInput = {
@@ -46,7 +59,9 @@ export type AgentOrchestratorDeps = {
 export class AgentOrchestrator {
   constructor(private readonly deps: AgentOrchestratorDeps) {}
 
-  async *handlePromptStream(input: HandlePromptInput): AsyncGenerator<AgentStreamEvent> {
+  async *handlePromptStream(
+    input: HandlePromptInput,
+  ): AsyncGenerator<AgentStreamEvent> {
     const run = await this.deps.runStore.create({
       projectId: input.projectId,
       userId: input.userId,
@@ -64,11 +79,23 @@ export class AgentOrchestrator {
         message: "AI Agent is analyzing the storefront request...",
       };
 
-      const projectState = await this.deps.projectStateStore.loadOrCreate(input.projectId, input.userId);
+      const projectState = await this.deps.projectStateStore.loadOrCreate(
+        input.projectId,
+        input.userId,
+      );
       yield { type: "state_loaded", status: projectState.status };
 
-      yield { type: "thinking_started", runId: run.id, message: "Đang hiểu yêu cầu của bạn..." };
-      yield { type: "thinking_context_loaded", runId: run.id, projectStatus: projectState.status };
+      yield {
+        type: "thinking_started",
+        runId: run.id,
+        message: "Đang phân tích yêu cầu của bạn...",
+      };
+      yield {
+        type: "thinking_context_loaded",
+        runId: run.id,
+        projectStatus: projectState.status,
+        hasInitializedSource: canApplyIncrementalUpdate(projectState),
+      };
       const thinking = await runThinkingLayer({
         projectId: input.projectId,
         run,
@@ -84,35 +111,62 @@ export class AgentOrchestrator {
         yield {
           type: "thinking_needs_clarification",
           runId: run.id,
-          question: thinking.downstreamTask.clarification?.question ?? "Vui lòng xác nhận trước khi tiếp tục.",
-          reason: thinking.downstreamTask.clarification?.reason ?? "Thinking layer requires clarification.",
+          question:
+            thinking.downstreamTask.clarification?.question ??
+            "Vui lòng xác nhận trước khi tiếp tục.",
+          reason:
+            thinking.downstreamTask.clarification?.reason ??
+            "Thinking layer requires clarification.",
         };
-        await this.deps.runStore.waitForClarification(run, { thinking: toThinkingRunSummary(thinking) });
+        await this.deps.runStore.waitForClarification(run, {
+          thinking: toThinkingRunSummary(thinking),
+        });
         return;
       }
       yield mapThinkingToCompletedEvent(thinking);
 
-      const intent = await classifyIntent({ prompt: input.prompt, projectState });
+      const intent = builderIntentFromThinking(thinking);
       yield { type: "intent_detected", intent };
 
       if (intent.shouldAskClarifyingQuestion && intent.riskLevel === "high") {
         const plan = createClarificationPlan(intent);
         yield {
           type: "clarification_required",
-          question: intent.clarificationQuestion ?? "Please confirm before applying this high-risk storefront change.",
+          question:
+            intent.clarificationQuestion ??
+            "Please confirm before applying this high-risk storefront change.",
         };
-        await this.deps.runStore.waitForClarification(run, { intent, plan, affectedFiles: [] });
+        await this.deps.runStore.waitForClarification(run, {
+          intent,
+          plan,
+          affectedFiles: [],
+        });
         return;
       }
 
       if (shouldInitializeProject(projectState, intent)) {
-        yield* this.initProjectWorkflow({ input, runId: run.id, projectState, intent });
+        yield* this.initProjectWorkflow({
+          input,
+          runId: run.id,
+          projectState,
+          intent,
+        });
         const plan = createInitPlan(intent);
-        await this.deps.runStore.complete(run, { intent, plan, affectedFiles: [], thinking: toThinkingRunSummary(thinking) });
+        await this.deps.runStore.complete(run, {
+          intent,
+          plan,
+          affectedFiles: [],
+          thinking: toThinkingRunSummary(thinking),
+        });
         return;
       }
 
-      const updateResult = yield* this.updateProjectWorkflow({ input, runId: run.id, projectState, intent });
+      const updateResult = yield* this.updateProjectWorkflow({
+        input,
+        runId: run.id,
+        projectState,
+        intent,
+      });
       await this.deps.runStore.complete(run, {
         intent,
         plan: updateResult.plan,
@@ -139,7 +193,10 @@ export class AgentOrchestrator {
       projectId: input.projectId,
       messageId: input.messageId,
     };
-    const runPhase = async <T>(name: string, operation: () => Promise<T> | T): Promise<T> => {
+    const runPhase = async <T>(
+      name: string,
+      operation: () => Promise<T> | T,
+    ): Promise<T> => {
       logAgentPhase("started", name, phaseContext);
       try {
         const result = await operation();
@@ -155,27 +212,40 @@ export class AgentOrchestrator {
     const plan = createInitPlan(intent);
     logAgentPhase("finished", "create_plan", phaseContext);
     yield { type: "plan_created", plan };
-    yield { type: "source_generation_started", message: "Generating storefront source from template..." };
+    yield {
+      type: "source_generation_started",
+      message: "Generating storefront source from template...",
+    };
 
-    const websiteSpec = await runPhase("extract_website_spec", () => extractWebsiteSpec({
-      prompt: input.prompt,
-      projectState,
-      provider: this.deps.openAIProvider,
-      model: this.deps.agentConfig?.plannerModel,
-    }));
-    const templateId = await runPhase("select_template", () => selectTemplate(websiteSpec));
-    const initResult = await runPhase("init_source", () => initSource({
-      projectSlug: slugifyProjectName(websiteSpec.store.name),
-      packageManager: projectState.stack.packageManager,
-      packageRegistryVersion: "initial-v1",
-      templateId,
-      websiteSpec,
-    }));
+    const websiteSpec = await runPhase("extract_website_spec", () =>
+      extractWebsiteSpec({
+        prompt: input.prompt,
+        projectState,
+        provider: this.deps.openAIProvider,
+        model: this.deps.agentConfig?.plannerModel,
+      }),
+    );
+    const templateId = await runPhase("select_template", () =>
+      selectTemplate(websiteSpec),
+    );
+    const initResult = await runPhase("init_source", () =>
+      initSource({
+        projectSlug: slugifyProjectName(websiteSpec.store.name),
+        packageManager: projectState.stack.packageManager,
+        packageRegistryVersion: "initial-v1",
+        templateId,
+        websiteSpec,
+      }),
+    );
     const fileManifest = buildFileManifest(initResult.files);
     logAgentPhase("started", "write_files", phaseContext);
     try {
       for (const file of initResult.files) {
-        await this.deps.projectFileStore?.writeTextFile(input.projectId, file.path, file.content);
+        await this.deps.projectFileStore?.writeTextFile(
+          input.projectId,
+          file.path,
+          file.content,
+        );
         yield { type: "file_changed", path: file.path, operation: "created" };
       }
       logAgentPhase("finished", "write_files", phaseContext);
@@ -185,25 +255,43 @@ export class AgentOrchestrator {
     }
 
     yield { type: "validation_started", commands: plan.validationCommands };
-    const validation = await runPhase("validate", () => this.validate(input.projectId, plan.validationCommands));
-    yield { type: "validation_finished", ok: validation.ok, summary: validation.summary, errors: validation.errors };
+    const validation = await runPhase("validate", () =>
+      this.validate(input.projectId, plan.validationCommands),
+    );
+    yield {
+      type: "validation_finished",
+      ok: validation.ok,
+      summary: validation.summary,
+      errors: validation.errors,
+    };
 
-    const nextProjectState = await runPhase("save_project_state", () => this.deps.projectStateStore.save({
-      ...projectState,
-      ...initResult.projectStatePatch,
-      status: "initialized",
-      ecommerceSpec: {
-        ...projectState.ecommerceSpec,
-        storeType: websiteSpec.store.type,
-        targetCustomers: websiteSpec.store.targetCustomers,
-        mainProducts: websiteSpec.products,
-        requiredFeatures: Object.entries(websiteSpec.features).filter(([, enabled]) => Boolean(enabled)).map(([feature]) => feature),
-      },
-      brand: websiteSpec.brand,
-      pages: websiteSpec.pages.map((page) => ({ ...page, purpose: `Storefront page for ${page.name}`, status: "implemented" })),
-      features: { ...projectState.features, ...websiteSpec.features },
-      fileManifest,
-    }, input.userId));
+    const nextProjectState = await runPhase("save_project_state", () =>
+      this.deps.projectStateStore.save(
+        {
+          ...projectState,
+          ...initResult.projectStatePatch,
+          status: "initialized",
+          ecommerceSpec: {
+            ...projectState.ecommerceSpec,
+            storeType: websiteSpec.store.type,
+            targetCustomers: websiteSpec.store.targetCustomers,
+            mainProducts: websiteSpec.products,
+            requiredFeatures: Object.entries(websiteSpec.features)
+              .filter(([, enabled]) => Boolean(enabled))
+              .map(([feature]) => feature),
+          },
+          brand: websiteSpec.brand,
+          pages: websiteSpec.pages.map((page) => ({
+            ...page,
+            purpose: `Storefront page for ${page.name}`,
+            status: "implemented",
+          })),
+          features: { ...projectState.features, ...websiteSpec.features },
+          fileManifest,
+        },
+        input.userId,
+      ),
+    );
     yield { type: "project_state_updated", projectState: nextProjectState };
 
     await this.deps.snapshotService?.createSnapshot({
@@ -227,7 +315,12 @@ export class AgentOrchestrator {
       validation,
     });
     logAgentPhase("finished", "summary", phaseContext);
-    yield { type: "done", runId: args.runId, summary, changedFiles: initResult.files.map((file) => file.path) };
+    yield {
+      type: "done",
+      runId: args.runId,
+      summary,
+      changedFiles: initResult.files.map((file) => file.path),
+    };
   }
 
   private async *updateProjectWorkflow(args: {
@@ -235,20 +328,32 @@ export class AgentOrchestrator {
     runId: string;
     projectState: ProjectState;
     intent: BuilderIntent;
-  }): AsyncGenerator<AgentStreamEvent, { plan: ChangePlan; changedFiles: string[]; validation: ValidationResult }, unknown> {
+  }): AsyncGenerator<
+    AgentStreamEvent,
+    { plan: ChangePlan; changedFiles: string[]; validation: ValidationResult },
+    unknown
+  > {
     const { input, projectState, intent } = args;
     if (!this.deps.projectFileStore) {
-      throw new Error("Project file store is required for incremental updates.");
+      throw new Error(
+        "Project file store is required for incremental updates.",
+      );
     }
 
-    const normalizedRequirement = await normalizeRequirement({ prompt: input.prompt });
+    const normalizedRequirement = await normalizeRequirement({
+      prompt: intent.normalizedRequirement || input.prompt,
+    });
     const normalizedIntent = { ...intent, normalizedRequirement };
     const relevantFiles = await retrieveRelevantContext({
       prompt: normalizedRequirement,
       projectState,
-      readFile: (path) => this.deps.projectFileStore!.readTextFile(input.projectId, path),
+      readFile: (path) =>
+        this.deps.projectFileStore!.readTextFile(input.projectId, path),
     });
-    yield { type: "context_retrieved", files: relevantFiles.map(({ path, reason }) => ({ path, reason })) };
+    yield {
+      type: "context_retrieved",
+      files: relevantFiles.map(({ path, reason }) => ({ path, reason })),
+    };
 
     const plan = await createChangePlan({
       prompt: normalizedRequirement,
@@ -261,11 +366,22 @@ export class AgentOrchestrator {
     yield { type: "plan_created", plan };
 
     if (plan.requiresUserConfirmation && plan.riskLevel === "high") {
-      yield { type: "clarification_required", question: "Please confirm before applying this high-risk storefront change." };
-      return { plan, changedFiles: [], validation: skippedValidation("Waiting for user confirmation.") };
+      yield {
+        type: "clarification_required",
+        question:
+          "Please confirm before applying this high-risk storefront change.",
+      };
+      return {
+        plan,
+        changedFiles: [],
+        validation: skippedValidation("Waiting for user confirmation."),
+      };
     }
 
-    yield { type: "source_generation_started", message: "Generating incremental storefront patch..." };
+    yield {
+      type: "source_generation_started",
+      message: "Generating incremental storefront patch...",
+    };
     const patch = await generatePatch({
       plan,
       projectState,
@@ -275,15 +391,30 @@ export class AgentOrchestrator {
       model: this.deps.agentConfig?.coderModel,
     });
     const patchService = new PatchService(this.deps.projectFileStore);
-    const applyResult = await patchService.apply(input.projectId, patch.operations);
+    const applyResult = await patchService.apply(
+      input.projectId,
+      patch.operations,
+    );
 
     for (const operation of patch.operations) {
-      yield { type: "file_changed", path: operation.path, operation: toChangedOperation(operation) };
+      yield {
+        type: "file_changed",
+        path: operation.path,
+        operation: toChangedOperation(operation),
+      };
     }
 
     yield { type: "validation_started", commands: plan.validationCommands };
-    const validation = await this.validate(input.projectId, plan.validationCommands);
-    yield { type: "validation_finished", ok: validation.ok, summary: validation.summary, errors: validation.errors };
+    const validation = await this.validate(
+      input.projectId,
+      plan.validationCommands,
+    );
+    yield {
+      type: "validation_finished",
+      ok: validation.ok,
+      summary: validation.summary,
+      errors: validation.errors,
+    };
 
     if (!validation.ok) {
       await this.deps.snapshotService?.rollbackToLatestStable({
@@ -294,22 +425,28 @@ export class AgentOrchestrator {
       });
     }
 
-    const nextProjectState = await this.deps.projectStateStore.patch(input.projectId, {
-      ...(patch.projectStatePatch ?? {}),
-      status: validation.ok ? "initialized" : "failed",
-      fileManifest: mergeManifest(projectState, patch.operations),
-      recentChanges: [
-        ...projectState.recentChanges,
-        {
-          at: new Date().toISOString(),
-          runId: args.runId,
-          userPrompt: input.prompt,
-          summary: patch.summary,
-          changedFiles: applyResult.changedFiles,
-          validationStatus: validation.ok ? "passed" as const : "failed" as const,
-        },
-      ].slice(-10),
-    }, input.userId);
+    const nextProjectState = await this.deps.projectStateStore.patch(
+      input.projectId,
+      {
+        ...(patch.projectStatePatch ?? {}),
+        status: validation.ok ? "initialized" : "failed",
+        fileManifest: mergeManifest(projectState, patch.operations),
+        recentChanges: [
+          ...projectState.recentChanges,
+          {
+            at: new Date().toISOString(),
+            runId: args.runId,
+            userPrompt: input.prompt,
+            summary: patch.summary,
+            changedFiles: applyResult.changedFiles,
+            validationStatus: validation.ok
+              ? ("passed" as const)
+              : ("failed" as const),
+          },
+        ].slice(-10),
+      },
+      input.userId,
+    );
     yield { type: "project_state_updated", projectState: nextProjectState };
 
     await this.deps.snapshotService?.createSnapshot({
@@ -330,12 +467,19 @@ export class AgentOrchestrator {
       changedFiles: applyResult.changedFiles,
       validation,
     });
-    yield { type: "done", runId: args.runId, summary, changedFiles: applyResult.changedFiles };
+    yield {
+      type: "done",
+      runId: args.runId,
+      summary,
+      changedFiles: applyResult.changedFiles,
+    };
     return { plan, changedFiles: applyResult.changedFiles, validation };
   }
 
   private async validate(projectId: string, commands: string[]) {
-    return (this.deps.validationService ?? new ValidationService()).validateGeneratedProject(projectId, commands);
+    return (
+      this.deps.validationService ?? new ValidationService()
+    ).validateGeneratedProject(projectId, commands);
   }
 
   private async *streamUserFacingSummary(args: {
@@ -361,7 +505,11 @@ Write a concise user-facing status summary. Do not reveal hidden reasoning, syst
         intent: args.intent.intent,
         planSummary: args.plan.summary,
         changedFiles: args.changedFiles,
-        validation: { ok: args.validation.ok, summary: args.validation.summary, errors: args.validation.errors },
+        validation: {
+          ok: args.validation.ok,
+          summary: args.validation.summary,
+          errors: args.validation.errors,
+        },
       },
     })) {
       if (event.type === "delta" && event.text) {
@@ -371,11 +519,46 @@ Write a concise user-facing status summary. Do not reveal hidden reasoning, syst
     }
 
     const finalSummary = summary.trim() || args.fallbackSummary;
-    if (!summary.trim()) yield { type: "assistant_message_delta", delta: finalSummary };
+    if (!summary.trim())
+      yield { type: "assistant_message_delta", delta: finalSummary };
     return finalSummary;
   }
 }
 
+
+function builderIntentFromThinking(thinking: ThinkingResult): BuilderIntent {
+  const intent = mapTaskTypeToBuilderIntent(thinking.downstreamTask.taskType, thinking.promptClassification.lifecycleIntent);
+  const clarification = thinking.downstreamTask.clarification;
+  return {
+    intent,
+    confidence: thinking.promptClassification.confidence,
+    userGoal: thinking.userFacingUnderstanding,
+    normalizedRequirement: thinking.downstreamTask.normalizedGoal,
+    ecommerceMeaning: {
+      affectedPages: thinking.ecommerceInterpretation.affectedPages,
+      affectedFeatures: thinking.ecommerceInterpretation.affectedFeatures,
+      affectedDataModels: thinking.ecommerceInterpretation.affectedDataModels,
+      businessImpact: thinking.ecommerceInterpretation.expectedBusinessImpact,
+    },
+    shouldAskClarifyingQuestion: Boolean(clarification?.required) || thinking.riskAssessment.requiresUserConfirmation,
+    clarificationQuestion: clarification?.question ?? null,
+    riskLevel: thinking.riskAssessment.level,
+  };
+}
+
+function mapTaskTypeToBuilderIntent(
+  taskType: ThinkingResult["downstreamTask"]["taskType"],
+  lifecycleIntent: ThinkingResult["promptClassification"]["lifecycleIntent"],
+): BuilderIntent["intent"] {
+  if (taskType === "init_storefront_project") return "init_project";
+  if (taskType === "content_update") return "modify_content";
+  if (taskType === "design_update") return "modify_design";
+  if (taskType === "product_data_update") return "modify_products";
+  if (taskType === "bug_fix") return "fix_bug";
+  if (taskType === "answer_question") return "explain_project";
+  if (lifecycleIntent === "update_project") return "add_feature";
+  return lifecycleIntent;
+}
 
 const CORE_STOREFRONT_FILES = [
   "package.json",
@@ -384,26 +567,39 @@ const CORE_STOREFRONT_FILES = [
   "src/routes/index.tsx",
 ] as const;
 
-function shouldInitializeProject(projectState: ProjectState, intent: BuilderIntent) {
-  return intent.intent === "init_project" || !canApplyIncrementalUpdate(projectState);
+function shouldInitializeProject(
+  projectState: ProjectState,
+  intent: BuilderIntent,
+) {
+  return (
+    intent.intent === "init_project" || !canApplyIncrementalUpdate(projectState)
+  );
 }
 
 function canApplyIncrementalUpdate(projectState: ProjectState) {
   if (projectState.status !== "initialized") return false;
-  const manifestPaths = new Set(projectState.fileManifest.map((file) => file.path));
+  const manifestPaths = new Set(
+    projectState.fileManifest.map((file) => file.path),
+  );
   return CORE_STOREFRONT_FILES.every((path) => manifestPaths.has(path));
 }
 
 function createInitPlan(intent: BuilderIntent): ChangePlan {
   return {
-    summary: "Initialize storefront source from the selected ecommerce template.",
+    summary:
+      "Initialize storefront source from the selected ecommerce template.",
     changeType: "init_source",
     affectedFiles: [],
     operations: [
       { type: "create_file", reason: "Render storefront template files." },
-      { type: "run_validation", reason: "Validate generated storefront source." },
+      {
+        type: "run_validation",
+        reason: "Validate generated storefront source.",
+      },
     ],
-    acceptanceCriteria: ["Storefront source is generated in the project workspace."],
+    acceptanceCriteria: [
+      "Storefront source is generated in the project workspace.",
+    ],
     validationCommands: [],
     riskLevel: intent.riskLevel,
     requiresUserConfirmation: false,
@@ -423,15 +619,22 @@ function createClarificationPlan(intent: BuilderIntent): ChangePlan {
   };
 }
 
-function toChangedOperation(operation: FileOperation): "created" | "modified" | "deleted" {
+function toChangedOperation(
+  operation: FileOperation,
+): "created" | "modified" | "deleted" {
   if (operation.type === "create_file") return "created";
   if (operation.type === "delete_file") return "deleted";
   return "modified";
 }
 
-function mergeManifest(projectState: ProjectState, operations: FileOperation[]) {
+function mergeManifest(
+  projectState: ProjectState,
+  operations: FileOperation[],
+) {
   const now = new Date().toISOString();
-  const manifest = new Map(projectState.fileManifest.map((entry) => [entry.path, entry]));
+  const manifest = new Map(
+    projectState.fileManifest.map((entry) => [entry.path, entry]),
+  );
   for (const operation of operations) {
     if (operation.type === "delete_file") {
       manifest.delete(operation.path);
@@ -448,7 +651,9 @@ function mergeManifest(projectState: ProjectState, operations: FileOperation[]) 
   return [...manifest.values()];
 }
 
-function inferManifestKind(path: string): ProjectState["fileManifest"][number]["kind"] {
+function inferManifestKind(
+  path: string,
+): ProjectState["fileManifest"][number]["kind"] {
   if (path.includes("/routes/") || path === "src/router.tsx") return "route";
   if (path.includes("/components/")) return "component";
   if (path.includes("/data/")) return "data";
@@ -459,14 +664,20 @@ function inferManifestKind(path: string): ProjectState["fileManifest"][number]["
 }
 
 function inferManifestPurpose(path: string) {
-  if (path.includes("product-filter")) return "Product filtering controls and logic.";
+  if (path.includes("product-filter"))
+    return "Product filtering controls and logic.";
   if (path.includes("product-grid")) return "Product discovery grid.";
-  if (path.includes("products")) return "Product data and product listing experience.";
+  if (path.includes("products"))
+    return "Product data and product listing experience.";
   return "Incrementally updated storefront source file.";
 }
 
 function inferSymbols(content: string) {
-  return [...content.matchAll(/(?:export\s+)?(?:function|const|class)\s+([A-Za-z0-9_]+)/g)].map((match) => match[1]);
+  return [
+    ...content.matchAll(
+      /(?:export\s+)?(?:function|const|class)\s+([A-Za-z0-9_]+)/g,
+    ),
+  ].map((match) => match[1]);
 }
 
 function skippedValidation(summary: string): ValidationResult {
@@ -487,8 +698,14 @@ function logAgentPhase(
     messageId: context.messageId,
     ...(error
       ? {
-          error: redactSecrets(error instanceof Error ? error.message : "Unknown agent phase error."),
-          stack: redactSecrets(error instanceof Error && error.stack ? error.stack : ""),
+          error: redactSecrets(
+            error instanceof Error
+              ? error.message
+              : "Unknown agent phase error.",
+          ),
+          stack: redactSecrets(
+            error instanceof Error && error.stack ? error.stack : "",
+          ),
         }
       : {}),
   };

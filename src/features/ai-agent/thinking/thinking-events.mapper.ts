@@ -1,5 +1,5 @@
 import type { AgentStreamEvent } from "../agent/agent-events";
-import type { ThinkingResult } from "./thinking.schema";
+import type { StructuredThinkingResult, ThinkingResult } from "./thinking.schema";
 
 export function mapThinkingToUserWishEvent(thinking: ThinkingResult): AgentStreamEvent {
   return {
@@ -21,5 +21,17 @@ export function mapThinkingToCompletedEvent(thinking: ThinkingResult): AgentStre
     taskType: thinking.downstreamTask.taskType,
     normalizedGoal: thinking.downstreamTask.normalizedGoal,
     riskLevel: thinking.riskAssessment.level,
+  };
+}
+
+export function toSanitizedThinkingEvent(result: StructuredThinkingResult) {
+  return {
+    intent: result.intent,
+    confidence: result.confidence,
+    summary: result.normalizedTask.description,
+    affectedPages: result.ecommerceContext.affectedPages,
+    affectedFeatures: result.ecommerceContext.affectedFeatures,
+    conversionGoal: result.ecommerceContext.conversionGoal,
+    riskLevel: result.risk.level,
   };
 }

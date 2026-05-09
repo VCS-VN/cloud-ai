@@ -75,6 +75,154 @@ export const thinkingInputSchema = z.object({
   }),
 });
 
+
+export const thinkingIntentSchema = z.enum([
+  "init_project",
+  "add_feature",
+  "modify_design",
+  "modify_content",
+  "modify_products",
+  "fix_bug",
+  "integrate_service",
+  "explain_project",
+  "unknown",
+]);
+
+export const thinkingLanguageSchema = z.enum(["vi", "en", "mixed", "unknown"]);
+
+export const thinkingStoreTypeSchema = z.enum([
+  "fashion",
+  "cosmetics",
+  "electronics",
+  "furniture",
+  "food",
+  "digital",
+  "general",
+  "unknown",
+]);
+
+export const thinkingConversionGoalSchema = z.enum([
+  "increase_add_to_cart",
+  "increase_checkout_completion",
+  "improve_product_discovery",
+  "increase_trust",
+  "improve_brand_perception",
+  "improve_mobile_ux",
+  "none",
+  "unknown",
+]);
+
+export const thinkingRecommendedNextStepSchema = z.enum([
+  "ask_clarification",
+  "init_source",
+  "create_plan",
+  "generate_patch",
+  "explain_only",
+  "reject_or_safe_redirect",
+]);
+
+export const thinkingPrioritySchema = z.enum(["low", "normal", "high"]);
+
+export const structuredThinkingInputSchema = z.object({
+  projectId: nonEmptyString,
+  userId: nonEmptyString,
+  userPrompt: nonEmptyString,
+  projectState: z.custom<ProjectState>().nullable(),
+  recentConversationSummary: z.string().nullable().optional(),
+  recentUserMessages: z.array(z.object({ id: nonEmptyString, content: z.string(), createdAt: nonEmptyString })).optional(),
+  runtimeContext: z.object({
+    hasInitializedSource: z.boolean(),
+    hasRunningPreview: z.boolean(),
+    currentPreviewUrl: z.string().nullable().optional(),
+    builderStack: z.object({
+      framework: z.literal("tanstack-start"),
+      router: z.literal("tanstack-router"),
+      dataFetching: z.literal("tanstack-query"),
+      ui: z.literal("react"),
+      styling: z.literal("tailwindcss"),
+      bundler: z.literal("vite"),
+      viteMajorVersion: z.literal(8),
+    }),
+  }),
+});
+
+export const structuredThinkingResultSchema = z.object({
+  intent: thinkingIntentSchema,
+  confidence: confidenceSchema,
+  language: thinkingLanguageSchema,
+  userWish: z.object({
+    rawPrompt: nonEmptyString,
+    explicitRequests: z.array(z.string()),
+    implicitRequests: z.array(z.string()),
+    inferredEcommerceGoals: z.array(z.string()),
+    outOfScopeRequests: z.array(z.string()),
+  }),
+  ecommerceContext: z.object({
+    storeType: thinkingStoreTypeSchema,
+    affectedPages: z.array(z.string()),
+    affectedSections: z.array(z.string()),
+    affectedFeatures: z.array(z.string()),
+    affectedEntities: z.array(z.string()),
+    conversionGoal: thinkingConversionGoalSchema,
+  }),
+  projectAction: z.object({
+    shouldInitProject: z.boolean(),
+    shouldModifyExistingProject: z.boolean(),
+    shouldAskClarification: z.boolean(),
+    clarificationQuestion: z.string().nullable(),
+    requiresSourceInit: z.boolean(),
+    requiresPatchGeneration: z.boolean(),
+    requiresValidation: z.boolean(),
+    requiresPreviewRefresh: z.boolean(),
+  }),
+  constraints: z.object({
+    preserveExistingDesign: z.boolean(),
+    preserveExistingFeatures: z.boolean(),
+    requestedStackChange: z.boolean(),
+    requestedDestructiveChange: z.boolean(),
+    forbiddenActions: z.array(z.string()),
+  }),
+  risk: z.object({
+    level: riskLevelSchema,
+    reasons: z.array(z.string()),
+  }),
+  normalizedTask: z.object({
+    title: nonEmptyString,
+    description: nonEmptyString,
+    acceptanceCriteria: z.array(z.string()),
+    implementationHints: z.array(z.string()),
+  }),
+  downstream: z.object({
+    recommendedNextStep: thinkingRecommendedNextStepSchema,
+    priority: thinkingPrioritySchema,
+  }),
+});
+
+export const structuredAgentTaskSchema = z.object({
+  projectId: nonEmptyString,
+  userId: nonEmptyString,
+  sourcePrompt: nonEmptyString,
+  intent: thinkingIntentSchema,
+  title: nonEmptyString,
+  description: nonEmptyString,
+  ecommerceGoal: thinkingConversionGoalSchema,
+  affectedPages: z.array(z.string()),
+  affectedSections: z.array(z.string()),
+  affectedFeatures: z.array(z.string()),
+  affectedEntities: z.array(z.string()),
+  acceptanceCriteria: z.array(z.string()),
+  implementationHints: z.array(z.string()),
+  riskLevel: riskLevelSchema,
+  nextStep: thinkingRecommendedNextStepSchema,
+  requires: z.object({
+    sourceInit: z.boolean(),
+    patchGeneration: z.boolean(),
+    validation: z.boolean(),
+    previewRefresh: z.boolean(),
+    clarification: z.boolean(),
+  }),
+});
+
 export const preflightResultSchema = z.object({
   sanitizedPrompt: z.string(),
   warnings: z.array(z.string()),
@@ -237,6 +385,14 @@ export const thinkingRunSummarySchema = z.object({
   downstreamTaskType: agentTaskTypeSchema,
   createdAt: nonEmptyString,
 });
+
+
+export type StructuredThinkingInput = z.infer<typeof structuredThinkingInputSchema>;
+export type StructuredThinkingResult = z.infer<typeof structuredThinkingResultSchema>;
+export type StructuredAgentTask = z.infer<typeof structuredAgentTaskSchema>;
+export type ThinkingIntent = z.infer<typeof thinkingIntentSchema>;
+export type ThinkingConversionGoal = z.infer<typeof thinkingConversionGoalSchema>;
+export type ThinkingRecommendedNextStep = z.infer<typeof thinkingRecommendedNextStepSchema>;
 
 export type ThinkingInput = z.infer<typeof thinkingInputSchema>;
 export type PreflightResult = z.infer<typeof preflightResultSchema>;
