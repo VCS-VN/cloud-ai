@@ -55,3 +55,7 @@ PWA fields are retained on project records for compatibility, but the current pr
 ## Design System
 
 `DESIGN.md` is the source of truth for colors, typography, spacing, radius, and component treatment. Tokens are mapped into `tailwind.config.ts` and `app/styles/globals.css`. Do not modify `DESIGN.md` for feature implementation.
+
+## Generated Storefront Workspaces
+
+AI Agent generated storefront source is written outside the Builder Web runtime under `projects/{projectId}`. Builder routes and components must not import files from those generated workspaces directly; previews should use the project workspace or a dedicated sandbox/dev server. Agent patches are guarded to stay inside the matching project workspace, and `ProjectState` plus agent run history remain the source of truth for build/edit workflows.

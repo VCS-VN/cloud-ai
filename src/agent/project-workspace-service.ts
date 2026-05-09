@@ -1,8 +1,7 @@
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ProjectFileNode, ProjectFileNodeRepository } from "@/shared/project-types";
 
-const WORKSPACES_ROOT = path.resolve(process.cwd(), "projects");
 const IGNORED_DIRS = new Set([".git", "node_modules", "dist", ".output", ".tanstack"]);
 const TEXT_FILE_EXTENSIONS = new Set([
   ".css",
@@ -17,16 +16,24 @@ const TEXT_FILE_EXTENSIONS = new Set([
 ]);
 
 export class ProjectWorkspaceService {
-  constructor(private readonly fileNodeRepository?: ProjectFileNodeRepository) {}
+  constructor(
+    private readonly fileNodeRepository?: ProjectFileNodeRepository,
+    private readonly workspacesRoot = path.resolve(process.cwd(), "projects"),
+  ) {}
 
   getWorkspacePath(projectId: string) {
-    return path.join(WORKSPACES_ROOT, assertSafeProjectId(projectId));
+    return path.join(this.workspacesRoot, assertSafeProjectId(projectId));
   }
 
   async ensureWorkspace(projectId: string) {
     const workspacePath = this.getWorkspacePath(projectId);
     await mkdir(workspacePath, { recursive: true });
     return workspacePath;
+  }
+
+  async deleteWorkspace(projectId: string) {
+    const workspacePath = this.getWorkspacePath(projectId);
+    await rm(workspacePath, { recursive: true, force: true });
   }
 
   resolveWorkspacePath(projectId: string, relativePath = ".") {

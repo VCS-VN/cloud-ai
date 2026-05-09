@@ -33,6 +33,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
+import { AgentEventTimeline } from "@/features/ai-agent/ui/agent-event-timeline";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { FilePreviewPanel } from "@/components/projects/FilePreviewPanel";
 import { MessageComposer } from "@/components/projects/MessageComposer";
@@ -49,6 +50,7 @@ import {
   deleteProject,
   getProjectWorkspace,
 } from "@/server/functions/projects";
+import type { AgentStreamEvent } from "@/features/ai-agent/agent/agent-events";
 import type {
   ComposerReasoningEffort,
   Message,
@@ -79,6 +81,7 @@ type ActiveStream = {
   agentMessageId: string;
   url: string;
   source: EventSource;
+  hasTerminalEvent: boolean;
 };
 
 const MESSAGE_PAGE_SIZE = 20;
@@ -220,6 +223,7 @@ function ProjectDetailPage() {
     maxWidth: number;
   } | null>(null);
   const activeStreamRef = useRef<ActiveStream | null>(null);
+  const [agentEvents, setAgentEvents] = useState<AgentStreamEvent[]>([]);
 
   const messagesQuery = useInfiniteQuery({
     queryKey: getProjectMessagesQueryKey(project?.id),
@@ -303,7 +307,7 @@ function ProjectDetailPage() {
       closeActiveStream();
 
       const source = new EventSource(url);
-      activeStreamRef.current = { agentMessageId, url, source };
+      activeStreamRef.current = { agentMessageId, url, source, hasTerminalEvent: false };
 
       const updateMessage = (updater: (message: Message) => Message) => {
         queryClient.setQueryData<InfiniteData<MessagePage>>(
@@ -347,10 +351,40 @@ function ProjectDetailPage() {
         }));
       };
 
+      const handleAgentEvent = (rawEvent: Event) => {
+        const event = JSON.parse((rawEvent as MessageEvent<string>).data) as AgentStreamEvent;
+        setAgentEvents((current) => [...current, event]);
+        if (event.type === "clarification_required") {
+          setProject((currentProject) =>
+            currentProject
+              ? {
+                  ...currentProject,
+                  processingStatus: "idle",
+                  activeAgentMessageId:
+                    currentProject.activeAgentMessageId === agentMessageId
+                      ? undefined
+                      : currentProject.activeAgentMessageId,
+                  updatedAt: new Date().toISOString(),
+                }
+              : currentProject,
+          );
+          void queryClient.invalidateQueries({ queryKey: ["project-runs", project?.id] });
+        }
+        if (event.type === "done") {
+          void queryClient.invalidateQueries({ queryKey: ["project", project?.id] });
+          void queryClient.invalidateQueries({ queryKey: ["project-files", project?.id] });
+          void queryClient.invalidateQueries({ queryKey: ["project-runs", project?.id] });
+          void queryClient.invalidateQueries({ queryKey: ["project-preview", project?.id] });
+        }
+      };
+
       const handleTerminal = (rawEvent: Event) => {
         const event = JSON.parse(
           (rawEvent as MessageEvent<string>).data,
         ) as MessageTerminalEvent;
+        if (activeStreamRef.current?.agentMessageId === event.messageId) {
+          activeStreamRef.current.hasTerminalEvent = true;
+        }
         updateMessage((message) => ({
           ...message,
           content: event.content,
@@ -377,6 +411,7 @@ function ProjectDetailPage() {
               }
             : currentProject,
         );
+        void queryClient.invalidateQueries({ queryKey: ["project-runs", project?.id] });
         if (event.type === "message.failed" && event.error?.message) {
           setSendError(event.error.message);
         }
@@ -384,15 +419,40 @@ function ProjectDetailPage() {
         void router.invalidate();
       };
 
+      source.addEventListener("agent_event", handleAgentEvent);
       source.addEventListener("message.started", handleStarted);
       source.addEventListener("message.delta", handleDelta);
       source.addEventListener("message.completed", handleTerminal);
       source.addEventListener("message.failed", handleTerminal);
       source.addEventListener("message.stopped", handleTerminal);
       source.onerror = () => {
-        if (activeStreamRef.current?.agentMessageId === agentMessageId) {
-          closeActiveStream(agentMessageId);
-        }
+        const activeStream = activeStreamRef.current;
+        if (activeStream?.agentMessageId !== agentMessageId) return;
+
+        const hasTerminalEvent = activeStream.hasTerminalEvent;
+        closeActiveStream(agentMessageId);
+
+        if (hasTerminalEvent) return;
+
+        setProject((currentProject) =>
+          currentProject
+            ? {
+                ...currentProject,
+                processingStatus: "idle",
+                activeAgentMessageId:
+                  currentProject.activeAgentMessageId === agentMessageId
+                    ? undefined
+                    : currentProject.activeAgentMessageId,
+                processingStartedAt: undefined,
+                updatedAt: new Date().toISOString(),
+              }
+            : currentProject,
+        );
+        void queryClient.invalidateQueries({ queryKey: ["project", project?.id] });
+        void queryClient.invalidateQueries({ queryKey: getProjectMessagesQueryKey(project?.id) });
+        void queryClient.invalidateQueries({ queryKey: ["project-runs", project?.id] });
+        void queryClient.invalidateQueries({ queryKey: ["project-preview", project?.id] });
+        void router.invalidate();
       };
     },
     [closeActiveStream, project?.id, queryClient, router],
@@ -412,6 +472,7 @@ function ProjectDetailPage() {
     closeActiveStream();
     setProject(workspace?.project);
     setSendError(undefined);
+    setAgentEvents([]);
     setSelectedNodeId(firstFileNode(workspace?.fileTree ?? [])?.id);
     setDetailMode("preview");
     setPreviewPath("/");
@@ -587,6 +648,7 @@ function ProjectDetailPage() {
     if (!project) return;
     setSending(true);
     setSendError(undefined);
+    setAgentEvents([]);
     setDraft("");
 
     const clientId = `client-${crypto.randomUUID()}`;
@@ -707,13 +769,18 @@ function ProjectDetailPage() {
               />
 
               <div className="min-h-0 h-1 flex-1 overflow-hidden px-sm ">
-                <ProjectMessagesPanel
-                  messages={messages}
-                  loadingOlder={loadingOlder}
-                  hasMore={hasMoreMessages}
-                  onLoadOlder={loadOlderMessages}
-                  onRetryMessage={handleRetryMessage}
-                />
+                <div className="flex h-full min-h-0 flex-col gap-sm">
+                  <AgentEventTimeline events={agentEvents} />
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    <ProjectMessagesPanel
+                      messages={messages}
+                      loadingOlder={loadingOlder}
+                      hasMore={hasMoreMessages}
+                      onLoadOlder={loadOlderMessages}
+                      onRetryMessage={handleRetryMessage}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="shrink-0 p-sm">

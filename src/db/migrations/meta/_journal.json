@@ -36,6 +36,13 @@
       "when": 1778070000000,
       "tag": "0004_rename_projects_table",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778271017993,
+      "tag": "0005_ai_agent_orchestrator",
+      "breakpoints": true
     }
   ]
 }

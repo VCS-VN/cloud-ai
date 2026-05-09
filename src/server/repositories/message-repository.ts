@@ -266,9 +266,25 @@ export class PgProjectMessageRepository implements ProjectMessageRepository {
         providerEventType: chunk.providerEventType,
         createdAt: new Date(chunk.createdAt),
       })
+      .onConflictDoNothing({
+        target: [agentMessageChunks.messageId, agentMessageChunks.sequence],
+      })
       .returning();
 
-    return toAgentMessageChunk(row);
+    if (row) return toAgentMessageChunk(row);
+
+    const [existingRow] = await this.db
+      .select()
+      .from(agentMessageChunks)
+      .where(
+        and(
+          eq(agentMessageChunks.messageId, chunk.messageId),
+          eq(agentMessageChunks.sequence, chunk.sequence),
+        ),
+      );
+
+    if (!existingRow) throw new Error("Agent message chunk conflict could not be resolved.");
+    return toAgentMessageChunk(existingRow);
   }
 
   async listAgentMessageChunks(

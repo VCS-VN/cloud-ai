@@ -1,5 +1,6 @@
 import type { MessageStreamEvent } from "@/shared/project-types";
 import type { ProjectProcessingStatus, StreamErrorCode } from "@/shared/project-types";
+import { redactJson, redactSecrets } from "@/features/ai-agent/security/secret-redactor";
 
 const activeProjectMessageStreams = new Map<string, AbortController>();
 const textEncoder = new TextEncoder();
@@ -94,7 +95,7 @@ export function toStreamFailureEvent(args: {
     providerResponseId: args.providerResponseId,
     error: {
       code: args.code,
-      message: args.message,
+      message: redactSecrets(args.message),
     },
   };
 }

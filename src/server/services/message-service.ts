@@ -1,9 +1,9 @@
 import {
   AIProviderConfigurationError,
-  type AIProvider,
 } from "@/ai/ai-provider";
-import { buildProjectMessageInput } from "@/ai/prompt-builder";
 import type { AgentRuntime } from "@/agent/agent-runtime";
+import type { AgentOrchestrator } from "@/features/ai-agent/agent/agent-orchestrator.server";
+import type { AgentStreamEvent } from "@/features/ai-agent/agent/agent-events";
 import type {
   ComposerReasoningEffort,
   Message,
@@ -54,8 +54,8 @@ export class MessageService {
   constructor(
     private readonly projectRepository: ProjectRepository,
     private readonly messageRepository: ProjectMessageRepository,
-    private readonly aiProviderFactory: () => AIProvider,
     private readonly agentRuntime?: AgentRuntime,
+    private readonly agentOrchestrator?: AgentOrchestrator,
   ) {}
 
   async getProjectMessages(
@@ -114,7 +114,7 @@ export class MessageService {
         status: "pending",
         processingStatus: "pending",
         parentMessageId: userMessage.id,
-        provider: "openai",
+        provider: "agent-orchestrator",
         createdAt: new Date(Date.parse(now) + 1).toISOString(),
         updatedAt: new Date(Date.parse(now) + 1).toISOString(),
       },
@@ -207,6 +207,20 @@ export class MessageService {
 
     if (!promptMessage) throw new Error("Message not found.");
 
+    if (this.agentOrchestrator) {
+      await this.streamAgentOrchestratorMessage({
+        projectId,
+        agentMessageId,
+        agentMessage,
+        parentMessageId: promptMessage.id,
+        prompt: promptMessage.content,
+        emit,
+        signal,
+        userId: resolvedUserId,
+      });
+      return;
+    }
+
     if (agentMessage.provider === "workspace-agent") {
       await this.streamWorkspaceAgentMessage({
         projectId,
@@ -220,121 +234,193 @@ export class MessageService {
       return;
     }
 
-    const history = buildProjectMessageInput({
-      prompt: promptMessage.content,
-      history: page.messages.filter(
-        (message) => message.id !== agentMessage.id,
-      ),
-    });
+    throw new AIProviderConfigurationError(
+      "PROVIDER_NOT_CONFIGURED",
+      "Agent orchestrator is not available.",
+    );
+  }
 
-    const provider = this.aiProviderFactory();
-    if (!provider.streamProjectMessage) {
+  private async streamAgentOrchestratorMessage(args: {
+    projectId: string;
+    agentMessageId: string;
+    agentMessage: Message;
+    parentMessageId?: string;
+    prompt: string;
+    emit: (event: MessageStreamEvent) => Promise<void> | void;
+    signal?: AbortSignal;
+    userId?: string;
+  }) {
+    if (!this.agentOrchestrator) {
       throw new AIProviderConfigurationError(
         "PROVIDER_NOT_CONFIGURED",
-        "Streaming provider is not available.",
+        "Agent orchestrator is not available.",
       );
     }
 
-    let aggregatedContent = agentMessage.content;
-    const startedAt = agentMessage.startedAt ?? new Date().toISOString();
+    const existingChunks = await this.messageRepository.listAgentMessageChunks(args.agentMessageId, args.userId);
+    let aggregatedContent = args.agentMessage.content || existingChunks.map((chunk) => chunk.content).join("");
+    let sequence = existingChunks.reduce((max, chunk) => Math.max(max, chunk.sequence), 0);
+    const startedAt = args.agentMessage.startedAt ?? new Date().toISOString();
+    const streamStartedAt = Date.now();
 
-    await provider.streamProjectMessage(
-      {
-        projectId,
-        messageId: agentMessageId,
-        prompt: promptMessage.content,
-        history,
-        reasoningEffort: options?.reasoningEffort,
-        planMode: options?.planMode,
-        signal,
-      },
-      {
-        onStarted: async (event) => {
-          await this.messageRepository.updateMessage(agentMessageId, {
-            processingStatus: "streaming",
-            provider: "openai",
-            providerResponseId: event.providerResponseId,
-            startedAt,
-            updatedAt: new Date().toISOString(),
-          });
-          await emit(event);
-        },
-        onDelta: async (event) => {
-          aggregatedContent += event.delta;
-          await this.messageRepository.saveAgentMessageChunk(
-            {
-              id: crypto.randomUUID(),
-              projectId,
-              messageId: agentMessageId,
-              userId,
-              sequence: event.sequence,
-              content: event.delta,
-              providerEventType: "response.output_text.delta",
-              createdAt: new Date().toISOString(),
-            },
-            userId,
-          );
-          await this.messageRepository.updateMessage(agentMessageId, {
-            content: aggregatedContent,
-            processingStatus: "streaming",
-            startedAt,
-            updatedAt: new Date().toISOString(),
-          });
-          await emit(event);
-        },
-        onCompleted: async (event) => {
-          await this.messageRepository.updateMessage(agentMessageId, {
-            content: aggregatedContent,
-            processingStatus: "completed",
-            providerResponseId: event.providerResponseId,
-            startedAt,
-            completedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            errorMessage: undefined,
-          });
-          await this.projectRepository.updateProjectProcessingState(
-            projectId,
-            "idle",
-            userId,
-          );
-          await emit({ ...event, content: aggregatedContent });
-        },
-        onFailed: async (event) => {
-          await this.messageRepository.updateMessage(agentMessageId, {
-            content: aggregatedContent,
-            processingStatus: "failed",
-            providerResponseId: event.providerResponseId,
-            startedAt,
-            completedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            errorMessage: event.error?.message,
-          });
-          await this.projectRepository.updateProjectProcessingState(
-            projectId,
-            "idle",
-            userId,
-          );
-          await emit({ ...event, content: aggregatedContent });
-        },
-        onStopped: async (event) => {
-          await this.messageRepository.updateMessage(agentMessageId, {
-            content: aggregatedContent,
-            processingStatus: "stopped",
-            providerResponseId: event.providerResponseId,
-            startedAt,
-            completedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          });
-          await this.projectRepository.updateProjectProcessingState(
-            projectId,
-            "idle",
-            userId,
-          );
-          await emit({ ...event, content: aggregatedContent });
-        },
-        onHeartbeat: emit,
-      },
+    console.info(
+      JSON.stringify({
+        event: "agent_message_stream_started",
+        projectId: args.projectId,
+        messageId: args.agentMessageId,
+        userId: args.userId,
+      }),
     );
+
+    await this.messageRepository.updateMessage(args.agentMessageId, {
+      processingStatus: "streaming",
+      provider: "agent-orchestrator",
+      startedAt,
+      updatedAt: new Date().toISOString(),
+    });
+    await args.emit({
+      type: "message.started",
+      projectId: args.projectId,
+      messageId: args.agentMessageId,
+      processingStatus: "streaming",
+    });
+
+    const toUserFacingDelta = createAgentMessageDeltaPresenter();
+    let hasTerminalUserFacingDelta = false;
+
+    const emitDelta = async (delta: string, providerEventType: string) => {
+      sequence += 1;
+      aggregatedContent += delta;
+      await this.messageRepository.saveAgentMessageChunk(
+        {
+          id: crypto.randomUUID(),
+          projectId: args.projectId,
+          messageId: args.agentMessageId,
+          userId: args.userId,
+          sequence,
+          content: delta,
+          providerEventType,
+          createdAt: new Date().toISOString(),
+        },
+        args.userId,
+      );
+      await this.messageRepository.updateMessage(args.agentMessageId, {
+        content: aggregatedContent,
+        processingStatus: "streaming",
+        startedAt,
+        updatedAt: new Date().toISOString(),
+      });
+      await args.emit({
+        type: "message.delta",
+        messageId: args.agentMessageId,
+        sequence,
+        delta,
+      });
+    };
+
+    try {
+      for await (const event of this.agentOrchestrator.handlePromptStream({
+        projectId: args.projectId,
+        userId: args.userId,
+        prompt: args.prompt,
+        messageId: args.agentMessageId,
+        parentMessageId: args.parentMessageId,
+        signal: args.signal,
+      })) {
+        console.info(
+          JSON.stringify({
+            event: "agent_orchestrator_event",
+            projectId: args.projectId,
+            messageId: args.agentMessageId,
+            agentEventType: event.type,
+            elapsedMs: Date.now() - streamStartedAt,
+          }),
+        );
+        const delta = toUserFacingDelta(event);
+        if (delta) {
+          if (event.type === "done" || event.type === "error") hasTerminalUserFacingDelta = true;
+          await emitDelta(delta, event.type);
+        }
+        if (event.type === "error") {
+          throw new Error(event.message);
+        }
+      }
+
+      await this.messageRepository.updateMessage(args.agentMessageId, {
+        content: aggregatedContent,
+        processingStatus: "completed",
+        startedAt,
+        completedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        errorMessage: undefined,
+      });
+      await this.projectRepository.updateProjectProcessingState(
+        args.projectId,
+        "idle",
+        args.userId,
+      );
+      await args.emit({
+        type: "message.completed",
+        messageId: args.agentMessageId,
+        content: aggregatedContent,
+        processingStatus: "completed",
+        projectProcessingStatus: "idle",
+      });
+      console.info(
+        JSON.stringify({
+          event: "agent_message_stream_completed",
+          projectId: args.projectId,
+          messageId: args.agentMessageId,
+          chunks: sequence,
+          totalChars: aggregatedContent.length,
+          elapsedMs: Date.now() - streamStartedAt,
+        }),
+      );
+    } catch (error) {
+      const aborted = args.signal?.aborted || (error instanceof DOMException && error.name === "AbortError");
+      const processingStatus = aborted ? "stopped" : "failed";
+      const message = error instanceof Error ? error.message : "Agent orchestrator failed.";
+      if (aborted && !hasTerminalUserFacingDelta) {
+        aggregatedContent = appendUserFacingLine(aggregatedContent, "Đã dừng xử lý. Bạn có thể tiếp tục bằng prompt mới.");
+      }
+      if (!aborted && !hasTerminalUserFacingDelta) {
+        aggregatedContent = appendUserFacingLine(aggregatedContent, "Không thể hoàn tất xử lý. Vui lòng thử lại hoặc điều chỉnh prompt.");
+      }
+      await this.messageRepository.updateMessage(args.agentMessageId, {
+        content: aggregatedContent,
+        processingStatus,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        errorMessage: aborted ? undefined : message,
+      });
+      await this.projectRepository.updateProjectProcessingState(args.projectId, "idle", args.userId);
+      await args.emit({
+        type: aborted ? "message.stopped" : "message.failed",
+        messageId: args.agentMessageId,
+        content: aggregatedContent,
+        processingStatus,
+        projectProcessingStatus: "idle",
+        ...(aborted
+          ? {}
+          : {
+              error: {
+                code: "PROVIDER_STREAM_FAILED" as const,
+                message: "Không thể hoàn tất xử lý. Vui lòng thử lại hoặc điều chỉnh prompt.",
+              },
+            }),
+      });
+      console.error(
+        JSON.stringify({
+          event: aborted ? "agent_message_stream_stopped" : "agent_message_stream_failed",
+          projectId: args.projectId,
+          messageId: args.agentMessageId,
+          chunks: sequence,
+          error: aborted ? undefined : message,
+          elapsedMs: Date.now() - streamStartedAt,
+        }),
+      );
+    }
   }
 
   private async streamWorkspaceAgentMessage(args: {
@@ -353,8 +439,9 @@ export class MessageService {
       );
     }
 
-    let aggregatedContent = args.agentMessage.content;
-    let sequence = 0;
+    const existingChunks = await this.messageRepository.listAgentMessageChunks(args.agentMessageId, args.userId);
+    let aggregatedContent = args.agentMessage.content || existingChunks.map((chunk) => chunk.content).join("");
+    let sequence = existingChunks.reduce((max, chunk) => Math.max(max, chunk.sequence), 0);
     const startedAt = args.agentMessage.startedAt ?? new Date().toISOString();
 
     await this.messageRepository.updateMessage(args.agentMessageId, {
@@ -549,6 +636,58 @@ export class MessageService {
     };
   }
 }
+
+function createAgentMessageDeltaPresenter() {
+  const emitted = new Set<string>();
+
+  return (event: AgentStreamEvent) => {
+    const message = agentEventToUserFacingMessage(event);
+    if (!message) return undefined;
+    const key =
+      event.type === "assistant_message_delta" ? `${event.type}:${message}` : message;
+    if (emitted.has(key)) return undefined;
+    emitted.add(key);
+    return `${message}${message.endsWith("\n") ? "" : "\n"}`;
+  };
+}
+
+export function agentEventToUserFacingMessage(event: AgentStreamEvent) {
+  switch (event.type) {
+    case "intent_detected":
+      if (event.intent.intent === "init_project") return "Đang khởi tạo dự án...";
+      if (event.intent.intent === "explain_project") return "Đang kiểm tra dự án...";
+      return "Đang cập nhật trang...";
+    case "source_generation_started":
+      return /incremental|patch|update/i.test(event.message)
+        ? "Đang cập nhật trang..."
+        : "Đang tạo trang...";
+    case "assistant_message_delta":
+      return undefined;
+    case "done":
+      return getDoneMessageForUser(event.summary);
+    case "error":
+      return "Không thể hoàn tất xử lý. Vui lòng thử lại hoặc điều chỉnh prompt.";
+    default:
+      return undefined;
+  }
+}
+
+
+function getDoneMessageForUser(summary: string) {
+  if (/init|initial|khởi tạo|generated|storefront files|from template/i.test(summary)) {
+    return "Hoàn tất. Dự án đã được khởi tạo thành công.";
+  }
+  if (/add|create|new|thêm|tạo/i.test(summary)) {
+    return "Hoàn tất. Yêu cầu mới đã được thêm thành công.";
+  }
+  return "Hoàn tất. Nội dung đã được cập nhật thành công.";
+}
+
+function appendUserFacingLine(content: string, line: string) {
+  const separator = content && !content.endsWith("\n") ? "\n" : "";
+  return `${content}${separator}${line}\n`;
+}
+
 
 function normalizeCursor(cursor?: MessageCursor): MessageCursor {
   const limit = Math.min(Math.max(cursor?.limit ?? 50, 1), 100);

@@ -23,6 +23,31 @@ function AgentMessageContent({ content }: { content: string }) {
   );
 }
 
+
+function getAgentDisplayContent(content: string, status: Message["processingStatus"]) {
+  const fallback =
+    status === "failed"
+      ? "Không thể hoàn tất xử lý. Vui lòng thử lại hoặc điều chỉnh prompt."
+      : status === "stopped"
+        ? "Đã dừng xử lý. Bạn có thể tiếp tục bằng prompt mới."
+        : "### Trạng thái\n- Đang chuẩn bị xử lý yêu cầu...";
+
+  if (!content.trim()) return fallback;
+
+  const userFacingLines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(isUserFacingAgentLine);
+
+  if (userFacingLines.length === 0) return fallback;
+  return [...new Set(userFacingLines)].join("\n");
+}
+
+function isUserFacingAgentLine(line: string) {
+  return /^(Đang khởi tạo dự án|Đang tạo trang|Đang cập nhật trang|Đang kiểm tra dự án|Hoàn tất\.|Không thể hoàn tất xử lý\.|Đã dừng xử lý\.)/.test(line)
+    && !/\b\d+\s+file\b/i.test(line);
+}
+
 export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const label = isUser ? "You" : "Agent";
@@ -40,10 +65,9 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
         : isFailed
           ? "Failed"
           : "Ready";
-  const content =
-    !isUser && !message.content && (isPending || isStreaming)
-      ? "### Status\n- Preparing your project workspace..."
-      : message.content;
+  const content = isUser
+    ? message.content
+    : getAgentDisplayContent(message.content, message.processingStatus);
 
   return (
     <article
@@ -115,7 +139,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
 
         {!isUser && !isFailed && !isPending && !isStreaming && isStopped ? (
           <div className="mt-sm rounded-md border border-[var(--app-border)] bg-[var(--app-panel-bg)] p-xs text-[12px] leading-4 text-[var(--app-muted-text)]">
-            Generation stopped. You can continue with another prompt.
+            Đã dừng xử lý. Bạn có thể tiếp tục bằng prompt mới.
           </div>
         ) : null}
       </div>

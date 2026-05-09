@@ -1,1 +1,1 @@
-// Shared Vitest setup for project tests.
+// Shared Vitest setup file. Keep intentionally empty until tests need globals.

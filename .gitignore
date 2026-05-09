@@ -17,4 +17,8 @@ src/routeTree.gen.ts
 
 .tanstack/
 
-projects/
+
+.code-review-graph
+
+.pnpm-store
+/projects/

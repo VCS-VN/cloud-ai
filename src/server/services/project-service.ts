@@ -52,8 +52,9 @@ export class ProjectService {
     private readonly projectRepository: ProjectRepository,
     private readonly messageRepository: ProjectMessageRepository,
     private readonly fileNodeRepository: ProjectFileNodeRepository,
+    workspaceService?: ProjectWorkspaceService,
   ) {
-    this.workspaceService = new ProjectWorkspaceService(fileNodeRepository);
+    this.workspaceService = workspaceService ?? new ProjectWorkspaceService(fileNodeRepository);
   }
 
   async listProjects(userId?: string): Promise<Project[]> {
@@ -111,7 +112,7 @@ export class ProjectService {
         status: "pending",
         processingStatus: "pending",
         parentMessageId: userMessage.id,
-        provider: "workspace-agent",
+        provider: "agent-orchestrator",
         createdAt: new Date(Date.parse(now) + 1).toISOString(),
         updatedAt: new Date(Date.parse(now) + 1).toISOString(),
       },
@@ -175,6 +176,7 @@ export class ProjectService {
   ): Promise<{ success: true }> {
     const deleted = await this.projectRepository.deleteProject(projectId, userId);
     if (!deleted) throw new Error("Project not found.");
+    await this.workspaceService.deleteWorkspace(projectId);
     await this.messageRepository.bulkUpdateMessageStatusByProject(
       projectId,
       0,

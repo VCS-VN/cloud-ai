@@ -134,7 +134,7 @@ export function ProjectMessagesPanel({
       <section
         id="project-messages-viewport"
         ref={viewportRef}
-        className="flex min-h-0 h-full flex-col gap-sm overflow-y-auto pr-xs scroll-smooth"
+        className="builder-scrollbar-hidden flex min-h-0 h-full flex-col gap-sm overflow-y-auto pr-xs scroll-smooth"
         style={{
           height: "calc(100vh - 360px)",
           overflowY: "scroll",
