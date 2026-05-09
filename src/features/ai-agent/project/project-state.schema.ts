@@ -125,6 +125,13 @@ export type ProjectState = {
     changedFiles: string[];
     validationStatus: "passed" | "failed" | "skipped";
   }>;
+  designState?: {
+    templateId: string;
+    designSourcePath: string;
+    designSourceHash: string;
+    designCopiedAt: string;
+    designLastLoadedAt?: string;
+  };
 };
 
 export type FileManifestEntry = {
@@ -398,7 +405,9 @@ export type AgentStreamEvent =
   | { type: "validation_finished"; ok: boolean; summary: string; errors?: string[] }
   | { type: "project_state_updated"; projectState: ProjectState }
   | { type: "done"; runId: string; summary: string; changedFiles: string[]; previewUrl?: string }
-  | { type: "error"; code: string; message: string; recoverable: boolean };
+  | { type: "error"; code: string; message: string; recoverable: boolean }
+  | { type: "design_file_copied"; projectId: string; messageId: string; data: { templateId: string; destinationPath: string } }
+  | { type: "design_rules_loaded"; projectId: string; messageId: string; data: { source: string; summary: string; hash: string } };
 
 export function createEmptyProjectState(projectId: string): ProjectState {
   return {

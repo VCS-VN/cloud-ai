@@ -100,15 +100,15 @@ function ProjectStatusBadge({ selected, status }: { selected: boolean; status: s
 
 function DeleteButton({ confirming, deleting, onCancel, onDelete }: { confirming: boolean; deleting: boolean; onCancel: () => void; onDelete: () => void }) {
   return (
-    <span className="inline-flex items-center gap-xxs rounded-pill bg-[var(--app-panel)] p-xxs text-[var(--app-danger-text)] ring-1 ring-[var(--app-border)] transition-colors duration-200">
+    <span className="inline-flex items-center gap-xxs rounded-pill bg-[var(--app-panel)] p-xxs text-red-500 ring-1 ring-red-300 transition-colors duration-200">
       {confirming ? (
-        <button className="inline-flex h-7 items-center gap-xxs rounded-pill px-xs text-[11px] font-[520] outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={onDelete} disabled={deleting} aria-busy={deleting}>
+        <button className="inline-flex h-7 items-center gap-xxs rounded-pill px-xs text-[11px] font-[520] text-red-500 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={onDelete} disabled={deleting} aria-busy={deleting}>
           {deleting ? <Loader2 aria-hidden="true" className="animate-spin" size={12} /> : <Trash2 aria-hidden="true" size={12} />}
           Delete
         </button>
       ) : (
-        <button className="inline-flex h-7 w-7 items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]" type="button" onClick={onDelete} aria-label="Delete project">
-          <Trash2 aria-hidden="true" className="text-[var(--app-icon-muted)]" size={14} />
+        <button className="inline-flex h-7 w-7 items-center justify-center rounded-full text-red-500 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]" type="button" onClick={onDelete} aria-label="Delete project">
+          <Trash2 aria-hidden="true" size={14} />
         </button>
       )}
       {confirming ? <button className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--app-muted)] outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]" type="button" onClick={onCancel} disabled={deleting} aria-label="Cancel delete"><X aria-hidden="true" size={13} /></button> : null}

@@ -31,6 +31,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { AgentEventTimeline } from "@/features/ai-agent/ui/agent-event-timeline";
@@ -755,71 +756,67 @@ function ProjectDetailPage() {
     <main className="h-25 min-h-0 overflow-hidden bg-(--app-bg) text-(--app-text)">
       {workspace && project ? (
         <div className="flex h-full min-h-0 min-w-0 overflow-hidden">
-          {chatVisible ? (
-            <div
-              className="flex min-h-0 w-105 shrink-0 flex-col overflow-hidden border-r border-(--app-border) bg-(--app-panel) transition-colors duration-300"
-              style={{ width: chatWidth }}
-            >
-              <ChatHeader
-                project={project}
-                processing={project.processingStatus === "processing"}
-                onBack={() => void navigate({ to: "/projects" as never })}
-                onDelete={handleDeletedProject}
-                onToggleChat={toggleChat}
-              />
+          <div
+            className="flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-(--app-border) bg-(--app-panel) transition-[width,border-width] duration-300 ease-in-out"
+            style={{ width: chatVisible ? chatWidth : 0, borderRightWidth: chatVisible ? undefined : 0 }}
+          >
+            <ChatHeader
+              project={project}
+              processing={project.processingStatus === "processing"}
+              onBack={() => void navigate({ to: "/projects" as never })}
+              onDelete={handleDeletedProject}
+              onToggleChat={toggleChat}
+            />
 
-              <div className="min-h-0 h-1 flex-1 overflow-hidden px-sm ">
-                <div className="flex h-full min-h-0 flex-col gap-sm">
-                  <AgentEventTimeline events={agentEvents} />
-                  <div className="min-h-0 flex-1 overflow-hidden">
-                    <ProjectMessagesPanel
-                      messages={messages}
-                      loadingOlder={loadingOlder}
-                      hasMore={hasMoreMessages}
-                      onLoadOlder={loadOlderMessages}
-                      onRetryMessage={handleRetryMessage}
-                    />
-                  </div>
+            <div className="min-h-0 h-1 flex-1 overflow-hidden px-sm ">
+              <div className="flex h-full min-h-0 flex-col gap-sm">
+                <AgentEventTimeline events={agentEvents} />
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  <ProjectMessagesPanel
+                    messages={messages}
+                    loadingOlder={loadingOlder}
+                    hasMore={hasMoreMessages}
+                    onLoadOlder={loadOlderMessages}
+                    onRetryMessage={handleRetryMessage}
+                  />
                 </div>
               </div>
-
-              <div className="shrink-0 p-sm">
-                <MessageComposer
-                  value={draft}
-                  reasoningEffort={reasoningEffort}
-                  planMode={planModeEnabled}
-                  sending={sending}
-                  processing={project.processingStatus === "processing"}
-                  error={sendError}
-                  disabled={project.processingStatus === "processing"}
-                  onChange={setDraft}
-                  onReasoningEffortChange={setReasoningEffort}
-                  onPlanModeChange={setPlanModeEnabled}
-                  onSend={handleSendMessage}
-                  onStop={handleStopGeneration}
-                  onScrollMessagesUp={() => scrollMessagesByPage("up")}
-                  onScrollMessagesDown={scrollMessagesToLatest}
-                />
-              </div>
             </div>
-          ) : null}
 
-          {chatVisible ? (
-            <button
-              type="button"
-              className="left-0 z-[12000] group relative w-2 shrink-0 cursor-col-resize touch-none border-30 border-blue-500 p-0 outline-none transition-colors duration-200"
-              aria-label="Resize chat panel"
-              onPointerDown={beginResize}
-              onPointerMove={resize}
-              onPointerUp={endResize}
-              onPointerCancel={endResize}
-            >
-              <span
-                className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--app-border-strong)] transition-colors duration-200 group-hover:bg-[var(--app-accent)]"
-                aria-hidden="true"
+            <div className="shrink-0 p-sm">
+              <MessageComposer
+                value={draft}
+                reasoningEffort={reasoningEffort}
+                planMode={planModeEnabled}
+                sending={sending}
+                processing={project.processingStatus === "processing"}
+                error={sendError}
+                disabled={project.processingStatus === "processing"}
+                onChange={setDraft}
+                onReasoningEffortChange={setReasoningEffort}
+                onPlanModeChange={setPlanModeEnabled}
+                onSend={handleSendMessage}
+                onStop={handleStopGeneration}
+                onScrollMessagesUp={() => scrollMessagesByPage("up")}
+                onScrollMessagesDown={scrollMessagesToLatest}
               />
-            </button>
-          ) : null}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className={`left-0 z-[12000] group relative w-2 shrink-0 cursor-col-resize touch-none border-0 p-0 outline-none transition-[opacity] duration-200 ${chatVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+            aria-label="Resize chat panel"
+            onPointerDown={beginResize}
+            onPointerMove={resize}
+            onPointerUp={endResize}
+            onPointerCancel={endResize}
+          >
+            <span
+              className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--app-border-strong)] transition-colors duration-200 group-hover:bg-[var(--app-accent)]"
+              aria-hidden="true"
+            />
+          </button>
 
           <section
             style={{
@@ -888,13 +885,6 @@ function ChatHeader({
     <header className="shrink-0 border-b border-[var(--app-border)] p-sm">
       <div className="flex min-w-0 items-start gap-sm">
         <button
-          className="inline-flex h-8 shrink-0 items-center rounded-pill border border-[var(--app-border)] bg-[var(--app-control)] px-sm text-[12px] text-[var(--app-danger-text)] transition-colors duration-200 hover:border-[var(--app-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
-          type="button"
-          onClick={onDelete}
-        >
-          Delete
-        </button>
-        <button
           className="mt-xxs inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
           type="button"
           onClick={onBack}
@@ -930,14 +920,24 @@ function ChatHeader({
             </span>
           </div>
         </div>
-        <button
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
-          type="button"
-          onClick={onToggleChat}
-          aria-label="Hide chat"
-        >
-          <PanelLeftClose aria-hidden="true" size={16} />
-        </button>
+        <div className="flex shrink-0 items-center gap-xs">
+          <button
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+            type="button"
+            onClick={onToggleChat}
+            aria-label="Hide chat"
+          >
+            <PanelLeftClose aria-hidden="true" size={16} />
+          </button>
+          <button
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-300 bg-[var(--app-control)] text-red-500 transition-colors duration-200 hover:border-red-400 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+            type="button"
+            onClick={onDelete}
+            aria-label="Delete project"
+          >
+            <Trash2 aria-hidden="true" size={16} />
+          </button>
+        </div>
       </div>
     </header>
   );

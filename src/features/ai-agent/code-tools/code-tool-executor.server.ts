@@ -17,6 +17,9 @@ export async function executeProjectTool(input: {
   sandboxMode?: "read-only" | "workspace-write";
 }): Promise<ProjectToolResult> {
   const startedAt = Date.now();
+  if (!(input.context as any).flags) {
+    (input.context as any).flags = { designRulesLoaded: false };
+  }
   const tool = input.registry.get(input.toolCall.name);
 
   if (!tool) {
@@ -75,6 +78,26 @@ export async function executeProjectTool(input: {
   }
 
   const args = softNormalizeToolArgs(tool, input.toolCall.arguments);
+
+  if (tool.category === "mutate") {
+    const flags = (input.context as any).flags;
+    const designRulesLoaded = flags?.designRulesLoaded === true;
+    if (!designRulesLoaded) {
+      const changedFiles = extractPotentialChangedFiles(args);
+      const hasUiFile = changedFiles.some((file) => isUiRelatedFilePath(file));
+      if (hasUiFile) {
+        return toolError(
+          input.context,
+          tool.name,
+          tool.category,
+          startedAt,
+          "DESIGN_RULES_REQUIRED",
+          "DESIGN.md must be read before modifying UI code. Call project_read_design_rules first.",
+          true,
+        );
+      }
+    }
+  }
 
   if (tool.category === "mutate") {
     const changedFiles = extractPotentialChangedFiles(args);
@@ -197,4 +220,17 @@ function extractPotentialChangedFiles(args: unknown) {
   }
   if (typeof args.path === "string") return [args.path];
   return [];
+}
+
+const UI_RELATED_GLOBS = [
+  "src/routes/",
+  "src/components/",
+  "src/features/",
+  "src/styles/",
+  "tailwind.config",
+  "postcss.config",
+];
+
+function isUiRelatedFilePath(filePath: string): boolean {
+  return UI_RELATED_GLOBS.some((glob) => filePath.startsWith(glob) || filePath.includes(`/${glob}`));
 }

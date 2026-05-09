@@ -13,6 +13,7 @@ import { projectReadFileTool } from "./tools/project-read-file.tool.server";
 import { projectSearchCodeTool } from "./tools/project-search-code.tool.server";
 import { projectPreviewStatusTool } from "./tools/project-preview-status.tool.server";
 import { projectPreviewRestartTool } from "./tools/project-preview-restart.tool.server";
+import { projectReadDesignRulesTool } from "./tools/project-read-design-rules.tool.server";
 
 export const CODE_TOOL_LIMITS = {
   maxToolLoopIterations: 40,
@@ -28,29 +29,34 @@ const PHASE_TOOL_NAMES: Record<CodeToolPhase, string[]> = {
   context_bootstrap: [
     "project_get_context",
     "project_get_file_tree",
+    "project_read_design_rules",
   ],
   inspection: [
     "project_search_code",
     "project_read_file",
     "project_read_file_range",
+    "project_read_design_rules",
   ],
   planning: [
     "project_get_context",
     "project_search_code",
     "project_read_file",
     "project_read_file_range",
+    "project_read_design_rules",
   ],
   mutation: [
     "project_create_snapshot",
     "project_delete_file",
     "project_apply_patch",
     "project_create_file",
+    "project_read_design_rules",
   ],
   validation: [
     "project_run_validation",
     "project_get_diff",
     "project_preview_status",
     "project_preview_restart",
+    "project_read_design_rules",
   ],
   repair: [
     "project_search_code",
@@ -59,10 +65,12 @@ const PHASE_TOOL_NAMES: Record<CodeToolPhase, string[]> = {
     "project_apply_patch",
     "project_run_validation",
     "project_get_diff",
+    "project_read_design_rules",
   ],
   finalize: [
     "project_get_diff",
     "project_preview_status",
+    "project_read_design_rules",
   ],
 };
 
@@ -106,7 +114,8 @@ export function createDefaultCodeToolRegistry() {
     .register(projectReadFileTool)
     .register(projectReadFileRangeTool)
     .register(projectPreviewStatusTool)
-    .register(projectPreviewRestartTool));
+    .register(projectPreviewRestartTool)
+    .register(projectReadDesignRulesTool));
 }
 
 export function selectAllowedToolNames(input: {

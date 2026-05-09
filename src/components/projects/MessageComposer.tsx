@@ -49,6 +49,15 @@ export function MessageComposer({
     await onSend(value);
   }
 
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      if (canSend) {
+        event.currentTarget.form?.requestSubmit();
+      }
+    }
+  }
+
   return (
     <form
       className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel-bg)] p-sm transition-colors duration-300 focus-within:border-[var(--app-border-strong)]"
@@ -68,6 +77,7 @@ export function MessageComposer({
         placeholder="Ask Cloud AI..."
         disabled={sending || disabled}
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={handleKeyDown}
       />
 
       {error ? (

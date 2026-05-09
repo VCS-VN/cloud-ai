@@ -45,6 +45,10 @@ import {
   buildValidationStartedEvent,
 } from "../code-tools/code-tool-events.server";
 import { getPreviewRestartRequirement } from "../code-tools/services/preview-restart-policy.server";
+import {
+  copyDesignFileToProject,
+  loadProjectDesignRules,
+} from "../code-tools/services/design-file-service.server";
 
 export type HandlePromptInput = {
   projectId: string;
@@ -279,6 +283,41 @@ export class AgentOrchestrator {
       throw error;
     }
 
+    const designCopyResult = await runPhase("copy_design_file", () =>
+      copyDesignFileToProject({
+        projectId: input.projectId,
+        workspaceRoot: `./projects/${input.projectId}`,
+      }),
+    );
+
+    yield {
+      type: "design_file_copied",
+      projectId: input.projectId,
+      messageId: input.messageId ?? args.runId,
+      data: {
+        templateId: designCopyResult.templateId,
+        destinationPath: designCopyResult.destinationPath,
+      },
+    };
+
+    const designRules = await runPhase("load_design_rules", () =>
+      loadProjectDesignRules({
+        projectId: input.projectId,
+        workspaceRoot: `./projects/${input.projectId}`,
+      }),
+    );
+
+    yield {
+      type: "design_rules_loaded",
+      projectId: input.projectId,
+      messageId: input.messageId ?? args.runId,
+      data: {
+        source: designRules.path,
+        summary: designRules.summary,
+        hash: designRules.hash,
+      },
+    };
+
     yield { type: "validation_started", commands: plan.validationCommands };
     const validation = await runPhase("validate", () =>
       this.validate(input.projectId, plan.validationCommands),
@@ -313,6 +352,12 @@ export class AgentOrchestrator {
           })),
           features: { ...projectState.features, ...websiteSpec.features },
           fileManifest,
+          designState: {
+            templateId: designCopyResult.templateId,
+            designSourcePath: "DESIGN.md",
+            designSourceHash: designRules.hash,
+            designCopiedAt: new Date().toISOString(),
+          },
         },
         input.userId,
       ),

@@ -20,7 +20,11 @@ Core rules:
 - Do not edit .env or secret files.
 - If a requested change is destructive, broad, or conflicts with ProjectState, stop and request clarification.
 - After mutation, run validation.
-- If validation fails, inspect the error and perform a minimal repair patch.`;
+- If validation fails, inspect the error and perform a minimal repair patch.
+- Before generating or modifying UI code (routes, components, pages, styles), call project_read_design_rules.
+- DESIGN.md is the source of truth for storefront UI quality, layout rhythm, colors, typography, spacing, components, and responsive behavior.
+- When updating UI, extract relevant rules from DESIGN.md, inspect existing code, apply a minimal patch aligned with DESIGN.md, and validate after changes.
+- Do not create bare demo layouts. Product sections must include commerce-ready affordances.`;
 
 export type CodeAgentTaskSummary = {
   title: string;

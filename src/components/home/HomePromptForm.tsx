@@ -9,7 +9,7 @@ type HomePromptFormProps = {
   onSubmit: (prompt: string) => Promise<void> | void;
 };
 
-const placeholder = "Ask Cloud AI to create a";
+const placeholder = "Ask Cloud AI to create a website, app, or anything you imagine...";
 
 export function HomePromptForm({
   prompt,
@@ -26,6 +26,15 @@ export function HomePromptForm({
     await onSubmit(prompt);
   }
 
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      if (canSubmit) {
+        event.currentTarget.form?.requestSubmit();
+      }
+    }
+  }
+
   return (
     <form className="mx-auto w-full max-w-[1040px]" onSubmit={handleSubmit}>
       <div className="rounded-md border border-[var(--app-composer-border)] bg-[var(--app-composer-bg)] p-md text-[var(--app-composer-text)] transition-colors duration-200 focus-within:border-[var(--app-composer-border-focus)] sm:p-lg">
@@ -39,6 +48,7 @@ export function HomePromptForm({
           placeholder={placeholder}
           disabled={loading}
           onChange={(event) => onPromptChange(event.target.value)}
+          onKeyDown={handleKeyDown}
         />
 
         <div className="mt-md flex items-end justify-between gap-sm">

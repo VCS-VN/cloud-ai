@@ -49,6 +49,7 @@
   --app-hero-control-text: var(--color-ink);
   --app-hero-inverse: var(--color-primary);
   --app-hero-inverse-text: var(--color-on-primary);
+  --app-hero-glow: radial-gradient(ellipse 60% 50% at 50% 40%, color-mix(in srgb, var(--color-block-lime) 25%, transparent), transparent);
   --app-pill-bg: var(--color-primary);
   --app-pill-hover: #222222;
   --app-pill-text: var(--color-on-primary);
@@ -166,6 +167,7 @@
   --app-hero-control-text: var(--color-inverse-ink);
   --app-hero-inverse: var(--color-on-inverse-soft);
   --app-hero-inverse-text: var(--color-inverse-canvas);
+  --app-hero-glow: radial-gradient(ellipse 60% 50% at 50% 40%, color-mix(in srgb, var(--color-block-lime) 15%, transparent), transparent);
   --app-pill-bg: var(--color-on-inverse-soft);
   --app-pill-hover: #f1f1f1;
   --app-pill-text: var(--color-inverse-canvas);

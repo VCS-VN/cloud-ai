@@ -31,6 +31,8 @@ const EVENT_LABELS: Record<AgentStreamEvent["type"], string> = {
   project_state_updated: "Project state updated",
   done: "Done",
   error: "Error",
+  design_file_copied: "Design file copied",
+  design_rules_loaded: "Design rules loaded",
 };
 
 export function AgentEventTimeline({ events }: { events: AgentStreamEvent[] }) {
@@ -88,6 +90,8 @@ function detailFor(event: AgentStreamEvent) {
     case "project_state_updated": return event.projectState.status;
     case "context_retrieved": return `${event.files.length} files`;
     case "clarification_required": return `${event.question}${event.reason ? ` — ${event.reason}` : ""}`;
+    case "design_file_copied": return `${event.data.templateId} → ${event.data.destinationPath}`;
+    case "design_rules_loaded": return event.data.summary;
     default: return "";
   }
 }

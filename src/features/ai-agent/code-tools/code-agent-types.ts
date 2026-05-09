@@ -12,6 +12,11 @@ export type ToolExecutionContext = {
   stream?: {
     send: (event: unknown) => void | Promise<void>;
   };
+  flags?: {
+    designRulesLoaded?: boolean;
+    isUiRelatedChange?: boolean;
+  };
+  designRuleHash?: string;
 };
 
 export type CodeToolDefinition<TArgs = unknown, TData = unknown> = {
