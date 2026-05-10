@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleDashed, FileText, Loader2, TriangleAlert } from "lucide-react";
+import { CheckCircle2, CircleDashed, FileText, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
 import type { AgentStreamEvent } from "../agent/agent-events";
 
 const EVENT_LABELS: Record<AgentStreamEvent["type"], string> = {
@@ -33,6 +33,15 @@ const EVENT_LABELS: Record<AgentStreamEvent["type"], string> = {
   error: "Error",
   design_file_copied: "Design file copied",
   design_rules_loaded: "Design rules loaded",
+  dev_install_started: "Installing packages",
+  dev_install_completed: "Packages installed",
+  dev_install_failed: "Install failed",
+  dev_starting: "Starting dev server",
+  dev_ready: "Dev server ready",
+  dev_error: "Dev server error",
+  dev_fix_attempt: "Attempting fix",
+  dev_fix_applied: "Fix applied",
+  dev_fix_failed: "Fix failed",
 };
 
 export function AgentEventTimeline({ events }: { events: AgentStreamEvent[] }) {
@@ -58,6 +67,10 @@ function iconFor(event: AgentStreamEvent) {
   if (event.type === "done" || event.type === "validation_finished" || event.type === "project_state_updated" || event.type === "thinking_completed" || event.type === "code_tool_loop_completed") return <CheckCircle2 aria-hidden="true" size={14} className="text-[var(--app-icon-selected)]" />;
   if (event.type === "file_changed" || event.type === "patch_applied") return <FileText aria-hidden="true" size={14} className="text-[var(--app-icon-muted)]" />;
   if (event.type === "source_generation_started" || event.type === "validation_started" || event.type === "thinking_started" || event.type === "code_tool_loop_started" || event.type === "tool_call_requested" || event.type === "repair_started") return <Loader2 aria-hidden="true" size={14} className="animate-spin text-[var(--app-icon-muted)]" />;
+  if (event.type === "dev_install_started" || event.type === "dev_starting") return <Loader2 aria-hidden="true" size={14} className="animate-spin text-[var(--app-icon-muted)]" />;
+  if (event.type === "dev_install_completed" || event.type === "dev_ready" || event.type === "dev_fix_applied") return <CheckCircle2 aria-hidden="true" size={14} className="text-[var(--app-icon-selected)]" />;
+  if (event.type === "dev_install_failed" || event.type === "dev_error" || event.type === "dev_fix_failed") return <TriangleAlert aria-hidden="true" size={14} className="text-[var(--app-icon)]" />;
+  if (event.type === "dev_fix_attempt") return <RefreshCw aria-hidden="true" size={14} className="animate-spin text-[var(--app-icon-muted)]" />;
   return <CircleDashed aria-hidden="true" size={14} className="text-[var(--app-icon-subtle)]" />;
 }
 
@@ -92,6 +105,15 @@ function detailFor(event: AgentStreamEvent) {
     case "clarification_required": return `${event.question}${event.reason ? ` — ${event.reason}` : ""}`;
     case "design_file_copied": return `${event.data.templateId} → ${event.data.destinationPath}`;
     case "design_rules_loaded": return event.data.summary;
+    case "dev_install_started": return "Đang cài đặt packages...";
+    case "dev_install_completed": return `Đã cài đặt packages (${(event.durationMs / 1000).toFixed(1)} giây)`;
+    case "dev_install_failed": return `Lỗi cài đặt: ${event.error}`;
+    case "dev_starting": return "Đang khởi động dev server...";
+    case "dev_ready": return `Dev server sẵn sàng tại ${event.previewUrl}`;
+    case "dev_error": return `${event.error} (${event.tier})`;
+    case "dev_fix_attempt": return `Đang sửa lỗi (lần ${event.attempt}/3): ${event.error}`;
+    case "dev_fix_applied": return `Đã sửa thành công — ${event.changedFiles.length} file đã cập nhật`;
+    case "dev_fix_failed": return `Không thể tự động sửa lỗi: ${event.reason}`;
     default: return "";
   }
 }

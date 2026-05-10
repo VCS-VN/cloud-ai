@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { projectStates } from "@/db/schema";
 import type * as schema from "@/db/schema";
-import type { ProjectState, ProjectStateStatus } from "@/features/ai-agent/project/project-state.schema";
+import type { ProjectState, ProjectStateStatus, DevRuntime } from "@/features/ai-agent/project/project-state.schema";
 
 type ProjectStateDatabase = PostgresJsDatabase<typeof schema>;
 type ProjectStateRow = typeof projectStates.$inferSelect;
@@ -10,6 +10,7 @@ type ProjectStateRow = typeof projectStates.$inferSelect;
 type ProjectStateRecord = ProjectState & {
   id: string;
   userId?: string;
+  devRuntime?: DevRuntime;
   createdAt: string;
   updatedAt: string;
 };
@@ -30,6 +31,7 @@ function toRecord(row: ProjectStateRow): ProjectStateRecord {
     fileManifest: row.fileManifest as ProjectState["fileManifest"],
     decisionLog: row.decisionLog as ProjectState["decisionLog"],
     recentChanges: row.recentChanges as ProjectState["recentChanges"],
+    devRuntime: row.devRuntime as DevRuntime,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -54,6 +56,7 @@ export class PgProjectStateRepository {
       fileManifest: record.fileManifest,
       decisionLog: record.decisionLog,
       recentChanges: record.recentChanges,
+      devRuntime: record.devRuntime,
       createdAt: new Date(record.createdAt),
       updatedAt: new Date(record.updatedAt),
     };

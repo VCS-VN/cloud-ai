@@ -1,4 +1,6 @@
 import { ProjectWorkspaceService } from "@/agent/project-workspace-service";
+import type { ProcessManager } from "@/features/ai-agent/runtime/process-manager.server";
+import type { ProjectStateStore } from "@/features/ai-agent/project/project-state-store.server";
 import type {
   Project,
   ProjectFileNode,
@@ -53,6 +55,8 @@ export class ProjectService {
     private readonly messageRepository: ProjectMessageRepository,
     private readonly fileNodeRepository: ProjectFileNodeRepository,
     workspaceService?: ProjectWorkspaceService,
+    private readonly processManager?: ProcessManager,
+    private readonly projectStateStore?: ProjectStateStore,
   ) {
     this.workspaceService = workspaceService ?? new ProjectWorkspaceService(fileNodeRepository);
   }
@@ -146,15 +150,17 @@ export class ProjectService {
     const project = await this.projectRepository.getProject(projectId, userId);
     if (!project) return undefined;
 
-    const [messages, fileTree] = await Promise.all([
+    const [messages, fileTree, devRuntime] = await Promise.all([
       this.messageRepository.listMessages(projectId, userId, { limit: 50 }),
       this.fileNodeRepository.listFileNodes(projectId, userId),
+      this.projectStateStore?.readDevRuntime(projectId) ?? null,
     ]);
 
     return {
       project,
       messages: messages.messages,
       fileTree: buildTree(fileTree),
+      devRuntime: devRuntime ?? undefined,
     };
   }
 
@@ -174,6 +180,7 @@ export class ProjectService {
     projectId: string,
     userId?: string,
   ): Promise<{ success: true }> {
+    await this.processManager?.stop(projectId);
     const deleted = await this.projectRepository.deleteProject(projectId, userId);
     if (!deleted) throw new Error("Project not found.");
     await this.workspaceService.deleteWorkspace(projectId);

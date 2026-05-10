@@ -1,12 +1,15 @@
 <!-- 
 Sync Impact Report:
-- Version change: 1.1.0 -> 1.2.0
-- Added sections: Principle VIII (Code Formatting)
-- Modified principles: 
-  - Principle I updated to enforce clear code flow between UI client, service flow, repository, and database.
-  - Principle V updated to enforce strict adherence to DESIGN.md tokens and theming even when mimicking images.
-  - Principle VII updated to prioritize code-graph-review before reviewing specific routes/components.
-- Templates requiring updates: ✅ updated (N/A for constitution self-update)
+- Version change: 1.2.0 -> 1.3.0
+- Added sections: Principle IX (Database JSON Type Convention)
+- Modified principles: None
+- Removed sections: None
+- Templates requiring updates:
+  - specs/001-auto-install-start/data-model.md ✅ updated (jsonb → json)
+  - .specify/templates/plan-template.md ✅ no changes needed (no json/jsonb references)
+  - .specify/templates/spec-template.md ✅ no changes needed (no database type references)
+  - .specify/templates/tasks-template.md ✅ no changes needed (no database type references)
+- Follow-up TODOs: Existing codebase uses jsonb extensively — migration to json is out of scope for this amendment; new code must use json
 -->
 # Cloud-AI Constitution
 
@@ -37,6 +40,9 @@ Khi review code, **ưu tiên sử dụng `code-graph-review`** để đánh giá
 ### VIII. Chuẩn hóa Code Formatting
 Sau khi cập nhật code, bắt buộc phải chạy format theo cấu hình ESLint của dự án để đảm bảo tính nhất quán về style code trước khi commit/merge.
 
+### IX. Database JSON Type Convention
+Tất cả các field JSON trong database (PostgreSQL) bắt buộc sử dụng type `json`, **không được dùng** `jsonb`. Việc dùng `json` bảo toàn định dạng gốc (whitespace, thứ tự key), giúp dữ liệu dễ đọc, debug, và kiểm soát diff chính xác hơn. Các schema Drizzle ORM mới và migration mới phải dùng `json()` thay vì `jsonb()`.
+
 ## Architecture & UX Requirements
 
 - Giao diện: Icon cần dùng semantic theme tokens (ví dụ: `--app-icon`, `--app-icon-muted`). Tuyệt đối không hardcode color bằng hex hay các màu trực tiếp kiểu `text-white`, `text-black` trừ khi là brand asset cố định.
@@ -47,4 +53,4 @@ Sau khi cập nhật code, bắt buộc phải chạy format theo cấu hình ES
 - Amendments phải được sự đồng ý của Product Owner/Lead.
 - Toàn bộ thay đổi phải tuân theo Core Principles trên. Nếu có vi phạm (ví dụ API lỗi không đúng chuẩn, hoặc UX code hardcode color không theo DESIGN.md) thì Pull Request sẽ bị reject.
 
-**Version**: 1.2.0 | **Ratified**: 2026-05-05 | **Last Amended**: 2026-05-05
+**Version**: 1.3.0 | **Ratified**: 2026-05-05 | **Last Amended**: 2026-05-11

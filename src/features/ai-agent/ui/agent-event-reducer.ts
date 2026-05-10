@@ -1,5 +1,16 @@
 import type { AgentStreamEvent, ValidationResult } from "../agent/agent-events";
 
+export type RuntimeUIState = {
+  status: "idle" | "installing" | "installed" | "starting" | "running" | "error" | "fixing";
+  previewUrl: string | null;
+  previewPort: number | null;
+  error: string | null;
+  errorTier: "code" | "config" | "system" | null;
+  fixAttempt: number | null;
+  fixChangedFiles: string[];
+  durationMs: number | null;
+};
+
 export type AgentEventState = {
   events: AgentStreamEvent[];
   assistantMessage: string;
@@ -25,10 +36,22 @@ export type AgentEventState = {
   doneSummary?: string;
   previewUrl?: string;
   error?: Extract<AgentStreamEvent, { type: "error" }>;
+  runtime: RuntimeUIState;
+};
+
+const INITIAL_RUNTIME: RuntimeUIState = {
+  status: "idle",
+  previewUrl: null,
+  previewPort: null,
+  error: null,
+  errorTier: null,
+  fixAttempt: null,
+  fixChangedFiles: [],
+  durationMs: null,
 };
 
 export function createInitialAgentEventState(): AgentEventState {
-  return { events: [], assistantMessage: "", changedFiles: [], done: false };
+  return { events: [], assistantMessage: "", changedFiles: [], done: false, runtime: { ...INITIAL_RUNTIME } };
 }
 
 export function agentEventReducer(state: AgentEventState, event: AgentStreamEvent): AgentEventState {
@@ -71,5 +94,32 @@ export function agentEventReducer(state: AgentEventState, event: AgentStreamEven
     next.changedFiles = [...new Set([...next.changedFiles, ...event.changedFiles])];
   }
   if (event.type === "error") next.error = event;
+  if (event.type === "dev_install_started") {
+    next.runtime = { ...next.runtime, status: "installing", error: null };
+  }
+  if (event.type === "dev_install_completed") {
+    next.runtime = { ...next.runtime, status: "installed", durationMs: event.durationMs };
+  }
+  if (event.type === "dev_install_failed") {
+    next.runtime = { ...next.runtime, status: "error", error: event.error };
+  }
+  if (event.type === "dev_starting") {
+    next.runtime = { ...next.runtime, status: "starting" };
+  }
+  if (event.type === "dev_ready") {
+    next.runtime = { ...next.runtime, status: "running", previewUrl: event.previewUrl, previewPort: event.port };
+  }
+  if (event.type === "dev_error") {
+    next.runtime = { ...next.runtime, status: "error", error: event.error, errorTier: event.tier };
+  }
+  if (event.type === "dev_fix_attempt") {
+    next.runtime = { ...next.runtime, status: "fixing", fixAttempt: event.attempt, error: event.error };
+  }
+  if (event.type === "dev_fix_applied") {
+    next.runtime = { ...next.runtime, fixChangedFiles: event.changedFiles };
+  }
+  if (event.type === "dev_fix_failed") {
+    next.runtime = { ...next.runtime, status: "error", error: event.reason };
+  }
   return next;
 }

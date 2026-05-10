@@ -12,6 +12,7 @@ import type { ProjectFileStore } from "../project/project-file-store.server";
 import type { SnapshotService } from "../project/snapshot-service.server";
 import type { AgentConfig } from "./agent-config";
 import type { OpenAIProvider } from "../openai/openai-provider.server";
+import type { RuntimeService } from "../runtime/runtime-service.server";
 import { ECOMMERCE_AGENT_SYSTEM_PROMPT } from "../openai/prompts";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { buildFileManifest } from "../source/code-index-service.server";
@@ -61,6 +62,7 @@ export type AgentOrchestratorDeps = {
   validationService?: ValidationService;
   openAIProvider?: OpenAIProvider;
   agentConfig?: AgentConfig;
+  runtimeService?: RuntimeService;
 };
 
 export class AgentOrchestrator {
@@ -677,6 +679,64 @@ export class AgentOrchestrator {
       fileManifest: mergedManifest,
     });
 
+    let previewUrl: string | undefined;
+
+    const workspaceRoot = `./projects/${input.projectId}`;
+    if (this.deps.runtimeService) {
+      const installYield = this.deps.runtimeService.runPostInitInstall({
+        projectId: input.projectId,
+        workspaceRoot,
+        runId: args.runId,
+        signal: input.signal,
+      });
+      let installFailed = false;
+      for await (const event of installYield) {
+        yield event;
+        if (event.type === "dev_install_failed") {
+          installFailed = true;
+        }
+      }
+
+      if (!installFailed) {
+        const devYield = this.deps.runtimeService.runPostInitDev({
+          projectId: input.projectId,
+          workspaceRoot,
+          runId: args.runId,
+          signal: input.signal,
+        });
+        let devFailed = false;
+        let devErrorTier: "code" | "config" | "system" | null = null;
+        let devErrorMessage: string | null = null;
+        for await (const event of devYield) {
+          yield event;
+          if (event.type === "dev_ready") {
+            previewUrl = event.previewUrl;
+          }
+          if (event.type === "dev_error") {
+            devFailed = true;
+            devErrorTier = event.tier;
+            devErrorMessage = event.error;
+          }
+        }
+
+        if (devFailed && devErrorTier && devErrorTier !== "system" && this.deps.runtimeService) {
+          const fixYield = this.deps.runtimeService.runErrorFixLoop({
+            projectId: input.projectId,
+            workspaceRoot,
+            runId: args.runId,
+            currentDevLog: devErrorMessage ?? "",
+            signal: input.signal,
+          });
+          for await (const event of fixYield) {
+            yield event;
+            if (event.type === "dev_ready") {
+              previewUrl = event.previewUrl;
+            }
+          }
+        }
+      }
+    }
+
     const fallbackSummary = `Generated retail storefront with ${uniqueChangedFiles.length} files (${initResult.files.length} infrastructure + ${loopResult.changedFiles.length} UI components).`;
     logAgentPhase("started", "summary", phaseContext);
     const summary = yield* this.streamUserFacingSummary({
@@ -693,6 +753,7 @@ export class AgentOrchestrator {
       runId: args.runId,
       summary,
       changedFiles: uniqueChangedFiles,
+      previewUrl,
     };
   }
 

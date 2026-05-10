@@ -20,6 +20,7 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowLeft,
+  CheckCircle2,
   Code2,
   Copy,
   Download,
@@ -32,8 +33,14 @@ import {
   PanelLeftOpen,
   RefreshCw,
   Trash2,
+  TriangleAlert,
 } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
+import {
+  agentEventReducer,
+  createInitialAgentEventState,
+} from "@/features/ai-agent/ui/agent-event-reducer";
+import type { RuntimeUIState } from "@/features/ai-agent/ui/agent-event-reducer";
 import { AgentEventTimeline } from "@/features/ai-agent/ui/agent-event-timeline";
 import { StreamingTextPanel } from "@/features/ai-agent/ui/streaming-text-panel";
 import { UserMenu } from "@/components/auth/UserMenu";
@@ -78,6 +85,17 @@ const statusLabel: Record<Project["status"], string> = {
   ready: "Ready",
   failed: "Failed",
 };
+
+function mapDevRuntimeStatus(
+  s: string,
+): RuntimeUIState["status"] {
+  if (s === "installing") return "installing";
+  if (s === "installed") return "installed";
+  if (s === "starting") return "starting";
+  if (s === "running") return "running";
+  if (s === "error") return "error";
+  return "idle";
+}
 
 type ActiveStream = {
   agentMessageId: string;
@@ -279,6 +297,30 @@ function ProjectDetailPage() {
     () => mergeMessages(messagesQuery.data?.pages ?? []),
     [messagesQuery.data?.pages],
   );
+
+  const runtimeState = useMemo<RuntimeUIState>(() => {
+    const base = createInitialAgentEventState();
+    if (workspace?.devRuntime) {
+      const dr = workspace.devRuntime;
+      base.runtime = {
+        status: mapDevRuntimeStatus(dr.status),
+        previewUrl: dr.previewUrl,
+        previewPort: dr.port,
+        error: dr.lastError,
+        errorTier: dr.lastErrorTier,
+        fixAttempt: dr.retryCount > 0 ? dr.retryCount : null,
+        fixChangedFiles: dr.fixAttempts?.flatMap((a) => a.changedFiles) ?? [],
+        durationMs: dr.installCompletedAt && dr.installStartedAt
+          ? new Date(dr.installCompletedAt).getTime() - new Date(dr.installStartedAt).getTime()
+          : null,
+      };
+    }
+    return agentEvents.reduce(
+      (state, event) => agentEventReducer(state, event),
+      base,
+    ).runtime;
+  }, [agentEvents, workspace?.devRuntime]);
+
   const loadedMessageCount = messages.length;
   const totalMessages = messagesQuery.data
     ? Math.max(...messagesQuery.data.pages.map((page) => page.total))
@@ -800,6 +842,7 @@ function ProjectDetailPage() {
             <ChatHeader
               project={project}
               processing={project.processingStatus === "processing"}
+              runtimeState={runtimeState}
               onBack={() => void navigate({ to: "/projects" as never })}
               onDelete={handleDeletedProject}
               onToggleChat={toggleChat}
@@ -866,6 +909,7 @@ function ProjectDetailPage() {
               chatVisible={chatVisible}
               mode={detailMode}
               previewPath={previewPath}
+              runtimeState={runtimeState}
               onToggleChat={toggleChat}
               onModeChange={setDetailMode}
               onPathChange={setPreviewPath}
@@ -877,6 +921,7 @@ function ProjectDetailPage() {
                   <PreviewWorkspace
                     selectedNode={selectedNode}
                     previewPath={previewPath}
+                    runtimeState={runtimeState}
                   />
                 ) : (
                   <CodeView
@@ -906,19 +951,78 @@ function ProjectDetailPage() {
   );
 }
 
+function runtimeStatusBadge(
+  state: RuntimeUIState,
+): { label: string; bg: string; text: string; icon: React.ReactNode } | null {
+  switch (state.status) {
+    case "installing":
+      return {
+        label: "Đang cài đặt...",
+        bg: "bg-blue-100 dark:bg-blue-900/40",
+        text: "text-blue-700 dark:text-blue-300",
+        icon: <Loader2 aria-hidden="true" className="animate-spin" size={12} />,
+      };
+    case "installed":
+      return {
+        label:
+          state.durationMs !== null
+            ? `Đã cài đặt (${(state.durationMs / 1000).toFixed(1)}s)`
+            : "Đã cài đặt",
+        bg: "bg-green-100 dark:bg-green-900/40",
+        text: "text-green-700 dark:text-green-300",
+        icon: <CheckCircle2 aria-hidden="true" size={12} />,
+      };
+    case "starting":
+      return {
+        label: "Đang khởi động...",
+        bg: "bg-amber-100 dark:bg-amber-900/40",
+        text: "text-amber-700 dark:text-amber-300",
+        icon: <Loader2 aria-hidden="true" className="animate-spin" size={12} />,
+      };
+    case "running":
+      return {
+        label: "Đang chạy",
+        bg: "bg-green-100 dark:bg-green-900/40",
+        text: "text-green-700 dark:text-green-300",
+        icon: <CheckCircle2 aria-hidden="true" size={12} />,
+      };
+    case "error":
+      return {
+        label: state.error ? `Lỗi: ${state.error}` : "Lỗi",
+        bg: "bg-red-100 dark:bg-red-900/40",
+        text: "text-red-700 dark:text-red-300",
+        icon: <TriangleAlert aria-hidden="true" size={12} />,
+      };
+    case "fixing":
+      return {
+        label: `Đang sửa lỗi (lần ${state.fixAttempt ?? "?"}/3)...`,
+        bg: "bg-amber-100 dark:bg-amber-900/40",
+        text: "text-amber-700 dark:text-amber-300",
+        icon: (
+          <RefreshCw aria-hidden="true" className="animate-spin" size={12} />
+        ),
+      };
+    default:
+      return null;
+  }
+}
+
 function ChatHeader({
   project,
   processing = false,
+  runtimeState,
   onBack,
   onDelete,
   onToggleChat,
 }: {
   project: Project;
   processing?: boolean;
+  runtimeState: RuntimeUIState;
   onBack: () => void;
   onDelete: () => void;
   onToggleChat: () => void;
 }) {
+  const statusBadge = runtimeStatusBadge(runtimeState);
   return (
     <header className="shrink-0 border-b border-[var(--app-border)] p-sm">
       <div className="flex min-w-0 items-start gap-sm">
@@ -935,9 +1039,26 @@ function ChatHeader({
             {project.name}
           </h1>
           <p className="m-0 mt-xxs text-[12px] leading-4 text-[var(--app-muted)]">
-            {processing
-              ? "Generating a response"
-              : "Previewing last saved version"}
+            {processing ? (
+              "Generating a response"
+            ) : runtimeState.status === "running" && runtimeState.previewUrl ? (
+              <a
+                href={runtimeState.previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-xxs text-blue-600 hover:underline dark:text-blue-400"
+              >
+                {runtimeState.previewUrl}
+                <ExternalLink aria-hidden="true" size={10} />
+              </a>
+            ) : runtimeState.status === "error" && runtimeState.error ? (
+              <span className="text-red-600 dark:text-red-400">
+                {runtimeState.errorTier ? `[${runtimeState.errorTier}] ` : ""}
+                {runtimeState.error}
+              </span>
+            ) : (
+              "Previewing last saved version"
+            )}
           </p>
           <div className="mt-xs flex flex-wrap gap-xs text-[12px] leading-4 text-[var(--app-muted)]">
             <span className="rounded-pill bg-[var(--app-control)] px-xs py-xxs">
@@ -951,6 +1072,14 @@ function ChatHeader({
                   size={12}
                 />
                 Generating
+              </span>
+            ) : null}
+            {statusBadge ? (
+              <span
+                className={`inline-flex items-center gap-xxs rounded-pill px-xs py-xxs ${statusBadge.bg} ${statusBadge.text}`}
+              >
+                {statusBadge.icon}
+                {statusBadge.label}
               </span>
             ) : null}
             <span className="rounded-pill bg-[var(--app-control)] px-xs py-xxs">
@@ -985,6 +1114,7 @@ function PreviewToolbar({
   chatVisible,
   mode,
   previewPath,
+  runtimeState,
   onToggleChat,
   onModeChange,
   onPathChange,
@@ -993,11 +1123,16 @@ function PreviewToolbar({
   chatVisible: boolean;
   mode: DetailMode;
   previewPath: string;
+  runtimeState: RuntimeUIState;
   onToggleChat: () => void;
   onModeChange: (mode: DetailMode) => void;
   onPathChange: (path: string) => void;
   user?: import("@/auth/types").AuthUserSummary;
 }) {
+  const previewUrl =
+    runtimeState.status === "running" ? runtimeState.previewUrl : null;
+  console.log("🚀 ~ PreviewToolbar ~ runtimeState:", runtimeState);
+  console.log("🚀 ~ PreviewToolbar ~ previewUrl:", previewUrl);
   return (
     <header className="flex h-14 shrink-0 items-center gap-sm pt-3  border-[var(--app-border)] px-sm transition-colors duration-300">
       {!chatVisible ? (
@@ -1057,13 +1192,25 @@ function PreviewToolbar({
 
       <div className="flex shrink-0 items-center gap-xs">
         <UserMenu user={user} compact />
-        <button
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
-          type="button"
-          aria-label="Open preview"
-        >
-          <ExternalLink aria-hidden="true" size={15} />
-        </button>
+        {previewUrl ? (
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+            aria-label="Open preview"
+          >
+            <ExternalLink aria-hidden="true" size={15} />
+          </a>
+        ) : (
+          <button
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+            type="button"
+            aria-label="Open preview"
+          >
+            <ExternalLink aria-hidden="true" size={15} />
+          </button>
+        )}
         <button
           className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
           type="button"
@@ -1079,16 +1226,30 @@ function PreviewToolbar({
 function PreviewWorkspace({
   selectedNode,
   previewPath,
+  runtimeState,
 }: {
   selectedNode?: ProjectFileNode;
   previewPath: string;
+  runtimeState: RuntimeUIState;
 }) {
+  const showIframe =
+    runtimeState.status === "running" && runtimeState.previewUrl;
+
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--app-panel)] transition-colors duration-300">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-sm border border-[var(--app-border)] bg-[var(--app-surface)] transition-colors duration-300">
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto p-sm">
-          <FilePreviewPanel node={selectedNode} />
-        </div>
+        {showIframe ? (
+          <iframe
+            src={runtimeState.previewUrl!}
+            className="h-full w-full border-0"
+            title="Project preview"
+            sandbox="allow-scripts allow-same-origin allow-forms"
+          />
+        ) : (
+          <div className="min-h-0 min-w-0 flex-1 overflow-auto p-sm">
+            <FilePreviewPanel node={selectedNode} />
+          </div>
+        )}
       </div>
     </section>
   );

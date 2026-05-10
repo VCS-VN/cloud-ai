@@ -8,6 +8,9 @@ import { ProjectRunStore } from "@/features/ai-agent/project/project-run-store.s
 import { ProjectFileStore } from "@/features/ai-agent/project/project-file-store.server";
 import { SnapshotService } from "@/features/ai-agent/project/snapshot-service.server";
 import { ProjectStateStore } from "@/features/ai-agent/project/project-state-store.server";
+import { ProcessManager } from "@/features/ai-agent/runtime/process-manager.server";
+import { RuntimeService } from "@/features/ai-agent/runtime/runtime-service.server";
+import { ErrorFixer } from "@/features/ai-agent/runtime/error-analyzer.server";
 import { ProjectFileTreeService } from "@/server/services/file-tree-service";
 import { MessageService } from "@/server/services/message-service";
 import { ProjectService } from "@/server/services/project-service";
@@ -35,11 +38,15 @@ export async function getProjectServices() {
   const projectFileStore = new ProjectFileStore();
   const snapshotService = new SnapshotService(projectSnapshotRepo);
   const agentConfig = loadAgentConfig();
-  const openAIProvider = new OpenAIProvider(createOpenAIClient());
-  const agentOrchestrator = new AgentOrchestrator({ projectStateStore, runStore, projectFileStore, snapshotService, openAIProvider, agentConfig });
+  const openAIClient = createOpenAIClient();
+  const openAIProvider = new OpenAIProvider(openAIClient);
+  const processManager = new ProcessManager();
+  const errorFixer = new ErrorFixer({ openAIProvider, coderModel: agentConfig.coderModel });
+  const runtimeService = new RuntimeService({ processManager, projectStateStore, errorFixer });
+  const agentOrchestrator = new AgentOrchestrator({ projectStateStore, runStore, projectFileStore, snapshotService, openAIProvider, agentConfig, runtimeService });
 
   return {
-    projectService: new ProjectService(projectRepo, messageRepo, fileNodeRepo),
+    projectService: new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore),
     projectRunService: new ProjectRunService(projectRepo, runStore),
 
     messageService: new MessageService(

@@ -4,7 +4,6 @@ export const REQUIRED_GENERATED_STOREFRONT_FILES = [
   "tsconfig.json",
   "postcss.config.js",
   "tailwind.config.ts",
-  "index.html",
   "src/router.tsx",
   "src/routeTree.gen.ts",
   "src/routes/__root.tsx",
@@ -46,4 +45,5 @@ export const REQUIRED_GENERATED_STOREFRONT_FILES = [
   "src/styles/app.css",
 ] as const;
 
-export type GeneratedStorefrontFilePath = (typeof REQUIRED_GENERATED_STOREFRONT_FILES)[number];
+export type GeneratedStorefrontFilePath =
+  (typeof REQUIRED_GENERATED_STOREFRONT_FILES)[number];

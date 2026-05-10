@@ -350,6 +350,54 @@ export type ProjectSnapshot = {
   createdAt: string;
 };
 
+export type DevRuntimeStatus =
+  | "installing"
+  | "installed"
+  | "starting"
+  | "running"
+  | "error"
+  | "stopped";
+
+export type DevRuntime = {
+  status: DevRuntimeStatus;
+  pid: number | null;
+  port: number | null;
+  installStartedAt: string | null;
+  installCompletedAt: string | null;
+  devStartedAt: string | null;
+  previewUrl: string | null;
+  installLog: string | null;
+  devLog: string | null;
+  lastError: string | null;
+  lastErrorTier: "code" | "config" | "system" | null;
+  retryCount: number;
+  maxRetries: number;
+  fixAttempts: Array<{
+    attempt: number;
+    changedFiles: string[];
+    errorBefore: string;
+    errorAfter: string | null;
+    success: boolean;
+  }>;
+};
+
+export const EMPTY_DEV_RUNTIME: DevRuntime = {
+  status: "stopped",
+  pid: null,
+  port: null,
+  installStartedAt: null,
+  installCompletedAt: null,
+  devStartedAt: null,
+  previewUrl: null,
+  installLog: null,
+  devLog: null,
+  lastError: null,
+  lastErrorTier: null,
+  retryCount: 0,
+  maxRetries: 3,
+  fixAttempts: [],
+};
+
 export type AgentStreamEvent =
   | { type: "agent_started"; runId: string; projectId: string; message: string }
   | { type: "state_loaded"; status: ProjectStatus }

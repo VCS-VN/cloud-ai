@@ -3,6 +3,8 @@ export type {
   AgentRunStatus,
   BuilderIntent,
   ChangePlan,
+  DevRuntime,
+  DevRuntimeStatus,
   FileOperation,
   PatchResult,
   ProjectSnapshot,
@@ -13,6 +15,7 @@ export type {
 } from "../project/project-state.schema";
 
 import type { AgentStreamEvent as BaseAgentStreamEvent } from "../project/project-state.schema";
+import type { DevRuntimeEvent } from "../runtime/runtime-events";
 
 export type CodeToolAgentStreamEvent =
   | { type: "code_tool_loop_started"; projectId: string; messageId: string; taskTitle: string; message?: string }
@@ -28,4 +31,4 @@ export type CodeToolAgentStreamEvent =
   | { type: "code_tool_loop_completed"; projectId: string; messageId: string; summary: string; changedFiles: string[]; validationStatus: "passed" | "failed" | "skipped" }
   | { type: "human_review_required"; projectId: string; messageId: string; reason: string; changedFiles: string[] };
 
-export type AgentStreamEvent = BaseAgentStreamEvent | CodeToolAgentStreamEvent;
+export type AgentStreamEvent = BaseAgentStreamEvent | CodeToolAgentStreamEvent | DevRuntimeEvent;

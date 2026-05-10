@@ -1,3 +1,5 @@
+import type { DevRuntime } from "@/features/ai-agent/project/project-state.schema";
+
 export type RecordStatus = 0 | 1
 export type ProjectStatus = 0 | 'draft' | 'generating' | 'ready' | 'failed'
 export type MessageRole = 'user' | 'agent'
@@ -169,11 +171,13 @@ export type ProjectFileNode = {
   updatedAt: string
 }
 
+
 export type ProjectWorkspace = {
   project: Project
   messages: Message[]
   fileTree: ProjectFileNode[]
   selectedNode?: ProjectFileNode
+  devRuntime?: DevRuntime | null
 }
 
 export type WorkspaceResult = {

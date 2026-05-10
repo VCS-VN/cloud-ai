@@ -1,4 +1,4 @@
-import { createEmptyProjectState, type FileManifestEntry, type ProjectState } from "./project-state.schema";
+import { createEmptyProjectState, EMPTY_DEV_RUNTIME, type DevRuntime, type FileManifestEntry, type ProjectState } from "./project-state.schema";
 import type { PgProjectStateRepository, ProjectStateRecord } from "@/server/repositories/project-state-repository";
 
 export type CodeChangeRecordInput = {
@@ -69,6 +69,30 @@ export class ProjectStateStore {
     const manifest = new Map(current.fileManifest.map((entry) => [entry.path, entry]));
     for (const entry of entries) manifest.set(entry.path, entry);
     return this.save({ ...current, fileManifest: [...manifest.values()] }, userId);
+  }
+
+  async readDevRuntime(projectId: string, userId?: string): Promise<DevRuntime> {
+    const existing = await this.repository.getByProjectId(projectId, userId);
+    return existing?.devRuntime ?? EMPTY_DEV_RUNTIME;
+  }
+
+  async saveDevRuntime(projectId: string, devRuntime: DevRuntime, userId?: string): Promise<DevRuntime> {
+    const existing = await this.repository.getByProjectId(projectId, userId);
+    if (existing) {
+      await this.repository.save({ ...existing, devRuntime });
+      return devRuntime;
+    }
+    const state = createEmptyProjectState(projectId);
+    const now = new Date().toISOString();
+    const saved = await this.repository.save({
+      ...state,
+      id: crypto.randomUUID(),
+      userId,
+      devRuntime,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return saved.devRuntime ?? devRuntime;
   }
 }
 
