@@ -105,15 +105,15 @@ function detailFor(event: AgentStreamEvent) {
     case "clarification_required": return `${event.question}${event.reason ? ` — ${event.reason}` : ""}`;
     case "design_file_copied": return `${event.data.templateId} → ${event.data.destinationPath}`;
     case "design_rules_loaded": return event.data.summary;
-    case "dev_install_started": return "Đang cài đặt packages...";
-    case "dev_install_completed": return `Đã cài đặt packages (${(event.durationMs / 1000).toFixed(1)} giây)`;
-    case "dev_install_failed": return `Lỗi cài đặt: ${event.error}`;
-    case "dev_starting": return "Đang khởi động dev server...";
-    case "dev_ready": return `Dev server sẵn sàng tại ${event.previewUrl}`;
+    case "dev_install_started": return "Installing packages...";
+    case "dev_install_completed": return `Installed packages (${(event.durationMs / 1000).toFixed(1)}s)`;
+    case "dev_install_failed": return `Install error: ${event.error}`;
+    case "dev_starting": return "Starting dev server...";
+    case "dev_ready": return `Dev server ready at ${event.previewUrl}`;
     case "dev_error": return `${event.error} (${event.tier})`;
-    case "dev_fix_attempt": return `Đang sửa lỗi (lần ${event.attempt}/3): ${event.error}`;
-    case "dev_fix_applied": return `Đã sửa thành công — ${event.changedFiles.length} file đã cập nhật`;
-    case "dev_fix_failed": return `Không thể tự động sửa lỗi: ${event.reason}`;
+    case "dev_fix_attempt": return `Fixing error (attempt ${event.attempt}/3): ${event.error}`;
+    case "dev_fix_applied": return `Fix applied successfully — ${event.changedFiles.length} files updated`;
+    case "dev_fix_failed": return `Cannot auto-fix: ${event.reason}`;
     default: return "";
   }
 }

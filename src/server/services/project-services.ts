@@ -10,6 +10,7 @@ import { SnapshotService } from "@/features/ai-agent/project/snapshot-service.se
 import { ProjectStateStore } from "@/features/ai-agent/project/project-state-store.server";
 import { ProcessManager } from "@/features/ai-agent/runtime/process-manager.server";
 import { RuntimeService } from "@/features/ai-agent/runtime/runtime-service.server";
+import { presenceService } from "@/features/ai-agent/runtime/presence-service.server";
 import { ErrorFixer } from "@/features/ai-agent/runtime/error-analyzer.server";
 import { ProjectFileTreeService } from "@/server/services/file-tree-service";
 import { MessageService } from "@/server/services/message-service";
@@ -41,6 +42,7 @@ export async function getProjectServices() {
   const openAIClient = createOpenAIClient();
   const openAIProvider = new OpenAIProvider(openAIClient);
   const processManager = new ProcessManager();
+  presenceService.setProcessManager(processManager);
   const errorFixer = new ErrorFixer({ openAIProvider, coderModel: agentConfig.coderModel });
   const runtimeService = new RuntimeService({ processManager, projectStateStore, errorFixer });
   const agentOrchestrator = new AgentOrchestrator({ projectStateStore, runStore, projectFileStore, snapshotService, openAIProvider, agentConfig, runtimeService });

@@ -36,6 +36,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
+import { PreviewInitPanel } from "@/components/projects/PreviewInitPanel";
 import {
   agentEventReducer,
   createInitialAgentEventState,
@@ -43,6 +44,7 @@ import {
 import type { RuntimeUIState } from "@/features/ai-agent/ui/agent-event-reducer";
 import { AgentEventTimeline } from "@/features/ai-agent/ui/agent-event-timeline";
 import { StreamingTextPanel } from "@/features/ai-agent/ui/streaming-text-panel";
+import { useUserPresence } from "@/hooks/useUserPresence";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { FilePreviewPanel } from "@/components/projects/FilePreviewPanel";
 import { MessageComposer } from "@/components/projects/MessageComposer";
@@ -86,9 +88,7 @@ const statusLabel: Record<Project["status"], string> = {
   failed: "Failed",
 };
 
-function mapDevRuntimeStatus(
-  s: string,
-): RuntimeUIState["status"] {
+function mapDevRuntimeStatus(s: string): RuntimeUIState["status"] {
   if (s === "installing") return "installing";
   if (s === "installed") return "installed";
   if (s === "starting") return "starting";
@@ -310,9 +310,11 @@ function ProjectDetailPage() {
         errorTier: dr.lastErrorTier,
         fixAttempt: dr.retryCount > 0 ? dr.retryCount : null,
         fixChangedFiles: dr.fixAttempts?.flatMap((a) => a.changedFiles) ?? [],
-        durationMs: dr.installCompletedAt && dr.installStartedAt
-          ? new Date(dr.installCompletedAt).getTime() - new Date(dr.installStartedAt).getTime()
-          : null,
+        durationMs:
+          dr.installCompletedAt && dr.installStartedAt
+            ? new Date(dr.installCompletedAt).getTime() -
+              new Date(dr.installStartedAt).getTime()
+            : null,
       };
     }
     return agentEvents.reduce(
@@ -320,6 +322,18 @@ function ProjectDetailPage() {
       base,
     ).runtime;
   }, [agentEvents, workspace?.devRuntime]);
+
+  const { isActive } = useUserPresence({
+    projectId: project?.id ?? "",
+    userId: user.id,
+    enabled: !!project?.id,
+  });
+
+  useEffect(() => {
+    if (!project?.id || !user?.id) return;
+    if (!isActive) {
+    }
+  }, [isActive, project?.id, user?.id]);
 
   const loadedMessageCount = messages.length;
   const totalMessages = messagesQuery.data
@@ -922,6 +936,7 @@ function ProjectDetailPage() {
                     selectedNode={selectedNode}
                     previewPath={previewPath}
                     runtimeState={runtimeState}
+                    projectId={project?.id ?? ""}
                   />
                 ) : (
                   <CodeView
@@ -957,7 +972,7 @@ function runtimeStatusBadge(
   switch (state.status) {
     case "installing":
       return {
-        label: "Đang cài đặt...",
+        label: "Installing...",
         bg: "bg-blue-100 dark:bg-blue-900/40",
         text: "text-blue-700 dark:text-blue-300",
         icon: <Loader2 aria-hidden="true" className="animate-spin" size={12} />,
@@ -966,36 +981,36 @@ function runtimeStatusBadge(
       return {
         label:
           state.durationMs !== null
-            ? `Đã cài đặt (${(state.durationMs / 1000).toFixed(1)}s)`
-            : "Đã cài đặt",
+            ? `Installed (${(state.durationMs / 1000).toFixed(1)}s)`
+            : "Installed",
         bg: "bg-green-100 dark:bg-green-900/40",
         text: "text-green-700 dark:text-green-300",
         icon: <CheckCircle2 aria-hidden="true" size={12} />,
       };
     case "starting":
       return {
-        label: "Đang khởi động...",
+        label: "Starting...",
         bg: "bg-amber-100 dark:bg-amber-900/40",
         text: "text-amber-700 dark:text-amber-300",
         icon: <Loader2 aria-hidden="true" className="animate-spin" size={12} />,
       };
     case "running":
       return {
-        label: "Đang chạy",
+        label: "Running",
         bg: "bg-green-100 dark:bg-green-900/40",
         text: "text-green-700 dark:text-green-300",
         icon: <CheckCircle2 aria-hidden="true" size={12} />,
       };
     case "error":
       return {
-        label: state.error ? `Lỗi: ${state.error}` : "Lỗi",
+        label: state.error ? `Error: ${state.error}` : "Error",
         bg: "bg-red-100 dark:bg-red-900/40",
         text: "text-red-700 dark:text-red-300",
         icon: <TriangleAlert aria-hidden="true" size={12} />,
       };
     case "fixing":
       return {
-        label: `Đang sửa lỗi (lần ${state.fixAttempt ?? "?"}/3)...`,
+        label: `Fixing error (attempt ${state.fixAttempt ?? "?"}/3)...`,
         bg: "bg-amber-100 dark:bg-amber-900/40",
         text: "text-amber-700 dark:text-amber-300",
         icon: (
@@ -1038,28 +1053,7 @@ function ChatHeader({
           <h1 className="m-0 truncate text-[14px] font-[580] leading-4 tracking-[-0.015em]">
             {project.name}
           </h1>
-          <p className="m-0 mt-xxs text-[12px] leading-4 text-[var(--app-muted)]">
-            {processing ? (
-              "Generating a response"
-            ) : runtimeState.status === "running" && runtimeState.previewUrl ? (
-              <a
-                href={runtimeState.previewUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-xxs text-blue-600 hover:underline dark:text-blue-400"
-              >
-                {runtimeState.previewUrl}
-                <ExternalLink aria-hidden="true" size={10} />
-              </a>
-            ) : runtimeState.status === "error" && runtimeState.error ? (
-              <span className="text-red-600 dark:text-red-400">
-                {runtimeState.errorTier ? `[${runtimeState.errorTier}] ` : ""}
-                {runtimeState.error}
-              </span>
-            ) : (
-              "Previewing last saved version"
-            )}
-          </p>
+
           <div className="mt-xs flex flex-wrap gap-xs text-[12px] leading-4 text-[var(--app-muted)]">
             <span className="rounded-pill bg-[var(--app-control)] px-xs py-xxs">
               {project.status !== 0 ? statusLabel[project.status] : "Inactive"}
@@ -1131,8 +1125,7 @@ function PreviewToolbar({
 }) {
   const previewUrl =
     runtimeState.status === "running" ? runtimeState.previewUrl : null;
-  console.log("🚀 ~ PreviewToolbar ~ runtimeState:", runtimeState);
-  console.log("🚀 ~ PreviewToolbar ~ previewUrl:", previewUrl);
+
   return (
     <header className="flex h-14 shrink-0 items-center gap-sm pt-3  border-[var(--app-border)] px-sm transition-colors duration-300">
       {!chatVisible ? (
@@ -1227,13 +1220,17 @@ function PreviewWorkspace({
   selectedNode,
   previewPath,
   runtimeState,
+  projectId,
 }: {
   selectedNode?: ProjectFileNode;
   previewPath: string;
   runtimeState: RuntimeUIState;
+  projectId: string;
 }) {
   const showIframe =
     runtimeState.status === "running" && runtimeState.previewUrl;
+  const showInitPanel =
+    runtimeState.status === "idle" && !runtimeState.previewUrl;
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--app-panel)] transition-colors duration-300">
@@ -1245,6 +1242,8 @@ function PreviewWorkspace({
             title="Project preview"
             sandbox="allow-scripts allow-same-origin allow-forms"
           />
+        ) : showInitPanel ? (
+          <PreviewInitPanel projectId={projectId} onStartPreview={() => {}} />
         ) : (
           <div className="min-h-0 min-w-0 flex-1 overflow-auto p-sm">
             <FilePreviewPanel node={selectedNode} />

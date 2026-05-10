@@ -47,7 +47,7 @@ function getAgentDisplayContent(
 
 function isUserFacingAgentLine(line: string) {
   return (
-    /^(Analyzing|Understood:|Task identified|Clarification needed:|Initializing project|Creating page|Updating page|Inspecting project|Done\.|Could not complete|Processing stopped|Đang phân tích|Đã hiểu:|Đã xác định task|Cần làm rõ:|Đang khởi tạo dự án|Đang tạo trang|Đang cập nhật trang|Đang kiểm tra dự án|Hoàn tất\.|Không thể hoàn tất xử lý|Đã dừng xử lý)/.test(
+    /^(Analyzing|Understood:|Task identified|Clarification needed:|Initializing project|Creating page|Updating page|Inspecting project|Done\.|Could not complete|Processing stopped)/.test(
       line,
     ) && !/\b\d+\s+file\b/i.test(line)
   );
