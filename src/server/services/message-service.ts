@@ -381,10 +381,10 @@ export class MessageService {
       const processingStatus = aborted ? "stopped" : "failed";
       const message = error instanceof Error ? error.message : "Agent orchestrator failed.";
       if (aborted && !hasTerminalUserFacingDelta) {
-        aggregatedContent = appendUserFacingLine(aggregatedContent, "Đã dừng xử lý. Bạn có thể tiếp tục bằng prompt mới.");
+        aggregatedContent = appendUserFacingLine(aggregatedContent, "Processing stopped. You can continue with a new prompt.");
       }
       if (!aborted && !hasTerminalUserFacingDelta) {
-        aggregatedContent = appendUserFacingLine(aggregatedContent, "Không thể hoàn tất xử lý. Vui lòng thử lại hoặc điều chỉnh prompt.");
+        aggregatedContent = appendUserFacingLine(aggregatedContent, "Could not complete the request. Please try again or adjust your prompt.");
       }
       await this.messageRepository.updateMessage(args.agentMessageId, {
         content: aggregatedContent,
@@ -406,7 +406,7 @@ export class MessageService {
           : {
               error: {
                 code: "PROVIDER_STREAM_FAILED" as const,
-                message: "Không thể hoàn tất xử lý. Vui lòng thử lại hoặc điều chỉnh prompt.",
+                message: "Could not complete the request. Please try again or adjust your prompt.",
               },
             }),
       });
@@ -656,25 +656,25 @@ export function agentEventToUserFacingMessage(event: AgentStreamEvent) {
     case "thinking_started":
       return event.message;
     case "user_wish_extracted":
-      return `Đã hiểu: ${event.understanding}`;
+      return `Understood: ${event.understanding}`;
     case "thinking_completed":
-      return "Đã xác định task. Đang lập kế hoạch...";
+      return "Task identified. Planning...";
     case "thinking_needs_clarification":
-      return `Cần làm rõ: ${event.question}`;
+      return `Clarification needed: ${event.question}`;
     case "intent_detected":
-      if (event.intent.intent === "init_project") return "Đang khởi tạo dự án...";
-      if (event.intent.intent === "explain_project") return "Đang kiểm tra dự án...";
-      return "Đang cập nhật trang...";
+      if (event.intent.intent === "init_project") return "Initializing project...";
+      if (event.intent.intent === "explain_project") return "Inspecting project...";
+      return "Updating page...";
     case "source_generation_started":
       return /incremental|patch|update/i.test(event.message)
-        ? "Đang cập nhật trang..."
-        : "Đang tạo trang...";
+        ? "Updating page..."
+        : "Creating page...";
     case "assistant_message_delta":
       return undefined;
     case "done":
       return getDoneMessageForUser(event.summary);
     case "error":
-      return "Không thể hoàn tất xử lý. Vui lòng thử lại hoặc điều chỉnh prompt.";
+      return "Could not complete the request. Please try again or adjust your prompt.";
     default:
       return undefined;
   }
@@ -683,12 +683,12 @@ export function agentEventToUserFacingMessage(event: AgentStreamEvent) {
 
 function getDoneMessageForUser(summary: string) {
   if (/init|initial|khởi tạo|generated|storefront files|from template/i.test(summary)) {
-    return "Hoàn tất. Dự án đã được khởi tạo thành công.";
+    return "Done. Project initialized successfully.";
   }
   if (/add|create|new|thêm|tạo/i.test(summary)) {
-    return "Hoàn tất. Yêu cầu mới đã được thêm thành công.";
+    return "Done. New request added successfully.";
   }
-  return "Hoàn tất. Nội dung đã được cập nhật thành công.";
+  return "Done. Content updated successfully.";
 }
 
 function appendUserFacingLine(content: string, line: string) {

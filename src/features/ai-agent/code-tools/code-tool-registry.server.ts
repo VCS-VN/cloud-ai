@@ -118,6 +118,14 @@ export function createDefaultCodeToolRegistry() {
     .register(projectReadDesignRulesTool));
 }
 
+export function createInitCodeToolRegistry() {
+  return new CodeToolRegistry()
+    .register(projectGetFileTreeTool)
+    .register(projectReadDesignRulesTool)
+    .register(createProjectCreateFileTool())
+    .register(createProjectRunValidationTool());
+}
+
 export function selectAllowedToolNames(input: {
   phase: CodeToolPhase;
 }) {

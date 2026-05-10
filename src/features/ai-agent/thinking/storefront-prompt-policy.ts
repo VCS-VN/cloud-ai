@@ -37,6 +37,19 @@ export const APPLY_KEYWORDS = [
   "review",
   "banner",
   "hero",
+  "add",
+  "create",
+  "update",
+  "improve",
+  "change",
+  "make",
+  "delete",
+  "remove",
+  "hide",
+  "show",
+  "optimize",
+  "better",
+  "professional",
 ] as const;
 
 export const PLAN_ONLY_KEYWORDS = [
@@ -49,6 +62,14 @@ export const PLAN_ONLY_KEYWORDS = [
   "review trước",
   "chưa implement",
   "estimate trước",
+  "plan only",
+  "just analyze",
+  "don't modify code",
+  "don't change code",
+  "make a plan",
+  "give me an action plan",
+  "review first",
+  "estimate first",
 ] as const;
 export const EXPLAIN_KEYWORDS = [
   "giải thích",
@@ -56,12 +77,21 @@ export const EXPLAIN_KEYWORDS = [
   "hoạt động thế nào",
   "code này làm gì",
   "luồng này",
+  "explain",
+  "why",
+  "how does",
+  "what does this code",
+  "how does this work",
 ] as const;
 export const REVIEW_ONLY_KEYWORDS = [
   "review code",
   "kiểm tra giúp",
   "đánh giá",
   "có vấn đề gì không",
+  "review this code",
+  "check this",
+  "evaluate",
+  "any issues",
 ] as const;
 
 const DESTRUCTIVE_KEYWORDS = [
@@ -166,7 +196,7 @@ export function detectHardClarificationBlock(input: {
       type: "inaccessible_project",
       reason: "Current storefront source files are not accessible.",
       question:
-        "Mình chưa truy cập được source storefront hiện tại. Bạn kiểm tra lại project rồi gửi lại yêu cầu nhé?",
+        "Cannot access the current storefront source. Please check the project and try again.",
     };
   }
 
@@ -175,7 +205,7 @@ export function detectHardClarificationBlock(input: {
       type: "destructive",
       reason: "Request may remove or replace most of the current storefront.",
       question:
-        "Yêu cầu này có thể thay đổi/xóa phần lớn storefront hiện tại. Bạn xác nhận muốn tiếp tục theo hướng destructive này chứ?",
+        "This request may change or remove most of the current storefront. Do you want to continue?",
     };
   }
 
@@ -185,7 +215,7 @@ export function detectHardClarificationBlock(input: {
       reason:
         "Real external integration requires credentials or production configuration.",
       question:
-        "Tính năng này cần credential/config thật. Bạn muốn cung cấp cấu hình tích hợp hay chỉ tạo UI/mock flow trước?",
+        "This feature requires real credentials. Do you want to provide them or create a UI/mock flow first?",
     };
   }
 
@@ -194,7 +224,7 @@ export function detectHardClarificationBlock(input: {
       type: "unsafe",
       reason: "Request is security-sensitive or asks to bypass safeguards.",
       question:
-        "Mình không thể thực hiện yêu cầu bỏ qua bảo mật/validation hoặc lộ thông tin nhạy cảm. Bạn muốn mình cải thiện storefront theo hướng an toàn nào?",
+        "Cannot process requests that bypass security, leak secrets, or disable validation.",
     };
   }
 
@@ -203,7 +233,7 @@ export function detectHardClarificationBlock(input: {
       type: "conflict",
       reason: "Request contains conflicting constraints.",
       question:
-        "Yêu cầu đang có ràng buộc mâu thuẫn. Bạn muốn ưu tiên giữ nguyên hiện tại hay thay đổi layout/tính năng?",
+        "The request has conflicting constraints. Do you want to keep the current state or change the layout/features?",
     };
   }
 
@@ -215,7 +245,7 @@ export function detectHardClarificationBlock(input: {
       type: "unrelated",
       reason: "Prompt is not about the current storefront project.",
       question:
-        "Yêu cầu này không liên quan storefront hiện tại. Bạn muốn mình chỉnh phần nào của website bán hàng?",
+        "This request is unrelated to the current storefront. Which part of the website would you like to modify?",
     };
   }
 
@@ -326,5 +356,5 @@ function includesAny(prompt: string, keywords: readonly string[]): boolean {
 }
 
 function normalizePrompt(prompt: string): string {
-  return prompt.toLocaleLowerCase("vi-VN").trim();
+  return prompt.toLocaleLowerCase().trim();
 }

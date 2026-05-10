@@ -65,6 +65,44 @@ export class OpenAIProvider {
     });
   }
 
+  async *streamCodeToolResponse(args: {
+    model: string;
+    input: unknown[];
+    tools: CodeToolDefinition[];
+    toolChoice?: "auto" | "required";
+  }): AsyncGenerator<
+    | { type: "text_delta"; text: string }
+    | { type: "tool_call"; toolCall: ProviderFunctionToolCall }
+    | { type: "done"; outputText: string; toolCalls: ProviderFunctionToolCall[] }
+  > {
+    const response = await this.client.responses.create({
+      model: args.model,
+      input: args.input as never,
+      tools: buildOpenAIFunctionTools(args.tools) as never,
+      tool_choice: args.toolChoice ?? "auto",
+      parallel_tool_calls: false,
+      stream: true,
+    } as never);
+
+    let outputText = "";
+    const toolCalls: ProviderFunctionToolCall[] = [];
+
+    for await (const event of response as unknown as AsyncIterable<{ type: string; delta?: string; response?: { output?: unknown[] } }>) {
+      if (event.type === "response.output_text.delta" && event.delta) {
+        outputText += event.delta;
+        yield { type: "text_delta", text: event.delta };
+      }
+      if (event.type === "response.completed" && event.response) {
+        const calls = extractFunctionToolCalls(event.response);
+        for (const call of calls) {
+          toolCalls.push(call);
+          yield { type: "tool_call", toolCall: call };
+        }
+        yield { type: "done", outputText, toolCalls };
+      }
+    }
+  }
+
   async parseStructured<TInput, TOutput>(args: {
     model: string;
     system: string;

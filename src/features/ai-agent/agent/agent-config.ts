@@ -8,6 +8,8 @@ export type AgentConfig = {
   enableSandboxValidation: boolean;
   maxRunsPerMinute: number;
   maxPromptChars: number;
+  agenticMaxIterations: number;
+  agenticMaxConsecutiveToolErrors: number;
 };
 
 function readNumber(value: string | undefined, fallback: number) {
@@ -26,6 +28,8 @@ export function loadAgentConfig(env: NodeJS.ProcessEnv = process.env): AgentConf
     enableSandboxValidation: env.AGENT_ENABLE_SANDBOX_VALIDATION !== "false",
     maxRunsPerMinute: readNumber(env.AGENT_MAX_RUNS_PER_MINUTE, 12),
     maxPromptChars: readNumber(env.AGENT_MAX_PROMPT_CHARS, 12000),
+    agenticMaxIterations: readNumber(env.AGENTIC_MAX_ITERATIONS, 40),
+    agenticMaxConsecutiveToolErrors: readNumber(env.AGENTIC_MAX_CONSECUTIVE_ERRORS, 5),
   });
 }
 
@@ -37,6 +41,8 @@ export function enforceAgentLimits(config: AgentConfig): AgentConfig {
     maxContextChars: clamp(config.maxContextChars, 1_000, 120_000),
     maxRunsPerMinute: clamp(config.maxRunsPerMinute, 1, 60),
     maxPromptChars: clamp(config.maxPromptChars, 1_000, 40_000),
+    agenticMaxIterations: clamp(config.agenticMaxIterations, 1, 80),
+    agenticMaxConsecutiveToolErrors: clamp(config.agenticMaxConsecutiveToolErrors, 1, 10),
   };
 }
 

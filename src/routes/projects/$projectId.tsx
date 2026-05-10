@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { AgentEventTimeline } from "@/features/ai-agent/ui/agent-event-timeline";
+import { StreamingTextPanel } from "@/features/ai-agent/ui/streaming-text-panel";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { FilePreviewPanel } from "@/components/projects/FilePreviewPanel";
 import { MessageComposer } from "@/components/projects/MessageComposer";
@@ -225,6 +226,7 @@ function ProjectDetailPage() {
   } | null>(null);
   const activeStreamRef = useRef<ActiveStream | null>(null);
   const [agentEvents, setAgentEvents] = useState<AgentStreamEvent[]>([]);
+  const [agentReasoning, setAgentReasoning] = useState("");
 
   const messagesQuery = useInfiniteQuery({
     queryKey: getProjectMessagesQueryKey(project?.id),
@@ -308,7 +310,12 @@ function ProjectDetailPage() {
       closeActiveStream();
 
       const source = new EventSource(url);
-      activeStreamRef.current = { agentMessageId, url, source, hasTerminalEvent: false };
+      activeStreamRef.current = {
+        agentMessageId,
+        url,
+        source,
+        hasTerminalEvent: false,
+      };
 
       const updateMessage = (updater: (message: Message) => Message) => {
         queryClient.setQueryData<InfiniteData<MessagePage>>(
@@ -353,8 +360,13 @@ function ProjectDetailPage() {
       };
 
       const handleAgentEvent = (rawEvent: Event) => {
-        const event = JSON.parse((rawEvent as MessageEvent<string>).data) as AgentStreamEvent;
+        const event = JSON.parse(
+          (rawEvent as MessageEvent<string>).data,
+        ) as AgentStreamEvent;
         setAgentEvents((current) => [...current, event]);
+        if (event.type === "assistant_message_delta") {
+          setAgentReasoning((prev) => prev + event.delta);
+        }
         if (event.type === "clarification_required") {
           setProject((currentProject) =>
             currentProject
@@ -369,13 +381,23 @@ function ProjectDetailPage() {
                 }
               : currentProject,
           );
-          void queryClient.invalidateQueries({ queryKey: ["project-runs", project?.id] });
+          void queryClient.invalidateQueries({
+            queryKey: ["project-runs", project?.id],
+          });
         }
         if (event.type === "done") {
-          void queryClient.invalidateQueries({ queryKey: ["project", project?.id] });
-          void queryClient.invalidateQueries({ queryKey: ["project-files", project?.id] });
-          void queryClient.invalidateQueries({ queryKey: ["project-runs", project?.id] });
-          void queryClient.invalidateQueries({ queryKey: ["project-preview", project?.id] });
+          void queryClient.invalidateQueries({
+            queryKey: ["project", project?.id],
+          });
+          void queryClient.invalidateQueries({
+            queryKey: ["project-files", project?.id],
+          });
+          void queryClient.invalidateQueries({
+            queryKey: ["project-runs", project?.id],
+          });
+          void queryClient.invalidateQueries({
+            queryKey: ["project-preview", project?.id],
+          });
         }
       };
 
@@ -412,7 +434,9 @@ function ProjectDetailPage() {
               }
             : currentProject,
         );
-        void queryClient.invalidateQueries({ queryKey: ["project-runs", project?.id] });
+        void queryClient.invalidateQueries({
+          queryKey: ["project-runs", project?.id],
+        });
         if (event.type === "message.failed" && event.error?.message) {
           setSendError(event.error.message);
         }
@@ -449,10 +473,18 @@ function ProjectDetailPage() {
               }
             : currentProject,
         );
-        void queryClient.invalidateQueries({ queryKey: ["project", project?.id] });
-        void queryClient.invalidateQueries({ queryKey: getProjectMessagesQueryKey(project?.id) });
-        void queryClient.invalidateQueries({ queryKey: ["project-runs", project?.id] });
-        void queryClient.invalidateQueries({ queryKey: ["project-preview", project?.id] });
+        void queryClient.invalidateQueries({
+          queryKey: ["project", project?.id],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: getProjectMessagesQueryKey(project?.id),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ["project-runs", project?.id],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ["project-preview", project?.id],
+        });
         void router.invalidate();
       };
     },
@@ -474,6 +506,7 @@ function ProjectDetailPage() {
     setProject(workspace?.project);
     setSendError(undefined);
     setAgentEvents([]);
+    setAgentReasoning("");
     setSelectedNodeId(firstFileNode(workspace?.fileTree ?? [])?.id);
     setDetailMode("preview");
     setPreviewPath("/");
@@ -650,6 +683,7 @@ function ProjectDetailPage() {
     setSending(true);
     setSendError(undefined);
     setAgentEvents([]);
+    setAgentReasoning("");
     setDraft("");
 
     const clientId = `client-${crypto.randomUUID()}`;
@@ -758,7 +792,10 @@ function ProjectDetailPage() {
         <div className="flex h-full min-h-0 min-w-0 overflow-hidden">
           <div
             className="flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-(--app-border) bg-(--app-panel) transition-[width,border-width] duration-300 ease-in-out"
-            style={{ width: chatVisible ? chatWidth : 0, borderRightWidth: chatVisible ? undefined : 0 }}
+            style={{
+              width: chatVisible ? chatWidth : 0,
+              borderRightWidth: chatVisible ? undefined : 0,
+            }}
           >
             <ChatHeader
               project={project}
@@ -770,6 +807,7 @@ function ProjectDetailPage() {
 
             <div className="min-h-0 h-1 flex-1 overflow-hidden px-sm ">
               <div className="flex h-full min-h-0 flex-col gap-sm">
+                {/* <StreamingTextPanel text={agentReasoning} isStreaming={project.processingStatus === "processing"} /> */}
                 <AgentEventTimeline events={agentEvents} />
                 <div className="min-h-0 flex-1 overflow-hidden">
                   <ProjectMessagesPanel

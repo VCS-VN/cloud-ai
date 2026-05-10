@@ -14,6 +14,7 @@ export async function runThinkingLayer(input: RunThinkingLayerInput) {
   try {
     const result = await runThinkingLayerCore({
       ...coreInput,
+      provider: undefined,
       saveResult: input.saveResult ?? (runStore ? async (thinkingResult) => {
         await saveThinkingResultSummary({ runStore, run: input.run, result: thinkingResult });
       } : undefined),

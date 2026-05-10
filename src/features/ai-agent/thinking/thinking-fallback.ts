@@ -30,7 +30,7 @@ export function createHeuristicThinkingResult(
     id: `thinking_${now}`,
     projectId: input.projectId,
     runId: input.runId,
-    userFacingUnderstanding: `Mình hiểu bạn muốn ${input.userPrompt.replace(/[.!?。]+$/, "")}.`,
+    userFacingUnderstanding: `I understand you want ${input.userPrompt.replace(/[.!?。]+$/, "")}.`,
     promptClassification: {
       lifecycleIntent,
       confidence: 0.65,
@@ -150,7 +150,7 @@ export function createClarificationStructuredThinkingResult(
       shouldModifyExistingProject: false,
       shouldAskClarification: true,
       clarificationQuestion:
-        "Bạn có thể mô tả rõ hơn thay đổi storefront bạn muốn thực hiện không?",
+        "Could you describe the storefront change you want more clearly?",
       requiresSourceInit: false,
       requiresPatchGeneration: false,
       requiresValidation: false,
@@ -234,7 +234,7 @@ function createApplyStructuredThinkingResult(
     normalizedTask: {
       title: "Apply storefront improvement",
       description:
-        "Mình sẽ áp dụng thay đổi theo hướng cải thiện storefront dựa trên ngữ cảnh hiện tại.",
+        "I will apply changes to improve the storefront based on current context.",
       acceptanceCriteria: [
         "Current storefront code is inspected before mutation.",
         "The change uses a minimal patch and preserves existing storefront behavior.",

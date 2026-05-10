@@ -29,10 +29,10 @@ function getAgentDisplayContent(
 ) {
   const fallback =
     status === "failed"
-      ? "Không thể hoàn tất xử lý. Vui lòng thử lại hoặc điều chỉnh prompt."
+      ? "Could not complete the request. Please try again or adjust your prompt."
       : status === "stopped"
-        ? "Đã dừng xử lý. Bạn có thể tiếp tục bằng prompt mới."
-        : "### Trạng thái\n- Đang chuẩn bị xử lý yêu cầu...";
+        ? "Processing stopped. You can continue with a new prompt."
+        : "### Status\n- Preparing to process your request...";
 
   if (!content.trim()) return fallback;
 
@@ -47,7 +47,7 @@ function getAgentDisplayContent(
 
 function isUserFacingAgentLine(line: string) {
   return (
-    /^(Đang phân tích yêu cầu của bạn|Đã hiểu:|Đã xác định task\.|Cần làm rõ:|Đang khởi tạo dự án|Đang tạo trang|Đang cập nhật trang|Đang kiểm tra dự án|Hoàn tất\.|Không thể hoàn tất xử lý\.|Đã dừng xử lý\.)/.test(
+    /^(Analyzing|Understood:|Task identified|Clarification needed:|Initializing project|Creating page|Updating page|Inspecting project|Done\.|Could not complete|Processing stopped|Đang phân tích|Đã hiểu:|Đã xác định task|Cần làm rõ:|Đang khởi tạo dự án|Đang tạo trang|Đang cập nhật trang|Đang kiểm tra dự án|Hoàn tất\.|Không thể hoàn tất xử lý|Đã dừng xử lý)/.test(
       line,
     ) && !/\b\d+\s+file\b/i.test(line)
   );
@@ -144,7 +144,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
 
         {!isUser && !isFailed && !isPending && !isStreaming && isStopped ? (
           <div className="mt-sm rounded-md border border-[var(--app-border)] bg-[var(--app-panel-bg)] p-xs text-[12px] leading-4 text-[var(--app-muted-text)]">
-            Đã dừng xử lý. Bạn có thể tiếp tục bằng prompt mới.
+            Processing stopped. You can continue with a new prompt.
           </div>
         ) : null}
       </div>

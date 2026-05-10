@@ -1,19 +1,11 @@
 import type { AgentConfig } from "../agent/agent-config";
 import type { AgentRun, ProjectState } from "../project/project-state.schema";
-import { validateThinkingBusinessRules } from "./thinking-business-validator";
-import { THINKING_LAYER_CONFIG } from "./thinking-config";
 import {
   createClarificationStructuredThinkingResult,
   createHeuristicThinkingResult,
 } from "./thinking-fallback";
-import { ThinkingResultJsonSchema } from "./thinking-json-schema";
 import { preflightUserPrompt } from "./thinking-preflight";
 import {
-  THINKING_LAYER_DEVELOPER_PROMPT,
-  THINKING_LAYER_SYSTEM_PROMPT,
-} from "./thinking.prompt";
-import {
-  structuredThinkingResultSchema,
   thinkingInputSchema,
   thinkingResultSchema,
   type StructuredThinkingInput,
@@ -22,23 +14,8 @@ import {
   type ThinkingResult,
 } from "./thinking.schema";
 import {
-  normalizeStructuredThinkingForProjectDetail,
-  toStorefrontThinkingResult,
-} from "./storefront-thinking-normalizer";
-import {
   detectHardClarificationBlock,
-  inferStorefrontIntent,
 } from "./storefront-prompt-policy";
-
-export type ThinkingProvider = {
-  parseStructured<TInput, TOutput>(args: {
-    model: string;
-    system: string;
-    user: TInput;
-    schemaName: string;
-    schema: unknown;
-  }): Promise<TOutput>;
-};
 
 export type RunThinkingLayerInput = {
   projectId: string;
@@ -46,7 +23,7 @@ export type RunThinkingLayerInput = {
   userId?: string;
   userPrompt: string;
   projectState: ProjectState | null;
-  provider?: ThinkingProvider;
+  provider?: unknown;
   agentConfig?: AgentConfig;
   saveResult?: (result: ThinkingResult) => Promise<void> | void;
 };
@@ -70,338 +47,33 @@ export async function runThinkingLayer(
     return blocked;
   }
 
-  const result = input.provider
-    ? await extractProviderThinkingResult(
-        input.provider,
-        thinkingInput,
-        input.agentConfig?.plannerModel ?? THINKING_LAYER_CONFIG.model,
-      )
-    : createHeuristicThinkingResult(thinkingInput);
-  const validated = thinkingResultSchema.parse(result);
-  await input.saveResult?.(validated);
-  return validated;
-}
+  const hasInitializedSource =
+    thinkingInput.projectContext.status !== "empty" &&
+    thinkingInput.projectContext.fileManifest.length > 0;
 
-async function extractProviderThinkingResult(
-  provider: ThinkingProvider,
-  thinkingInput: ThinkingInput,
-  model: string,
-): Promise<ThinkingResult> {
-  const structuredInput = buildStructuredThinkingInput(thinkingInput);
-  try {
-    const structured = await requestValidatedStructuredThinkingResult({
-      provider,
-      model,
-      thinkingInput: structuredInput,
-    });
-    const normalized = normalizeStructuredThinkingForProjectDetail({
-      thinking: structured,
-      thinkingInput: structuredInput,
-    });
-    return thinkingResultSchema.parse(
-      structuredThinkingToLegacyResult(normalized, thinkingInput),
-    );
-  } catch (error) {
-    console.warn(
-      JSON.stringify({
-        event: "thinking_provider_fallback",
-        projectId: thinkingInput.projectId,
-        runId: thinkingInput.runId,
-        error: compactThinkingProviderError(error),
-      }),
-    );
-    const fallback = createClarificationStructuredThinkingResult(
-      structuredInput,
-      error instanceof Error
-        ? error.message
-        : "Thinking provider validation failed.",
-    );
-    const normalized = normalizeStructuredThinkingForProjectDetail({
-      thinking: fallback,
-      thinkingInput: structuredInput,
-    });
-    return thinkingResultSchema.parse(
-      structuredThinkingToLegacyResult(normalized, thinkingInput),
-    );
-  }
-}
-
-async function requestValidatedStructuredThinkingResult(input: {
-  provider: ThinkingProvider;
-  model: string;
-  thinkingInput: StructuredThinkingInput;
-}): Promise<StructuredThinkingResult> {
-  const first = await requestStructuredThinkingResult(input);
-  const firstValidation = validateThinkingBusinessRules({
-    result: first,
-    hasInitializedSource:
-      input.thinkingInput.runtimeContext.hasInitializedSource,
-  });
-  if (firstValidation.ok) return first;
-
-  const repaired = await requestStructuredThinkingResult({
-    ...input,
-    repairInstruction: firstValidation.errors.join("; "),
-  });
-  const repairedValidation = validateThinkingBusinessRules({
-    result: repaired,
-    hasInitializedSource:
-      input.thinkingInput.runtimeContext.hasInitializedSource,
-  });
-  if (repairedValidation.ok) return repaired;
-
-  throw new Error(
-    `Thinking Result failed business validation: ${repairedValidation.errors.join("; ")}`,
-  );
-}
-
-async function requestStructuredThinkingResult(input: {
-  provider: ThinkingProvider;
-  model: string;
-  thinkingInput: StructuredThinkingInput;
-  repairInstruction?: string;
-}): Promise<StructuredThinkingResult> {
-  const result = await input.provider.parseStructured<unknown, unknown>({
-    model: input.model,
-    system: buildStructuredThinkingSystemPrompt(input.repairInstruction),
-    user: input.thinkingInput,
-    schemaName: "thinking_result",
-    schema: ThinkingResultJsonSchema,
-  });
-  return structuredThinkingResultSchema.parse(
-    normalizeProviderStructuredThinkingOutput(result, input.thinkingInput),
-  );
-}
-
-function buildStructuredThinkingSystemPrompt(repairInstruction?: string) {
-  const basePrompt = `${THINKING_LAYER_SYSTEM_PROMPT}\n\n${THINKING_LAYER_DEVELOPER_PROMPT}`;
-  if (!repairInstruction) return basePrompt;
-  return `${basePrompt}\n\nRepair the previous ThinkingResult. Keep the same user intent and fix only these validation errors: ${repairInstruction}\nReturn only a complete root StructuredThinkingResult object. Do not wrap it in thinking_result, result, data, output, or response.`;
-}
-
-export function normalizeProviderStructuredThinkingOutput(
-  raw: unknown,
-  thinkingInput: StructuredThinkingInput,
-): unknown {
-  const unwrapped = unwrapStructuredThinkingOutput(raw);
-  if (!isRecord(unwrapped)) return synthesizeStructuredThinkingResult(thinkingInput);
-
-  const normalized: Record<string, unknown> = { ...unwrapped };
-  normalized.intent = normalizeStructuredIntent(normalized.intent);
-  normalized.confidence = normalizeConfidence(normalized.confidence);
-  normalized.language = normalizeLanguage(normalized.language);
-
-  const hasRequiredSections = [
-    "userWish",
-    "ecommerceContext",
-    "projectAction",
-    "constraints",
-    "risk",
-    "normalizedTask",
-    "downstream",
-  ].every((key) => isRecord(normalized[key]));
-
-  if (!hasRequiredSections) {
-    const synthesized = synthesizeStructuredThinkingResult(thinkingInput);
-    return structuredThinkingResultSchema.parse({
-      ...synthesized,
-      ...Object.fromEntries(
-        Object.entries(normalized).filter(([, value]) => value !== undefined),
-      ),
-      userWish: isRecord(normalized.userWish)
-        ? normalized.userWish
-        : synthesized.userWish,
-      ecommerceContext: isRecord(normalized.ecommerceContext)
-        ? normalized.ecommerceContext
-        : synthesized.ecommerceContext,
-      projectAction: isRecord(normalized.projectAction)
-        ? normalized.projectAction
-        : synthesized.projectAction,
-      constraints: isRecord(normalized.constraints)
-        ? normalized.constraints
-        : synthesized.constraints,
-      risk: isRecord(normalized.risk) ? normalized.risk : synthesized.risk,
-      normalizedTask: isRecord(normalized.normalizedTask)
-        ? normalized.normalizedTask
-        : synthesized.normalizedTask,
-      downstream: isRecord(normalized.downstream)
-        ? normalized.downstream
-        : synthesized.downstream,
-    });
-  }
-
-  return normalized;
-}
-
-function synthesizeStructuredThinkingResult(
-  thinkingInput: StructuredThinkingInput,
-): StructuredThinkingResult {
-  const block = detectHardClarificationBlock({
+  const hardBlock = detectHardClarificationBlock({
     userPrompt: thinkingInput.userPrompt,
     projectState: thinkingInput.projectState,
-    hasInitializedSource: thinkingInput.runtimeContext.hasInitializedSource,
+    hasInitializedSource,
   });
-  const sourceReady = thinkingInput.runtimeContext.hasInitializedSource;
-  const intent = block
-    ? "unknown"
-    : sourceReady
-      ? mapStorefrontIntentForStructured(
-          inferStorefrontIntent(thinkingInput.userPrompt, "unknown"),
-        )
-      : "init_project";
-  const description = block?.question ?? `Apply storefront request: ${thinkingInput.userPrompt}`;
-  return {
-    intent,
-    confidence: block ? 1 : 0.55,
-    language: "unknown",
-    userWish: {
-      rawPrompt: thinkingInput.userPrompt,
-      explicitRequests: [thinkingInput.userPrompt],
-      implicitRequests: block ? [] : ["Use safe e-commerce defaults."],
-      inferredEcommerceGoals: block
-        ? []
-        : ["Improve the current e-commerce storefront."],
-      outOfScopeRequests: [],
-    },
-    ecommerceContext: {
-      storeType: "unknown",
-      affectedPages: sourceReady ? ["/"] : [],
-      affectedSections: sourceReady ? ["homepage"] : [],
-      affectedFeatures: [],
-      affectedEntities: [],
-      conversionGoal: sourceReady ? "improve_brand_perception" : "unknown",
-    },
-    projectAction: {
-      shouldInitProject: !sourceReady && !block,
-      shouldModifyExistingProject: sourceReady && !block,
-      shouldAskClarification: Boolean(block),
-      clarificationQuestion: block?.question ?? null,
-      requiresSourceInit: !sourceReady && !block,
-      requiresPatchGeneration: sourceReady && !block,
-      requiresValidation: !block,
-      requiresPreviewRefresh: sourceReady && !block,
-    },
-    constraints: {
-      preserveExistingDesign: true,
-      preserveExistingFeatures: true,
-      requestedStackChange: false,
-      requestedDestructiveChange: block?.type === "destructive",
-      forbiddenActions: block?.type === "unsafe" ? [block.reason] : [],
-    },
-    risk: {
-      level: block ? "high" : "low",
-      reasons: block ? [block.reason] : ["Recovered malformed provider output."],
-    },
-    normalizedTask: {
-      title: block ? "Clarify storefront request" : "Apply storefront request",
-      description,
-      acceptanceCriteria: block
-        ? ["No project files are mutated until the blocker is resolved."]
-        : [
-            "Current storefront code is inspected before mutation.",
-            "The change uses a minimal patch and preserves existing storefront behavior.",
-            "Validation runs after mutation or reports a specific blocker.",
-          ],
-      implementationHints: block ? [] : ["Inspect existing source before patching."],
-    },
-    downstream: {
-      recommendedNextStep: block
-        ? "ask_clarification"
-        : sourceReady
-          ? "generate_patch"
-          : "init_source",
-      priority: "normal",
-    },
-  };
-}
 
-function unwrapStructuredThinkingOutput(raw: unknown): unknown {
-  if (!isRecord(raw)) return raw;
-  for (const key of ["thinking_result", "result", "data", "output", "response"]) {
-    if (isRecord(raw[key])) return raw[key];
+  if (hardBlock) {
+    const structuredInput = buildStructuredThinkingInput(thinkingInput);
+    const clarification = createClarificationStructuredThinkingResult(
+      structuredInput,
+      hardBlock.reason,
+    );
+    const result = thinkingResultSchema.parse(
+      structuredThinkingToLegacyResult(clarification, thinkingInput),
+    );
+    await input.saveResult?.(result);
+    return result;
   }
-  return raw;
-}
 
-function normalizeStructuredIntent(value: unknown): StructuredThinkingResult["intent"] {
-  if (value === "improve_responsive" || value === "improve_conversion") return "modify_design";
-  if (value === "remove_feature") return "modify_content";
-  if (
-    value === "init_project" ||
-    value === "add_feature" ||
-    value === "modify_design" ||
-    value === "modify_content" ||
-    value === "modify_products" ||
-    value === "fix_bug" ||
-    value === "integrate_service" ||
-    value === "explain_project" ||
-    value === "unknown"
-  ) return value;
-  return "unknown";
-}
-
-function mapStorefrontIntentForStructured(intent: ReturnType<typeof inferStorefrontIntent>): StructuredThinkingResult["intent"] {
-  if (intent === "improve_responsive" || intent === "improve_conversion" || intent === "unknown_storefront_change") return "modify_design";
-  if (intent === "remove_feature") return "modify_content";
-  return intent;
-}
-
-function normalizeConfidence(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return clampConfidence(value);
-  if (typeof value === "string") {
-    const parsed = Number.parseFloat(value);
-    if (Number.isFinite(parsed)) return clampConfidence(parsed);
-  }
-  return 0.55;
-}
-
-function clampConfidence(value: number) {
-  return Math.min(1, Math.max(0, value));
-}
-
-function normalizeLanguage(value: unknown): StructuredThinkingResult["language"] {
-  if (value === "vi" || value === "en" || value === "mixed" || value === "unknown") return value;
-  return "unknown";
-}
-
-function compactThinkingProviderError(error: unknown) {
-  if (!(error instanceof Error)) return "Unknown thinking provider error.";
-  return error.message.replace(/\s+/g, " ").slice(0, 500);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function buildThinkingInput(input: RunThinkingLayerInput): ThinkingInput {
-  return thinkingInputSchema.parse({
-    projectId: input.projectId,
-    runId: input.run.id,
-    userId: input.userId,
-    userPrompt: input.userPrompt.trim(),
-    projectState: input.projectState,
-    conversationContext: {
-      recentUserMessages: [],
-      recentAssistantSummaries: [],
-    },
-    projectContext: {
-      status: mapProjectStatus(input.projectState?.status),
-      fileManifest: (input.projectState?.fileManifest ?? []).map((file) => ({
-        path: file.path,
-        purpose: file.purpose,
-        kind: mapFileKind(file.kind),
-      })),
-      recentChanges: (input.projectState?.recentChanges ?? [])
-        .slice(0, 5)
-        .map((change) => ({
-          runId: change.runId,
-          userPrompt: change.userPrompt,
-          summary: change.summary,
-          changedFiles: change.changedFiles,
-          validationStatus: change.validationStatus,
-        })),
-    },
-  });
+  const heuristic = createHeuristicThinkingResult(thinkingInput);
+  const validated = thinkingResultSchema.parse(heuristic);
+  await input.saveResult?.(validated);
+  return validated;
 }
 
 export function buildStructuredThinkingInput(
@@ -444,10 +116,6 @@ function structuredThinkingToLegacyResult(
 ): ThinkingResult {
   const id = `thinking_${Date.now().toString(36)}`;
   const wishId = `${id}_wish`;
-  const storefront = toStorefrontThinkingResult({
-    thinking: result,
-    thinkingInput: buildStructuredThinkingInput(input),
-  });
   const needsClarification =
     result.projectAction.shouldAskClarification ||
     result.downstream.recommendedNextStep === "ask_clarification";
@@ -510,7 +178,7 @@ function structuredThinkingToLegacyResult(
             id: `${id}_ambiguity`,
             question:
               result.projectAction.clarificationQuestion ??
-              "Vui lòng xác nhận trước khi tiếp tục.",
+              "Please confirm before continuing.",
             impact: result.risk.level,
             recommendedHandling: "ask_user",
           },
@@ -532,8 +200,6 @@ function structuredThinkingToLegacyResult(
       runId: input.runId,
       taskType: needsClarification
         ? "needs_clarification"
-        : storefront.executionMode !== "apply"
-          ? "answer_question"
         : mapTaskType(result.intent),
       normalizedGoal: result.normalizedTask.title,
       userPrompt: input.userPrompt,
@@ -572,15 +238,30 @@ function structuredThinkingToLegacyResult(
             required: true,
             question:
               result.projectAction.clarificationQuestion ??
-              "Vui lòng xác nhận trước khi tiếp tục.",
+              "Please confirm before continuing.",
             reason: result.risk.reasons.join("; "),
           }
         : undefined,
       storefront: {
-        executionMode: storefront.executionMode,
-        actionPolicy: storefront.actionPolicy,
-        acceptanceCriteria: storefront.acceptanceCriteria,
-        implementationBias: storefront.implementationBias,
+        executionMode: needsClarification ? "plan" : "apply",
+        actionPolicy: {
+          shouldApplyCode: !needsClarification,
+          shouldCreatePlanOnly: needsClarification,
+          shouldAskClarification: needsClarification,
+          clarificationQuestion: needsClarification
+            ? (result.projectAction.clarificationQuestion ?? null)
+            : null,
+          clarificationReason: needsClarification
+            ? result.risk.reasons.join("; ")
+            : null,
+        },
+        acceptanceCriteria: result.normalizedTask.acceptanceCriteria,
+        implementationBias: {
+          preferMinimalPatch: true,
+          preserveExistingDesignDirection: true,
+          useExistingComponentsFirst: true,
+          avoidFullRewrite: true,
+        },
       },
     },
   };
@@ -597,7 +278,7 @@ function buildBlockedThinkingResult(
     projectId: input.projectId,
     runId: input.runId,
     userFacingUnderstanding:
-      "Mình không thể xử lý yêu cầu này vì nó có dấu hiệu không an toàn.",
+      "Cannot process this request due to safety concerns.",
     promptClassification: {
       lifecycleIntent: "unknown",
       confidence: 1,
@@ -680,11 +361,42 @@ function buildBlockedThinkingResult(
       clarification: {
         required: true,
         question:
-          "Vui lòng gửi lại yêu cầu chỉnh website mà không yêu cầu bỏ qua chính sách hoặc lộ reasoning nội bộ.",
+          "Please resubmit your request without bypassing security policies.",
         reason,
       },
     },
   };
+}
+
+function buildThinkingInput(input: RunThinkingLayerInput): ThinkingInput {
+  return thinkingInputSchema.parse({
+    projectId: input.projectId,
+    runId: input.run.id,
+    userId: input.userId,
+    userPrompt: input.userPrompt.trim(),
+    projectState: input.projectState,
+    conversationContext: {
+      recentUserMessages: [],
+      recentAssistantSummaries: [],
+    },
+    projectContext: {
+      status: mapProjectStatus(input.projectState?.status),
+      fileManifest: (input.projectState?.fileManifest ?? []).map((file) => ({
+        path: file.path,
+        purpose: file.purpose,
+        kind: mapFileKind(file.kind),
+      })),
+      recentChanges: (input.projectState?.recentChanges ?? [])
+        .slice(0, 5)
+        .map((change) => ({
+          runId: change.runId,
+          userPrompt: change.userPrompt,
+          summary: change.summary,
+          changedFiles: change.changedFiles,
+          validationStatus: change.validationStatus,
+        })),
+    },
+  });
 }
 
 function compactProjectState(projectState: ThinkingInput["projectState"]) {

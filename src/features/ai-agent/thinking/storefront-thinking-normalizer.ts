@@ -199,7 +199,7 @@ function ensureAcceptanceCriteria(
 }
 
 function createSafeApplySummary(prompt: string): string {
-  return `Mình sẽ áp dụng thay đổi storefront dựa trên yêu cầu: ${prompt.replace(/[.!?。]+$/, "")}.`;
+  return `I will apply storefront changes based on your request: ${prompt.replace(/[.!?。]+$/, "")}.`;
 }
 
 function inferLikelyFiles(areas: string[]): string[] {

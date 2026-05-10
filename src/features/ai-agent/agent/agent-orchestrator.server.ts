@@ -13,21 +13,19 @@ import type { SnapshotService } from "../project/snapshot-service.server";
 import type { AgentConfig } from "./agent-config";
 import type { OpenAIProvider } from "../openai/openai-provider.server";
 import { ECOMMERCE_AGENT_SYSTEM_PROMPT } from "../openai/prompts";
-import { createChangePlan } from "../planning/create-change-plan.server";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
-import { normalizeRequirement } from "../planning/normalize-requirement.server";
 import { buildFileManifest } from "../source/code-index-service.server";
-import { initSource } from "../source/init-source.server";
-import { generatePatch } from "../source/patch-generator.server";
-import { PatchService } from "../source/patch-service.server";
-import { retrieveRelevantContext } from "../source/retrieve-context.server";
+import { initInfrastructureSource, initSource } from "../source/init-source.server";
+import { REQUIRED_GENERATED_STOREFRONT_FILES } from "../source/generated-project-layout";
+import { buildRetailInitPrompt } from "./init-prompt.server";
 import {
   selectTemplate,
   slugifyProjectName,
 } from "../source/template-registry.server";
 import { ValidationService } from "../source/validation-service.server";
-import { AgentError, toSafeAgentError } from "./agent-errors";
+import { toSafeAgentError } from "./agent-errors";
 import { runThinkingLayer } from "../thinking/thinking-orchestrator.server";
+import { createHeuristicThinkingResult } from "../thinking/thinking-fallback";
 import {
   mapThinkingToCompletedEvent,
   mapThinkingToUserWishEvent,
@@ -35,16 +33,11 @@ import {
 import { toThinkingRunSummary } from "../thinking/thinking.repository.server";
 import type { ThinkingResult } from "../thinking/thinking.schema";
 import { redactSecrets } from "../security/secret-redactor";
-import { runBoundedCodeToolLoop } from "../code-tools/code-tool-loop.server";
-import {
-  buildCodeContextLoadedEvent,
-  buildCodeToolLoopStartedEvent,
-  buildPatchAppliedEvent,
-  buildPreviewRestartRequiredEvent,
-  buildSnapshotCreatedEvent,
-  buildValidationStartedEvent,
-} from "../code-tools/code-tool-events.server";
-import { getPreviewRestartRequirement } from "../code-tools/services/preview-restart-policy.server";
+import { runAgenticLoop } from "./agentic-loop.server";
+import type { AgenticLoopResult } from "./agentic-loop.types";
+import { executeProjectTool } from "../code-tools/code-tool-executor.server";
+import { createDefaultCodeToolRegistry, createInitCodeToolRegistry } from "../code-tools/code-tool-registry.server";
+import type { ToolExecutionContext } from "../code-tools/code-agent-types";
 import {
   copyDesignFileToProject,
   loadProjectDesignRules,
@@ -102,7 +95,7 @@ export class AgentOrchestrator {
       yield {
         type: "thinking_started",
         runId: run.id,
-        message: "Đang phân tích yêu cầu của bạn...",
+        message: "Analyzing your request...",
       };
       yield {
         type: "thinking_context_loaded",
@@ -127,7 +120,7 @@ export class AgentOrchestrator {
           runId: run.id,
           question:
             thinking.downstreamTask.clarification?.question ??
-            "Vui lòng xác nhận trước khi tiếp tục.",
+            "Please confirm before continuing.",
           reason:
             thinking.downstreamTask.clarification?.reason ??
             "Thinking layer requires clarification.",
@@ -190,17 +183,131 @@ export class AgentOrchestrator {
         return;
       }
 
-      const updateResult = yield* this.updateProjectWorkflow({
-        input,
-        runId: run.id,
+      const toolExecutionContext: ToolExecutionContext = {
+        userId: input.userId ?? "",
+        projectId: input.projectId,
+        messageId: input.messageId ?? run.id,
+        workspaceRoot: `./projects/${input.projectId}`,
         projectState,
-        intent,
+      };
+
+      const registry = createDefaultCodeToolRegistry();
+
+      const pendingEvents: AgentStreamEvent[] = [];
+      const loopGenerator = runAgenticLoop(
+        {
+          projectId: input.projectId,
+          userId: input.userId,
+          messageId: input.messageId,
+          runId: run.id,
+          userPrompt: input.prompt,
+          projectState,
+          thinkingResult: thinking,
+          context: toolExecutionContext,
+          signal: input.signal,
+        },
+        {
+          model: this.deps.agentConfig?.coderModel ?? "gpt-5.4",
+          maxIterations: this.deps.agentConfig?.agenticMaxIterations ?? 40,
+          maxConsecutiveToolErrors:
+            this.deps.agentConfig?.agenticMaxConsecutiveToolErrors ?? 5,
+          callModel: async (modelInput) => {
+            const result =
+              await this.deps.openAIProvider!.createCodeToolResponse({
+                model: this.deps.agentConfig?.coderModel ?? "gpt-5.4",
+                input: modelInput.messages as unknown[],
+                tools: modelInput.tools,
+                toolChoice: "auto",
+              });
+            return result;
+          },
+          executeTool: async (toolCall) => {
+            return executeProjectTool({
+              registry,
+              context: toolExecutionContext,
+              toolCall,
+              inspectionCompleted: true,
+              mutationCompleted: false,
+            });
+          },
+          sendEvent: async (event) => {
+            pendingEvents.push(event as AgentStreamEvent);
+          },
+        },
+      );
+
+      let loopResult: AgenticLoopResult;
+      let iterResult = await loopGenerator.next();
+      while (!iterResult.done) {
+        iterResult = await loopGenerator.next();
+      }
+      loopResult = iterResult.value;
+
+      for (const event of pendingEvents) {
+        yield event;
+      }
+
+      const nextProjectState = await this.deps.projectStateStore.patch(
+        input.projectId,
+        {
+          status: loopResult.status === "completed" ? "initialized" : "failed",
+          fileManifest: mergeManifest(
+            projectState,
+            loopResult.changedFiles.map((path) => ({
+              type: "create_file" as const,
+              path,
+              content: "",
+            })),
+          ),
+          recentChanges: [
+            ...projectState.recentChanges,
+            {
+              at: new Date().toISOString(),
+              runId: run.id,
+              userPrompt: input.prompt,
+              summary: loopResult.summary,
+              changedFiles: loopResult.changedFiles,
+              validationStatus:
+                loopResult.status === "completed"
+                  ? ("passed" as const)
+                  : ("failed" as const),
+            },
+          ].slice(-10),
+        },
+        input.userId,
+      );
+      yield { type: "project_state_updated", projectState: nextProjectState };
+
+      const summary = yield* this.streamUserFacingSummary({
+        fallbackSummary: loopResult.summary,
+        input,
+        intent: builderIntentFromThinking(thinking),
+        plan: createLoopPlan(loopResult),
+        changedFiles: loopResult.changedFiles,
+        validation: {
+          ok: loopResult.status === "completed",
+          commands: [],
+          summary: loopResult.summary,
+          errors: [],
+        },
       });
+
+      yield {
+        type: "done",
+        runId: run.id,
+        summary,
+        changedFiles: loopResult.changedFiles,
+      };
       await this.deps.runStore.complete(run, {
         intent,
-        plan: updateResult.plan,
-        affectedFiles: updateResult.changedFiles,
-        validationResult: updateResult.validation,
+        plan: createLoopPlan(loopResult),
+        affectedFiles: loopResult.changedFiles,
+        validationResult: {
+          ok: loopResult.status === "completed",
+          commands: [],
+          summary: loopResult.summary,
+          errors: [],
+        },
         thinking: toThinkingRunSummary(thinking),
       });
     } catch (error) {
@@ -241,10 +348,6 @@ export class AgentOrchestrator {
     const plan = createInitPlan(intent);
     logAgentPhase("finished", "create_plan", phaseContext);
     yield { type: "plan_created", plan };
-    yield {
-      type: "source_generation_started",
-      message: "Generating storefront source from template...",
-    };
 
     const websiteSpec = await runPhase("extract_website_spec", () =>
       extractWebsiteSpec({
@@ -257,31 +360,11 @@ export class AgentOrchestrator {
     const templateId = await runPhase("select_template", () =>
       selectTemplate(websiteSpec),
     );
-    const initResult = await runPhase("init_source", () =>
-      initSource({
-        projectSlug: slugifyProjectName(websiteSpec.store.name),
-        packageManager: projectState.stack.packageManager,
-        packageRegistryVersion: "initial-v1",
-        templateId,
-        websiteSpec,
-      }),
-    );
-    const fileManifest = buildFileManifest(initResult.files);
-    logAgentPhase("started", "write_files", phaseContext);
-    try {
-      for (const file of initResult.files) {
-        await this.deps.projectFileStore?.writeTextFile(
-          input.projectId,
-          file.path,
-          file.content,
-        );
-        yield { type: "file_changed", path: file.path, operation: "created" };
-      }
-      logAgentPhase("finished", "write_files", phaseContext);
-    } catch (error) {
-      logAgentPhase("failed", "write_files", phaseContext, error);
-      throw error;
-    }
+
+    yield {
+      type: "source_generation_started",
+      message: "Copying design rules and generating infrastructure...",
+    };
 
     const designCopyResult = await runPhase("copy_design_file", () =>
       copyDesignFileToProject({
@@ -289,7 +372,6 @@ export class AgentOrchestrator {
         workspaceRoot: `./projects/${input.projectId}`,
       }),
     );
-
     yield {
       type: "design_file_copied",
       projectId: input.projectId,
@@ -306,7 +388,6 @@ export class AgentOrchestrator {
         workspaceRoot: `./projects/${input.projectId}`,
       }),
     );
-
     yield {
       type: "design_rules_loaded",
       projectId: input.projectId,
@@ -317,6 +398,228 @@ export class AgentOrchestrator {
         hash: designRules.hash,
       },
     };
+
+    const initResult = await runPhase("init_infrastructure", () =>
+      initInfrastructureSource({
+        projectSlug: slugifyProjectName(websiteSpec.store.name),
+        packageManager: projectState.stack.packageManager,
+        packageRegistryVersion: "initial-v1",
+        templateId,
+        websiteSpec,
+      }),
+    );
+
+    logAgentPhase("started", "write_infrastructure_files", phaseContext);
+    try {
+      for (const file of initResult.files) {
+        await this.deps.projectFileStore?.writeTextFile(
+          input.projectId,
+          file.path,
+          file.content,
+        );
+        yield { type: "file_changed", path: file.path, operation: "created" };
+      }
+      logAgentPhase("finished", "write_infrastructure_files", phaseContext);
+    } catch (error) {
+      logAgentPhase("failed", "write_infrastructure_files", phaseContext, error);
+      throw error;
+    }
+
+    yield {
+      type: "source_generation_started",
+      message: "Generating retail storefront UI with design rules...",
+    };
+
+    const toolExecutionContext: ToolExecutionContext = {
+      userId: input.userId ?? "",
+      projectId: input.projectId,
+      messageId: input.messageId ?? args.runId,
+      workspaceRoot: `./projects/${input.projectId}`,
+      projectState,
+      flags: {
+        designRulesLoaded: true,
+      },
+    };
+    (toolExecutionContext as any).__codeToolSnapshotId = "init-snapshot";
+
+    const registry = createInitCodeToolRegistry();
+    const retailInitPrompt = buildRetailInitPrompt({
+      userPrompt: input.prompt,
+      websiteSpec,
+      designRules,
+    });
+
+    const thinking = createHeuristicThinkingResult({
+      projectId: input.projectId,
+      runId: args.runId,
+      userId: input.userId,
+      userPrompt: retailInitPrompt,
+      projectState,
+      conversationContext: {
+        recentUserMessages: [],
+        recentAssistantSummaries: [],
+      },
+      projectContext: {
+        status: projectState.status === "empty" ? "empty" : "initialized",
+        fileManifest: projectState.fileManifest.map((f) => ({
+          path: f.path,
+          purpose: f.purpose,
+          kind: f.kind as "route" | "component" | "data" | "config" | "style" | "server" | "state" | "unknown",
+        })),
+        recentChanges: projectState.recentChanges.map((c) => ({
+          runId: c.runId,
+          userPrompt: c.userPrompt,
+          summary: c.summary,
+          changedFiles: c.changedFiles,
+          validationStatus: c.validationStatus,
+        })),
+      },
+    });
+
+    console.info(JSON.stringify({
+      event: "init_agentic_loop_starting",
+      projectId: input.projectId,
+      promptLength: retailInitPrompt.length,
+      toolCount: registry.list().length,
+      toolNames: registry.list().map((t) => t.name),
+      model: this.deps.agentConfig?.coderModel ?? "gpt-5.4",
+    }));
+
+    const pendingEvents: AgentStreamEvent[] = [];
+    const loopGenerator = runAgenticLoop(
+      {
+        projectId: input.projectId,
+        userId: input.userId,
+        messageId: input.messageId,
+        runId: args.runId,
+        userPrompt: retailInitPrompt,
+        projectState,
+        thinkingResult: thinking,
+        context: toolExecutionContext,
+        signal: input.signal,
+      },
+      {
+        model: this.deps.agentConfig?.coderModel ?? "gpt-5.4",
+        maxIterations: this.deps.agentConfig?.agenticMaxIterations ?? 40,
+        maxConsecutiveToolErrors:
+          this.deps.agentConfig?.agenticMaxConsecutiveToolErrors ?? 5,
+        callModel: async (modelInput) => {
+          return this.deps.openAIProvider!.createCodeToolResponse({
+            model: this.deps.agentConfig?.coderModel ?? "gpt-5.4",
+            input: modelInput.messages as unknown[],
+            tools: modelInput.tools,
+            toolChoice: "required",
+          });
+        },
+        executeTool: async (toolCall) => {
+          return executeProjectTool({
+            registry,
+            context: toolExecutionContext,
+            toolCall,
+            inspectionCompleted: true,
+            mutationCompleted: false,
+          });
+        },
+        sendEvent: async (event) => {
+          pendingEvents.push(event as AgentStreamEvent);
+        },
+      },
+    );
+
+    let loopResult: AgenticLoopResult;
+    let iterResult = await loopGenerator.next();
+    while (!iterResult.done) {
+      iterResult = await loopGenerator.next();
+    }
+    loopResult = iterResult.value;
+
+    console.info(JSON.stringify({
+      event: "init_agentic_loop_completed",
+      projectId: input.projectId,
+      status: loopResult.status,
+      totalToolCalls: loopResult.totalToolCalls,
+      changedFileCount: loopResult.changedFiles.length,
+      iterations: loopResult.iterations,
+      summary: loopResult.summary?.substring(0, 200),
+    }));
+
+    for (const event of pendingEvents) {
+      yield event;
+    }
+
+    const missingRequiredFiles = REQUIRED_GENERATED_STOREFRONT_FILES.filter(
+      (requiredPath) => !initResult.files.some((file) => file.path === requiredPath)
+        && !loopResult.changedFiles.includes(requiredPath),
+    );
+
+    if (loopResult.changedFiles.length === 0 || missingRequiredFiles.length > 0) {
+      console.info(JSON.stringify({
+        event: "init_backfill_required_files",
+        projectId: input.projectId,
+        reason: loopResult.changedFiles.length === 0
+          ? "Agentic loop created 0 files, backfilling deterministic storefront baseline"
+          : "Agentic loop missed required storefront files, backfilling deterministic baseline",
+        missingRequiredFiles,
+      }));
+
+      yield {
+        type: "source_generation_started",
+        message: "Ensuring required storefront pages, components, and Store Provider exist...",
+      };
+
+      const fallbackResult = await runPhase("backfill_init_source", () =>
+        initSource({
+          projectSlug: slugifyProjectName(websiteSpec.store.name),
+          packageManager: projectState.stack.packageManager,
+          packageRegistryVersion: "initial-v1",
+          templateId,
+          websiteSpec,
+        }),
+      );
+
+      const existingChangedFiles = new Set([
+        ...initResult.files.map((file) => file.path),
+        ...loopResult.changedFiles,
+      ]);
+      const backfilledFiles: string[] = [];
+
+      logAgentPhase("started", "write_backfill_files", phaseContext);
+      try {
+        for (const file of fallbackResult.files) {
+          if (existingChangedFiles.has(file.path)) continue;
+          if (await this.projectFileExists(input.projectId, file.path)) continue;
+          await this.deps.projectFileStore?.writeTextFile(
+            input.projectId,
+            file.path,
+            file.content,
+          );
+          backfilledFiles.push(file.path);
+          yield { type: "file_changed", path: file.path, operation: "created" };
+        }
+        logAgentPhase("finished", "write_backfill_files", phaseContext);
+      } catch (error) {
+        logAgentPhase("failed", "write_backfill_files", phaseContext, error);
+      }
+
+      loopResult = {
+        status: "completed",
+        summary: `Created storefront using agentic loop plus deterministic baseline backfill. ${backfilledFiles.length} files backfilled.`,
+        changedFiles: [...loopResult.changedFiles, ...backfilledFiles],
+        iterations: 1,
+        totalToolCalls: loopResult.totalToolCalls,
+      };
+    }
+
+    const allChangedFiles = [
+      ...initResult.files.map((f) => f.path),
+      ...loopResult.changedFiles,
+    ];
+    const uniqueChangedFiles = [...new Set(allChangedFiles)];
+    const infraManifest = buildFileManifest(initResult.files);
+    const uiManifest = buildFileManifest(
+      loopResult.changedFiles.map((path) => ({ path, content: "" })),
+    );
+    const mergedManifest = [...infraManifest, ...uiManifest.filter((ui) => !infraManifest.some((infra) => infra.path === ui.path))];
 
     yield { type: "validation_started", commands: plan.validationCommands };
     const validation = await runPhase("validate", () =>
@@ -351,7 +654,7 @@ export class AgentOrchestrator {
             status: "implemented",
           })),
           features: { ...projectState.features, ...websiteSpec.features },
-          fileManifest,
+          fileManifest: mergedManifest,
           designState: {
             templateId: designCopyResult.templateId,
             designSourcePath: "DESIGN.md",
@@ -369,19 +672,19 @@ export class AgentOrchestrator {
       userId: input.userId,
       runId: args.runId,
       kind: "initial",
-      summary: "Initial generated storefront snapshot.",
+      summary: "Initial retail storefront snapshot.",
       projectState: nextProjectState,
-      fileManifest,
+      fileManifest: mergedManifest,
     });
 
-    const fallbackSummary = `Generated ${initResult.files.length} storefront files from ${templateId}.`;
+    const fallbackSummary = `Generated retail storefront with ${uniqueChangedFiles.length} files (${initResult.files.length} infrastructure + ${loopResult.changedFiles.length} UI components).`;
     logAgentPhase("started", "summary", phaseContext);
     const summary = yield* this.streamUserFacingSummary({
       fallbackSummary,
       input,
       intent,
       plan,
-      changedFiles: initResult.files.map((file) => file.path),
+      changedFiles: uniqueChangedFiles,
       validation,
     });
     logAgentPhase("finished", "summary", phaseContext);
@@ -389,241 +692,24 @@ export class AgentOrchestrator {
       type: "done",
       runId: args.runId,
       summary,
-      changedFiles: initResult.files.map((file) => file.path),
+      changedFiles: uniqueChangedFiles,
     };
-  }
-
-  private async *updateProjectWorkflow(args: {
-    input: HandlePromptInput;
-    runId: string;
-    projectState: ProjectState;
-    intent: BuilderIntent;
-  }): AsyncGenerator<
-    AgentStreamEvent,
-    { plan: ChangePlan; changedFiles: string[]; validation: ValidationResult },
-    unknown
-  > {
-    const { input, projectState, intent } = args;
-    if (!this.deps.projectFileStore) {
-      throw new Error(
-        "Project file store is required for incremental updates.",
-      );
-    }
-
-    const normalizedRequirement = await normalizeRequirement({
-      prompt: intent.normalizedRequirement || input.prompt,
-    });
-    const normalizedIntent = { ...intent, normalizedRequirement };
-    yield buildCodeToolLoopStartedEvent({
-      projectId: input.projectId,
-      messageId: input.messageId ?? args.runId,
-      taskTitle: normalizedRequirement,
-    });
-    const relevantFiles = await retrieveRelevantContext({
-      prompt: normalizedRequirement,
-      projectState,
-      readFile: (path) =>
-        this.deps.projectFileStore!.readTextFile(input.projectId, path),
-    });
-    yield {
-      type: "context_retrieved",
-      files: relevantFiles.map(({ path, reason }) => ({ path, reason })),
-    };
-    yield buildCodeContextLoadedEvent({
-      projectId: input.projectId,
-      messageId: input.messageId ?? args.runId,
-      summary: "Relevant project context loaded for code update.",
-      stack: Object.values(projectState.stack),
-      fileCount: projectState.fileManifest.length,
-    });
-
-    const plan = await createChangePlan({
-      prompt: normalizedRequirement,
-      projectState,
-      intent: normalizedIntent,
-      relevantFiles,
-      provider: this.deps.openAIProvider,
-      model: this.deps.agentConfig?.plannerModel,
-    });
-    if (plan.operations.length === 0) {
-      plan.operations.push({
-        type: "run_validation",
-        reason: "Validate the implicit apply-mode storefront task.",
-      });
-    }
-    yield { type: "plan_created", plan };
-
-    if (plan.requiresUserConfirmation && plan.riskLevel === "high") {
-      yield {
-        type: "clarification_required",
-        question:
-          "Please confirm before applying this high-risk storefront change.",
-      };
-      return {
-        plan,
-        changedFiles: [],
-        validation: skippedValidation("Waiting for user confirmation."),
-      };
-    }
-
-    yield {
-      type: "source_generation_started",
-      message: "Generating incremental storefront patch...",
-    };
-    const patch = await generatePatch({
-      plan,
-      projectState,
-      relevantFiles,
-      prompt: normalizedRequirement,
-      provider: this.deps.openAIProvider,
-      model: this.deps.agentConfig?.coderModel,
-    });
-    const snapshot = await this.deps.snapshotService?.createSnapshot({
-      projectId: input.projectId,
-      userId: input.userId,
-      runId: args.runId,
-      kind: "pre_change",
-      summary: "Pre-change snapshot before code tool mutation.",
-      projectState,
-      fileManifest: projectState.fileManifest,
-    });
-    if (snapshot) {
-      yield buildSnapshotCreatedEvent({
-        projectId: input.projectId,
-        messageId: input.messageId ?? args.runId,
-        snapshotId: snapshot.id,
-      });
-    }
-
-    const patchService = new PatchService(this.deps.projectFileStore);
-    const applyResult = await patchService.apply(
-      input.projectId,
-      patch.operations,
-    );
-    const insertions = patch.operations
-      .filter((operation) => operation.type !== "delete_file")
-      .reduce((total, operation) => total + operation.content.split("\n").length, 0);
-    const deletions = patch.operations.filter((operation) => operation.type === "delete_file").length;
-    yield buildPatchAppliedEvent({
-      projectId: input.projectId,
-      messageId: input.messageId ?? args.runId,
-      changedFiles: applyResult.changedFiles,
-      insertions,
-      deletions,
-    });
-    if (isApplyModeStorefrontUpdate(intent) && applyResult.changedFiles.length === 0) {
-      throw new AgentError(
-        "APPLY_MODE_EMPTY_DIFF",
-        "Chưa áp dụng được thay đổi vào source. Apply-mode cần có file thay đổi hoặc blocker rõ ràng thay vì báo hoàn tất.",
-        true,
-      );
-    }
-    const previewRestart = getPreviewRestartRequirement(applyResult.changedFiles);
-    if (previewRestart.required) {
-      yield buildPreviewRestartRequiredEvent({
-        projectId: input.projectId,
-        messageId: input.messageId ?? args.runId,
-        reason: previewRestart.reason,
-        changedFiles: previewRestart.changedFiles,
-      });
-    }
-
-    for (const operation of patch.operations) {
-      yield {
-        type: "file_changed",
-        path: operation.path,
-        operation: toChangedOperation(operation),
-      };
-    }
-
-    yield { type: "validation_started", commands: plan.validationCommands };
-    yield buildValidationStartedEvent({
-      projectId: input.projectId,
-      messageId: input.messageId ?? args.runId,
-      commands: plan.validationCommands,
-    });
-    const validation = await this.validate(
-      input.projectId,
-      plan.validationCommands,
-    );
-    yield {
-      type: "validation_finished",
-      ok: validation.ok,
-      summary: validation.summary,
-      errors: validation.errors,
-    };
-    yield* streamCodeToolLoopEvents({
-      projectId: input.projectId,
-      messageId: input.messageId ?? args.runId,
-      taskTitle: plan.summary,
-      changedFiles: applyResult.changedFiles,
-      validation,
-    });
-
-    if (!validation.ok) {
-      await this.deps.snapshotService?.rollbackToLatestStable({
-        projectId: input.projectId,
-        userId: input.userId,
-        runId: args.runId,
-        reason: validation.summary,
-      });
-    }
-
-    const nextProjectState = await this.deps.projectStateStore.patch(
-      input.projectId,
-      {
-        ...(patch.projectStatePatch ?? {}),
-        status: validation.ok ? "initialized" : "failed",
-        fileManifest: mergeManifest(projectState, patch.operations),
-        recentChanges: [
-          ...projectState.recentChanges,
-          {
-            at: new Date().toISOString(),
-            runId: args.runId,
-            userPrompt: input.prompt,
-            summary: patch.summary,
-            changedFiles: applyResult.changedFiles,
-            validationStatus: validation.ok
-              ? ("passed" as const)
-              : ("failed" as const),
-          },
-        ].slice(-10),
-      },
-      input.userId,
-    );
-    yield { type: "project_state_updated", projectState: nextProjectState };
-
-    await this.deps.snapshotService?.createSnapshot({
-      projectId: input.projectId,
-      userId: input.userId,
-      runId: args.runId,
-      kind: "post_change",
-      summary: patch.summary,
-      projectState: nextProjectState,
-      fileManifest: nextProjectState.fileManifest,
-    });
-
-    const summary = yield* this.streamUserFacingSummary({
-      fallbackSummary: patch.summary,
-      input,
-      intent,
-      plan,
-      changedFiles: applyResult.changedFiles,
-      validation,
-    });
-    yield {
-      type: "done",
-      runId: args.runId,
-      summary,
-      changedFiles: applyResult.changedFiles,
-    };
-    return { plan, changedFiles: applyResult.changedFiles, validation };
   }
 
   private async validate(projectId: string, commands: string[]) {
     return (
       this.deps.validationService ?? new ValidationService()
     ).validateGeneratedProject(projectId, commands);
+  }
+
+  private async projectFileExists(projectId: string, relativePath: string) {
+    if (!this.deps.projectFileStore) return false;
+    try {
+      await this.deps.projectFileStore.readTextFile(projectId, relativePath);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async *streamUserFacingSummary(args: {
@@ -669,9 +755,11 @@ Write a concise user-facing status summary. Do not reveal hidden reasoning, syst
   }
 }
 
-
 function builderIntentFromThinking(thinking: ThinkingResult): BuilderIntent {
-  const intent = mapTaskTypeToBuilderIntent(thinking.downstreamTask.taskType, thinking.promptClassification.lifecycleIntent);
+  const intent = mapTaskTypeToBuilderIntent(
+    thinking.downstreamTask.taskType,
+    thinking.promptClassification.lifecycleIntent,
+  );
   const clarification = thinking.downstreamTask.clarification;
   return {
     intent,
@@ -684,7 +772,9 @@ function builderIntentFromThinking(thinking: ThinkingResult): BuilderIntent {
       affectedDataModels: thinking.ecommerceInterpretation.affectedDataModels,
       businessImpact: thinking.ecommerceInterpretation.expectedBusinessImpact,
     },
-    shouldAskClarifyingQuestion: Boolean(clarification?.required) || thinking.riskAssessment.requiresUserConfirmation,
+    shouldAskClarifyingQuestion:
+      Boolean(clarification?.required) ||
+      thinking.riskAssessment.requiresUserConfirmation,
     clarificationQuestion: clarification?.question ?? null,
     riskLevel: thinking.riskAssessment.level,
   };
@@ -767,10 +857,6 @@ function getStorefrontExecutionMode(thinking: ThinkingResult) {
   return thinking.downstreamTask.storefront?.executionMode;
 }
 
-function isApplyModeStorefrontUpdate(intent: BuilderIntent) {
-  return intent.intent !== "init_project" && intent.intent !== "explain_project" && intent.riskLevel !== "high";
-}
-
 function createNonApplyPlan(
   thinking: ThinkingResult,
   mode: NonNullable<ReturnType<typeof getStorefrontExecutionMode>>,
@@ -780,10 +866,10 @@ function createNonApplyPlan(
     changeType: "explain_only",
     affectedFiles: [],
     operations: [],
-    acceptanceCriteria:
-      thinking.downstreamTask.storefront?.acceptanceCriteria.length
-        ? thinking.downstreamTask.storefront.acceptanceCriteria
-        : ["No project files are mutated for explicit non-apply requests."],
+    acceptanceCriteria: thinking.downstreamTask.storefront?.acceptanceCriteria
+      .length
+      ? thinking.downstreamTask.storefront.acceptanceCriteria
+      : ["No project files are mutated for explicit non-apply requests."],
     validationCommands: [],
     riskLevel: thinking.riskAssessment.level,
     requiresUserConfirmation: false,
@@ -794,17 +880,11 @@ function nonApplySummary(
   mode: NonNullable<ReturnType<typeof getStorefrontExecutionMode>>,
   thinking: ThinkingResult,
 ) {
-  if (mode === "plan") return `Mình sẽ chỉ lập kế hoạch, chưa sửa code: ${thinking.downstreamTask.normalizedGoal}`;
-  if (mode === "review") return `Mình sẽ chỉ review/đánh giá, không sửa code: ${thinking.downstreamTask.normalizedGoal}`;
-  return `Mình sẽ giải thích, không sửa code: ${thinking.downstreamTask.normalizedGoal}`;
-}
-
-function toChangedOperation(
-  operation: FileOperation,
-): "created" | "modified" | "deleted" {
-  if (operation.type === "create_file") return "created";
-  if (operation.type === "delete_file") return "deleted";
-  return "modified";
+  if (mode === "plan")
+    return `Planning only, not modifying code: ${thinking.downstreamTask.normalizedGoal}`;
+  if (mode === "review")
+    return `Review/evaluation only, not modifying code: ${thinking.downstreamTask.normalizedGoal}`;
+  return `Explanation only, not modifying code: ${thinking.downstreamTask.normalizedGoal}`;
 }
 
 function mergeManifest(
@@ -860,8 +940,21 @@ function inferSymbols(content: string) {
   ].map((match) => match[1]);
 }
 
-function skippedValidation(summary: string): ValidationResult {
-  return { ok: true, commands: [], summary, errors: [] };
+function createLoopPlan(result: AgenticLoopResult): ChangePlan {
+  return {
+    summary: result.summary,
+    changeType: "modify_files",
+    affectedFiles: result.changedFiles,
+    operations: result.changedFiles.map((path) => ({
+      type: "create_file" as const,
+      path,
+      reason: "Applied by agentic loop",
+    })),
+    acceptanceCriteria: ["Changes applied and validated"],
+    validationCommands: [],
+    riskLevel: "low",
+    requiresUserConfirmation: false,
+  };
 }
 
 function logAgentPhase(
@@ -894,34 +987,4 @@ function logAgentPhase(
     return;
   }
   console.info(JSON.stringify(payload));
-}
-
-async function* streamCodeToolLoopEvents(input: {
-  projectId: string;
-  messageId: string;
-  taskTitle: string;
-  changedFiles: string[];
-  validation: ValidationResult;
-}): AsyncGenerator<AgentStreamEvent> {
-  const events: AgentStreamEvent[] = [];
-  await runBoundedCodeToolLoop({
-    projectId: input.projectId,
-    messageId: input.messageId,
-    taskTitle: input.taskTitle,
-    changedFiles: input.changedFiles,
-    validate: async () => ({
-      status: input.validation.ok ? "passed" : "failed",
-      commands: input.validation.commands.map((command) => ({
-        command: command.command,
-        status: command.exitCode === 0 ? "passed" : "failed",
-        exitCode: command.exitCode,
-        stdoutSummary: command.stdout,
-        stderrSummary: command.stderr,
-        durationMs: command.durationMs,
-      })),
-      canRepair: false,
-    }),
-    sendEvent: (event) => { events.push(event as AgentStreamEvent); },
-  });
-  for (const event of events) yield event;
 }
