@@ -1,5 +1,4 @@
 import { Loader2, Play } from "lucide-react";
-import { useState, type ReactNode } from "react";
 
 type PreviewInitPanelProps = {
   projectId: string;
@@ -10,23 +9,23 @@ type PreviewInitPanelProps = {
 };
 
 export function PreviewInitPanel({
-  projectId,
+  projectId: _projectId,
   onStartPreview,
   isLoading = false,
   error = null,
   onRetry,
 }: PreviewInitPanelProps) {
-  const [isStarting, setIsStarting] = useState(false);
-
   const handleStartClick = () => {
-    if (isStarting || isLoading) return;
-    setIsStarting(true);
+    if (isLoading) return;
     onStartPreview();
   };
 
-  if (isLoading || isStarting) {
+  if (isLoading) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-md bg-[var(--app-panel)] p-md transition-colors duration-300">
+      <div
+        aria-busy="true"
+        className="flex h-full flex-col items-center justify-center gap-md bg-[var(--app-panel)] p-md transition-colors duration-300"
+      >
         <Loader2
           aria-hidden="true"
           className="animate-spin text-[var(--app-icon-muted)]"
@@ -69,6 +68,7 @@ export function PreviewInitPanel({
         <button
           type="button"
           onClick={handleStartClick}
+          disabled={isLoading}
           className="inline-flex items-center gap-xs rounded-pill bg-[var(--app-control)] px-lg py-xs text-[14px] font-[480] text-[var(--app-text)] transition-colors duration-300 hover:bg-[var(--app-surface)]"
         >
           <Play aria-hidden="true" size={16} />

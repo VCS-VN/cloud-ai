@@ -1,6 +1,11 @@
 import { ProjectWorkspaceService } from "@/agent/project-workspace-service";
 import type { ProcessManager } from "@/features/ai-agent/runtime/process-manager.server";
 import type { ProjectStateStore } from "@/features/ai-agent/project/project-state-store.server";
+import {
+  EMPTY_DEV_RUNTIME,
+  type DevRuntime,
+} from "@/features/ai-agent/project/project-state.schema";
+import type { RuntimeService } from "@/features/ai-agent/runtime/runtime-service.server";
 import type {
   Project,
   ProjectFileNode,
@@ -47,6 +52,10 @@ function createDefaultPwaConfig(projectName: string, description?: string) {
   };
 }
 
+export type StartPreviewResult =
+  | { success: true; previewUrl: string; port: number; alreadyRunning?: boolean }
+  | { success: false; error: string; errorTier: "code" | "config" | "system" };
+
 export class ProjectService {
   private readonly workspaceService: ProjectWorkspaceService;
 
@@ -57,6 +66,7 @@ export class ProjectService {
     workspaceService?: ProjectWorkspaceService,
     private readonly processManager?: ProcessManager,
     private readonly projectStateStore?: ProjectStateStore,
+    private readonly runtimeService?: RuntimeService,
   ) {
     this.workspaceService = workspaceService ?? new ProjectWorkspaceService(fileNodeRepository);
   }
@@ -161,6 +171,103 @@ export class ProjectService {
       messages: messages.messages,
       fileTree: buildTree(fileTree),
       devRuntime: devRuntime ?? undefined,
+    };
+  }
+
+  async getDevRuntimeState(
+    projectId: string,
+    userId?: string,
+  ): Promise<DevRuntime> {
+    const project = await this.projectRepository.getProject(projectId, userId);
+    if (!project) throw new Error("Project not found.");
+
+    const runtime =
+      (await this.projectStateStore?.readDevRuntime(projectId, userId)) ??
+      EMPTY_DEV_RUNTIME;
+
+    if (
+      (runtime.status === "running" || runtime.status === "starting") &&
+      !this.processManager?.isRunning(projectId)
+    ) {
+      return {
+        ...runtime,
+        status: "stopped",
+        pid: null,
+        previewUrl: null,
+      };
+    }
+
+    return runtime;
+  }
+
+  async startPreview(
+    projectId: string,
+    userId?: string,
+  ): Promise<StartPreviewResult> {
+    const project = await this.projectRepository.getProject(projectId, userId);
+    if (!project) throw new Error("Project not found.");
+    if (!this.processManager || !this.projectStateStore || !this.runtimeService) {
+      return {
+        success: false,
+        error: "Preview runtime is not configured.",
+        errorTier: "system",
+      };
+    }
+
+    const currentRuntime = await this.projectStateStore.readDevRuntime(
+      projectId,
+      userId,
+    );
+    if (
+      this.processManager.isRunning(projectId) &&
+      currentRuntime.previewUrl &&
+      currentRuntime.port
+    ) {
+      return {
+        success: true,
+        alreadyRunning: true,
+        previewUrl: currentRuntime.previewUrl,
+        port: currentRuntime.port,
+      };
+    }
+
+    const workspaceRoot = await this.workspaceService.ensureWorkspace(projectId);
+    const runId = crypto.randomUUID();
+
+    for await (const event of this.runtimeService.runPostInitDev({
+      projectId,
+      workspaceRoot,
+      runId,
+    })) {
+      if (event.type === "dev_ready") {
+        return {
+          success: true,
+          previewUrl: event.previewUrl,
+          port: event.port,
+        };
+      }
+      if (event.type === "dev_error") {
+        return {
+          success: false,
+          error: event.error,
+          errorTier: event.tier,
+        };
+      }
+    }
+
+    const runtime = await this.projectStateStore.readDevRuntime(projectId, userId);
+    if (runtime.status === "running" && runtime.previewUrl && runtime.port) {
+      return {
+        success: true,
+        previewUrl: runtime.previewUrl,
+        port: runtime.port,
+      };
+    }
+
+    return {
+      success: false,
+      error: runtime.lastError ?? "Preview did not become ready.",
+      errorTier: runtime.lastErrorTier ?? "system",
     };
   }
 

@@ -105,7 +105,7 @@ export class ProcessManager {
     workspaceRoot: string,
     signal?: AbortSignal,
   ): Promise<DevProcessHandle> {
-    this.stop(projectId);
+    await this.stop(projectId);
 
     const child = spawn("pnpm", ["dev"], {
       cwd: workspaceRoot,

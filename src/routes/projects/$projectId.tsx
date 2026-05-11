@@ -61,6 +61,10 @@ import {
   deleteProject,
   getProjectWorkspace,
 } from "@/server/functions/projects";
+import {
+  getDevRuntimeState,
+  startPreview,
+} from "@/server/functions/preview";
 import type { AgentStreamEvent } from "@/features/ai-agent/agent/agent-events";
 import type {
   ComposerReasoningEffort,
@@ -71,6 +75,7 @@ import type {
   MessageTerminalEvent,
   Project,
   ProjectFileNode,
+  ProjectWorkspace,
 } from "@/shared/project-types";
 
 type DetailMode = "preview" | "code";
@@ -214,6 +219,8 @@ function ProjectDetailPage() {
   const retryMessage = useServerFn(retryProjectMessage);
   const stopGeneration = useServerFn(stopProjectGeneration);
   const removeProject = useServerFn(deleteProject);
+  const getRuntimeState = useServerFn(getDevRuntimeState);
+  const startProjectPreview = useServerFn(startPreview);
   const { workspace } = Route.useLoaderData();
   const router = useRouter();
   const { user } = Route.useRouteContext();
@@ -226,6 +233,9 @@ function ProjectDetailPage() {
   const [planModeEnabled, setPlanModeEnabled] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | undefined>();
+  const [previewStarting, setPreviewStarting] = useState(false);
+  const [previewStartError, setPreviewStartError] = useState<string | null>(null);
+  const [manualRuntime, setManualRuntime] = useState<RuntimeUIState | null>(null);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
   const [detailMode, setDetailMode] = useState<DetailMode>("preview");
@@ -300,28 +310,13 @@ function ProjectDetailPage() {
 
   const runtimeState = useMemo<RuntimeUIState>(() => {
     const base = createInitialAgentEventState();
-    if (workspace?.devRuntime) {
-      const dr = workspace.devRuntime;
-      base.runtime = {
-        status: mapDevRuntimeStatus(dr.status),
-        previewUrl: dr.previewUrl,
-        previewPort: dr.port,
-        error: dr.lastError,
-        errorTier: dr.lastErrorTier,
-        fixAttempt: dr.retryCount > 0 ? dr.retryCount : null,
-        fixChangedFiles: dr.fixAttempts?.flatMap((a) => a.changedFiles) ?? [],
-        durationMs:
-          dr.installCompletedAt && dr.installStartedAt
-            ? new Date(dr.installCompletedAt).getTime() -
-              new Date(dr.installStartedAt).getTime()
-            : null,
-      };
-    }
+    if (workspace?.devRuntime) base.runtime = toRuntimeUIState(workspace.devRuntime);
+    if (manualRuntime) base.runtime = manualRuntime;
     return agentEvents.reduce(
       (state, event) => agentEventReducer(state, event),
       base,
     ).runtime;
-  }, [agentEvents, workspace?.devRuntime]);
+  }, [agentEvents, manualRuntime, workspace?.devRuntime]);
 
   const { isActive } = useUserPresence({
     projectId: project?.id ?? "",
@@ -561,6 +556,9 @@ function ProjectDetailPage() {
     closeActiveStream();
     setProject(workspace?.project);
     setSendError(undefined);
+    setPreviewStarting(false);
+    setPreviewStartError(null);
+    setManualRuntime(null);
     setAgentEvents([]);
     setAgentReasoning("");
     setSelectedNodeId(firstFileNode(workspace?.fileTree ?? [])?.id);
@@ -575,6 +573,21 @@ function ProjectDetailPage() {
       ),
     );
   }, [closeActiveStream, workspace?.project.id, workspace?.fileTree]);
+
+  useEffect(() => {
+    if (!project?.id) return;
+    let cancelled = false;
+    void getRuntimeState({ data: { projectId: project.id } })
+      .then((runtime) => {
+        if (!cancelled) setManualRuntime(toRuntimeUIState(runtime));
+      })
+      .catch(() => {
+        if (!cancelled) setManualRuntime(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getRuntimeState, project?.id]);
 
   useEffect(() => () => closeActiveStream(), [closeActiveStream]);
 
@@ -842,6 +855,55 @@ function ProjectDetailPage() {
     }
   }
 
+  const handleStartPreview = useCallback(async () => {
+    if (!project?.id || previewStarting) return;
+    setPreviewStarting(true);
+    setPreviewStartError(null);
+    setManualRuntime((current) => ({
+      ...(current ?? createInitialAgentEventState().runtime),
+      status: "starting",
+      error: null,
+      errorTier: null,
+    }));
+
+    try {
+      const result = await startProjectPreview({ data: { projectId: project.id } });
+      if (!result.success) {
+        setPreviewStartError(result.error);
+        setManualRuntime((current) => ({
+          ...(current ?? createInitialAgentEventState().runtime),
+          status: "error",
+          error: result.error,
+          errorTier: result.errorTier,
+          previewUrl: null,
+          previewPort: null,
+        }));
+        return;
+      }
+      setManualRuntime((current) => ({
+        ...(current ?? createInitialAgentEventState().runtime),
+        status: "running",
+        previewUrl: result.previewUrl,
+        previewPort: result.port,
+        error: null,
+        errorTier: null,
+      }));
+      await router.invalidate();
+    } catch (cause) {
+      const message =
+        cause instanceof Error ? cause.message : "Unable to start preview.";
+      setPreviewStartError(message);
+      setManualRuntime((current) => ({
+        ...(current ?? createInitialAgentEventState().runtime),
+        status: "error",
+        error: message,
+        errorTier: "system",
+      }));
+    } finally {
+      setPreviewStarting(false);
+    }
+  }, [project?.id, previewStarting, router, startProjectPreview]);
+
   return (
     <main className="h-25 min-h-0 overflow-hidden bg-(--app-bg) text-(--app-text)">
       {workspace && project ? (
@@ -937,6 +999,9 @@ function ProjectDetailPage() {
                     previewPath={previewPath}
                     runtimeState={runtimeState}
                     projectId={project?.id ?? ""}
+                    previewStarting={previewStarting}
+                    previewStartError={previewStartError}
+                    onStartPreview={handleStartPreview}
                   />
                 ) : (
                   <CodeView
@@ -1218,19 +1283,26 @@ function PreviewToolbar({
 
 function PreviewWorkspace({
   selectedNode,
-  previewPath,
+  previewPath: _previewPath,
   runtimeState,
   projectId,
+  previewStarting,
+  previewStartError,
+  onStartPreview,
 }: {
   selectedNode?: ProjectFileNode;
   previewPath: string;
   runtimeState: RuntimeUIState;
   projectId: string;
+  previewStarting: boolean;
+  previewStartError: string | null;
+  onStartPreview: () => void;
 }) {
   const showIframe =
     runtimeState.status === "running" && runtimeState.previewUrl;
   const showInitPanel =
-    runtimeState.status === "idle" && !runtimeState.previewUrl;
+    !runtimeState.previewUrl &&
+    ["idle", "error"].includes(runtimeState.status);
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--app-panel)] transition-colors duration-300">
@@ -1243,7 +1315,13 @@ function PreviewWorkspace({
             sandbox="allow-scripts allow-same-origin allow-forms"
           />
         ) : showInitPanel ? (
-          <PreviewInitPanel projectId={projectId} onStartPreview={() => {}} />
+          <PreviewInitPanel
+            projectId={projectId}
+            onStartPreview={onStartPreview}
+            isLoading={previewStarting}
+            error={previewStartError ?? runtimeState.error}
+            onRetry={onStartPreview}
+          />
         ) : (
           <div className="min-h-0 min-w-0 flex-1 overflow-auto p-sm">
             <FilePreviewPanel node={selectedNode} />
@@ -1252,6 +1330,24 @@ function PreviewWorkspace({
       </div>
     </section>
   );
+}
+
+function toRuntimeUIState(runtime: NonNullable<ProjectWorkspace["devRuntime"]>): RuntimeUIState {
+  return {
+    status: mapDevRuntimeStatus(runtime.status),
+    previewUrl: runtime.previewUrl,
+    previewPort: runtime.port,
+    error: runtime.lastError,
+    errorTier: runtime.lastErrorTier,
+    fixAttempt: runtime.retryCount > 0 ? runtime.retryCount : null,
+    fixChangedFiles:
+      runtime.fixAttempts?.flatMap((attempt) => attempt.changedFiles) ?? [],
+    durationMs:
+      runtime.installCompletedAt && runtime.installStartedAt
+        ? new Date(runtime.installCompletedAt).getTime() -
+          new Date(runtime.installStartedAt).getTime()
+        : null,
+  };
 }
 
 function CodeView({

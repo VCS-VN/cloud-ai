@@ -24,6 +24,8 @@ import { PgAgentRunRepository } from "@/server/repositories/agent-run-repository
 import { PgProjectSnapshotRepository } from "@/server/repositories/project-snapshot-repository";
 import { PgProjectStateRepository } from "@/server/repositories/project-state-repository";
 
+const processManager = new ProcessManager();
+
 export async function getProjectServices() {
   const db = getDb();
   const projectRepo = new PgProjectRepository(db);
@@ -41,14 +43,13 @@ export async function getProjectServices() {
   const agentConfig = loadAgentConfig();
   const openAIClient = createOpenAIClient();
   const openAIProvider = new OpenAIProvider(openAIClient);
-  const processManager = new ProcessManager();
   presenceService.setProcessManager(processManager);
   const errorFixer = new ErrorFixer({ openAIProvider, coderModel: agentConfig.coderModel });
   const runtimeService = new RuntimeService({ processManager, projectStateStore, errorFixer });
   const agentOrchestrator = new AgentOrchestrator({ projectStateStore, runStore, projectFileStore, snapshotService, openAIProvider, agentConfig, runtimeService });
 
   return {
-    projectService: new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore),
+    projectService: new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore, runtimeService),
     projectRunService: new ProjectRunService(projectRepo, runStore),
 
     messageService: new MessageService(
