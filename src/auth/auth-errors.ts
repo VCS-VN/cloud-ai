@@ -11,6 +11,9 @@ const safeMessages: Record<LoginErrorCode, string> = {
   'network-error': 'A connection issue occurred. Please check your network and try again.',
   'popup-cancelled': 'You cancelled Google sign-in.',
   'popup-blocked': 'Your browser blocked the sign-in window. Please allow popups and try again.',
+  'unauthorized-domain': 'This domain is not authorized for Google sign-in. Add it in Firebase Authentication settings.',
+  'operation-not-allowed': 'Google sign-in is not enabled for this Firebase project.',
+  'invalid-client-config': 'Firebase sign-in configuration is invalid for this environment.',
   unknown: 'Something went wrong. Please try again.'
 }
 
@@ -32,6 +35,9 @@ export function toSafeAuthError(error: unknown, fallback: LoginErrorCode = 'unkn
 
 export function mapFirebaseClientError(error: unknown): LoginErrorCode {
   const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: unknown }).code) : ''
+  if (code.includes('unauthorized-domain')) return 'unauthorized-domain'
+  if (code.includes('operation-not-allowed')) return 'operation-not-allowed'
+  if (code.includes('invalid-api-key') || code.includes('invalid-app-credential') || code.includes('app-not-authorized')) return 'invalid-client-config'
   if (code.includes('popup-closed') || code.includes('cancelled')) return 'popup-cancelled'
   if (code.includes('popup-blocked')) return 'popup-blocked'
   if (code.includes('network')) return 'network-error'

@@ -43,6 +43,10 @@ export async function signInWithGoogleAndGetIdToken() {
     const idToken = await result.user.getIdToken();
     return { idToken };
   } catch (error) {
+    console.error('[auth] Firebase Google sign-in failed', {
+      code: typeof error === 'object' && error && 'code' in error ? (error as { code?: unknown }).code : undefined,
+      message: typeof error === 'object' && error && 'message' in error ? (error as { message?: unknown }).message : undefined,
+    });
     throw new AuthError(mapFirebaseClientError(error));
   }
 }

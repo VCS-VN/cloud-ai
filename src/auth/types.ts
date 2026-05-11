@@ -46,6 +46,9 @@ export type LoginErrorCode =
   | 'network-error'
   | 'popup-cancelled'
   | 'popup-blocked'
+  | 'unauthorized-domain'
+  | 'operation-not-allowed'
+  | 'invalid-client-config'
   | 'unknown'
 
 export type LoginError = {

@@ -8,12 +8,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "build": "tsr generate && vite build && tsc --noEmit",
-    "start": "node .output/server/index.mjs",
+    "start": "node scripts/start-production.mjs",
     "dev": "tsr generate && vite dev",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:rollback": "tsx src/db/migrate-down.ts",
-    "start:prod": "node dist/server/server.js"
+    "start:prod": "node scripts/start-production.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.9",

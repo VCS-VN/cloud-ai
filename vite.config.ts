@@ -3,7 +3,6 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { defineConfig } from "vitest/config";
-import { nitro } from "nitro/vite";
 
 export default defineConfig({
   build: {
@@ -15,7 +14,6 @@ export default defineConfig({
   plugins: [
     tanstackStart(),
     react(),
-    nitro(),
     VitePWA({
       registerType: "autoUpdate",
       outDir: "dist/client",
