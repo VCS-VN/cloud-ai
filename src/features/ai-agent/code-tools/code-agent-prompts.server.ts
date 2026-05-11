@@ -24,6 +24,7 @@ Core rules:
 - Before generating or modifying UI code (routes, components, pages, styles), call project_read_design_rules.
 - DESIGN.md is the source of truth for storefront UI quality, layout rhythm, colors, typography, spacing, components, and responsive behavior.
 - When updating UI, extract relevant rules from DESIGN.md, inspect existing code, apply a minimal patch aligned with DESIGN.md, and validate after changes.
+- After shadcn-style component setup, handle HTTP client setup as a separate step: use tools to create or update src/services/http/client.ts for the shared axios instance and interceptor behavior, create or update .env.example with VITE_API_BASE_URL, and ensure package metadata uses axios ^1.16.0 when the task explicitly requires HTTP setup.
 - Do not create bare demo layouts. Product sections must include commerce-ready affordances.`;
 
 export type CodeAgentTaskSummary = {

@@ -122,6 +122,10 @@ export function renderInfrastructureFiles(
       content: `${JSON.stringify(packageJson, null, 2)}\n`,
     },
     {
+      path: ".env.example",
+      content: renderEnvExampleSource(),
+    },
+    {
       path: "components.json",
       content: `${JSON.stringify({ $schema: "https://ui.shadcn.com/schema.json", style: "default", rsc: false, tsx: true, tailwind: { config: "tailwind.config.ts", css: "src/styles/app.css", baseColor: "neutral", cssVariables: true }, aliases: { components: "@/components", utils: "@/lib/utils" } }, null, 2)}\n`,
     },
@@ -179,7 +183,235 @@ export function renderInfrastructureFiles(
       content: `import { type ClassValue, clsx } from "clsx"\nimport { twMerge } from "tailwind-merge"\n\nexport function cn(...inputs: ClassValue[]) {\n  return twMerge(clsx(inputs))\n}\n`,
     },
     { path: "src/styles/app.css", content: appCssSource() },
+    { path: "src/services/http/client.ts", content: renderHttpClientSource() },
   ];
+}
+
+export function renderHttpClientSource(): string {
+  return `import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios'
+
+type ApiErrorPayload = {
+  message?: unknown
+  error?: unknown
+  errors?: unknown
+  code?: unknown
+}
+
+export type AuthTokens = {
+  accessToken: string
+  refreshToken: string
+}
+
+const ACCESS_TOKEN_KEY = 'accessToken'
+const REFRESH_TOKEN_KEY = 'refreshToken'
+
+function getErrorMessage(payload: ApiErrorPayload | undefined, fallback: string) {
+  if (!payload) return fallback
+
+  if (typeof payload.message === 'string' && payload.message.trim()) {
+    return payload.message.trim()
+  }
+
+  if (typeof payload.error === 'string' && payload.error.trim()) {
+    return payload.error.trim()
+  }
+
+  if (Array.isArray(payload.errors) && typeof payload.errors[0] === 'string') {
+    return payload.errors[0]
+  }
+
+  return fallback
+}
+
+function getStorage() {
+  return typeof window === 'undefined' ? undefined : window.localStorage
+}
+
+export function getAccessToken() {
+  return getStorage()?.getItem(ACCESS_TOKEN_KEY) ?? null
+}
+
+export function getRefreshToken() {
+  return getStorage()?.getItem(REFRESH_TOKEN_KEY) ?? null
+}
+
+export function setAuthTokens(tokens: AuthTokens) {
+  const storage = getStorage()
+  storage?.setItem(ACCESS_TOKEN_KEY, tokens.accessToken)
+  storage?.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken)
+}
+
+export function clearAuthTokens() {
+  const storage = getStorage()
+  storage?.removeItem(ACCESS_TOKEN_KEY)
+  storage?.removeItem(REFRESH_TOKEN_KEY)
+}
+
+function getApiBaseUrl() {
+  return import.meta.env.VITE_API_BASE_URL || undefined
+}
+
+export class ApiError extends Error {
+  status?: number
+  code?: string
+  details?: unknown
+
+  constructor(message: string, options?: { status?: number; code?: string; details?: unknown }) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = options?.status
+    this.code = options?.code
+    this.details = options?.details
+  }
+}
+
+function withDefaultHeaders(config: InternalAxiosRequestConfig) {
+  config.timeout = config.timeout ?? 10000
+  config.headers.set('Accept', 'application/json')
+
+  if (config.data !== undefined && !config.headers.has('Content-Type')) {
+    config.headers.set('Content-Type', 'application/json')
+  }
+
+  if (!config.headers.has('Authorization')) {
+    const accessToken = getAccessToken()
+    if (accessToken) {
+      config.headers.set('Authorization', \`Bearer \${accessToken}\`)
+    }
+  }
+
+  return config
+}
+
+export function toApiError(error: unknown) {
+  if (error instanceof ApiError) return error
+
+  if (axios.isAxiosError(error)) {
+    const responseData =
+      typeof error.response?.data === 'object' && error.response.data
+        ? (error.response.data as ApiErrorPayload)
+        : undefined
+
+    return new ApiError(
+      getErrorMessage(responseData, error.message || 'Something went wrong while calling the API.'),
+      {
+        status: error.response?.status,
+        code: typeof responseData?.code === 'string' ? responseData.code : error.code,
+        details: error.response?.data,
+      },
+    )
+  }
+
+  if (error instanceof Error) return new ApiError(error.message)
+
+  return new ApiError('Something went wrong while calling the API.')
+}
+
+type RetriableRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean
+  _skipAuthRefresh?: boolean
+}
+
+export const apiClient = axios.create()
+
+apiClient.interceptors.request.use((config) => {
+  config.baseURL = getApiBaseUrl()
+  return config
+})
+
+apiClient.interceptors.request.use(withDefaultHeaders)
+
+type RefreshTokenResponse = AuthTokens
+
+let refreshPromise: Promise<AuthTokens> | null = null
+
+function isRefreshRequest(config: InternalAxiosRequestConfig | undefined) {
+  const url = config?.url ?? ''
+  return typeof url === 'string' && url.includes('/api/v1/auth/refresh-token')
+}
+
+async function refreshAuthTokens(): Promise<AuthTokens> {
+  const refreshToken = getRefreshToken()
+
+  if (!refreshToken) {
+    clearAuthTokens()
+    throw new ApiError('Your session has expired. Please log in again.', { status: 401 })
+  }
+
+  const response = await apiClient.get<RefreshTokenResponse>('/api/v1/auth/refresh-token', {
+    headers: { Authorization: \`Bearer \${refreshToken}\` },
+    _skipAuthRefresh: true,
+  } as RetriableRequestConfig)
+
+  if (response.data?.accessToken && response.data?.refreshToken) {
+    setAuthTokens({ accessToken: response.data.accessToken, refreshToken: response.data.refreshToken })
+  }
+
+  return response.data
+}
+
+async function refreshAuthTokensOnce() {
+  if (!refreshPromise) {
+    refreshPromise = refreshAuthTokens()
+  }
+
+  try {
+    return await refreshPromise
+  } finally {
+    refreshPromise = null
+  }
+}
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    if (!axios.isAxiosError(error)) {
+      return Promise.reject(toApiError(error))
+    }
+
+    const config = error.config as RetriableRequestConfig | undefined
+    const status = error.response?.status
+
+    if (!config || status !== 401) {
+      return Promise.reject(toApiError(error))
+    }
+
+    if (config._skipAuthRefresh) {
+      if (isRefreshRequest(config)) clearAuthTokens()
+      return Promise.reject(toApiError(error))
+    }
+
+    if (config._retry || isRefreshRequest(config)) {
+      if (isRefreshRequest(config)) clearAuthTokens()
+      return Promise.reject(toApiError(error))
+    }
+
+    const refreshToken = getRefreshToken()
+
+    if (!refreshToken) {
+      clearAuthTokens()
+      return Promise.reject(toApiError(error))
+    }
+
+    try {
+      config._retry = true
+      const tokens = await refreshAuthTokensOnce()
+      config.headers.set('Authorization', \`Bearer \${tokens.accessToken}\`)
+      return await apiClient.request(config)
+    } catch (refreshError) {
+      const apiError = toApiError(refreshError)
+      if (apiError.status === 401) clearAuthTokens()
+      return Promise.reject(apiError)
+    }
+  },
+)
+`;
+}
+
+export function renderEnvExampleSource(): string {
+  return `# Backend API endpoint used by src/services/http/client.ts
+VITE_API_BASE_URL=http://localhost:3000
+`;
 }
 
 export function renderStorefrontBaselineFiles(
