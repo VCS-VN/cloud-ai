@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowRight } from "lucide-react";
 import { LoginModal } from "@/components/auth/LoginModal";
 import { HomePromptForm } from "@/components/home/HomePromptForm";
 import { createProjectFromPrompt } from "@/server/functions/projects";
@@ -84,7 +83,7 @@ function HomePage() {
           </div>
         </nav>
 
-        <section className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col justify-center pb-xl pt-section text-center">
+        <section className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col justify-center pb-xl pt-xl text-center sm:pt-xxl">
           {/* <a
             className="mb-xl inline-flex self-center items-center gap-sm rounded-pill bg-[var(--color-primary)] p-xxs pr-md text-button font-[480] text-[var(--color-on-primary)] transition-opacity duration-200 hover:opacity-86"
             href="/"
@@ -123,6 +122,67 @@ function HomePage() {
               Created “{createdProjectName}”.
             </p>
           ) : null}
+
+          <div className="mt-xl grid gap-sm text-left md:grid-cols-[1.05fr_0.95fr]">
+            <article className="rounded-lg bg-[var(--color-block-lime)] p-lg text-[var(--color-ink)] transition-transform duration-300 ease-out hover:-translate-y-1 sm:p-xl">
+              <p className="m-0 font-mono text-caption uppercase tracking-[0.6px] opacity-70">
+                FAST START
+              </p>
+              <h2 className="m-0 mt-lg max-w-xl text-headline font-[540] leading-[1.35] tracking-[-0.26px]">
+                Turn a rough prompt into a structured website workspace.
+              </h2>
+              <div className="mt-xl grid gap-sm sm:grid-cols-3">
+                {[
+                  ["01", "Describe the page"],
+                  ["02", "Review generated sections"],
+                  ["03", "Iterate by chatting"],
+                ].map(([step, label]) => (
+                  <div
+                    key={step}
+                    className="rounded-md border border-[rgb(0_0_0_/_0.12)] bg-[var(--color-canvas)] p-md transition-transform duration-200 ease-out hover:-translate-y-0.5"
+                  >
+                    <span className="font-mono text-caption uppercase tracking-[0.6px] opacity-60">
+                      {step}
+                    </span>
+                    <p className="m-0 mt-md text-body-sm font-[330] leading-[1.45] tracking-[-0.14px]">
+                      {label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <aside className="grid gap-sm sm:grid-cols-2 md:grid-cols-1">
+              <div className="rounded-lg bg-[var(--color-block-cream)] p-lg text-[var(--color-ink)] transition-transform duration-300 ease-out hover:-translate-y-1">
+                <p className="m-0 font-mono text-caption uppercase tracking-[0.6px] opacity-70">
+                  PROMPT IDEAS
+                </p>
+                <div className="mt-lg flex flex-wrap gap-xs">
+                  {["Landing page", "SaaS dashboard", "Shopfront", "Portfolio"].map(
+                    (label) => (
+                      <button
+                        key={label}
+                        className="rounded-pill border border-[rgb(0_0_0_/_0.12)] bg-[var(--color-canvas)] px-sm py-xs text-body-sm font-[480] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[var(--color-primary)]"
+                        type="button"
+                        onClick={() => setPrompt(label)}
+                      >
+                        {label}
+                      </button>
+                    ),
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-[var(--color-block-navy)] p-lg text-[var(--color-inverse-ink)] transition-transform duration-300 ease-out hover:-translate-y-1">
+                <p className="m-0 font-mono text-caption uppercase tracking-[0.6px] opacity-70">
+                  WORKFLOW
+                </p>
+                <p className="m-0 mt-lg text-body font-[320] leading-[1.45] tracking-[-0.26px] opacity-90">
+                  Generate, preview, and refine pages in one focused builder flow.
+                </p>
+              </div>
+            </aside>
+          </div>
         </section>
       </div>
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />

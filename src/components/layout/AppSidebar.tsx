@@ -74,7 +74,7 @@ export function AppSidebar({
     >
       <div className="mb-md flex items-center justify-between gap-sm">
         <button
-          className="flex min-w-0 items-center gap-xs border-0 bg-transparent p-0 text-left text-[12px] font-[520] text-[var(--app-sidebar-text)]"
+          className="flex min-w-0 items-center gap-xs border-0 bg-transparent p-0 text-left text-[12px] font-[520] text-[var(--app-sidebar-text)] transition-opacity duration-200 hover:opacity-75"
           type="button"
           onClick={goDashboard}
           aria-label="Dashboard"
@@ -88,7 +88,7 @@ export function AppSidebar({
           ) : null}
         </button>
         <button
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--app-sidebar-border)] bg-[var(--app-sidebar-control)] text-[var(--app-icon-muted)] transition-all duration-200 hover:bg-[var(--app-sidebar-control-hover)] hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--app-sidebar-border)] bg-[var(--app-sidebar-control)] text-[var(--app-icon-muted)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-[var(--app-sidebar-control-hover)] hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
           type="button"
           onClick={toggleSidebar}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -205,7 +205,7 @@ function SidebarButton({
 }) {
   return (
     <button
-      className={`flex h-9 w-full min-w-0 items-center gap-sm rounded-sm border-0 px-sm text-left text-[12px] transition ${selected ? "bg-[var(--app-selected-bg)] text-[var(--app-selected-text)]" : "bg-transparent text-[var(--app-sidebar-muted)] hover:bg-[var(--app-sidebar-control-hover)] hover:text-[var(--app-icon)]"} ${collapsed ? "justify-center px-0" : ""}`}
+      className={`flex h-9 w-full min-w-0 items-center gap-sm rounded-sm border border-transparent px-sm text-left text-[12px] transition-all duration-200 ease-out ${selected ? "bg-[var(--app-selected-bg)] text-[var(--app-selected-text)]" : "bg-transparent text-[var(--app-sidebar-muted)] hover:-translate-y-0.5 hover:border-[var(--app-sidebar-border)] hover:bg-[var(--app-sidebar-control-hover)] hover:text-[var(--app-icon)]"} ${collapsed ? "justify-center px-0" : ""}`}
       type="button"
       title={collapsed ? label : undefined}
       aria-label={label}
