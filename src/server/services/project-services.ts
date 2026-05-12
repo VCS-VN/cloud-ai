@@ -46,6 +46,7 @@ export async function getProjectServices() {
   presenceService.setProcessManager(processManager);
   const errorFixer = new ErrorFixer({ openAIProvider, coderModel: agentConfig.coderModel });
   const runtimeService = new RuntimeService({ processManager, projectStateStore, errorFixer });
+  presenceService.setRuntimeStore(projectStateStore);
   const agentOrchestrator = new AgentOrchestrator({ projectStateStore, runStore, projectFileStore, snapshotService, openAIProvider, agentConfig, runtimeService });
 
   return {

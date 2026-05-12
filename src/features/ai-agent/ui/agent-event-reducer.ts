@@ -1,7 +1,7 @@
 import type { AgentStreamEvent, ValidationResult } from "../agent/agent-events";
 
 export type RuntimeUIState = {
-  status: "idle" | "installing" | "installed" | "starting" | "running" | "error" | "fixing";
+  status: "idle" | "installing" | "installed" | "starting" | "running" | "stopped" | "error" | "fixing";
   previewUrl: string | null;
   previewPort: number | null;
   error: string | null;

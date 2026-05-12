@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 
 type UseUserPresenceOptions = {
   projectId: string;
-  userId: string;
   enabled?: boolean;
 };
 
@@ -13,49 +12,60 @@ type UseUserPresenceReturn = {
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
+function createPresenceId() {
+  return crypto.randomUUID();
+}
+
 export function useUserPresence({
   projectId,
-  userId,
   enabled = true,
 }: UseUserPresenceOptions): UseUserPresenceReturn {
   const [isActive, setIsActive] = useState(true);
   const [lastHeartbeat, setLastHeartbeat] = useState<number | null>(null);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isVisibleRef = useRef(true);
+  const presenceIdRef = useRef<string>(createPresenceId());
+  const isActiveRef = useRef(true);
 
   useEffect(() => {
-    if (!enabled || !projectId || !userId) return;
+    if (!enabled || !projectId) return;
 
-    const handleVisibilityChange = () => {
-      const visible = document.visibilityState === "visible";
-      isVisibleRef.current = visible;
-      setIsActive(visible);
-    };
+    const presenceId = presenceIdRef.current;
+    let cancelled = false;
 
-    const handleFocusChange = () => {
-      const focused = document.hasFocus();
-      if (focused) {
-        isVisibleRef.current = true;
-        setIsActive(true);
+    const postPresence = (path: "heartbeat" | "leave", reason?: string, keepalive = false) => {
+      const body = JSON.stringify({ presenceId, reason });
+      if (keepalive && navigator.sendBeacon) {
+        const blob = new Blob([body], { type: "application/json" });
+        navigator.sendBeacon(
+          `/api/projects/${encodeURIComponent(projectId)}/presence/${path}`,
+          blob,
+        );
+        return Promise.resolve(undefined);
       }
+      return fetch(`/api/projects/${encodeURIComponent(projectId)}/presence/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive,
+      });
     };
 
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("focus", handleFocusChange);
-    window.addEventListener("blur", handleFocusChange);
+    const sendLeave = (reason: "leave" | "blur" | "hidden" | "unload") => {
+      if (!isActiveRef.current && reason !== "unload" && reason !== "leave") return;
+      isActiveRef.current = false;
+      setIsActive(false);
+      void postPresence("leave", reason, reason === "unload").catch((error) => {
+        console.error("Presence leave failed:", error);
+      });
+    };
 
     const sendHeartbeat = async () => {
-      if (!isVisibleRef.current) return;
+      if (cancelled || document.visibilityState !== "visible" || !document.hasFocus()) return;
       try {
-        const response = await fetch(
-          `/api/projects/${encodeURIComponent(projectId)}/presence/heartbeat`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId }),
-          },
-        );
-        if (response.ok) {
+        const response = await postPresence("heartbeat");
+        if (response?.ok) {
+          isActiveRef.current = true;
+          setIsActive(true);
           setLastHeartbeat(Date.now());
         }
       } catch (error) {
@@ -63,20 +73,47 @@ export function useUserPresence({
       }
     };
 
-    sendHeartbeat();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void sendHeartbeat();
+      } else {
+        sendLeave("hidden");
+      }
+    };
 
+    const handleFocus = () => {
+      void sendHeartbeat();
+    };
+
+    const handleBlur = () => {
+      sendLeave("blur");
+    };
+
+    const handlePageHide = () => {
+      sendLeave("unload");
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("pagehide", handlePageHide);
+
+    void sendHeartbeat();
     heartbeatTimerRef.current = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
 
     return () => {
+      cancelled = true;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("focus", handleFocusChange);
-      window.removeEventListener("blur", handleFocusChange);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("pagehide", handlePageHide);
       if (heartbeatTimerRef.current) {
         clearInterval(heartbeatTimerRef.current);
         heartbeatTimerRef.current = null;
       }
+      sendLeave("leave");
     };
-  }, [projectId, userId, enabled]);
+  }, [projectId, enabled]);
 
   return { isActive, lastHeartbeat };
 }

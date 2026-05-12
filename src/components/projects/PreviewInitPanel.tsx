@@ -32,7 +32,7 @@ export function PreviewInitPanel({
           size={32}
         />
         <p className="text-[14px] leading-4 text-[var(--app-muted)]">
-          Initializing preview...
+          Starting preview in the review panel...
         </p>
       </div>
     );
@@ -42,6 +42,9 @@ export function PreviewInitPanel({
     return (
       <div className="flex h-full items-center justify-center bg-[var(--app-panel)] p-md transition-colors duration-300">
         <div className="max-w-sm rounded-md border border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] p-md">
+          <p className="mb-xs text-[12px] font-[580] leading-4 text-[var(--app-danger-text)]">
+            Preview failed
+          </p>
           <p className="text-[var(--app-danger-text)] text-[14px] leading-4">
             {error}
           </p>
@@ -63,7 +66,7 @@ export function PreviewInitPanel({
     <div className="flex h-full flex-col items-center justify-center gap-lg bg-[var(--app-panel)] p-md transition-colors duration-300">
       <div className="flex flex-col items-center gap-sm text-center">
         <p className="text-[14px] leading-4 text-[var(--app-muted)]">
-          Preview is not running
+          Preview is stopped
         </p>
         <button
           type="button"

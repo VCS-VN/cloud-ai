@@ -56,6 +56,11 @@ export type StartPreviewResult =
   | { success: true; previewUrl: string; port: number; alreadyRunning?: boolean }
   | { success: false; error: string; errorTier: "code" | "config" | "system" };
 
+type PreviewReconcileResult =
+  | { status: "ready"; previewUrl: string; port: number; alreadyRunning?: boolean }
+  | { status: "start"; requestedPort?: number | null }
+  | { status: "failed"; error: string; errorTier: "code" | "config" | "system" };
+
 export class ProjectService {
   private readonly workspaceService: ProjectWorkspaceService;
 
@@ -181,21 +186,7 @@ export class ProjectService {
     const project = await this.projectRepository.getProject(projectId, userId);
     if (!project) throw new Error("Project not found.");
 
-    const runtime =
-      (await this.projectStateStore?.readDevRuntime(projectId, userId)) ??
-      EMPTY_DEV_RUNTIME;
-
-    if (
-      (runtime.status === "running" || runtime.status === "starting") &&
-      !this.processManager?.isRunning(projectId)
-    ) {
-      return {
-        ...runtime,
-        status: "stopped",
-        pid: null,
-        previewUrl: null,
-      };
-    }
+    const runtime = await this.readReconciledDevRuntime(projectId, userId);
 
     return runtime;
   }
@@ -214,20 +205,21 @@ export class ProjectService {
       };
     }
 
-    const currentRuntime = await this.projectStateStore.readDevRuntime(
-      projectId,
-      userId,
-    );
-    if (
-      this.processManager.isRunning(projectId) &&
-      currentRuntime.previewUrl &&
-      currentRuntime.port
-    ) {
+    const currentRuntime = await this.projectStateStore.readDevRuntime(projectId, userId);
+    const reconciled = await this.reconcilePreviewRuntime(projectId, currentRuntime, userId);
+    if (reconciled.status === "ready") {
       return {
         success: true,
-        alreadyRunning: true,
-        previewUrl: currentRuntime.previewUrl,
-        port: currentRuntime.port,
+        alreadyRunning: reconciled.alreadyRunning,
+        previewUrl: reconciled.previewUrl,
+        port: reconciled.port,
+      };
+    }
+    if (reconciled.status === "failed") {
+      return {
+        success: false,
+        error: reconciled.error,
+        errorTier: reconciled.errorTier,
       };
     }
 
@@ -238,6 +230,7 @@ export class ProjectService {
       projectId,
       workspaceRoot,
       runId,
+      requestedPort: reconciled.requestedPort,
     })) {
       if (event.type === "dev_ready") {
         return {
@@ -269,6 +262,86 @@ export class ProjectService {
       error: runtime.lastError ?? "Preview did not become ready.",
       errorTier: runtime.lastErrorTier ?? "system",
     };
+  }
+
+  private async readReconciledDevRuntime(
+    projectId: string,
+    userId?: string,
+  ): Promise<DevRuntime> {
+    const runtime =
+      (await this.projectStateStore?.readDevRuntime(projectId, userId)) ??
+      EMPTY_DEV_RUNTIME;
+    if (!this.processManager || !this.projectStateStore) return runtime;
+
+    const result = await this.reconcilePreviewRuntime(projectId, runtime, userId, {
+      allowStart: false,
+    });
+    if (result.status === "failed") {
+      return this.projectStateStore.readDevRuntime(projectId, userId);
+    }
+    return runtime;
+  }
+
+  private async reconcilePreviewRuntime(
+    projectId: string,
+    runtime: DevRuntime,
+    userId?: string,
+    options: { allowStart?: boolean } = {},
+  ): Promise<PreviewReconcileResult> {
+    if (!this.processManager || !this.projectStateStore) {
+      return { status: "start" };
+    }
+
+    if (this.processManager.isRunning(projectId) && runtime.previewUrl && runtime.port) {
+      return {
+        status: "ready",
+        alreadyRunning: true,
+        previewUrl: runtime.previewUrl,
+        port: runtime.port,
+      };
+    }
+
+    if (runtime.status !== "running" || !runtime.port || !runtime.previewUrl) {
+      return { status: "start" };
+    }
+
+    const portStatus = await this.processManager.getPortStatus(runtime.port);
+    if (portStatus === "free") {
+      if (options.allowStart === false) return runtime.port ? { status: "start", requestedPort: runtime.port } : { status: "start" };
+      return { status: "start", requestedPort: runtime.port };
+    }
+
+    if (await this.isPreviewEndpointHealthy(runtime.previewUrl)) {
+      return {
+        status: "ready",
+        alreadyRunning: true,
+        previewUrl: runtime.previewUrl,
+        port: runtime.port,
+      };
+    }
+
+    await this.projectStateStore.saveDevRuntime(projectId, {
+      ...runtime,
+      status: "error",
+      pid: null,
+      lastError: "Recorded preview port is occupied by an unrelated or unhealthy process.",
+      lastErrorTier: "system",
+    }, userId);
+
+    return {
+      status: "failed",
+      error: "Recorded preview port is occupied by an unrelated or unhealthy process.",
+      errorTier: "system",
+    };
+  }
+
+  private async isPreviewEndpointHealthy(previewUrl: string): Promise<boolean> {
+    try {
+      const response = await fetch(previewUrl, { method: "HEAD" });
+      return response.ok || response.status < 500;
+    } catch {
+      return false;
+    }
   }
 
   async getWorkspace(

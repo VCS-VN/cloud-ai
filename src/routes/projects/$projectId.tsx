@@ -61,10 +61,7 @@ import {
   deleteProject,
   getProjectWorkspace,
 } from "@/server/functions/projects";
-import {
-  getDevRuntimeState,
-  startPreview,
-} from "@/server/functions/preview";
+import { getDevRuntimeState, startPreview } from "@/server/functions/preview";
 import type { AgentStreamEvent } from "@/features/ai-agent/agent/agent-events";
 import type {
   ComposerReasoningEffort,
@@ -98,6 +95,7 @@ function mapDevRuntimeStatus(s: string): RuntimeUIState["status"] {
   if (s === "installed") return "installed";
   if (s === "starting") return "starting";
   if (s === "running") return "running";
+  if (s === "stopped") return "stopped";
   if (s === "error") return "error";
   return "idle";
 }
@@ -234,8 +232,12 @@ function ProjectDetailPage() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | undefined>();
   const [previewStarting, setPreviewStarting] = useState(false);
-  const [previewStartError, setPreviewStartError] = useState<string | null>(null);
-  const [manualRuntime, setManualRuntime] = useState<RuntimeUIState | null>(null);
+  const [previewStartError, setPreviewStartError] = useState<string | null>(
+    null,
+  );
+  const [manualRuntime, setManualRuntime] = useState<RuntimeUIState | null>(
+    null,
+  );
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
   const [detailMode, setDetailMode] = useState<DetailMode>("preview");
@@ -310,7 +312,8 @@ function ProjectDetailPage() {
 
   const runtimeState = useMemo<RuntimeUIState>(() => {
     const base = createInitialAgentEventState();
-    if (workspace?.devRuntime) base.runtime = toRuntimeUIState(workspace.devRuntime);
+    if (workspace?.devRuntime)
+      base.runtime = toRuntimeUIState(workspace.devRuntime);
     if (manualRuntime) base.runtime = manualRuntime;
     return agentEvents.reduce(
       (state, event) => agentEventReducer(state, event),
@@ -320,15 +323,14 @@ function ProjectDetailPage() {
 
   const { isActive } = useUserPresence({
     projectId: project?.id ?? "",
-    userId: user.id,
     enabled: !!project?.id,
   });
 
   useEffect(() => {
-    if (!project?.id || !user?.id) return;
+    if (!project?.id) return;
     if (!isActive) {
     }
-  }, [isActive, project?.id, user?.id]);
+  }, [isActive, project?.id]);
 
   const loadedMessageCount = messages.length;
   const totalMessages = messagesQuery.data
@@ -867,7 +869,9 @@ function ProjectDetailPage() {
     }));
 
     try {
-      const result = await startProjectPreview({ data: { projectId: project.id } });
+      const result = await startProjectPreview({
+        data: { projectId: project.id },
+      });
       if (!result.success) {
         setPreviewStartError(result.error);
         setManualRuntime((current) => ({
@@ -918,7 +922,6 @@ function ProjectDetailPage() {
             <ChatHeader
               project={project}
               processing={project.processingStatus === "processing"}
-              runtimeState={runtimeState}
               onBack={() => void navigate({ to: "/projects" as never })}
               onDelete={handleDeletedProject}
               onToggleChat={toggleChat}
@@ -975,12 +978,7 @@ function ProjectDetailPage() {
             />
           </button>
 
-          <section
-            style={{
-              paddingTop: 8,
-            }}
-            className="flex min-h-0 min-w-0 flex-1 shrink-0 flex-col overflow-hidden bg-(--app-panel) transition-colors duration-300"
-          >
+          <section className="flex min-h-0 min-w-0 flex-1 shrink-0 flex-col overflow-hidden bg-(--app-panel) transition-colors duration-300">
             <PreviewToolbar
               chatVisible={chatVisible}
               mode={detailMode}
@@ -1033,13 +1031,12 @@ function ProjectDetailPage() {
 
 function runtimeStatusBadge(
   state: RuntimeUIState,
-): { label: string; bg: string; text: string; icon: React.ReactNode } | null {
+): { label: string; tone: string; icon: React.ReactNode } | null {
   switch (state.status) {
     case "installing":
       return {
         label: "Installing...",
-        bg: "bg-blue-100 dark:bg-blue-900/40",
-        text: "text-blue-700 dark:text-blue-300",
+        tone: "border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)]",
         icon: <Loader2 aria-hidden="true" className="animate-spin" size={12} />,
       };
     case "installed":
@@ -1048,36 +1045,37 @@ function runtimeStatusBadge(
           state.durationMs !== null
             ? `Installed (${(state.durationMs / 1000).toFixed(1)}s)`
             : "Installed",
-        bg: "bg-green-100 dark:bg-green-900/40",
-        text: "text-green-700 dark:text-green-300",
+        tone: "border-[var(--app-border)] bg-[var(--color-block-lime)] text-[var(--app-on-color-block)]",
         icon: <CheckCircle2 aria-hidden="true" size={12} />,
       };
     case "starting":
       return {
         label: "Starting...",
-        bg: "bg-amber-100 dark:bg-amber-900/40",
-        text: "text-amber-700 dark:text-amber-300",
+        tone: "border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)]",
         icon: <Loader2 aria-hidden="true" className="animate-spin" size={12} />,
       };
     case "running":
       return {
         label: "Running",
-        bg: "bg-green-100 dark:bg-green-900/40",
-        text: "text-green-700 dark:text-green-300",
+        tone: "border-[var(--app-border)] bg-[var(--color-block-lime)] text-[var(--app-on-color-block)]",
         icon: <CheckCircle2 aria-hidden="true" size={12} />,
+      };
+    case "stopped":
+      return {
+        label: "Stopped",
+        tone: "border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)]",
+        icon: <TriangleAlert aria-hidden="true" size={12} />,
       };
     case "error":
       return {
         label: state.error ? `Error: ${state.error}` : "Error",
-        bg: "bg-red-100 dark:bg-red-900/40",
-        text: "text-red-700 dark:text-red-300",
+        tone: "border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] text-[var(--app-danger-text)]",
         icon: <TriangleAlert aria-hidden="true" size={12} />,
       };
     case "fixing":
       return {
         label: `Fixing error (attempt ${state.fixAttempt ?? "?"}/3)...`,
-        bg: "bg-amber-100 dark:bg-amber-900/40",
-        text: "text-amber-700 dark:text-amber-300",
+        tone: "border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)]",
         icon: (
           <RefreshCw aria-hidden="true" className="animate-spin" size={12} />
         ),
@@ -1090,19 +1088,16 @@ function runtimeStatusBadge(
 function ChatHeader({
   project,
   processing = false,
-  runtimeState,
   onBack,
   onDelete,
   onToggleChat,
 }: {
   project: Project;
   processing?: boolean;
-  runtimeState: RuntimeUIState;
   onBack: () => void;
   onDelete: () => void;
   onToggleChat: () => void;
 }) {
-  const statusBadge = runtimeStatusBadge(runtimeState);
   return (
     <header className="shrink-0 border-b border-[var(--app-border)] p-sm">
       <div className="flex min-w-0 items-start gap-sm">
@@ -1131,14 +1126,6 @@ function ChatHeader({
                   size={12}
                 />
                 Generating
-              </span>
-            ) : null}
-            {statusBadge ? (
-              <span
-                className={`inline-flex items-center gap-xxs rounded-pill px-xs py-xxs ${statusBadge.bg} ${statusBadge.text}`}
-              >
-                {statusBadge.icon}
-                {statusBadge.label}
               </span>
             ) : null}
             <span className="rounded-pill bg-[var(--app-control)] px-xs py-xxs">
@@ -1210,7 +1197,7 @@ function PreviewToolbar({
         aria-label="Choose view mode"
       >
         <button
-          className={`inline-flex h-8 items-center gap-xs rounded-sm border-0 px-sm text-[12px] transition ${mode === "preview" ? "bg-[var(--color-block-lime)] text-[var(--app-on-color-block)] [&_svg]:text-[var(--app-icon-on-color-block)] ring-1 ring-[var(--color-primary)]" : "bg-transparent text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"}`}
+          className={`inline-flex h-6 items-center gap-xs rounded-sm border-0 px-sm text-[12px] transition ${mode === "preview" ? "bg-[var(--color-block-lime)] text-[var(--app-on-color-block)] [&_svg]:text-[var(--app-icon-on-color-block)] ring-1 ring-[var(--color-primary)]" : "bg-transparent text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"}`}
           type="button"
           aria-pressed={mode === "preview"}
           onClick={() => onModeChange("preview")}
@@ -1219,7 +1206,7 @@ function PreviewToolbar({
           Preview
         </button>
         <button
-          className={`inline-flex h-8 items-center gap-xs rounded-sm border-0 px-sm text-[12px] transition ${mode === "code" ? "bg-[var(--color-block-lime)] text-[var(--app-on-color-block)] [&_svg]:text-[var(--app-icon-on-color-block)] ring-1 ring-[var(--color-primary)]" : "bg-transparent text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"}`}
+          className={`inline-flex h-6 items-center gap-xs rounded-sm border-0 px-sm text-[12px] transition ${mode === "code" ? "bg-[var(--color-block-lime)] text-[var(--app-on-color-block)] [&_svg]:text-[var(--app-icon-on-color-block)] ring-1 ring-[var(--color-primary)]" : "bg-transparent text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"}`}
           type="button"
           aria-pressed={mode === "code"}
           onClick={() => onModeChange("code")}
@@ -1302,11 +1289,31 @@ function PreviewWorkspace({
     runtimeState.status === "running" && runtimeState.previewUrl;
   const showInitPanel =
     !runtimeState.previewUrl &&
-    ["idle", "error"].includes(runtimeState.status);
+    ["idle", "stopped", "error"].includes(runtimeState.status);
+  const statusBadge = runtimeStatusBadge(runtimeState);
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--app-panel)] transition-colors duration-300">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-sm border border-[var(--app-border)] bg-[var(--app-surface)] transition-colors duration-300">
+        <div className="flex h-11 shrink-0 items-center justify-between gap-sm border-b border-[var(--app-border)] bg-[var(--app-panel)] px-sm transition-colors duration-300">
+          <div className="min-w-0">
+            <p className="m-0 text-[12px] font-[580] leading-4 text-[var(--app-text)]">
+              Preview mode
+            </p>
+          </div>
+          {statusBadge ? (
+            <span
+              className={`inline-flex shrink-0 items-center gap-xxs rounded-pill border px-xs py-xxs text-[12px] leading-4 ${statusBadge.tone}`}
+            >
+              {statusBadge.icon}
+              {statusBadge.label}
+            </span>
+          ) : (
+            <span className="inline-flex shrink-0 items-center gap-xxs rounded-pill border border-[var(--app-border)] bg-[var(--app-control)] px-xs py-xxs text-[12px] leading-4 text-[var(--app-muted)]">
+              Idle
+            </span>
+          )}
+        </div>
         {showIframe ? (
           <iframe
             src={runtimeState.previewUrl!}
@@ -1332,7 +1339,9 @@ function PreviewWorkspace({
   );
 }
 
-function toRuntimeUIState(runtime: NonNullable<ProjectWorkspace["devRuntime"]>): RuntimeUIState {
+function toRuntimeUIState(
+  runtime: NonNullable<ProjectWorkspace["devRuntime"]>,
+): RuntimeUIState {
   return {
     status: mapDevRuntimeStatus(runtime.status),
     previewUrl: runtime.previewUrl,

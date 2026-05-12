@@ -1,4 +1,5 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
+import net from "node:net";
 
 export type DevProcessHandle = {
   projectId: string;
@@ -16,6 +17,8 @@ export type InstallResult = {
   stderr: string;
   durationMs: number;
 };
+
+export type PortStatus = "free" | "occupied";
 
 const INSTALL_TIMEOUT_MS = 120_000;
 const DEV_STOP_GRACE_MS = 5_000;
@@ -53,6 +56,17 @@ export function parseViteError(line: string): { hasError: boolean; error?: strin
 
 export class ProcessManager {
   private processes = new Map<string, ChildProcess>();
+
+  async getPortStatus(port: number): Promise<PortStatus> {
+    return new Promise((resolve) => {
+      const server = net.createServer();
+      server.once("error", () => resolve("occupied"));
+      server.once("listening", () => {
+        server.close(() => resolve("free"));
+      });
+      server.listen(port, "127.0.0.1");
+    });
+  }
 
   runInstall(
     projectId: string,
@@ -104,10 +118,12 @@ export class ProcessManager {
     projectId: string,
     workspaceRoot: string,
     signal?: AbortSignal,
+    requestedPort?: number | null,
   ): Promise<DevProcessHandle> {
     await this.stop(projectId);
 
-    const child = spawn("pnpm", ["dev"], {
+    const args = requestedPort ? ["dev", "--", "--port", String(requestedPort)] : ["dev"];
+    const child = spawn("pnpm", args, {
       cwd: workspaceRoot,
       stdio: ["ignore", "pipe", "pipe"],
       detached: false,

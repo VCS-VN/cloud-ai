@@ -13,22 +13,19 @@ export const Route = createFileRoute(
         const user = await requireServerUser();
         const { projectId } = params;
 
-        let body: { userId?: string };
+        let body: { presenceId?: string };
         try {
           body = await request.json();
         } catch {
           return Response.json({ error: "Invalid request body" }, { status: 400 });
         }
 
-        const { userId } = body;
-        if (!userId) {
-          return Response.json({ error: "userId is required" }, { status: 400 });
+        const { presenceId } = body;
+        if (!presenceId) {
+          return Response.json({ error: "presenceId is required" }, { status: 400 });
         }
 
-        const processed = presenceService.processHeartbeat(projectId, userId);
-        if (!processed) {
-          presenceService.registerUser(projectId, userId);
-        }
+        presenceService.processHeartbeat(projectId, user.id, presenceId);
 
         return Response.json({
           success: true,

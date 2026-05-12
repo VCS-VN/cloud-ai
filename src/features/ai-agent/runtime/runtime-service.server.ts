@@ -98,10 +98,65 @@ export class RuntimeService {
     workspaceRoot: string;
     runId: string;
     signal?: AbortSignal;
+    requestedPort?: number | null;
   }): AsyncGenerator<DevRuntimeEvent> {
     const { projectId, workspaceRoot, runId, signal } = input;
+    let requestedPort = input.requestedPort;
 
     const currentRuntime = await this.deps.projectStateStore.readDevRuntime(projectId);
+    if (
+      currentRuntime.status === "running" &&
+      currentRuntime.previewUrl &&
+      currentRuntime.port &&
+      this.deps.processManager.isRunning(projectId)
+    ) {
+      yield {
+        type: "dev_ready",
+        runId,
+        projectId,
+        previewUrl: currentRuntime.previewUrl,
+        port: currentRuntime.port,
+      };
+      return;
+    }
+
+    if (
+      currentRuntime.status === "running" &&
+      currentRuntime.port &&
+      !this.deps.processManager.isRunning(projectId) &&
+      !requestedPort
+    ) {
+      const portStatus = await this.deps.processManager.getPortStatus(currentRuntime.port);
+      if (portStatus === "free") {
+        requestedPort = currentRuntime.port;
+      } else if (currentRuntime.previewUrl && await this.isPreviewEndpointHealthy(currentRuntime.previewUrl)) {
+        yield {
+          type: "dev_ready",
+          runId,
+          projectId,
+          previewUrl: currentRuntime.previewUrl,
+          port: currentRuntime.port,
+        };
+        return;
+      } else {
+        const errorRuntime: DevRuntime = {
+          ...currentRuntime,
+          status: "error",
+          pid: null,
+          lastError: "Recorded preview port is occupied by an unrelated or unhealthy process.",
+          lastErrorTier: "system",
+        };
+        await this.deps.projectStateStore.saveDevRuntime(projectId, errorRuntime);
+        yield {
+          type: "dev_error",
+          runId,
+          projectId,
+          error: errorRuntime.lastError ?? "Preview did not become ready.",
+          tier: "system",
+        };
+        return;
+      }
+    }
     const devStartedAt = new Date().toISOString();
     const startingRuntime: DevRuntime = {
       ...currentRuntime,
@@ -120,6 +175,7 @@ export class RuntimeService {
       projectId,
       workspaceRoot,
       signal,
+      requestedPort,
     );
 
     const devLogLines: string[] = [];
@@ -213,6 +269,15 @@ export class RuntimeService {
         error: devError ?? "Unknown dev server error.",
         tier: devError ? detectErrorTier(devError) : "system",
       };
+    }
+  }
+
+  private async isPreviewEndpointHealthy(previewUrl: string): Promise<boolean> {
+    try {
+      const response = await fetch(previewUrl, { method: "HEAD" });
+      return response.ok || response.status < 500;
+    } catch {
+      return false;
     }
   }
 
