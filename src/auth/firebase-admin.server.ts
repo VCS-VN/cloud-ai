@@ -46,11 +46,12 @@ export function mapDecodedTokenToUserProfile(decodedToken: DecodedIdToken): Fire
   if (!email || !emailVerified) throw new AuthError('email-not-verified')
 
   return {
-    firebaseUid: decodedToken.uid,
+    providerUid: decodedToken.uid,
+    password: null,
     email,
     emailVerified,
     displayName: typeof decodedToken.name === 'string' ? decodedToken.name : undefined,
     photoUrl: typeof decodedToken.picture === 'string' ? decodedToken.picture : undefined,
-    authProvider: 'google'
+    provider: 'GOOGLE'
   }
 }

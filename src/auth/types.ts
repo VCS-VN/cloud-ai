@@ -1,12 +1,13 @@
-export type AuthProvider = 'google'
+export type AuthProvider = 'GOOGLE' | 'GITHUB'
 
 export type FirebaseUserProfile = {
-  firebaseUid: string
+  providerUid: string
+  password: string | null
   email: string
   emailVerified: boolean
   displayName?: string
   photoUrl?: string
-  authProvider: AuthProvider
+  provider: AuthProvider
 }
 
 export type AuthUser = FirebaseUserProfile & {
@@ -22,7 +23,7 @@ export type AuthUserSummary = {
   emailVerified: true
   displayName?: string
   photoUrl?: string
-  authProvider: AuthProvider
+  provider: AuthProvider
 }
 
 export type CurrentUserResult = {

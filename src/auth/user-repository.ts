@@ -7,12 +7,13 @@ import type { AuthUser, FirebaseUserProfile } from './types'
 function rowToAuthUser(row: typeof users.$inferSelect): AuthUser {
   return {
     id: row.id,
-    firebaseUid: row.firebaseUid,
+    providerUid: row.providerUid,
+    password: row.password,
     email: row.email,
     emailVerified: row.emailVerified,
     displayName: row.displayName ?? undefined,
     photoUrl: row.photoUrl ?? undefined,
-    authProvider: row.authProvider === 'google' ? 'google' : 'google',
+    provider: row.provider === 'GITHUB' ? 'GITHUB' : 'GOOGLE',
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     lastLoginAt: row.lastLoginAt ?? row.updatedAt ?? row.createdAt
@@ -30,24 +31,26 @@ export class UserRepository {
         .insert(users)
         .values({
           id,
-          firebaseUid: profile.firebaseUid,
+          providerUid: profile.providerUid,
+          password: null,
           email: profile.email,
           emailVerified: profile.emailVerified,
           displayName: profile.displayName,
           photoUrl: profile.photoUrl,
-          authProvider: profile.authProvider,
+          provider: profile.provider,
           createdAt: now,
           updatedAt: now,
           lastLoginAt: now
         })
         .onConflictDoUpdate({
-          target: users.firebaseUid,
+          target: users.email,
           set: {
+            providerUid: profile.providerUid,
             email: profile.email,
             emailVerified: profile.emailVerified,
             displayName: profile.displayName,
             photoUrl: profile.photoUrl,
-            authProvider: profile.authProvider,
+            provider: profile.provider,
             updatedAt: now,
             lastLoginAt: now
           }
@@ -73,6 +76,6 @@ export function toAuthUserSummary(user: AuthUser) {
     emailVerified: true as const,
     displayName: user.displayName,
     photoUrl: user.photoUrl,
-    authProvider: user.authProvider
+    provider: user.provider
   }
 }

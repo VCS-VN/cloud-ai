@@ -26,7 +26,7 @@ function ProfileSettingsPage() {
         <dl className="mt-lg grid gap-sm text-[12px]">
           <div className="rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] p-sm"><dt className="text-[var(--app-muted)]">Email</dt><dd className="m-0 mt-xxs">{user.email}</dd></div>
           <div className="rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] p-sm"><dt className="text-[var(--app-muted)]">Display name</dt><dd className="m-0 mt-xxs">{user.displayName || 'Not set'}</dd></div>
-          <div className="rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] p-sm"><dt className="text-[var(--app-muted)]">Provider</dt><dd className="m-0 mt-xxs">Google</dd></div>
+          <div className="rounded-sm border border-[var(--app-border)] bg-[var(--app-control)] p-sm"><dt className="text-[var(--app-muted)]">Provider</dt><dd className="m-0 mt-xxs">{user.provider}</dd></div>
         </dl>
       </section>
     </main>

@@ -88,10 +88,12 @@ function DashboardPage() {
 
             <div className="mt-lg flex flex-wrap justify-center gap-sm">
               {[
-                "Build a landing page",
-                "Create a SaaS dashboard",
-                "Design a blog with CMS",
-                "Make an e-commerce store",
+                "Fashion store homepage",
+                "Product collection page",
+                "Flash sale landing page",
+                "Checkout upsell flow",
+                "New arrival campaign",
+                "Retail loyalty page",
               ].map((text) => (
                 <button
                   key={text}

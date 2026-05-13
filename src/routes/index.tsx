@@ -158,18 +158,23 @@ function HomePage() {
                   PROMPT IDEAS
                 </p>
                 <div className="mt-lg flex flex-wrap gap-xs">
-                  {["Landing page", "SaaS dashboard", "Shopfront", "Portfolio"].map(
-                    (label) => (
-                      <button
-                        key={label}
-                        className="rounded-pill border border-[rgb(0_0_0_/_0.12)] bg-[var(--color-canvas)] px-sm py-xs text-body-sm font-[480] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[var(--color-primary)]"
-                        type="button"
-                        onClick={() => setPrompt(label)}
-                      >
-                        {label}
-                      </button>
-                    ),
-                  )}
+                  {[
+                    "Fashion store homepage",
+                    "Product collection page",
+                    "Flash sale landing page",
+                    "Checkout upsell flow",
+                    "New arrival campaign",
+                    "Retail loyalty page",
+                  ].map((label) => (
+                    <button
+                      key={label}
+                      className="rounded-pill border border-[rgb(0_0_0_/_0.12)] bg-[var(--color-canvas)] px-sm py-xs text-body-sm font-[480] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[var(--color-primary)]"
+                      type="button"
+                      onClick={() => setPrompt(label)}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
