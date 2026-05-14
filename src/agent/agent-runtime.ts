@@ -1,4 +1,5 @@
 import { AgentToolRegistry } from "./agent-tool-registry";
+import { SHARED_SAMPLE_DATA_FILE_PATHS, buildStoreSampleDataInstructions } from "@/ai/prompt-builder";
 import { ProjectWorkspaceService } from "./project-workspace-service";
 
 export type AgentRuntimeRunInput = {
@@ -21,6 +22,7 @@ function buildInitPrompt(prompt: string) {
     "",
     "Use TailwindCSS, shadcn-style components, axios instance, zod, jotai, and react-hook-form.",
     "Create a clean starter structure and summarize the generated files.",
+    buildStoreSampleDataInstructions(),
   ].join("\n");
 }
 
@@ -55,6 +57,8 @@ export class AgentRuntime {
         "### Plan",
         "- Scaffold a TanStack Start app foundation.",
         "- Add the default frontend stack and starter files.",
+        "- Initialize shared StoreProvider sample data after pages and components.",
+        `- Preserve shared sample data files: ${SHARED_SAMPLE_DATA_FILE_PATHS.join(", ")}.`,
         "- Sync the generated file tree for preview.",
       ]);
 
@@ -83,6 +87,8 @@ export class AgentRuntime {
       "",
       "### Checks",
       "- Workspace scaffold completed successfully.",
+      "- StoreProvider sample Store and ProductsList instructions included.",
+      `- Shared sample data files protected: ${SHARED_SAMPLE_DATA_FILE_PATHS.join(", ")}.`,
       `- Synced ${nodes.length} file nodes for preview.`,
       "",
       "### Next steps",

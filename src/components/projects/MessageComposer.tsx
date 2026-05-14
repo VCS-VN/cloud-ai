@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, Loader2, Plus, Square, Wand2 } from "lucide-react";
-import type { FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import type { ComposerReasoningEffort } from "@/shared/project-types";
 
 type MessageComposerProps = {
@@ -18,6 +18,17 @@ type MessageComposerProps = {
   onScrollMessagesUp?: () => void;
   onScrollMessagesDown?: () => void;
 };
+
+export const MAX_PROJECT_MESSAGE_LENGTH = 12000;
+
+export function validateProjectMessageInput(value: string) {
+  const trimmedValue = value.trim();
+  if (trimmedValue.length === 0) return "Enter a prompt before sending.";
+  if (trimmedValue.length > MAX_PROJECT_MESSAGE_LENGTH) {
+    return `Prompt must be ${MAX_PROJECT_MESSAGE_LENGTH.toLocaleString()} characters or fewer.`;
+  }
+  return null;
+}
 
 const reasoningEffortOptions: ComposerReasoningEffort[] = [
   "low",
@@ -40,13 +51,21 @@ export function MessageComposer({
   onSend,
   onStop,
 }: MessageComposerProps) {
-  const canSend = value.trim().length > 0 && !sending && !disabled;
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const inputValidationError = useMemo(() => validateProjectMessageInput(value), [value]);
+  const canSend = !inputValidationError && !sending && !disabled;
   const canStop = processing && !sending && !!onStop;
+  const displayedError = validationError ?? error;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (inputValidationError) {
+      setValidationError(inputValidationError);
+      return;
+    }
     if (!canSend) return;
-    await onSend(value);
+    setValidationError(null);
+    await onSend(value.trim());
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -76,17 +95,22 @@ export function MessageComposer({
         }}
         placeholder="Ask Cloud AI..."
         disabled={sending || disabled}
-        onChange={(event) => onChange(event.target.value)}
+        maxLength={MAX_PROJECT_MESSAGE_LENGTH}
+        aria-invalid={!!displayedError}
+        onChange={(event) => {
+          setValidationError(null);
+          onChange(event.target.value);
+        }}
         onKeyDown={handleKeyDown}
       />
 
-      {error ? (
+      {displayedError ? (
         <p
           className="builder-truncate-safe mt-xs rounded-md bg-[var(--app-danger-bg)] p-sm text-[12px] leading-4 text-[var(--app-danger-text)]"
           role="alert"
           aria-live="assertive"
         >
-          {error}
+          {displayedError}
         </p>
       ) : null}
 

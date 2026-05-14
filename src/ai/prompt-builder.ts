@@ -3,6 +3,11 @@ import type { Message } from '@/shared/project-types'
 const MAX_HISTORY_TURNS = 12
 const MAX_HISTORY_CHAR_BUDGET = 8000
 
+export const SHARED_SAMPLE_DATA_FILE_PATHS = [
+  "src/providers/store-provider.tsx",
+  "src/data/sample-store.ts",
+] as const
+
 type PromptHistoryMessage = Pick<Message, 'role' | 'content'>
 
 function dedupeConsecutiveMessages(history: PromptHistoryMessage[]) {
@@ -85,4 +90,19 @@ export function buildProjectMessageInput({
 
   const recentTurns = trimToRecentTurns(latestHistory)
   return trimToCharacterBudget(recentTurns)
+}
+
+
+export function buildStoreSampleDataInstructions() {
+  return [
+    "After creating pages and components, initialize shared StoreProvider sample data.",
+    `Create and preserve shared sample data files: ${SHARED_SAMPLE_DATA_FILE_PATHS.join(", ")}.`,
+    "Use the fixed Store, Product, and ProductsList structures for sample data and do not add, remove, rename, or reshape fields.",
+    "Create one Store and one ProductsList with at least 6 realistic nail-studio Products.",
+    "Expose Store and ProductsList through StoreProvider so generated pages and components consume shared store/product values instead of local placeholders.",
+    "Generated pages/components must read Store and ProductsList from StoreProvider; do not duplicate independent store/product placeholder objects inside routes or components.",
+    "When user prompts update sample data, change values or product list membership/order only; never change Store/Product/ProductsList structure.",
+    "Match product updates by stable product id first. If product target, value, or reorder list is ambiguous, ask a clarification question before changing data.",
+    "Keep ProductsList as { total, data }, keep total equal to data.length, and keep each product.entityId equal to product.id.",
+  ].join("\n")
 }

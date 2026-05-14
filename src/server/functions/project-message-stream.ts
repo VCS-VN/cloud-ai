@@ -101,6 +101,29 @@ export function toStreamFailureEvent(args: {
   };
 }
 
+export function buildSampleDataClarificationMessage(reason: string) {
+  return [
+    "I need clarification before changing store/product sample data.",
+    reason,
+    "Please provide the target product id or exact value to update. Store, Product, and ProductsList structures must stay unchanged.",
+  ].join(" ");
+}
+
+export function toSampleDataClarificationEvent(args: {
+  messageId: string;
+  reason: string;
+  providerResponseId?: string;
+}): MessageStreamEvent {
+  return {
+    type: "message.completed",
+    messageId: args.messageId,
+    content: buildSampleDataClarificationMessage(args.reason),
+    processingStatus: "completed",
+    projectProcessingStatus: "idle",
+    providerResponseId: args.providerResponseId,
+  };
+}
+
 export function shouldPreserveProjectMessageStream(error: { recoverable?: boolean; code?: string }) {
   return error.recoverable === true || error.code === "HUMAN_REVIEW_REQUIRED";
 }

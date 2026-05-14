@@ -59,3 +59,7 @@ PWA fields are retained on project records for compatibility, but the current pr
 ## Generated Storefront Workspaces
 
 AI Agent generated storefront source is written outside the Builder Web runtime under `projects/{projectId}`. Builder routes and components must not import files from those generated workspaces directly; previews should use the project workspace or a dedicated sandbox/dev server. Agent patches are guarded to stay inside the matching project workspace, and `ProjectState` plus agent run history remain the source of truth for build/edit workflows.
+
+## Store/Product Sample Data Rules
+
+Generated storefront projects must initialize shared sample data after pages and components are created. Store, Product, and ProductsList structures are fixed: AI updates may change values, add/remove/reorder products, but must not add, remove, rename, or reshape fields. Product updates match stable product `id` first, every product keeps `entityId === id`, and `productsList.total` must equal `productsList.data.length`. Ambiguous store/product update prompts must ask for clarification before changing data.

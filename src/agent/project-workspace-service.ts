@@ -3,6 +3,16 @@ import path from "node:path";
 import type { ProjectFileNode, ProjectFileNodeRepository } from "@/shared/project-types";
 
 const IGNORED_DIRS = new Set([".git", "node_modules", "dist", ".output", ".tanstack"]);
+export const SHARED_SAMPLE_DATA_PATHS = [
+  "src/providers/store-provider.tsx",
+  "src/data/sample-store.ts",
+] as const;
+
+export function isSharedSampleDataPath(relativePath: string) {
+  const normalizedPath = relativePath.replace(/^\//u, "");
+  return SHARED_SAMPLE_DATA_PATHS.includes(normalizedPath as (typeof SHARED_SAMPLE_DATA_PATHS)[number]);
+}
+
 const TEXT_FILE_EXTENSIONS = new Set([
   ".css",
   ".html",
@@ -46,6 +56,7 @@ export class ProjectWorkspaceService {
   }
 
   async writeTextFile(projectId: string, relativePath: string, content: string) {
+    this.validateSharedSampleDataWrite(relativePath, content);
     const targetPath = this.resolveWorkspacePath(projectId, relativePath);
     await mkdir(path.dirname(targetPath), { recursive: true });
     await writeFile(targetPath, content, "utf8");
@@ -53,6 +64,13 @@ export class ProjectWorkspaceService {
 
   async readTextFile(projectId: string, relativePath: string) {
     return readFile(this.resolveWorkspacePath(projectId, relativePath), "utf8");
+  }
+
+  validateSharedSampleDataWrite(relativePath: string, content: string) {
+    if (!isSharedSampleDataPath(relativePath)) return;
+    if (!/StoreProvider/u.test(content) && !/sampleStore/u.test(content)) {
+      throw new Error("Shared sample data files must preserve StoreProvider/sample store data.");
+    }
   }
 
   async scaffoldTanStackStartProject(projectId: string, prompt: string) {
