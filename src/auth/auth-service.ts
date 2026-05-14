@@ -1,6 +1,7 @@
 import { redirect } from '@tanstack/react-router'
 import { AuthError, toSafeAuthError } from './auth-errors'
 import { mapDecodedTokenToUserProfile, verifyIdToken } from './firebase-admin.server'
+import { encryptUserApiKey, decryptUserApiKey } from './api-key-crypto.server'
 import { MerchantGatewayClient } from './oauth-client.server'
 import type { LoginResult, OAuthLoginInput } from './types'
 import { toAuthUserSummary, UserRepository } from './user-repository'
@@ -40,13 +41,14 @@ export class AuthService {
         redirectUri: input.redirectUri
       })
 
-      const profile = await this.merchantGateway.getProfile({ accessToken: tokenSet.accessToken })
+      const profile = await this.merchantGateway.getProfile({ apiKey: tokenSet.apiKey })
 
       const user = await this.users.upsertFromOAuth({
         providerUid: profile.id,
         email: profile.email,
         displayName: profile.name,
-        provider: 'MONMI_OAUTH'
+        provider: 'MONMI_OAUTH',
+        apiKey: encryptUserApiKey(tokenSet.apiKey)
       })
 
       await this.sessions.createSessionCookie(user)
@@ -80,7 +82,19 @@ export class AuthService {
     return user
   }
 
+  async requireMerchantApiKey() {
+    const session = await this.sessions.readSession()
+    if (!session) throw new AuthError('unauthorized')
+
+    const user = await this.users.findById(session.userId)
+    if (!user?.apiKey) throw new AuthError('unauthorized')
+
+    return decryptUserApiKey(user.apiKey)
+  }
+
   async logout() {
+    const session = await this.sessions.readSession()
+    if (session) await this.users.clearApiKey(session.userId)
     await this.sessions.clearSessionCookie()
     return { ok: true as const, redirectTo: '/' as const }
   }

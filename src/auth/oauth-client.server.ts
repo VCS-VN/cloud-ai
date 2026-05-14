@@ -23,8 +23,8 @@ function toAuthError(error: unknown, code: 'oauth-exchange-failed' | 'oauth-prof
 }
 
 function assertTokenSet(value: OAuthTokenSet) {
-  if (!value?.accessToken || typeof value.accessToken !== 'string') throw new AuthError('oauth-exchange-failed')
-  if (value.tokenType && value.tokenType !== 'Bearer') throw new AuthError('oauth-exchange-failed')
+  if (!value?.apiKey || typeof value.apiKey !== 'string') throw new AuthError('oauth-exchange-failed')
+  if (value.tokenType && value.tokenType !== 'ApiKey') throw new AuthError('oauth-exchange-failed')
 }
 
 function assertMerchantProfile(value: OAuthMerchantProfile) {
@@ -51,10 +51,12 @@ export class MerchantGatewayClient {
     }
   }
 
-  async getProfile(input: { accessToken: string }): Promise<OAuthMerchantProfile> {
+  async getProfile(input: { apiKey: string }): Promise<OAuthMerchantProfile> {
     try {
       const response = await axios.get<OAuthMerchantProfile>(`${getMerchantApiBaseUrl()}/api/v1/auth/profile`, {
-        headers: { authorization: `Bearer ${input.accessToken}` }
+        headers: {
+          'x-api-key': input.apiKey
+        }
       })
 
       assertMerchantProfile(response.data)

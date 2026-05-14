@@ -12,6 +12,7 @@ export type FirebaseUserProfile = {
 
 export type OAuthUserProfile = {
   providerUid: string
+  apiKey?: string
   email: string
   emailVerified?: boolean
   displayName?: string
@@ -21,6 +22,7 @@ export type OAuthUserProfile = {
 
 export type AuthUser = FirebaseUserProfile & {
   id: string
+  apiKey?: string
   createdAt: Date
   updatedAt: Date
   lastLoginAt: Date
@@ -59,10 +61,10 @@ export type OAuthTempSessionData = {
 }
 
 export type OAuthTokenSet = {
-  accessToken: string
   refreshToken?: string
   expiresIn: number
-  tokenType: 'Bearer'
+  tokenType: 'ApiKey'
+  apiKey: string
 }
 
 export type OAuthMerchantProfile = {

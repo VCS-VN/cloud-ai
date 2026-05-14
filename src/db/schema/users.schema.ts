@@ -13,6 +13,7 @@ export const users = pgTable(
     id: text("id").primaryKey(),
     providerUid: text("provider_uid").notNull(),
     password: text("password"),
+    apiKey: text("api_key"),
     email: text("email").notNull(),
     emailVerified: boolean("email_verified").notNull(),
     displayName: text("display_name"),

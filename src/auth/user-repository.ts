@@ -9,6 +9,7 @@ function rowToAuthUser(row: typeof users.$inferSelect): AuthUser {
     id: row.id,
     providerUid: row.providerUid,
     password: row.password,
+    apiKey: row.apiKey ?? undefined,
     email: row.email,
     emailVerified: row.emailVerified,
     displayName: row.displayName ?? undefined,
@@ -27,6 +28,7 @@ function mapUpsertValues(profile: {
   displayName?: string
   photoUrl?: string
   provider: AuthUser['provider']
+  apiKey?: string
 }) {
   const now = new Date()
   return {
@@ -35,6 +37,7 @@ function mapUpsertValues(profile: {
       id: crypto.randomUUID(),
       providerUid: profile.providerUid,
       password: null,
+      apiKey: profile.apiKey,
       email: profile.email,
       emailVerified: profile.emailVerified,
       displayName: profile.displayName,
@@ -65,6 +68,7 @@ export class UserRepository {
             displayName: profile.displayName,
             photoUrl: profile.photoUrl,
             provider: profile.provider,
+            apiKey: null,
             updatedAt: now,
             lastLoginAt: now
           }
@@ -86,7 +90,8 @@ export class UserRepository {
         emailVerified,
         displayName: profile.displayName,
         photoUrl: profile.photoUrl,
-        provider
+        provider,
+        apiKey: profile.apiKey
       })
 
       const [row] = await getDb()
@@ -101,6 +106,7 @@ export class UserRepository {
             displayName: profile.displayName,
             photoUrl: profile.photoUrl,
             provider,
+            apiKey: profile.apiKey,
             updatedAt: now,
             lastLoginAt: now
           }
@@ -115,6 +121,13 @@ export class UserRepository {
   async findById(id: string): Promise<AuthUser | null> {
     const [row] = await getDb().select().from(users).where(eq(users.id, id)).limit(1)
     return row ? rowToAuthUser(row) : null
+  }
+
+  async clearApiKey(id: string): Promise<void> {
+    await getDb()
+      .update(users)
+      .set({ apiKey: null, updatedAt: new Date() })
+      .where(eq(users.id, id))
   }
 }
 
