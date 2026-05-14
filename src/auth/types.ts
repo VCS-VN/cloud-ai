@@ -1,4 +1,4 @@
-export type AuthProvider = 'GOOGLE' | 'GITHUB'
+export type AuthProvider = 'GOOGLE' | 'GITHUB' | 'MONMI_OAUTH'
 
 export type FirebaseUserProfile = {
   providerUid: string
@@ -8,6 +8,15 @@ export type FirebaseUserProfile = {
   displayName?: string
   photoUrl?: string
   provider: AuthProvider
+}
+
+export type OAuthUserProfile = {
+  providerUid: string
+  email: string
+  emailVerified?: boolean
+  displayName?: string
+  photoUrl?: string
+  provider?: Extract<AuthProvider, 'MONMI_OAUTH'>
 }
 
 export type AuthUser = FirebaseUserProfile & {
@@ -36,6 +45,41 @@ export type LoginSuccess = {
   redirectTo: '/dashboard'
 }
 
+export type OAuthCallbackQuery = {
+  code?: string
+  state?: string
+  error?: string
+  errorDescription?: string
+}
+
+export type OAuthTempSessionData = {
+  state: string
+  codeVerifier: string
+  createdAt: string
+}
+
+export type OAuthTokenSet = {
+  accessToken: string
+  refreshToken?: string
+  expiresIn: number
+  tokenType: 'Bearer'
+}
+
+export type OAuthMerchantProfile = {
+  id: string
+  email: string
+  name?: string
+  identityLogin?: string
+  scopes?: string[]
+}
+
+export type OAuthLoginInput = {
+  code: string
+  state: string
+  codeVerifier: string
+  redirectUri: string
+}
+
 export type LoginErrorCode =
   | 'missing-token'
   | 'invalid-token'
@@ -50,6 +94,12 @@ export type LoginErrorCode =
   | 'unauthorized-domain'
   | 'operation-not-allowed'
   | 'invalid-client-config'
+  | 'missing-oauth-config'
+  | 'oauth-state-mismatch'
+  | 'oauth-temp-session-missing'
+  | 'oauth-exchange-failed'
+  | 'oauth-profile-fetch-failed'
+  | 'oauth-login-failed'
   | 'unknown'
 
 export type LoginError = {

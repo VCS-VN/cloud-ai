@@ -1,15 +1,17 @@
 import { redirect } from '@tanstack/react-router'
 import { AuthError, toSafeAuthError } from './auth-errors'
 import { mapDecodedTokenToUserProfile, verifyIdToken } from './firebase-admin.server'
-import { SessionService } from './session-service.server'
-import type { AuthUserSummary, LoginResult } from './types'
+import { MerchantGatewayClient } from './oauth-client.server'
+import type { LoginResult, OAuthLoginInput } from './types'
 import { toAuthUserSummary, UserRepository } from './user-repository'
+import { SessionService } from './session-service.server'
 
 export class AuthService {
   constructor(
     private readonly users = new UserRepository(),
-    private readonly sessions = new SessionService()
-  ) {}
+    private readonly sessions = new SessionService(),
+    private readonly merchantGateway = new MerchantGatewayClient()
+  ) { }
 
   async signInWithFirebaseIdToken(idToken: string): Promise<LoginResult> {
     if (!idToken || typeof idToken !== 'string') return toSafeAuthError(new AuthError('missing-token'))
@@ -25,20 +27,54 @@ export class AuthService {
     }
   }
 
-  async getCurrentUser(): Promise<AuthUserSummary | null> {
+  async signInWithOAuthCode(input: OAuthLoginInput): Promise<LoginResult> {
+    if (!input.code || !input.state || !input.codeVerifier || !input.redirectUri) {
+      return toSafeAuthError(new AuthError('oauth-login-failed'))
+    }
+
+    try {
+      const tokenSet = await this.merchantGateway.exchangeOAuthCode({
+        clientId: 'cloud-ai',
+        code: input.code,
+        codeVerifier: input.codeVerifier,
+        redirectUri: input.redirectUri
+      })
+
+      const profile = await this.merchantGateway.getProfile({ accessToken: tokenSet.accessToken })
+
+      const user = await this.users.upsertFromOAuth({
+        providerUid: profile.id,
+        email: profile.email,
+        displayName: profile.name,
+        provider: 'MONMI_OAUTH'
+      })
+
+      await this.sessions.createSessionCookie(user)
+
+      return { ok: true, user: toAuthUserSummary(user), redirectTo: '/dashboard' }
+    } catch (error) {
+      console.error(JSON.stringify({
+        event: 'cloud_ai_oauth_login_failed',
+        reason: error instanceof AuthError ? error.code : error instanceof Error ? error.message : 'unknown'
+      }))
+      return toSafeAuthError(error, 'oauth-login-failed')
+    }
+  }
+
+  async getCurrentUser() {
     const session = await this.sessions.readSession()
     if (!session) return null
     const user = await this.users.findById(session.userId)
     return user ? toAuthUserSummary(user) : null
   }
 
-  async requireUser(): Promise<AuthUserSummary> {
+  async requireUser() {
     const user = await this.getCurrentUser()
     if (!user) throw redirect({ to: '/' })
     return user
   }
 
-  async requireActionUser(): Promise<AuthUserSummary> {
+  async requireActionUser() {
     const user = await this.getCurrentUser()
     if (!user) throw new AuthError('unauthorized')
     return user

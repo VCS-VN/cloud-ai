@@ -6,9 +6,16 @@ async function loadAuthService() {
   return getAuthService()
 }
 
-export const loginWithFirebaseToken = createServerFn({ method: 'POST' })
-  .inputValidator((data: { idToken?: string }) => data)
-  .handler(async ({ data }) => (await loadAuthService()).signInWithFirebaseIdToken(data.idToken ?? ''))
+export const loginWithOAuthCode = createServerFn({ method: 'POST' })
+  .inputValidator((data: { code?: string; state?: string; codeVerifier?: string; redirectUri?: string }) => data)
+  .handler(async ({ data }) =>
+    (await loadAuthService()).signInWithOAuthCode({
+      code: data.code ?? '',
+      state: data.state ?? '',
+      codeVerifier: data.codeVerifier ?? '',
+      redirectUri: data.redirectUri ?? ''
+    })
+  )
 
 export const getCurrentUser = createServerFn({ method: 'GET' }).handler(async () => ({
   user: await (await loadAuthService()).getCurrentUser()

@@ -1,3 +1,4 @@
+import axios from "axios";
 import { ProjectWorkspaceService } from "@/agent/project-workspace-service";
 import type { ProcessManager } from "@/features/ai-agent/runtime/process-manager.server";
 import type { ProjectStateStore } from "@/features/ai-agent/project/project-state-store.server";
@@ -337,8 +338,8 @@ export class ProjectService {
 
   private async isPreviewEndpointHealthy(previewUrl: string): Promise<boolean> {
     try {
-      const response = await fetch(previewUrl, { method: "HEAD" });
-      return response.ok || response.status < 500;
+      const response = await axios.head(previewUrl, { validateStatus: () => true });
+      return response.status >= 200 && response.status < 500;
     } catch {
       return false;
     }

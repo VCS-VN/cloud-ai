@@ -1,14 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { X } from "lucide-react";
-import {
-  getSafeAuthMessage,
-  mapFirebaseClientError,
-} from "@/auth/auth-errors";
-import { signInWithGoogleAndGetIdToken } from "@/auth/firebase-client";
-import type { LoginErrorCode } from "@/auth/types";
-import { loginWithFirebaseToken } from "@/server/functions/auth";
 import { GoogleLoginButton } from "./GoogleLoginButton";
 
 type LoginModalProps = {
@@ -17,34 +8,14 @@ type LoginModalProps = {
 };
 
 export function LoginModal({ open, onClose }: LoginModalProps) {
-  const navigate = useNavigate();
-  const login = useServerFn(loginWithFirebaseToken);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>();
 
   if (!open) return null;
 
-  async function handleLogin() {
+  function handleLogin() {
     if (loading) return;
     setLoading(true);
-    setError(undefined);
-
-    try {
-      const { idToken } = await signInWithGoogleAndGetIdToken();
-      const result = await login({ data: { idToken } });
-      if (!result.ok) {
-        setError(result.message);
-        return;
-      }
-      onClose();
-      await navigate({ to: result.redirectTo as never });
-    } catch (loginError) {
-      const code: LoginErrorCode = mapFirebaseClientError(loginError);
-      if (code === "popup-cancelled") return;
-      setError(getSafeAuthMessage(code));
-    } finally {
-      setLoading(false);
-    }
+    window.location.href = "/auth/login";
   }
 
   return (
@@ -79,7 +50,7 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
         </div>
 
         <p className="mb-lg mt-sm text-[14px] leading-6 text-[var(--app-muted)]">
-          Sign in with Google to continue to your projects.
+          Continue with your Monmi account to access Cloud AI.
         </p>
 
         <GoogleLoginButton
@@ -87,15 +58,6 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
           disabled={loading}
           onClick={handleLogin}
         />
-
-        {error ? (
-          <p
-            className="mt-sm rounded-md border border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] p-sm text-[13px] leading-5 text-[var(--app-danger-text)]"
-            role="alert"
-          >
-            {error}
-          </p>
-        ) : null}
       </div>
     </div>
   );

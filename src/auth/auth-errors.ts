@@ -14,6 +14,12 @@ const safeMessages: Record<LoginErrorCode, string> = {
   'unauthorized-domain': 'This domain is not authorized for Google sign-in. Add it in Firebase Authentication settings.',
   'operation-not-allowed': 'Google sign-in is not enabled for this Firebase project.',
   'invalid-client-config': 'Firebase sign-in configuration is invalid for this environment.',
+  'missing-oauth-config': 'Cloud AI sign-in is not configured yet. Please try again later.',
+  'oauth-state-mismatch': 'Your sign-in session expired. Please try again.',
+  'oauth-temp-session-missing': 'Your sign-in session expired. Please try again.',
+  'oauth-exchange-failed': 'Unable to complete sign-in. Please try again.',
+  'oauth-profile-fetch-failed': 'Unable to load your account details. Please try again.',
+  'oauth-login-failed': 'Unable to sign in to Cloud AI. Please try again.',
   unknown: 'Something went wrong. Please try again.'
 }
 

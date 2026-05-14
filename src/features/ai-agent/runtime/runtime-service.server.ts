@@ -1,3 +1,4 @@
+import axios from "axios";
 import { parseViteReady, parseViteError, type ProcessManager } from "./process-manager.server";
 import type { ProjectStateStore } from "../project/project-state-store.server";
 import { EMPTY_DEV_RUNTIME, type DevRuntime } from "../project/project-state.schema";
@@ -274,8 +275,8 @@ export class RuntimeService {
 
   private async isPreviewEndpointHealthy(previewUrl: string): Promise<boolean> {
     try {
-      const response = await fetch(previewUrl, { method: "HEAD" });
-      return response.ok || response.status < 500;
+      const response = await axios.head(previewUrl, { validateStatus: () => true });
+      return response.status >= 200 && response.status < 500;
     } catch {
       return false;
     }

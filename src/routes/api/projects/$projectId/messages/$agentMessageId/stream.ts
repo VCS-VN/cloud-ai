@@ -17,7 +17,7 @@ export const Route = createFileRoute(
     handlers: {
       GET: async ({ params }) => {
         const user = await requireServerUser();
-        const { projectId, agentMessageId } = params;
+        const { projectId, agentMessageId } = params as { projectId: string; agentMessageId: string };
 
         const { messageService } = await getProjectServices();
 

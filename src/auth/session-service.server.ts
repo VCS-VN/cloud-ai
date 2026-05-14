@@ -1,16 +1,11 @@
 import '@tanstack/react-start/server-only'
 import { deleteCookie, getCookie, setCookie } from '@tanstack/react-start/server'
 import { AuthError } from './auth-errors'
+import { createSessionData, getSessionMaxAgeSeconds, isSessionExpired } from './session-codec'
 import type { AppSessionData, AuthUser } from './types'
 
 const SESSION_NAME = 'cloud_ai_session'
-const DEFAULT_MAX_AGE_SECONDS = 60 * 60 * 24 * 7
 const textEncoder = new TextEncoder()
-
-function getSessionMaxAge() {
-  const parsed = Number(process.env.SESSION_MAX_AGE_SECONDS)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_AGE_SECONDS
-}
 
 function getSessionSecret() {
   const secret = process.env.SESSION_SECRET || 'development-session-secret-minimum-32-chars'
@@ -29,7 +24,7 @@ function getCookieOptions() {
     secure: shouldUseSecureCookie(),
     sameSite: 'lax' as const,
     path: '/',
-    maxAge: getSessionMaxAge()
+    maxAge: getSessionMaxAgeSeconds()
   }
 }
 
@@ -74,13 +69,7 @@ async function readSessionValue(value: string): Promise<AppSessionData | null> {
 
 export class SessionService {
   async createSessionCookie(user: AuthUser) {
-    const now = new Date()
-    const expiresAt = new Date(now.getTime() + getSessionMaxAge() * 1000)
-    const value = await createSessionValue({
-      userId: user.id,
-      issuedAt: now.toISOString(),
-      expiresAt: expiresAt.toISOString()
-    })
+    const value = await createSessionValue(createSessionData(user.id))
 
     setCookie(SESSION_NAME, value, getCookieOptions())
   }
@@ -93,7 +82,7 @@ export class SessionService {
       const data = await readSessionValue(value)
       if (!data) return null
 
-      if (Date.parse(data.expiresAt) <= Date.now()) {
+      if (isSessionExpired(data)) {
         await this.clearSessionCookie()
         return null
       }

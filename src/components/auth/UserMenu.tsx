@@ -13,7 +13,6 @@ import {
   Sun,
   UserRound,
 } from "lucide-react";
-import { signOutFirebaseClient } from "@/auth/firebase-client";
 import type { AuthUserSummary } from "@/auth/types";
 import { logout } from "@/server/functions/auth";
 import { useTheme, type AppTheme } from "@/theme";
@@ -81,7 +80,6 @@ export function UserMenu({
     setLoading(true);
     try {
       const result = await logoutFn();
-      await signOutFirebaseClient().catch(() => undefined);
       setOpen(false);
       setAppearanceOpen(false);
       await navigate({ to: result.redirectTo });
