@@ -17,6 +17,7 @@ import type {
   ProjectFileNodeRepository,
   ProjectMessageRepository,
   ProjectRepository,
+  ProjectSettingsInput,
 } from "@/shared/project-types";
 
 function assertPrompt(prompt: string) {
@@ -35,6 +36,17 @@ function deriveProjectName(prompt: string) {
   return words
     ? `${words}${prompt.split(/\s+/).length > 7 ? "..." : ""}`
     : "New project";
+}
+
+function normalizeProjectName(name?: string) {
+  const normalized = name?.trim();
+  if (name !== undefined && !normalized) throw new Error("Project name cannot be empty.");
+  return normalized;
+}
+
+function normalizeSelectedStoreSlug(selectedStoreSlug?: string | null) {
+  const normalized = selectedStoreSlug?.trim();
+  return normalized ? normalized : null;
 }
 
 function createDefaultPwaConfig(projectName: string, description?: string) {
@@ -178,6 +190,23 @@ export class ProjectService {
       fileTree: buildTree(fileTree),
       devRuntime: devRuntime ?? undefined,
     };
+  }
+
+  async updateProjectSettings(
+    projectId: string,
+    settings: ProjectSettingsInput,
+    userId?: string,
+  ): Promise<Project> {
+    const project = await this.projectRepository.updateProjectSettings(
+      projectId,
+      {
+        name: normalizeProjectName(settings.name),
+        selectedStoreSlug: normalizeSelectedStoreSlug(settings.selectedStoreSlug),
+      },
+      userId,
+    );
+    if (!project) throw new Error("Project not found.");
+    return project;
   }
 
   async getDevRuntimeState(

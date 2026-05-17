@@ -7,17 +7,19 @@ const IV_LENGTH = 12
 
 function getEncryptionKey() {
   const secret = process.env.USER_API_KEY_ENCRYPTION_KEY
+
+
   if (!secret) throw new AuthError('auth-config-error')
 
-  if (secret.startsWith('base64:')) {
-    const key = Buffer.from(secret.slice('base64:'.length), 'base64')
-    if (key.length === 32) return key
-  }
+  // if (secret.startsWith('base64:')) {
+  //   const key = Buffer.from(secret.slice('base64:'.length), 'base64')
+  //   if (key.length === 32) return key
+  // }
 
-  if (secret.startsWith('hex:')) {
-    const key = Buffer.from(secret.slice('hex:'.length), 'hex')
-    if (key.length === 32) return key
-  }
+  // if (secret.startsWith('hex:')) {
+  //   const key = Buffer.from(secret.slice('hex:'.length), 'hex')
+  //   if (key.length === 32) return key
+  // }
 
   if (secret.length >= 32) return createHash('sha256').update(secret).digest()
 

@@ -59,6 +59,7 @@ export type Project = {
   processingStartedAt?: string
   updatedAt: string
   createdAt: string
+  selectedStoreSlug?: string | null
   pwa: PwaConfig
 }
 
@@ -172,6 +173,25 @@ export type ProjectFileNode = {
 }
 
 
+
+export type StoreOption = {
+  slug: string
+  displayName: string
+}
+
+export type StoreListResult = {
+  stores: StoreOption[]
+  page: number
+  limit: number
+  total?: number
+  hasMore?: boolean
+}
+
+export type ProjectSettingsInput = {
+  name?: string
+  selectedStoreSlug?: string | null
+}
+
 export type ProjectWorkspace = {
   project: Project
   messages: Message[]
@@ -191,6 +211,7 @@ export interface ProjectRepository {
   getProject(id: string, userId?: string): Promise<Project | undefined>
   listProjects(userId?: string): Promise<Project[]>
   deleteProject(id: string, userId?: string): Promise<boolean>
+  updateProjectSettings(id: string, settings: ProjectSettingsInput, userId?: string): Promise<Project | undefined>
   updateProjectProcessingState(
     id: string,
     processingStatus: ProjectProcessingStatus,

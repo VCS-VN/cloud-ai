@@ -43,6 +43,13 @@
       "when": 1778271017993,
       "tag": "0005_ai_agent_orchestrator",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779046800000,
+      "tag": "0012_project_selected_store_slug",
+      "breakpoints": true
     }
   ]
 }

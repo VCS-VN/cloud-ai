@@ -2,7 +2,7 @@ import { eq, and, desc } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { projects } from "@/db/schema";
 import type * as schema from "@/db/schema";
-import type { Project, PwaConfig } from "@/shared/project-types";
+import type { Project, ProjectSettingsInput, PwaConfig } from "@/shared/project-types";
 import type { ProjectRepository } from "@/shared/project-types";
 
 type ProjectRow = typeof projects.$inferSelect;
@@ -26,6 +26,7 @@ function toProject(row: ProjectRow): Project {
       row.processingStartedAt?.toISOString() ??
       data.processingStartedAt ??
       undefined,
+    selectedStoreSlug: row.selectedStoreSlug ?? data.selectedStoreSlug ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     pwa: data.pwa ?? fallbackPwa(row.name),
@@ -69,6 +70,7 @@ export class PgProjectRepository implements ProjectRepository {
           ? new Date(project.processingStartedAt)
           : null,
         currentRevisionId: null,
+        selectedStoreSlug: project.selectedStoreSlug ?? null,
         data: project as unknown as Record<string, unknown>,
         createdAt: new Date(project.createdAt),
         updatedAt: new Date(project.updatedAt),
@@ -85,6 +87,7 @@ export class PgProjectRepository implements ProjectRepository {
           processingStartedAt: project.processingStartedAt
             ? new Date(project.processingStartedAt)
             : null,
+          selectedStoreSlug: project.selectedStoreSlug ?? null,
           data: project as unknown as Record<string, unknown>,
           updatedAt: new Date(project.updatedAt),
         },
@@ -132,6 +135,32 @@ export class PgProjectRepository implements ProjectRepository {
       .where(filter)
       .returning();
     return !!row;
+  }
+
+  async updateProjectSettings(
+    id: string,
+    settings: ProjectSettingsInput,
+    userId?: string,
+  ): Promise<Project | undefined> {
+    let filter = and(
+      eq(projects.id, id),
+      eq(projects.status, 1),
+    );
+    if (userId) filter = and(filter, eq(projects.userId, userId));
+
+    const [row] = await this.db
+      .update(projects)
+      .set({
+        ...(settings.name === undefined ? {} : { name: settings.name }),
+        ...(settings.selectedStoreSlug === undefined
+          ? {}
+          : { selectedStoreSlug: settings.selectedStoreSlug ?? null }),
+        updatedAt: new Date(),
+      })
+      .where(filter)
+      .returning();
+
+    return row ? toProject(row) : undefined;
   }
 
   async updateProjectProcessingState(

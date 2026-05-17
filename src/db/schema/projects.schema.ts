@@ -11,6 +11,7 @@ export const projects = pgTable("projects", {
   activeAgentMessageId: text("active_agent_message_id"),
   processingStartedAt: timestamp("processing_started_at"),
   currentRevisionId: text("current_revision_id"),
+  selectedStoreSlug: text("selected_store_slug"),
   data: jsonb("data").notNull(),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),

@@ -32,7 +32,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
-  Trash2,
+  Settings,
   TriangleAlert,
 } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -50,6 +50,8 @@ import { FilePreviewPanel } from "@/components/projects/FilePreviewPanel";
 import { MessageComposer } from "@/components/projects/MessageComposer";
 import { ProjectFileExplorer } from "@/components/projects/ProjectFileExplorer";
 import { ProjectMessagesPanel } from "@/components/projects/ProjectMessagesPanel";
+import { ProjectDeleteConfirmDialog } from "@/components/projects/ProjectDeleteConfirmDialog";
+import { ProjectSettingsDrawer } from "@/components/projects/ProjectSettingsDrawer";
 import { getCurrentUser } from "@/server/functions/auth";
 import {
   listProjectMessages,
@@ -60,6 +62,7 @@ import {
 import {
   deleteProject,
   getProjectWorkspace,
+  updateProjectSettings,
 } from "@/server/functions/projects";
 import { getDevRuntimeState, startPreview } from "@/server/functions/preview";
 import type { AgentStreamEvent } from "@/features/ai-agent/agent/agent-events";
@@ -217,6 +220,7 @@ function ProjectDetailPage() {
   const retryMessage = useServerFn(retryProjectMessage);
   const stopGeneration = useServerFn(stopProjectGeneration);
   const removeProject = useServerFn(deleteProject);
+  const saveProjectSettings = useServerFn(updateProjectSettings);
   const getRuntimeState = useServerFn(getDevRuntimeState);
   const startProjectPreview = useServerFn(startPreview);
   const { workspace } = Route.useLoaderData();
@@ -232,6 +236,15 @@ function ProjectDetailPage() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | undefined>();
   const [previewStarting, setPreviewStarting] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsSaveError, setSettingsSaveError] = useState<string | null>(null);
+  const [settingsSaveSuccess, setSettingsSaveSuccess] = useState<string | null>(null);
+  const [settingsProjectName, setSettingsProjectName] = useState(workspace?.project.name ?? "");
+  const [settingsSelectedStoreSlug, setSettingsSelectedStoreSlug] = useState<string | null>(workspace?.project.selectedStoreSlug ?? null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [previewStartError, setPreviewStartError] = useState<string | null>(
     null,
   );
@@ -254,6 +267,13 @@ function ProjectDetailPage() {
     latestWidth: number;
     maxWidth: number;
   } | null>(null);
+  useEffect(() => {
+    if (!settingsOpen) {
+      setSettingsProjectName(project?.name ?? "");
+      setSettingsSelectedStoreSlug(project?.selectedStoreSlug ?? null);
+    }
+  }, [project?.name, project?.selectedStoreSlug, settingsOpen]);
+
   const activeStreamRef = useRef<ActiveStream | null>(null);
   const [agentEvents, setAgentEvents] = useState<AgentStreamEvent[]>([]);
   const [agentReasoning, setAgentReasoning] = useState("");
@@ -634,11 +654,53 @@ function ProjectDetailPage() {
     project?.processingStatus,
   ]);
 
-  function handleDeletedProject() {
-    if (!project) return;
-    void removeProject({ data: { projectId: project.id } }).finally(() => {
+
+  const handleSaveProjectSettings = useCallback(async (settings: { name?: string; selectedStoreSlug?: string | null }) => {
+    if (!project || settingsSaving) return;
+    setSettingsSaving(true);
+    setSettingsSaveError(null);
+    setSettingsSaveSuccess(null);
+
+    try {
+      const updatedProject = await saveProjectSettings({
+        data: {
+          projectId: project.id,
+          name: settings.name ?? settingsProjectName,
+          selectedStoreSlug: settings.selectedStoreSlug ?? settingsSelectedStoreSlug ?? null,
+        },
+      });
+      setProject(updatedProject);
+      setSettingsProjectName(updatedProject.name);
+      setSettingsSelectedStoreSlug(updatedProject.selectedStoreSlug ?? null);
+      queryClient.setQueryData(["project-workspace", project.id], (current: ProjectWorkspace | undefined) =>
+        current ? { ...current, project: updatedProject } : current,
+      );
+      setSettingsSaveSuccess("Project settings saved.");
+    } catch (cause) {
+      setSettingsSaveError(cause instanceof Error ? cause.message : "Unable to save project settings.");
+    } finally {
+      setSettingsSaving(false);
+    }
+  }, [project, queryClient, saveProjectSettings, settingsProjectName, settingsSaving, settingsSelectedStoreSlug]);
+
+  function requestDeleteProject() {
+    setDeleteError(null);
+    setDeleteConfirmOpen(true);
+  }
+
+  async function confirmDeleteProject() {
+    if (!project || deletePending || settingsSaving) return;
+    setDeletePending(true);
+    setDeleteError(null);
+    try {
+      await removeProject({ data: { projectId: project.id } });
+      setDeleteConfirmOpen(false);
       void navigate({ to: "/projects" as never });
-    });
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : "Unable to delete project.");
+    } finally {
+      setDeletePending(false);
+    }
   }
 
   function toggleChat() {
@@ -923,7 +985,7 @@ function ProjectDetailPage() {
               project={project}
               processing={project.processingStatus === "processing"}
               onBack={() => void navigate({ to: "/projects" as never })}
-              onDelete={handleDeletedProject}
+              onOpenSettings={() => setSettingsOpen(true)}
               onToggleChat={toggleChat}
             />
 
@@ -1016,6 +1078,42 @@ function ProjectDetailPage() {
               </div>
             </div>
           </section>
+          <ProjectSettingsDrawer
+            open={settingsOpen}
+            project={project}
+            loading={!project}
+            projectName={settingsProjectName}
+            selectedStoreSlug={settingsSelectedStoreSlug}
+            onProjectNameChange={(name) => {
+              setSettingsProjectName(name);
+              setSettingsSaveError(null);
+              setSettingsSaveSuccess(null);
+            }}
+            onSelectedStoreChange={(storeId) => {
+              setSettingsSelectedStoreSlug(storeId);
+              setSettingsSaveError(null);
+              setSettingsSaveSuccess(null);
+            }}
+            deleting={deletePending}
+            onDelete={requestDeleteProject}
+            saving={settingsSaving}
+            saveError={settingsSaveError}
+            saveSuccess={settingsSaveSuccess}
+            onOpenChange={setSettingsOpen}
+            onSave={handleSaveProjectSettings}
+          />
+          <ProjectDeleteConfirmDialog
+            open={deleteConfirmOpen}
+            project={project}
+            deleting={deletePending}
+            error={deleteError}
+            onCancel={() => {
+              if (deletePending) return;
+              setDeleteConfirmOpen(false);
+              setDeleteError(null);
+            }}
+            onConfirm={() => void confirmDeleteProject()}
+          />
         </div>
       ) : (
         <div className="p-md">
@@ -1089,13 +1187,13 @@ function ChatHeader({
   project,
   processing = false,
   onBack,
-  onDelete,
+  onOpenSettings,
   onToggleChat,
 }: {
   project: Project;
   processing?: boolean;
   onBack: () => void;
-  onDelete: () => void;
+  onOpenSettings: () => void;
   onToggleChat: () => void;
 }) {
   return (
@@ -1137,19 +1235,20 @@ function ChatHeader({
           <button
             className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
             type="button"
+            onClick={onOpenSettings}
+            aria-label="Open project settings"
+          >
+            <Settings aria-hidden="true" size={16} />
+          </button>
+          <button
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+            type="button"
             onClick={onToggleChat}
             aria-label="Hide chat"
           >
             <PanelLeftClose aria-hidden="true" size={16} />
           </button>
-          <button
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-300 bg-[var(--app-control)] text-red-500 transition-colors duration-200 hover:border-red-400 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
-            type="button"
-            onClick={onDelete}
-            aria-label="Delete project"
-          >
-            <Trash2 aria-hidden="true" size={16} />
-          </button>
+
         </div>
       </div>
     </header>
