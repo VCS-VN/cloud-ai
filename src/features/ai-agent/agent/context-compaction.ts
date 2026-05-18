@@ -12,6 +12,7 @@ Include:
 Be concise but thorough. This summary will replace the conversation history.`;
 
 const MAX_RECENT_MESSAGES = 10;
+const HARD_TRUNCATE_RECENT = 6;
 
 export async function compactConversation(
   messages: ConversationMessage[],
@@ -21,29 +22,52 @@ export async function compactConversation(
     return messages;
   }
 
-  const systemMessages = messages.filter((m) => "role" in m && m.role === "system");
-  const nonSystemMessages = messages.filter((m) => !("role" in m) || m.role !== "system");
+  const preservedHead: ConversationMessage[] = messages.filter(
+    (m) => "role" in m && (m.role === "system" || m.role === "developer"),
+  );
+  const preservedSet = new Set<ConversationMessage>(preservedHead);
+  const tailMessages = messages.filter((m) => !preservedSet.has(m));
 
   const compactionMessages: ConversationMessage[] = [
-    ...systemMessages,
+    ...preservedHead,
     { role: "user", content: COMPACTION_PROMPT },
-    ...nonSystemMessages,
+    ...tailMessages,
     { role: "user", content: "Please provide the handoff summary now." },
   ];
 
-  let summary: string;
   try {
-    summary = await callModel(compactionMessages);
-  } catch {
-    return messages;
+    const summary = await callModel(compactionMessages);
+    const recentMessages = tailMessages.slice(-MAX_RECENT_MESSAGES);
+    return [
+      ...preservedHead,
+      { role: "user", content: `[Context Compaction Summary]\n${summary}` },
+      ...recentMessages,
+    ];
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: "context_compaction_failed",
+      error: error instanceof Error ? error.message : String(error),
+      action: "hard_truncate_fallback",
+      messageCount: messages.length,
+    }));
+    return hardTruncate(messages, preservedHead, tailMessages);
   }
+}
 
-  const recentMessages = nonSystemMessages.slice(-MAX_RECENT_MESSAGES);
-
+function hardTruncate(
+  original: ConversationMessage[],
+  preservedHead: ConversationMessage[],
+  tailMessages: ConversationMessage[],
+): ConversationMessage[] {
+  const recent = tailMessages.slice(-HARD_TRUNCATE_RECENT);
+  const droppedCount = original.length - preservedHead.length - recent.length;
   return [
-    ...systemMessages,
-    { role: "user", content: `[Context Compaction Summary]\n${summary}` },
-    ...recentMessages,
+    ...preservedHead,
+    {
+      role: "user",
+      content: `[Context Truncated] ${droppedCount} earlier messages were dropped because automatic summarization failed. Continue from the most recent context below.`,
+    },
+    ...recent,
   ];
 }
 

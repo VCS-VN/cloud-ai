@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { Grid2X2, List, Plus, Search } from "lucide-react";
 import { AppSidebar, filterProjects } from "@/components/layout/AppSidebar";
+import { WorkspaceShell } from "@/components/layout/WorkspaceShell";
 import { ProjectList } from "@/components/projects/ProjectList";
 import { getCurrentUser } from "@/server/functions/auth";
 import {
@@ -52,17 +53,17 @@ function ProjectsPage() {
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[var(--app-bg)] p-xs text-[var(--app-text)] sm:p-sm">
-      <div className="grid min-h-[calc(100vh-16px)] gap-sm transition-[grid-template-columns] duration-200 lg:grid-cols-[290px_minmax(0,1fr)] has-[aside[data-collapsed=true]]:lg:grid-cols-[72px_minmax(0,1fr)]">
+    <WorkspaceShell
+      sidebar={
         <AppSidebar
           user={user}
           activeItem="projects"
           projects={projects}
           onOpenProject={openProject}
         />
-
-        <section className="min-w-0 rounded-sm bg-[var(--app-surface)] p-sm transition-colors duration-300 sm:p-md">
-          <header className="mb-md flex flex-col gap-sm xl:flex-row xl:items-start xl:justify-between">
+      }
+    >
+      <header className="mb-md flex flex-col gap-sm xl:flex-row xl:items-start xl:justify-between">
             <div>
               <h1 className="m-0 text-[20px] font-[580] leading-tight tracking-[-0.015em]">
                 Projects
@@ -135,8 +136,6 @@ function ProjectsPage() {
             onCreateProject={goDashboard}
             onClearSearch={() => setProjectSearch("")}
           />
-        </section>
-      </div>
-    </main>
+    </WorkspaceShell>
   );
 }

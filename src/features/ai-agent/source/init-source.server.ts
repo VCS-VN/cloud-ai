@@ -122,6 +122,10 @@ export function renderInfrastructureFiles(
       content: `${JSON.stringify(packageJson, null, 2)}\n`,
     },
     {
+      path: ".env",
+      content: renderEnvSource(),
+    },
+    {
       path: ".env.example",
       content: renderEnvExampleSource(),
     },
@@ -408,9 +412,14 @@ apiClient.interceptors.response.use(
 `;
 }
 
+export function renderEnvSource(): string {
+  return `VITE_API_BASE_URL=https://customer-api.myepis.cloud
+`;
+}
+
 export function renderEnvExampleSource(): string {
   return `# Backend API endpoint used by src/services/http/client.ts
-VITE_API_BASE_URL=http://localhost:3000
+VITE_API_BASE_URL=https://customer-api.myepis.cloud
 `;
 }
 
@@ -461,6 +470,11 @@ export function renderStorefrontBaselineFiles(
     },
     { path: "src/components/store/cart-item.tsx", content: cartItemSource() },
     { path: "src/components/store/order-card.tsx", content: orderCardSource() },
+    { path: "src/components/store/store-detail-error.tsx", content: storeDetailErrorSource() },
+    { path: "src/services/store/use-store-detail.ts", content: storeDetailQuerySource() },
+    { path: "src/services/store/use-products-list.ts", content: productsListQuerySource() },
+    { path: "src/services/store/use-product-detail.ts", content: productDetailQuerySource() },
+    { path: "src/services/store/use-categories-list.ts", content: categoriesListQuerySource() },
     { path: "src/routes/__root.tsx", content: rootRouteSource() },
     { path: "src/routes/index.tsx", content: homeRouteSource() },
     {
@@ -483,6 +497,160 @@ export function renderStorefrontBaselineFiles(
       content: orderDetailRouteSource(),
     },
   ];
+}
+
+function storeDetailErrorSource() {
+  return `import { Button } from '@/components/ui/button'
+
+type StoreDetailErrorProps = {
+  message?: string
+  onRetry: () => void
+}
+
+export function StoreDetailError({ message, onRetry }: StoreDetailErrorProps) {
+  return (
+    <section className="rounded-3xl border border-destructive/30 bg-destructive/5 p-6 text-foreground shadow-sm">
+      <div className="space-y-3">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-destructive">Store unavailable</p>
+        <h2 className="text-2xl font-semibold tracking-tight">We could not load this store.</h2>
+        <p className="text-sm text-muted-foreground">{message ?? 'Real store data failed to load. Try again to refetch the store detail.'}</p>
+        <Button type="button" onClick={onRetry}>Retry store data</Button>
+      </div>
+    </section>
+  )
+}
+`;
+}
+
+function storeDetailQuerySource() {
+  return `import { useQuery } from '@tanstack/react-query'
+import { apiClient } from '@/services/http/client'
+
+export type StoreDetail = {
+  id: string
+  slug: string
+  name: string
+  description?: string
+  [key: string]: unknown
+}
+
+export const storeSlug = import.meta.env.VITE_STORE_SLUG?.trim() || ''
+export const hasStoreSlug = storeSlug.length > 0
+
+export async function getStoreDetail(slug = storeSlug) {
+  const response = await apiClient.get<StoreDetail>(\`/api/v1/stores/\${slug}\`)
+  return response.data
+}
+
+export function useStoreDetail() {
+  return useQuery({
+    queryKey: ['store-detail', storeSlug],
+    queryFn: () => getStoreDetail(storeSlug),
+    enabled: hasStoreSlug,
+    retry: 1,
+  })
+}
+`;
+}
+
+function productsListQuerySource() {
+  return `import { useQuery } from '@tanstack/react-query'
+import { apiClient } from '@/services/http/client'
+import { hasStoreSlug } from '@/services/store/use-store-detail'
+
+export type Product = {
+  id: string
+  entityId?: string
+  name: string
+  price?: number
+  [key: string]: unknown
+}
+
+export type ProductsList = {
+  total: number
+  data: Product[]
+}
+
+type ProductsListParams = {
+  limit?: number
+  page?: number
+  storeId?: string
+  query?: string
+}
+
+export async function getProductsList(params: ProductsListParams) {
+  const response = await apiClient.get<ProductsList>('/api/v1/products', { params })
+  return response.data
+}
+
+export function useProductsList(params: ProductsListParams = {}) {
+  return useQuery({
+    queryKey: ['products-list', params],
+    queryFn: () => getProductsList(params),
+    enabled: hasStoreSlug && Boolean(params.storeId),
+  })
+}
+`;
+}
+
+function productDetailQuerySource() {
+  return `import { useQuery } from '@tanstack/react-query'
+import { apiClient } from '@/services/http/client'
+import { hasStoreSlug, type StoreDetail } from '@/services/store/use-store-detail'
+import type { Product } from '@/services/store/use-products-list'
+
+export type ProductDetail = Product & {
+  store?: StoreDetail
+  [key: string]: unknown
+}
+
+export async function getProductDetail(productId: string) {
+  const response = await apiClient.get<ProductDetail>(\`/api/v1/products/\${productId}\`, {
+    params: {
+      isGettingModel: true,
+      isGettingDefaultModel: true,
+    },
+  })
+  return response.data
+}
+
+export function useProductDetail(productId?: string) {
+  return useQuery({
+    queryKey: ['product-detail', productId],
+    queryFn: () => getProductDetail(productId ?? ''),
+    enabled: hasStoreSlug && Boolean(productId),
+  })
+}
+`;
+}
+
+function categoriesListQuerySource() {
+  return `import { useQuery } from '@tanstack/react-query'
+import { apiClient } from '@/services/http/client'
+import { hasStoreSlug } from '@/services/store/use-store-detail'
+
+export type Category = {
+  id: string
+  name: string
+  slug?: string
+  [key: string]: unknown
+}
+
+export async function getCategoriesList(storeId?: string) {
+  const response = await apiClient.get<Category[]>('/api/v1/categories', {
+    params: { storeId },
+  })
+  return response.data
+}
+
+export function useCategoriesList(storeId?: string) {
+  return useQuery({
+    queryKey: ['categories-list', storeId],
+    queryFn: () => getCategoriesList(storeId),
+    enabled: hasStoreSlug && Boolean(storeId),
+  })
+}
+`;
 }
 
 function appCssSource() {

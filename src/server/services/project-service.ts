@@ -2,6 +2,7 @@ import axios from "axios";
 import { ProjectWorkspaceService } from "@/agent/project-workspace-service";
 import type { ProcessManager } from "@/features/ai-agent/runtime/process-manager.server";
 import type { ProjectStateStore } from "@/features/ai-agent/project/project-state-store.server";
+import type { GeneratedProjectEnvWriter } from "@/features/ai-agent/store-runtime/generated-project-env-writer.server";
 import {
   EMPTY_DEV_RUNTIME,
   type DevRuntime,
@@ -85,6 +86,7 @@ export class ProjectService {
     private readonly processManager?: ProcessManager,
     private readonly projectStateStore?: ProjectStateStore,
     private readonly runtimeService?: RuntimeService,
+    private readonly envWriter?: GeneratedProjectEnvWriter,
   ) {
     this.workspaceService = workspaceService ?? new ProjectWorkspaceService(fileNodeRepository);
   }
@@ -206,6 +208,19 @@ export class ProjectService {
       userId,
     );
     if (!project) throw new Error("Project not found.");
+    if (settings.selectedStoreSlug !== undefined) {
+      await this.envWriter
+        ?.syncStoreSlug(projectId, project.selectedStoreSlug ?? null)
+        .catch((err) =>
+          console.warn(
+            JSON.stringify({
+              event: "generated_project_env_sync_failed",
+              projectId,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          ),
+        );
+    }
     return project;
   }
 
@@ -384,6 +399,14 @@ export class ProjectService {
       ? await this.getProjectWorkspace(projectId, userId)
       : undefined;
     return { projects, selectedProjectId: workspace?.project.id, workspace };
+  }
+
+  async getSelectedStoreSlug(
+    projectId: string,
+    userId?: string,
+  ): Promise<string | null> {
+    const project = await this.projectRepository.getProject(projectId, userId);
+    return normalizeSelectedStoreSlug(project?.selectedStoreSlug ?? null);
   }
 
   async deleteProject(

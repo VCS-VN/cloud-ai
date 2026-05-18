@@ -1,10 +1,12 @@
 import type { AgentConfig } from "../agent/agent-config";
+import type { OpenAIProvider } from "../openai/openai-provider.server";
 import type { AgentRun, ProjectState } from "../project/project-state.schema";
 import {
   createClarificationStructuredThinkingResult,
   createHeuristicThinkingResult,
 } from "./thinking-fallback";
 import { preflightUserPrompt } from "./thinking-preflight";
+import { extractUserWishes } from "./user-wish-extractor.server";
 import {
   thinkingInputSchema,
   thinkingResultSchema,
@@ -23,7 +25,7 @@ export type RunThinkingLayerInput = {
   userId?: string;
   userPrompt: string;
   projectState: ProjectState | null;
-  provider?: unknown;
+  provider?: OpenAIProvider;
   agentConfig?: AgentConfig;
   saveResult?: (result: ThinkingResult) => Promise<void> | void;
 };
@@ -70,10 +72,54 @@ export async function runThinkingLayer(
     return result;
   }
 
-  const heuristic = createHeuristicThinkingResult(thinkingInput);
-  const validated = thinkingResultSchema.parse(heuristic);
+  const result = await runLLMThinkingWithFallback({
+    thinkingInput,
+    provider: input.provider,
+    model: input.agentConfig?.plannerModel,
+  });
+  const validated = thinkingResultSchema.parse(result);
   await input.saveResult?.(validated);
   return validated;
+}
+
+async function runLLMThinkingWithFallback(args: {
+  thinkingInput: ThinkingInput;
+  provider?: OpenAIProvider;
+  model?: string;
+}): Promise<ThinkingResult> {
+  if (!args.provider || !args.model) {
+    return createHeuristicThinkingResult(args.thinkingInput);
+  }
+  const startedAt = Date.now();
+  try {
+    const structured = await extractUserWishes({
+      input: args.thinkingInput,
+      provider: args.provider,
+      model: args.model,
+    });
+    const legacy = structuredThinkingToLegacyResult(structured, args.thinkingInput);
+    const validated = thinkingResultSchema.parse(legacy);
+    console.info(JSON.stringify({
+      event: "thinking_layer_llm_completed",
+      projectId: args.thinkingInput.projectId,
+      runId: args.thinkingInput.runId,
+      model: args.model,
+      durationMs: Date.now() - startedAt,
+      intent: validated.promptClassification.lifecycleIntent,
+      riskLevel: validated.riskAssessment.level,
+    }));
+    return validated;
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: "thinking_layer_llm_failed_falling_back_to_heuristic",
+      projectId: args.thinkingInput.projectId,
+      runId: args.thinkingInput.runId,
+      model: args.model,
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+    }));
+    return createHeuristicThinkingResult(args.thinkingInput);
+  }
 }
 
 export function buildStructuredThinkingInput(
@@ -119,6 +165,13 @@ function structuredThinkingToLegacyResult(
   const needsClarification =
     result.projectAction.shouldAskClarification ||
     result.downstream.recommendedNextStep === "ask_clarification";
+  const fallbackWishDescription =
+    pickNonEmpty(result.userWish.explicitRequests[0], input.userPrompt, result.normalizedTask.title) ??
+    "Process the user prompt.";
+  const acceptanceCriteria = filterNonEmpty(result.normalizedTask.acceptanceCriteria);
+  const safeAcceptanceCriteria = acceptanceCriteria.length > 0
+    ? acceptanceCriteria
+    : [result.normalizedTask.description];
   return {
     id,
     projectId: input.projectId,
@@ -133,10 +186,10 @@ function structuredThinkingToLegacyResult(
       {
         id: wishId,
         type: "explicit",
-        description: result.userWish.explicitRequests[0] ?? input.userPrompt,
+        description: fallbackWishDescription,
         priority: "must_have",
         confidence: result.confidence,
-        evidence: result.userWish.rawPrompt,
+        evidence: pickNonEmpty(result.userWish.rawPrompt, input.userPrompt) ?? fallbackWishDescription,
       },
     ],
     ecommerceInterpretation: {
@@ -190,10 +243,7 @@ function structuredThinkingToLegacyResult(
       reasons: result.risk.reasons,
       requiresUserConfirmation: needsClarification,
     },
-    suggestedAcceptanceCriteria:
-      result.normalizedTask.acceptanceCriteria.length > 0
-        ? result.normalizedTask.acceptanceCriteria
-        : [result.normalizedTask.description],
+    suggestedAcceptanceCriteria: safeAcceptanceCriteria,
     downstreamTask: {
       taskId: `${id}_task`,
       projectId: input.projectId,
@@ -209,10 +259,7 @@ function structuredThinkingToLegacyResult(
           description: result.normalizedTask.description,
           sourceWishId: wishId,
           priority: "must_have",
-          acceptanceCriteria:
-            result.normalizedTask.acceptanceCriteria.length > 0
-              ? result.normalizedTask.acceptanceCriteria
-              : [result.normalizedTask.description],
+          acceptanceCriteria: safeAcceptanceCriteria,
         },
       ],
       targetScope: {
@@ -255,7 +302,7 @@ function structuredThinkingToLegacyResult(
             ? result.risk.reasons.join("; ")
             : null,
         },
-        acceptanceCriteria: result.normalizedTask.acceptanceCriteria,
+        acceptanceCriteria: safeAcceptanceCriteria,
         implementationBias: {
           preferMinimalPatch: true,
           preserveExistingDesignDirection: true,
@@ -469,4 +516,19 @@ function mapFileKind(
   if (kind === "store") return "state";
   if (kind === "api") return "server";
   return "unknown";
+}
+
+function pickNonEmpty(...values: Array<string | undefined | null>): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value;
+  }
+  return undefined;
+}
+
+function filterNonEmpty(values: ReadonlyArray<string | undefined | null>): string[] {
+  const result: string[] = [];
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) result.push(value);
+  }
+  return result;
 }

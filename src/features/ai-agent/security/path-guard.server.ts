@@ -1,7 +1,6 @@
 import path from "node:path";
 
 const BLOCKED_SEGMENTS = new Set([".git", "node_modules"]);
-const BLOCKED_FILES = new Set([".env", ".env.local", ".env.production", ".env.development"]);
 
 export class PathGuard {
   constructor(private readonly rootPath = path.resolve(process.cwd(), "projects")) {}
@@ -28,6 +27,5 @@ export class PathGuard {
     const parts = normalized.split("/").filter(Boolean);
     if (parts.includes("..")) throw new Error("Parent directory traversal is not allowed.");
     if (parts.some((part) => BLOCKED_SEGMENTS.has(part))) throw new Error("Path targets a blocked directory.");
-    if (parts.some((part) => BLOCKED_FILES.has(part))) throw new Error("Path targets a blocked secret file.");
   }
 }

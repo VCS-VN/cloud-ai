@@ -1,3 +1,4 @@
+import { buildStoreRuntimeInstructions, buildStoreRuntimePromptContext } from "../store-runtime/store-runtime-prompt";
 import type { ProjectState } from "../project/project-state.schema";
 
 export const CODE_AGENT_DEVELOPER_PROMPT = `You are the Code Tool Agent for an AI E-commerce Website Builder.
@@ -17,7 +18,7 @@ Core rules:
 - Preserve existing project direction and ProjectState.
 - Do not change package versions unless the AgentTask explicitly requires it and package policy allows it.
 - Do not edit routeTree.gen.ts manually.
-- Do not edit .env or secret files.
+- Do not edit repository-level or Builder application .env or secret files. Allowed exception: add or update only VITE_STORE_SLUG inside generated project-detail .env files while preserving unrelated environment variables.
 - If a requested change is destructive, broad, or conflicts with ProjectState, stop and request clarification.
 - After mutation, run validation.
 - If validation fails, inspect the error and perform a minimal repair patch.
@@ -54,6 +55,7 @@ export function summarizeProjectStateForCodeAgent(projectState: ProjectState) {
 export function buildInitialCodeAgentInput(input: {
   agentTask: CodeAgentTaskSummary;
   projectState: ProjectState;
+  selectedStoreSlug?: string | null;
 }) {
   return [
     { role: "developer" as const, content: CODE_AGENT_DEVELOPER_PROMPT },
@@ -62,6 +64,13 @@ export function buildInitialCodeAgentInput(input: {
       content: JSON.stringify({
         agentTask: input.agentTask,
         projectStateSummary: summarizeProjectStateForCodeAgent(input.projectState),
+        storeRuntimeContext: buildStoreRuntimePromptContext({
+          selectedStoreSlug: input.selectedStoreSlug,
+        }),
+        storeRuntimeInstructions: buildStoreRuntimeInstructions({
+          selectedStoreSlug: input.selectedStoreSlug,
+          mode: "edit",
+        }),
         instruction: "Inspect the project with tools before applying any code change. Minimum sequence: project_get_context, project_get_file_tree, then project_search_code or project_read_file for relevant files before project_apply_patch or project_create_file. Do not patch blindly.",
       }),
     },

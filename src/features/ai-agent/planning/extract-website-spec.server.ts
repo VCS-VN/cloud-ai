@@ -16,15 +16,25 @@ Example shape: {"store":{"name":"Demo Store","type":"fashion","description":"Mod
 export async function extractWebsiteSpec(input: { prompt: string; provider?: OpenAIProvider; model?: string; projectState?: unknown }): Promise<WebsiteSpec> {
   const fallback = createFallbackWebsiteSpec(input.prompt);
   if (input.provider && input.model) {
-    const spec = await parseProviderWebsiteSpec({
-      prompt: input.prompt,
-      projectState: input.projectState,
-      provider: input.provider,
-      model: input.model,
-    });
-    const normalized = normalizeWebsiteSpec(spec, fallback);
-    assertNormalizedWebsiteSpec(normalized);
-    return normalized;
+    try {
+      const spec = await parseProviderWebsiteSpec({
+        prompt: input.prompt,
+        projectState: input.projectState,
+        provider: input.provider,
+        model: input.model,
+      });
+      const normalized = normalizeWebsiteSpec(spec, fallback);
+      assertNormalizedWebsiteSpec(normalized);
+      return normalized;
+    } catch (error) {
+      console.warn(JSON.stringify({
+        event: "extract_website_spec_provider_failed_using_heuristic_fallback",
+        model: input.model,
+        error: error instanceof Error ? error.message.slice(0, 400) : String(error).slice(0, 400),
+      }));
+      assertNormalizedWebsiteSpec(fallback);
+      return fallback;
+    }
   }
 
   assertNormalizedWebsiteSpec(fallback);
@@ -92,6 +102,7 @@ ${contractPrompt}`,
     user: { prompt: input.prompt, projectState: input.projectState },
     schemaName: "website_spec",
     schema: websiteSpecProviderSchema,
+    allowFreeFormFallback: true,
   });
 }
 

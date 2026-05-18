@@ -66,6 +66,7 @@ export function isForbiddenProjectPath(path: string) {
   const basename = segments.at(-1) ?? normalized;
 
   if (segments.some((segment) => FORBIDDEN_SEGMENTS.has(segment))) return true;
+  if (basename === ".env" || basename.startsWith(".env.")) return false;
   if (FORBIDDEN_EXACT_NAMES.has(basename)) return true;
   return SECRET_FILE_PATTERNS.some((pattern) => pattern.test(basename));
 }

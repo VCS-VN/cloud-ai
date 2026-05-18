@@ -1,17 +1,19 @@
 import type OpenAI from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions/completions";
 import { redactSecrets } from "../security/secret-redactor";
 import { parseStructuredText, type StructuredOutputSource } from "./structured-output-parser";
+import { isSchemaRejectionError } from "./schema-error-detection";
+import {
+  ToolCallAccumulator,
+  extractChatToolCalls,
+  toChatMessages,
+  toChatResponseFormat,
+  toChatTools,
+} from "./chat-completions-adapter";
+import type { ConversationMessage } from "../agent/agentic-loop.types";
 import type { CodeToolDefinition, ProjectToolResult, ProviderFunctionToolCall } from "../code-tools/code-agent-types";
-import { buildOpenAIFunctionTools } from "../code-tools/code-tool-registry.server";
 
 export type OpenAITextStreamEvent = { type: "delta" | "done"; text?: string };
-
-type StreamingJsonSchemaTextFormat = {
-  type: "json_schema";
-  name: string;
-  strict: boolean;
-  schema: Record<string, unknown>;
-};
 
 type OpenAIProviderLogLevel = "info" | "error";
 
@@ -32,15 +34,26 @@ export class OpenAIProvider {
     input: unknown[];
     tools: CodeToolDefinition[];
     toolChoice?: "auto" | "required";
+    signal?: AbortSignal;
   }): Promise<{ raw: unknown; toolCalls: ProviderFunctionToolCall[]; outputText: string }> {
-    const response = await this.client.responses.create({
-      model: args.model,
-      input: args.input as never,
-      tools: buildOpenAIFunctionTools(args.tools) as never,
-      tool_choice: args.toolChoice ?? "auto",
-      parallel_tool_calls: false,
-    } as never);
-    return { raw: response, toolCalls: extractFunctionToolCalls(response), outputText: selectResponseOutputText(response) };
+    const response = await this.client.chat.completions.create(
+      {
+        model: args.model,
+        messages: toChatMessages(args.input as ConversationMessage[]),
+        tools: toChatTools(args.tools),
+        tool_choice: args.toolChoice ?? "auto",
+        parallel_tool_calls: false,
+      },
+      args.signal ? { signal: args.signal } : undefined,
+    );
+
+    const choice = response.choices[0];
+    const message = choice?.message;
+    return {
+      raw: response,
+      outputText: typeof message?.content === "string" ? message.content : "",
+      toolCalls: extractChatToolCalls((message?.tool_calls ?? []) as never),
+    };
   }
 
   async continueCodeToolResponse(args: {
@@ -49,6 +62,7 @@ export class OpenAIProvider {
     tools: CodeToolDefinition[];
     toolCall: ProviderFunctionToolCall;
     toolOutput: ProjectToolResult;
+    signal?: AbortSignal;
   }): Promise<{ raw: unknown; toolCalls: ProviderFunctionToolCall[]; outputText: string }> {
     return this.createCodeToolResponse({
       model: args.model,
@@ -62,45 +76,120 @@ export class OpenAIProvider {
       ],
       tools: args.tools,
       toolChoice: "auto",
+      signal: args.signal,
     });
   }
 
-  async *streamCodeToolResponse(args: {
+  async streamCodeToolResponse(args: {
     model: string;
     input: unknown[];
     tools: CodeToolDefinition[];
     toolChoice?: "auto" | "required";
-  }): AsyncGenerator<
-    | { type: "text_delta"; text: string }
-    | { type: "tool_call"; toolCall: ProviderFunctionToolCall }
-    | { type: "done"; outputText: string; toolCalls: ProviderFunctionToolCall[] }
-  > {
-    const response = await this.client.responses.create({
+    signal?: AbortSignal;
+    onTextDelta?: (delta: string) => void | Promise<void>;
+    reasoningEffort?: "low" | "medium" | "high";
+  }): Promise<{ raw: unknown; toolCalls: ProviderFunctionToolCall[]; outputText: string }> {
+    const startedAt = Date.now();
+    const requestBody: Record<string, unknown> = {
       model: args.model,
-      input: args.input as never,
-      tools: buildOpenAIFunctionTools(args.tools) as never,
+      messages: toChatMessages(args.input as ConversationMessage[]),
+      tools: toChatTools(args.tools),
       tool_choice: args.toolChoice ?? "auto",
       parallel_tool_calls: false,
       stream: true,
-    } as never);
+    };
+    if (args.reasoningEffort) {
+      requestBody.reasoning_effort = args.reasoningEffort;
+    }
+
+    this.log("info", "openai_stream_started", {
+      model: args.model,
+      mode: "chat_code_tool_stream",
+      requestKind: "streamCodeToolResponse",
+      toolCount: args.tools.length,
+    });
 
     let outputText = "";
-    const toolCalls: ProviderFunctionToolCall[] = [];
+    let sawAnyChunk = false;
+    let finishReason: string | null = null;
+    const accumulator = new ToolCallAccumulator();
+    let lastEventAt = Date.now();
 
-    for await (const event of response as unknown as AsyncIterable<{ type: string; delta?: string; response?: { output?: unknown[] } }>) {
-      if (event.type === "response.output_text.delta" && event.delta) {
-        outputText += event.delta;
-        yield { type: "text_delta", text: event.delta };
-      }
-      if (event.type === "response.completed" && event.response) {
-        const calls = extractFunctionToolCalls(event.response);
-        for (const call of calls) {
-          toolCalls.push(call);
-          yield { type: "tool_call", toolCall: call };
+    try {
+      const stream = (await this.client.chat.completions.create(
+        requestBody as never,
+        args.signal ? { signal: args.signal } : undefined,
+      )) as unknown as AsyncIterable<{
+        choices?: Array<{
+          delta?: {
+            content?: string | null;
+            tool_calls?: Array<{
+              index?: number;
+              id?: string;
+              type?: string;
+              function?: { name?: string; arguments?: string };
+            }>;
+          };
+          finish_reason?: string | null;
+        }>;
+      }>;
+
+      for await (const chunk of stream) {
+        sawAnyChunk = true;
+        lastEventAt = Date.now();
+        if (args.signal?.aborted) {
+          throw new DOMException("Aborted", "AbortError");
         }
-        yield { type: "done", outputText, toolCalls };
+        const choice = chunk.choices?.[0];
+        const delta = choice?.delta;
+        if (delta?.content) {
+          outputText += delta.content;
+          if (args.onTextDelta) {
+            try {
+              await args.onTextDelta(delta.content);
+            } catch (deltaError) {
+              this.log("error", "openai_stream_delta_callback_failed", {
+                error: deltaError instanceof Error ? deltaError.message : String(deltaError),
+              });
+            }
+          }
+        }
+        if (delta?.tool_calls && delta.tool_calls.length > 0) {
+          accumulator.consume(delta.tool_calls as never);
+        }
+        if (choice?.finish_reason) {
+          finishReason = choice.finish_reason;
+        }
       }
+    } catch (error) {
+      const elapsed = Date.now() - lastEventAt;
+      this.log("error", "openai_stream_failed", {
+        model: args.model,
+        mode: "chat_code_tool_stream",
+        error: error instanceof Error ? error.message : String(error),
+        sawAnyChunk,
+        outputTextLength: outputText.length,
+        toolCallCount: accumulator.size(),
+        elapsedSinceLastEventMs: elapsed,
+      });
+      throw error;
     }
+
+    if (!sawAnyChunk) {
+      throw new Error("Chat completions stream produced no chunks before close.");
+    }
+
+    const toolCalls = accumulator.finalize();
+    this.log("info", "openai_stream_completed", {
+      model: args.model,
+      mode: "chat_code_tool_stream",
+      requestKind: "streamCodeToolResponse",
+      finishReason,
+      outputTextLength: outputText.length,
+      toolCallCount: toolCalls.length,
+      elapsedMs: Date.now() - startedAt,
+    });
+    return { raw: null, toolCalls, outputText };
   }
 
   async parseStructured<TInput, TOutput>(args: {
@@ -109,80 +198,96 @@ export class OpenAIProvider {
     user: TInput;
     schemaName: string;
     schema: unknown;
+    allowFreeFormFallback?: boolean;
   }): Promise<TOutput> {
+    try {
+      return await this.parseStructuredInner<TInput, TOutput>(args, { freeForm: false });
+    } catch (error) {
+      if (args.allowFreeFormFallback && isSchemaRejectionError(error)) {
+        this.log("info", "openai_structured_falling_back_to_free_form", {
+          model: args.model,
+          schemaName: args.schemaName,
+          reason: error instanceof Error ? error.message.slice(0, 200) : "unknown",
+        });
+        return this.parseStructuredInner<TInput, TOutput>(args, { freeForm: true });
+      }
+      throw error;
+    }
+  }
+
+  private async parseStructuredInner<TInput, TOutput>(
+    args: {
+      model: string;
+      system: string;
+      user: TInput;
+      schemaName: string;
+      schema: unknown;
+    },
+    opts: { freeForm: boolean },
+  ): Promise<TOutput> {
     const startedAt = Date.now();
     let chunkCount = 0;
-    let accumulatedLength = 0;
-    let deltaOutputText = "";
-    let doneOutputText = "";
-    let completedOutputText = "";
+    let accumulatedText = "";
     let selectedOutputSource: StructuredOutputSource = "empty";
 
     this.log("info", "openai_stream_started", {
       model: args.model,
-      mode: "structured",
+      mode: opts.freeForm ? "chat_structured_free_form" : "chat_structured",
       requestKind: "parseStructured",
       schemaName: args.schemaName,
     });
 
-    try {
-      const stream = await this.client.responses.create({
-        model: args.model,
-        instructions: `${args.system}
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: `${args.system}
 Return exactly one JSON value matching schema ${args.schemaName}.
 The JSON value must be the schema root object itself, not nested under "${args.schemaName}", "thinking_result", "result", "data", "output", or "response".
 Do not include markdown fences, prose, comments, or explanations.`,
-        input: JSON.stringify(args.user),
-        text: { format: createStreamingJsonSchemaTextFormat(args.schema, args.schemaName) },
-        stream: true,
-      });
+      },
+      {
+        role: "user",
+        content: typeof args.user === "string" ? args.user : JSON.stringify(args.user),
+      },
+    ];
 
-      for await (const event of stream as AsyncIterable<OpenAIResponseStreamEvent>) {
-        if (event.type) {
-          this.log("info", "openai_stream_event", {
-            mode: "structured",
-            schemaName: args.schemaName,
-            eventType: event.type,
-            deltaLength: event.delta?.length ?? 0,
-            chunkCount,
-            accumulatedLength,
-            completedLength: completedOutputText.length,
-            doneLength: doneOutputText.length,
-            elapsedMs: Date.now() - startedAt,
-          });
+    try {
+      const requestBody: Record<string, unknown> = {
+        model: args.model,
+        messages,
+        stream: true,
+      };
+      if (!opts.freeForm) {
+        const responseFormat = toChatResponseFormat(args.schema, args.schemaName, true);
+        if (responseFormat) {
+          requestBody.response_format = responseFormat;
         }
-        if (event.type === "response.output_text.delta" && event.delta) {
-          chunkCount += 1;
-          deltaOutputText += event.delta;
-          accumulatedLength = deltaOutputText.length;
-        }
-        if (event.type === "response.output_text.done" && event.text) {
-          doneOutputText = event.text;
-        }
-        if (event.type === "response.completed" && event.response?.output_text) {
-          completedOutputText = event.response.output_text;
-        }
-        if (event.type === "response.failed" || event.type === "response.incomplete" || event.type === "response.error") {
-          throw new Error(`OpenAI structured output stream ended with ${event.type} for ${args.schemaName}.`);
-        }
-        if (event.type === "response.refusal.delta" || event.type === "response.refusal.done") {
+      }
+      const stream = (await this.client.chat.completions.create(requestBody as never)) as unknown as AsyncIterable<{
+        choices?: Array<{ delta?: { content?: string | null; refusal?: string | null }; finish_reason?: string | null }>;
+      }>;
+
+      for await (const chunk of stream) {
+        const choice = chunk.choices?.[0];
+        if (choice?.delta?.refusal) {
           throw new Error(`OpenAI refused structured output for ${args.schemaName}.`);
+        }
+        const delta = choice?.delta?.content;
+        if (delta) {
+          chunkCount += 1;
+          accumulatedText += delta;
         }
       }
 
-      const selectedOutput = selectStructuredOutputText({ completedOutputText, doneOutputText, deltaOutputText });
-      selectedOutputSource = selectedOutput.source;
-      const parsed = parseStructuredText<TOutput>(selectedOutput.text, args.schema, args.schemaName, selectedOutput.source);
+      selectedOutputSource = accumulatedText.trim() ? "delta" : "empty";
+      const parsed = parseStructuredText<TOutput>(accumulatedText, args.schema, args.schemaName, selectedOutputSource);
       this.log("info", "openai_stream_completed", {
         model: args.model,
-        mode: "structured",
+        mode: opts.freeForm ? "chat_structured_free_form" : "chat_structured",
         requestKind: "parseStructured",
         schemaName: args.schemaName,
         chunkCount,
-        totalChars: selectedOutput.text.length,
-        deltaChars: deltaOutputText.length,
-        doneChars: doneOutputText.length,
-        completedChars: completedOutputText.length,
+        totalChars: accumulatedText.length,
         selectedOutputSource,
         elapsedMs: Date.now() - startedAt,
       });
@@ -191,17 +296,15 @@ Do not include markdown fences, prose, comments, or explanations.`,
       const normalized = normalizeProviderError(error, `OpenAI structured output streaming call failed for ${args.schemaName}.`);
       this.log("error", "openai_stream_failed", {
         model: args.model,
-        mode: "structured",
+        mode: opts.freeForm ? "chat_structured_free_form" : "chat_structured",
         requestKind: "parseStructured",
         schemaName: args.schemaName,
         error: normalized.message,
         originalErrorName: error instanceof Error ? error.name : typeof error,
         originalStack: error instanceof Error && error.stack ? redactSecrets(error.stack) : undefined,
-        safeOutputPreview: safePreview(completedOutputText || doneOutputText || deltaOutputText),
+        safeOutputPreview: safePreview(accumulatedText),
         selectedOutputSource,
-        deltaChars: deltaOutputText.length,
-        doneChars: doneOutputText.length,
-        completedChars: completedOutputText.length,
+        chunkCount,
         elapsedMs: Date.now() - startedAt,
       });
       throw normalized;
@@ -212,6 +315,7 @@ Do not include markdown fences, prose, comments, or explanations.`,
     model: string;
     system: string;
     input: unknown;
+    signal?: AbortSignal;
   }): AsyncGenerator<OpenAITextStreamEvent> {
     const startedAt = Date.now();
     let chunkCount = 0;
@@ -219,41 +323,41 @@ Do not include markdown fences, prose, comments, or explanations.`,
 
     this.log("info", "openai_stream_started", {
       model: args.model,
-      mode: "text",
+      mode: "chat_text",
       requestKind: "streamText",
     });
 
     try {
-      const stream = await this.client.responses.create({
-        model: args.model,
-        instructions: args.system,
-        input: typeof args.input === "string" ? args.input : JSON.stringify(args.input),
-        stream: true,
-      });
+      const stream = (await this.client.chat.completions.create(
+        {
+          model: args.model,
+          messages: [
+            { role: "system", content: args.system },
+            { role: "user", content: typeof args.input === "string" ? args.input : JSON.stringify(args.input) },
+          ],
+          stream: true,
+        },
+        args.signal ? { signal: args.signal } : undefined,
+      )) as unknown as AsyncIterable<{
+        choices?: Array<{ delta?: { content?: string | null }; finish_reason?: string | null }>;
+      }>;
 
-      for await (const event of stream as AsyncIterable<{ type: string; delta?: string }>) {
-        if (event.type) {
-          this.log("info", "openai_stream_event", {
-            mode: "text",
-            eventType: event.type,
-            deltaLength: event.delta?.length ?? 0,
-            chunkCount,
-            accumulatedLength,
-            elapsedMs: Date.now() - startedAt,
-          });
-        }
-        if (event.type === "response.output_text.delta" && event.delta) {
+      for await (const chunk of stream) {
+        const choice = chunk.choices?.[0];
+        const delta = choice?.delta?.content;
+        if (delta) {
           chunkCount += 1;
-          accumulatedLength += event.delta.length;
-          yield { type: "delta", text: event.delta };
+          accumulatedLength += delta.length;
+          yield { type: "delta", text: delta };
         }
-        if (event.type === "response.completed") {
+        if (choice?.finish_reason) {
           this.log("info", "openai_stream_completed", {
             model: args.model,
-            mode: "text",
+            mode: "chat_text",
             requestKind: "streamText",
             chunkCount,
             totalChars: accumulatedLength,
+            finishReason: choice.finish_reason,
             elapsedMs: Date.now() - startedAt,
           });
           yield { type: "done" };
@@ -263,7 +367,7 @@ Do not include markdown fences, prose, comments, or explanations.`,
       const normalized = normalizeProviderError(error, "OpenAI streaming call failed.");
       this.log("error", "openai_stream_failed", {
         model: args.model,
-        mode: "text",
+        mode: "chat_text",
         requestKind: "streamText",
         error: normalized.message,
         originalErrorName: error instanceof Error ? error.name : typeof error,
@@ -278,13 +382,6 @@ Do not include markdown fences, prose, comments, or explanations.`,
     this.logger(level, event, data);
   }
 }
-
-type OpenAIResponseStreamEvent = {
-  type: string;
-  delta?: string;
-  text?: string;
-  response?: { output_text?: string };
-};
 
 function defaultOpenAIProviderLogger(
   level: OpenAIProviderLogLevel,
@@ -308,79 +405,11 @@ function redactLogData(data: Record<string, unknown>) {
   );
 }
 
-function selectStructuredOutputText(args: {
-  completedOutputText: string;
-  doneOutputText: string;
-  deltaOutputText: string;
-}): { text: string; source: StructuredOutputSource } {
-  if (args.completedOutputText.trim()) return { text: args.completedOutputText, source: "completed" };
-  if (args.doneOutputText.trim()) return { text: args.doneOutputText, source: "done" };
-  if (args.deltaOutputText.trim()) return { text: args.deltaOutputText, source: "delta" };
-  return { text: "", source: "empty" };
-}
-
 function safePreview(text: string) {
   return redactSecrets(text).replace(/\s+/g, " ").slice(0, 300);
-}
-
-function createStreamingJsonSchemaTextFormat(schema: unknown, schemaName: string): StreamingJsonSchemaTextFormat {
-  if (isStreamingJsonSchemaTextFormat(schema)) {
-    return schema;
-  }
-
-  if (isJsonSchemaObject(schema)) {
-    return {
-      type: "json_schema",
-      name: schemaName,
-      strict: true,
-      schema: schema as Record<string, unknown>,
-    };
-  }
-
-  return {
-    type: "json_schema",
-    name: schemaName,
-    strict: true,
-    schema: {},
-  };
-}
-
-function isStreamingJsonSchemaTextFormat(value: unknown): value is StreamingJsonSchemaTextFormat {
-  return typeof value === "object" && value !== null && "type" in value && (value as { type?: unknown }).type === "json_schema";
-}
-
-function isJsonSchemaObject(value: unknown) {
-  return typeof value === "object" && value !== null && "type" in value && "properties" in value;
 }
 
 function normalizeProviderError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : fallback;
   return new Error(redactSecrets(message), { cause: error });
-}
-
-function extractFunctionToolCalls(response: unknown): ProviderFunctionToolCall[] {
-  const output = Array.isArray((response as { output?: unknown }).output) ? (response as { output: unknown[] }).output : [];
-  return output.flatMap((item) => {
-    const candidate = item as { type?: string; name?: unknown; call_id?: unknown; id?: unknown; arguments?: unknown };
-    if (candidate.type !== "function_call" || typeof candidate.name !== "string") return [];
-    return [{
-      callId: String(candidate.call_id ?? candidate.id ?? ""),
-      name: candidate.name,
-      arguments: candidate.arguments ?? {},
-    }];
-  });
-}
-
-function selectResponseOutputText(response: unknown) {
-  const direct = (response as { output_text?: unknown }).output_text;
-  if (typeof direct === "string") return direct;
-  const output = Array.isArray((response as { output?: unknown }).output) ? (response as { output: unknown[] }).output : [];
-  return output
-    .flatMap((item) => {
-      const content = (item as { content?: unknown }).content;
-      return Array.isArray(content) ? content : [];
-    })
-    .map((content) => (content as { text?: unknown }).text)
-    .filter((text): text is string => typeof text === "string")
-    .join("");
 }

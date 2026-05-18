@@ -10,6 +10,7 @@ export type StructuredThinkingProvider = {
     user: TInput;
     schemaName: string;
     schema: unknown;
+    allowFreeFormFallback?: boolean;
   }): Promise<TOutput>;
 };
 

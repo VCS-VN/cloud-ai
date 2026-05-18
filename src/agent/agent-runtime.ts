@@ -1,5 +1,6 @@
 import { AgentToolRegistry } from "./agent-tool-registry";
 import { SHARED_SAMPLE_DATA_FILE_PATHS, buildStoreSampleDataInstructions } from "@/ai/prompt-builder";
+import { buildStoreRuntimeInstructions } from "@/features/ai-agent/store-runtime/store-runtime-prompt";
 import { ProjectWorkspaceService } from "./project-workspace-service";
 
 export type AgentRuntimeRunInput = {
@@ -9,13 +10,14 @@ export type AgentRuntimeRunInput = {
   mode: "init" | "edit";
   emit?: (content: string) => Promise<void> | void;
   signal?: AbortSignal;
+  selectedStoreSlug?: string | null;
 };
 
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
 }
 
-function buildInitPrompt(prompt: string) {
+function buildInitPrompt(prompt: string, selectedStoreSlug?: string | null) {
   return [
     "Initialize a TanStack Start storefront project from this request:",
     `- ${prompt}`,
@@ -23,6 +25,7 @@ function buildInitPrompt(prompt: string) {
     "Use TailwindCSS, shadcn-style components, axios instance, zod, jotai, and react-hook-form.",
     "Create a clean starter structure and summarize the generated files.",
     buildStoreSampleDataInstructions(),
+    buildStoreRuntimeInstructions({ selectedStoreSlug, mode: "init" }),
   ].join("\n");
 }
 
@@ -64,7 +67,7 @@ export class AgentRuntime {
 
       createdFiles = await this.workspaceService.scaffoldTanStackStartProject(
         input.projectId,
-        buildInitPrompt(input.prompt),
+        buildInitPrompt(input.prompt, input.selectedStoreSlug),
       );
       throwIfAborted(input.signal);
 

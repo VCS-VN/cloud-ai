@@ -9,6 +9,7 @@ export type AgenticLoopInput = {
   runId: string;
   userPrompt: string;
   projectState: ProjectState;
+  selectedStoreSlug?: string | null;
   thinkingResult: ThinkingResult;
   context: ToolExecutionContext;
   signal?: AbortSignal;
@@ -26,6 +27,7 @@ export type AgenticLoopDeps = {
 export type ModelCallInput = {
   messages: ConversationMessage[];
   tools: CodeToolDefinition[];
+  onTextDelta?: (delta: string) => void | Promise<void>;
 };
 
 export type ModelCallResult = {

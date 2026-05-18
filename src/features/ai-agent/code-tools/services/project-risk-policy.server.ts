@@ -33,5 +33,12 @@ export function evaluateProjectRiskPolicy(input: {
 }
 
 export function isSensitivePath(path: string) {
+  if (isGeneratedProjectEnvPath(path)) return false;
   return SENSITIVE_PATH_PATTERNS.some((pattern) => pattern.test(path));
+}
+
+export function isGeneratedProjectEnvPath(path: string) {
+  const normalized = path.replaceAll("\\", "/").trim();
+  const basename = normalized.split("/").filter(Boolean).at(-1) ?? normalized;
+  return basename === ".env" || basename.startsWith(".env.");
 }

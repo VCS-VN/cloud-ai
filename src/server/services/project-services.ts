@@ -12,6 +12,7 @@ import { ProcessManager } from "@/features/ai-agent/runtime/process-manager.serv
 import { RuntimeService } from "@/features/ai-agent/runtime/runtime-service.server";
 import { presenceService } from "@/features/ai-agent/runtime/presence-service.server";
 import { ErrorFixer } from "@/features/ai-agent/runtime/error-analyzer.server";
+import { GeneratedProjectEnvWriter } from "@/features/ai-agent/store-runtime/generated-project-env-writer.server";
 import { ProjectFileTreeService } from "@/server/services/file-tree-service";
 import { MessageService } from "@/server/services/message-service";
 import { ProjectService } from "@/server/services/project-service";
@@ -39,6 +40,7 @@ export async function getProjectServices() {
   const projectStateStore = new ProjectStateStore(projectStateRepo);
   const runStore = new ProjectRunStore(agentRunRepo);
   const projectFileStore = new ProjectFileStore();
+  const envWriter = new GeneratedProjectEnvWriter(projectFileStore);
   const snapshotService = new SnapshotService(projectSnapshotRepo);
   const agentConfig = loadAgentConfig();
   const openAIClient = createOpenAIClient();
@@ -47,10 +49,20 @@ export async function getProjectServices() {
   const errorFixer = new ErrorFixer({ openAIProvider, coderModel: agentConfig.coderModel });
   const runtimeService = new RuntimeService({ processManager, projectStateStore, errorFixer });
   presenceService.setRuntimeStore(projectStateStore);
-  const agentOrchestrator = new AgentOrchestrator({ projectStateStore, runStore, projectFileStore, snapshotService, openAIProvider, agentConfig, runtimeService });
+  const projectService = new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore, runtimeService, envWriter);
+  const agentOrchestrator = new AgentOrchestrator({
+    projectStateStore,
+    runStore,
+    projectFileStore,
+    snapshotService,
+    openAIProvider,
+    agentConfig,
+    runtimeService,
+    selectedStoreSlugResolver: (projectId, userId) => projectService.getSelectedStoreSlug(projectId, userId),
+  });
 
   return {
-    projectService: new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore, runtimeService),
+    projectService,
     projectRunService: new ProjectRunService(projectRepo, runStore),
 
     messageService: new MessageService(

@@ -1,15 +1,15 @@
 <!-- 
 Sync Impact Report:
-- Version change: 1.3.0 -> 1.4.0
-- Added sections: Principle X (Import Alias Convention)
-- Modified principles: None
+- Version change: 1.4.0 -> 1.4.1
+- Added sections: None
+- Modified principles: Principle VI (AI Agent generated project-detail env exception for `VITE_STORE_SLUG`)
 - Removed sections: None
 - Templates requiring updates:
-  - .specify/templates/plan-template.md ✅ no changes needed (import convention is a new rule, existing plans unaffected)
+  - .specify/templates/plan-template.md ✅ no changes needed
   - .specify/templates/spec-template.md ✅ no changes needed
   - .specify/templates/tasks-template.md ✅ no changes needed
-  - AGENTS.md ⚠ pending (should reference new import convention principle)
-- Follow-up TODOs: Audit existing imports across codebase for compliance with new Principle X; migrate non-compliant imports in a separate cleanup pass
+  - AGENTS.md ⚠ pending (existing import convention follow-up remains)
+- Follow-up TODOs: Audit existing imports across codebase for compliance with Principle X; migrate non-compliant imports in a separate cleanup pass
 -->
 # Cloud-AI Constitution
 
@@ -33,6 +33,8 @@ Mọi đầu vào từ người dùng phải được validate ở cả phía Cl
 
 ### VI. Bảo mật theo role/permission
 Hệ thống xác thực và phân quyền phải được áp dụng chặt chẽ từ Frontend đến Backend. Các tác vụ nhạy cảm phải được kiểm tra Role và Permission phù hợp.
+
+AI Agent không được sửa repository-level hoặc Builder application `.env`/secret files. Ngoại lệ hẹp: khi feature yêu cầu đồng bộ selected store slug, AI Agent chỉ được thêm hoặc cập nhật `VITE_STORE_SLUG` trong generated project-detail `.env` files, đồng thời phải giữ nguyên các biến env không liên quan.
 
 ### VII. Code Review & Impact Analysis ưu tiên Graph
 Khi review code, **ưu tiên sử dụng `code-graph-review`** để đánh giá toàn diện các liên kết feature, function và flow trong project trước, sau đó mới đi sâu vào review các route và component cụ thể được đề cập update.
@@ -77,4 +79,4 @@ import { utils } from "~/lib/utils";         // SAI: dùng ~ thay vì @/
 - Amendments phải được sự đồng ý của Product Owner/Lead.
 - Toàn bộ thay đổi phải tuân theo Core Principles trên. Nếu có vi phạm (ví dụ API lỗi không đúng chuẩn, hoặc UX code hardcode color không theo DESIGN.md) thì Pull Request sẽ bị reject.
 
-**Version**: 1.4.0 | **Ratified**: 2026-05-05 | **Last Amended**: 2026-05-11
+**Version**: 1.4.1 | **Ratified**: 2026-05-05 | **Last Amended**: 2026-05-18

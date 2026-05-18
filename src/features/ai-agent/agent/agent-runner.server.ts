@@ -59,17 +59,21 @@ export class AgentRunner {
   constructor(private readonly orchestrator: AgentOrchestrator) {}
 
   async *handlePromptStream(input: HandlePromptInput): AsyncGenerator<AgentStreamEvent> {
-    const events = await withProjectMutationLock({
-      projectId: input.projectId,
-      run: async () => {
-        const collected: AgentStreamEvent[] = [];
-        for await (const event of this.orchestrator.handlePromptStream(input)) {
-          collected.push(event);
-        }
-        return collected;
-      },
+    const previous = projectMutationLocks.get(input.projectId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
     });
+    projectMutationLocks.set(input.projectId, previous.then(() => current));
 
-    for (const event of events) yield event;
+    await previous;
+    try {
+      yield* this.orchestrator.handlePromptStream(input);
+    } finally {
+      release();
+      if (projectMutationLocks.get(input.projectId) === current) {
+        projectMutationLocks.delete(input.projectId);
+      }
+    }
   }
 }

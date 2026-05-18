@@ -96,6 +96,8 @@ export function buildProjectMessageInput({
 export function buildStoreSampleDataInstructions() {
   return [
     "After creating pages and components, initialize shared StoreProvider sample data.",
+    "During project init, create generated project-detail .env with VITE_API_BASE_URL=https://customer-api.myepis.cloud, preserving any existing env values if the file already exists.",
+
     `Create and preserve shared sample data files: ${SHARED_SAMPLE_DATA_FILE_PATHS.join(", ")}.`,
     "Use the fixed Store, Product, and ProductsList structures for sample data and do not add, remove, rename, or reshape fields.",
     "Create one Store and one ProductsList with at least 6 realistic nail-studio Products.",
@@ -104,5 +106,13 @@ export function buildStoreSampleDataInstructions() {
     "When user prompts update sample data, change values or product list membership/order only; never change Store/Product/ProductsList structure.",
     "Match product updates by stable product id first. If product target, value, or reorder list is ambiguous, ask a clarification question before changing data.",
     "Keep ProductsList as { total, data }, keep total equal to data.length, and keep each product.entityId equal to product.id.",
+    "When generated project-detail .env contains VITE_STORE_SLUG, generated code must enable real server data through useQuery; when VITE_STORE_SLUG is missing, keep using these sample mocked Store and ProductsList values.",
+    "Initialize four useQuery-managed store data functions during project init: store detail, products list, product detail, and categories list.",
+    "Store detail must call GET /api/v1/stores/:storeSlug using import.meta.env.VITE_STORE_SLUG.",
+    "Products list must call GET /api/v1/products with query params limit, page, storeId, query and preserve the existing ProductsList { total, data } response shape.",
+    "Product detail must call GET /api/v1/products/:productId with default query params isGettingModel=true and isGettingDefaultModel=true.",
+    "Categories list must call GET /api/v1/categories with query param storeId.",
+    "All four queries must use enabled so server calls only run when VITE_STORE_SLUG exists and required IDs are available.",
+    "If VITE_STORE_SLUG exists and store detail loading fails, show a store-detail error UI with retry/refetch and do not silently fall back to demo store data.",
   ].join("\n")
 }

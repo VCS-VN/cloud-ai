@@ -23,7 +23,16 @@ export async function executeProjectTool(input: {
   const tool = input.registry.get(input.toolCall.name);
 
   if (!tool) {
-    return toolError(input.context, input.toolCall.name, "inspect", startedAt, "TOOL_NOT_FOUND", "Unknown tool requested by provider.", true);
+    const available = input.registry.list().map((t) => t.name).slice(0, 20).join(", ");
+    return toolError(
+      input.context,
+      input.toolCall.name,
+      "inspect",
+      startedAt,
+      "TOOL_NOT_FOUND",
+      `Unsupported tool call: "${input.toolCall.name}". Available tools include: ${available}. Re-emit the call using one of these tool names.`,
+      true,
+    );
   }
 
   if (input.sandboxMode === "read-only" && tool.category === "mutate") {
@@ -77,7 +86,19 @@ export async function executeProjectTool(input: {
     );
   }
 
-  const args = softNormalizeToolArgs(tool, input.toolCall.arguments);
+  const argParseResult = parseToolArgs(input.toolCall.arguments);
+  if (!argParseResult.ok) {
+    return toolError(
+      input.context,
+      tool.name,
+      tool.category,
+      startedAt,
+      "TOOL_ARGS_PARSE_FAILED",
+      `Tool arguments are not valid JSON: ${argParseResult.error}. Re-emit the call with a valid JSON object.`,
+      true,
+    );
+  }
+  const args = softNormalizeToolArgs(tool, argParseResult.value);
 
   if (tool.category === "mutate") {
     const flags = (input.context as any).flags;
@@ -199,8 +220,31 @@ export function toolError(
 function safeJsonParse(raw: string) {
   try {
     return JSON.parse(raw);
-  } catch {
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: "tool_args_json_parse_failed",
+      error: error instanceof Error ? error.message : String(error),
+      preview: raw.slice(0, 200),
+    }));
     return {};
+  }
+}
+
+export function parseToolArgs(rawArgs: unknown): { ok: true; value: unknown } | { ok: false; error: string } {
+  if (rawArgs === undefined || rawArgs === null) {
+    return { ok: true, value: {} };
+  }
+  if (typeof rawArgs !== "string") {
+    return { ok: true, value: rawArgs };
+  }
+  const trimmed = rawArgs.trim();
+  if (trimmed === "") {
+    return { ok: true, value: {} };
+  }
+  try {
+    return { ok: true, value: JSON.parse(trimmed) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "invalid JSON" };
   }
 }
 

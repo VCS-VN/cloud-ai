@@ -3,6 +3,7 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
 import { AppSidebar } from "@/components/layout/AppSidebar";
+import { WorkspaceShell } from "@/components/layout/WorkspaceShell";
 import { HomePromptForm } from "@/components/home/HomePromptForm";
 import { getCurrentUser } from "@/server/functions/auth";
 import {
@@ -63,17 +64,19 @@ function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[var(--color-canvas)] p-xs text-[var(--color-ink)] sm:p-sm">
-      <div className="grid min-h-[calc(100vh-16px)] gap-sm transition-[grid-template-columns] duration-200 lg:grid-cols-[290px_minmax(0,1fr)] has-[aside[data-collapsed=true]]:lg:grid-cols-[72px_minmax(0,1fr)]">
+    <WorkspaceShell
+      mainClassName="h-screen overflow-hidden bg-[var(--color-canvas)] p-xs text-[var(--color-ink)] sm:p-sm"
+      sectionClassName="min-w-0 overflow-y-auto rounded-lg border border-[var(--color-hairline)] bg-[var(--color-block-lilac)] text-[var(--color-ink)] transition-colors duration-300 ease-out"
+      sidebar={
         <AppSidebar
           user={user}
           activeItem="dashboard"
           projects={projects}
           onOpenProject={openProject}
         />
-
-        <section className="min-w-0 overflow-hidden rounded-lg border border-[var(--color-hairline)] bg-[var(--color-block-lilac)] text-[var(--color-ink)] transition-colors duration-300 ease-out">
-          <div className="flex min-h-[calc(100vh-16px)] flex-col items-center justify-center px-md py-xl text-center sm:px-xl lg:px-xxl">
+      }
+    >
+      <div className="flex min-h-full flex-col items-center justify-center px-md py-xl text-center sm:px-xl lg:px-xxl">
             <p className="mb-md font-mono text-eyebrow uppercase tracking-[0.54px] text-[var(--color-ink)] opacity-70">
               CLOUD AI
             </p>
@@ -118,9 +121,7 @@ function DashboardPage() {
               />
             </div>
           </div>
-        </section>
-      </div>
-    </main>
+    </WorkspaceShell>
   );
 }
 

@@ -5,6 +5,8 @@ import { CODE_TOOL_LIMITS } from "../code-tools/code-tool-registry.server";
 import { buildAgenticSystemPrompt, buildUserMessageWithThinking } from "./agentic-prompts.server";
 import { createDefaultCodeToolRegistry } from "../code-tools/code-tool-registry.server";
 import { compactConversation, estimateTokenCount } from "./context-compaction";
+import { withRetry } from "./retry";
+import { classifyError, describeError } from "./error-classifier";
 
 const AUTO_COMPACT_TOKEN_LIMIT = 150_000;
 
@@ -24,6 +26,7 @@ export async function* runAgenticLoop(
   let consecutiveErrors = 0;
   let consecutiveTextOnlyTurns = 0;
   const MAX_TEXT_ONLY_TURNS = 3;
+  const TEXT_ONLY_COMPLETION_THRESHOLD = 2;
 
   const maxIterations = deps.maxIterations ?? CODE_TOOL_LIMITS.maxToolLoopIterations;
   const maxConsecutiveErrors = deps.maxConsecutiveToolErrors ?? 5;
@@ -72,14 +75,50 @@ export async function* runAgenticLoop(
     });
 
     let modelResult;
+    let streamedTextLength = 0;
     try {
-      modelResult = await deps.callModel({ messages, tools });
+      modelResult = await withRetry(
+        () =>
+          deps.callModel({
+            messages,
+            tools,
+            onTextDelta: async (delta) => {
+              if (!delta) return;
+              streamedTextLength += delta.length;
+              await deps.sendEvent({
+                type: "assistant_message_delta",
+                projectId: input.projectId,
+                messageId: input.messageId ?? input.runId,
+                delta,
+              });
+            },
+          }),
+        {
+          signal: input.signal,
+          onAttempt: ({ attempt, cls, delayMs }) => {
+            logAgenticLoop("model_call_retry", {
+              projectId: input.projectId,
+              iteration,
+              attempt,
+              errorClass: describeError(cls),
+              delayMs,
+            });
+          },
+        },
+      );
     } catch (err) {
+      const cls = classifyError(err);
       const errorMsg = err instanceof Error ? err.message : "Unknown error";
-      logAgenticLoop("model_call_failed", { projectId: input.projectId, iteration, error: errorMsg });
+      logAgenticLoop("model_call_failed", {
+        projectId: input.projectId,
+        iteration,
+        error: errorMsg,
+        errorClass: describeError(cls),
+      });
+      const status: AgenticLoopResult["status"] = cls.kind === "user_aborted" ? "aborted" : "failed";
       return {
-        status: "failed",
-        summary: `Model call failed: ${errorMsg}`,
+        status,
+        summary: `Model call failed (${describeError(cls)}): ${errorMsg}`,
         changedFiles: [...changedFiles],
         iterations: iteration,
         totalToolCalls,
@@ -100,7 +139,7 @@ export async function* runAgenticLoop(
       textPreview: modelResult.outputText?.substring(0, 200) ?? "",
     });
 
-    if (hasText) {
+    if (hasText && streamedTextLength === 0) {
       await deps.sendEvent({
         type: "assistant_message_delta",
         projectId: input.projectId,
@@ -233,7 +272,7 @@ export async function* runAgenticLoop(
         totalToolCalls,
       });
 
-      if (totalToolCalls > 0 && consecutiveTextOnlyTurns >= 1) {
+      if (totalToolCalls > 0 && consecutiveTextOnlyTurns >= TEXT_ONLY_COMPLETION_THRESHOLD) {
         return {
           status: "completed",
           summary: modelResult.outputText || "Agent completed.",
