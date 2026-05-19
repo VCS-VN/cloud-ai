@@ -4,6 +4,7 @@ import type {
   ChatCompletionChunk,
   ChatCompletionMessageToolCall,
 } from "openai/resources/chat/completions/completions";
+import { z } from "zod";
 import type { ConversationMessage } from "../agent/agentic-loop.types";
 import type { CodeToolDefinition, ProviderFunctionToolCall } from "../code-tools/code-agent-types";
 
@@ -78,6 +79,16 @@ export function toChatResponseFormat(
   strict = true,
 ): { type: "json_schema"; json_schema: { name: string; strict: boolean; schema: Record<string, unknown> } } | undefined {
   if (!schema || typeof schema !== "object") return undefined;
+
+  if (isZodSchema(schema)) {
+    const jsonSchema = z.toJSONSchema(schema, { io: "output" }) as Record<string, unknown>;
+    const normalized = normalizeJsonSchemaForOpenAIStrict(jsonSchema);
+    return {
+      type: "json_schema",
+      json_schema: { name: schemaName, strict, schema: normalized },
+    };
+  }
+
   const schemaObj = schema as Record<string, unknown>;
   if (schemaObj.type === "json_schema" && typeof schemaObj.schema === "object") {
     return {
@@ -96,6 +107,40 @@ export function toChatResponseFormat(
     };
   }
   return undefined;
+}
+
+function isZodSchema(value: unknown): value is z.ZodType {
+  return typeof value === "object" && value !== null && "_zod" in value && "parse" in value;
+}
+
+function normalizeJsonSchemaForOpenAIStrict(node: unknown): Record<string, unknown> {
+  return walk(node) as Record<string, unknown>;
+
+  function walk(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(walk);
+    if (!value || typeof value !== "object") return value;
+
+    const node = { ...(value as Record<string, unknown>) };
+    delete node.$schema;
+    delete node.default;
+    delete node.examples;
+
+    if (node.type === "object" && node.properties && typeof node.properties === "object") {
+      const properties = node.properties as Record<string, unknown>;
+      const walkedProperties: Record<string, unknown> = {};
+      for (const [key, child] of Object.entries(properties)) {
+        walkedProperties[key] = walk(child);
+      }
+      node.properties = walkedProperties;
+      node.required = Object.keys(walkedProperties);
+      node.additionalProperties = false;
+    } else {
+      for (const key of Object.keys(node)) {
+        node[key] = walk(node[key]);
+      }
+    }
+    return node;
+  }
 }
 
 type AccumulatedToolCall = {

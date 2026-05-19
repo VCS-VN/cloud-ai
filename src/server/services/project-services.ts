@@ -11,6 +11,10 @@ import { ProjectStateStore } from "@/features/ai-agent/project/project-state-sto
 import { ProcessManager } from "@/features/ai-agent/runtime/process-manager.server";
 import { RuntimeService } from "@/features/ai-agent/runtime/runtime-service.server";
 import { presenceService } from "@/features/ai-agent/runtime/presence-service.server";
+import {
+  startPresenceSweeper,
+  stopPresenceSweeper,
+} from "@/features/ai-agent/runtime/presence-sweeper.server";
 import { ErrorFixer } from "@/features/ai-agent/runtime/error-analyzer.server";
 import { GeneratedProjectEnvWriter } from "@/features/ai-agent/store-runtime/generated-project-env-writer.server";
 import { ProjectFileTreeService } from "@/server/services/file-tree-service";
@@ -26,6 +30,21 @@ import { PgProjectSnapshotRepository } from "@/server/repositories/project-snaps
 import { PgProjectStateRepository } from "@/server/repositories/project-state-repository";
 
 const processManager = new ProcessManager();
+
+let runtimeBootstrapped = false;
+
+function ensureRuntimeBootstrap() {
+  if (runtimeBootstrapped) return;
+  runtimeBootstrapped = true;
+  startPresenceSweeper();
+  const shutdown = async () => {
+    stopPresenceSweeper();
+    await processManager.stopAll();
+    process.exit(0);
+  };
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
+}
 
 export async function getProjectServices() {
   const db = getDb();
@@ -46,6 +65,7 @@ export async function getProjectServices() {
   const openAIClient = createOpenAIClient();
   const openAIProvider = new OpenAIProvider(openAIClient);
   presenceService.setProcessManager(processManager);
+  ensureRuntimeBootstrap();
   const errorFixer = new ErrorFixer({ openAIProvider, coderModel: agentConfig.coderModel });
   const runtimeService = new RuntimeService({ processManager, projectStateStore, errorFixer });
   presenceService.setRuntimeStore(projectStateStore);

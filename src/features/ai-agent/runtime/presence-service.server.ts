@@ -94,6 +94,14 @@ class PresenceService {
     return expiredCount;
   }
 
+  expireStaleAcrossAllProjects(now = Date.now()): number {
+    let total = 0;
+    for (const projectId of this.projectPresence.keys()) {
+      total += this.expireStalePresence(projectId, now);
+    }
+    return total;
+  }
+
   getActivePresenceCount(projectId: string): number {
     const presence = this.projectPresence.get(projectId);
     if (!presence) return 0;

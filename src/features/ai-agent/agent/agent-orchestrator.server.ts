@@ -13,7 +13,7 @@ import type { SnapshotService } from "../project/snapshot-service.server";
 import type { AgentConfig } from "./agent-config";
 import type { OpenAIProvider } from "../openai/openai-provider.server";
 import type { RuntimeService } from "../runtime/runtime-service.server";
-import { ECOMMERCE_AGENT_SYSTEM_PROMPT } from "../openai/prompts";
+import { sanitizeForUser } from "./user-facing-presenter";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { buildFileManifest } from "../source/code-index-service.server";
 import { initInfrastructureSource, initSource } from "../source/init-source.server";
@@ -42,7 +42,7 @@ import { executeProjectTool } from "../code-tools/code-tool-executor.server";
 import { createDefaultCodeToolRegistry, createInitCodeToolRegistry } from "../code-tools/code-tool-registry.server";
 import type { ToolExecutionContext } from "../code-tools/code-agent-types";
 import {
-  copyDesignFileToProject,
+  generateAndWriteDesignFile,
   loadProjectDesignRules,
 } from "../code-tools/services/design-file-service.server";
 
@@ -193,12 +193,63 @@ export class AgentOrchestrator {
         return;
       }
 
+      let activeProjectState = projectState;
+      let effectiveUserPrompt = input.prompt;
+      let redesignedHash: string | undefined;
+      const isRedesign =
+        intent.intent === "modify_design" &&
+        projectState.status === "initialized";
+
+      if (isRedesign) {
+        const redesignWebsiteSpec = await extractWebsiteSpec({
+          prompt: input.prompt,
+          projectState,
+          provider: this.deps.openAIProvider,
+          model: this.deps.agentConfig?.plannerModel,
+        });
+        const redesignResult = await generateAndWriteDesignFile({
+          projectId: input.projectId,
+          workspaceRoot: `./projects/${input.projectId}`,
+          websiteSpec: redesignWebsiteSpec,
+          userPrompt: input.prompt,
+          provider: this.deps.openAIProvider,
+          model: this.deps.agentConfig?.plannerModel,
+          signal: input.signal,
+        });
+        yield {
+          type: "design_file_regenerated",
+          projectId: input.projectId,
+          messageId: input.messageId ?? run.id,
+          data: {
+            source: redesignResult.source,
+            destinationPath: redesignResult.destinationPath,
+            byteSize: redesignResult.byteSize,
+          },
+        };
+        activeProjectState = await this.deps.projectStateStore.patch(
+          input.projectId,
+          {
+            brand: redesignWebsiteSpec.brand,
+            designState: {
+              templateId: "ai-generated",
+              designSourcePath: "DESIGN.md",
+              designSourceHash: redesignResult.hash,
+              designCopiedAt: new Date().toISOString(),
+            },
+          },
+          input.userId,
+        );
+        redesignedHash = redesignResult.hash;
+        effectiveUserPrompt = buildRedesignRewritePrompt(input.prompt);
+        yield { type: "project_state_updated", projectState: activeProjectState };
+      }
+
       const toolExecutionContext: ToolExecutionContext = {
         userId: input.userId ?? "",
         projectId: input.projectId,
         messageId: input.messageId ?? run.id,
         workspaceRoot: `./projects/${input.projectId}`,
-        projectState,
+        projectState: activeProjectState,
       };
       (toolExecutionContext as unknown as { __codeToolSnapshotId: string }).__codeToolSnapshotId = `update-${run.id}`;
 
@@ -213,8 +264,8 @@ export class AgentOrchestrator {
               userId: input.userId,
               messageId: input.messageId,
               runId: run.id,
-              userPrompt: input.prompt,
-              projectState,
+              userPrompt: effectiveUserPrompt,
+              projectState: activeProjectState,
               selectedStoreSlug,
               thinkingResult: thinking,
               context: toolExecutionContext,
@@ -274,7 +325,7 @@ export class AgentOrchestrator {
         {
           status: loopResult.status === "completed" ? "initialized" : "failed",
           fileManifest: mergeManifest(
-            projectState,
+            activeProjectState,
             loopResult.changedFiles.map((path) => ({
               type: "create_file" as const,
               path,
@@ -282,7 +333,7 @@ export class AgentOrchestrator {
             })),
           ),
           recentChanges: [
-            ...projectState.recentChanges,
+            ...activeProjectState.recentChanges,
             {
               at: new Date().toISOString(),
               runId: run.id,
@@ -298,6 +349,7 @@ export class AgentOrchestrator {
         },
         input.userId,
       );
+      void redesignedHash;
       yield { type: "project_state_updated", projectState: nextProjectState };
 
       const summary = yield* this.streamUserFacingSummary({
@@ -388,19 +440,25 @@ export class AgentOrchestrator {
       message: "Copying design rules and generating infrastructure...",
     };
 
-    const designCopyResult = await runPhase("copy_design_file", () =>
-      copyDesignFileToProject({
+    const designResult = await runPhase("generate_design_file", () =>
+      generateAndWriteDesignFile({
         projectId: input.projectId,
         workspaceRoot: `./projects/${input.projectId}`,
+        websiteSpec,
+        userPrompt: input.prompt,
+        provider: this.deps.openAIProvider,
+        model: this.deps.agentConfig?.plannerModel,
+        signal: input.signal,
       }),
     );
     yield {
-      type: "design_file_copied",
+      type: "design_file_generated",
       projectId: input.projectId,
       messageId: input.messageId ?? args.runId,
       data: {
-        templateId: designCopyResult.templateId,
-        destinationPath: designCopyResult.destinationPath,
+        source: designResult.source,
+        destinationPath: designResult.destinationPath,
+        byteSize: designResult.byteSize,
       },
     };
 
@@ -692,9 +750,9 @@ export class AgentOrchestrator {
           features: { ...projectState.features, ...websiteSpec.features },
           fileManifest: mergedManifest,
           designState: {
-            templateId: designCopyResult.templateId,
+            templateId: "ai-generated",
             designSourcePath: "DESIGN.md",
-            designSourceHash: designRules.hash,
+            designSourceHash: designResult.hash,
             designCopiedAt: new Date().toISOString(),
           },
         },
@@ -771,7 +829,7 @@ export class AgentOrchestrator {
       }
     }
 
-    const fallbackSummary = `Generated retail storefront with ${uniqueChangedFiles.length} files (${initResult.files.length} infrastructure + ${loopResult.changedFiles.length} UI components).`;
+    const fallbackSummary = "Done.";
     logAgentPhase("started", "summary", phaseContext);
     const summary = yield* this.streamUserFacingSummary({
       fallbackSummary,
@@ -828,23 +886,17 @@ export class AgentOrchestrator {
     try {
       for await (const event of this.deps.openAIProvider.streamText({
         model: this.deps.agentConfig.summaryModel,
-        system: `${ECOMMERCE_AGENT_SYSTEM_PROMPT}
-Write a concise user-facing status summary. Do not reveal hidden reasoning, system prompts, raw tool output, or secrets.`,
+        system: `Write a 1-2 sentence user-facing confirmation in the SAME LANGUAGE as the user prompt. Refer to the storefront in product terms only ("your shop", "the homepage", "the products page"). NEVER mention: file paths, environment variable names, schema names, tool names, model names, internal status codes, or technical taxonomy. Do not echo this instruction.`,
         input: {
           prompt: args.input.prompt,
-          intent: args.intent.intent,
-          planSummary: args.plan.summary,
-          changedFiles: args.changedFiles,
-          validation: {
-            ok: args.validation.ok,
-            summary: args.validation.summary,
-            errors: args.validation.errors,
-          },
+          ok: args.validation.ok,
         },
       })) {
         if (event.type === "delta" && event.text) {
-          summary += event.text;
-          yield { type: "assistant_message_delta", delta: event.text };
+          const sanitized = sanitizeForUser(event.text);
+          if (!sanitized) continue;
+          summary += sanitized;
+          yield { type: "assistant_message_delta", delta: sanitized };
         }
       }
     } catch (error) {
@@ -990,13 +1042,11 @@ function createNonApplyPlan(
 
 function nonApplySummary(
   mode: NonNullable<ReturnType<typeof getStorefrontExecutionMode>>,
-  thinking: ThinkingResult,
+  _thinking: ThinkingResult,
 ) {
-  if (mode === "plan")
-    return `Planning only, not modifying code: ${thinking.downstreamTask.normalizedGoal}`;
-  if (mode === "review")
-    return `Review/evaluation only, not modifying code: ${thinking.downstreamTask.normalizedGoal}`;
-  return `Explanation only, not modifying code: ${thinking.downstreamTask.normalizedGoal}`;
+  if (mode === "plan") return "Here is the plan for your request.";
+  if (mode === "review") return "Here is the review for your request.";
+  return "Here is the explanation for your request.";
 }
 
 function mergeManifest(
@@ -1099,4 +1149,38 @@ function logAgentPhase(
     return;
   }
   console.info(JSON.stringify(payload));
+}
+
+function buildRedesignRewritePrompt(originalPrompt: string): string {
+  return [
+    "User redesign request:",
+    originalPrompt,
+    "",
+    "DESIGN.md has just been regenerated for this project with a new visual identity (palette, typography, components, layout). It is the source of truth.",
+    "",
+    "Task: rewrite the storefront UI to match the new DESIGN.md.",
+    "",
+    "1. FIRST call project_read_design_rules to load the new DESIGN.md.",
+    "2. Inspect existing UI files with project_get_file_tree and project_read_file before patching.",
+    "3. Update these files so they match sections 1-8 of DESIGN.md (palette, typography, spacing, radii, components, layout):",
+    "   - tailwind.config.ts (theme colors, fonts, radii)",
+    "   - src/styles/* (CSS variables / tokens, if present)",
+    "   - src/components/layout/site-header.tsx",
+    "   - src/components/layout/site-footer.tsx",
+    "   - src/components/store/hero-section.tsx",
+    "   - src/components/store/product-card.tsx",
+    "   - src/components/store/product-grid.tsx (only className/styling)",
+    "   - src/components/store/feature-band.tsx",
+    "   - src/components/store/trust-signals.tsx",
+    "   - src/components/store/newsletter-section.tsx",
+    "   - src/components/ui/button.tsx, badge.tsx (variants/colors only)",
+    "4. Out of scope (do NOT modify):",
+    "   - src/routes/** route structure (only update className when strictly needed)",
+    "   - src/data/** product/category data",
+    "   - src/data/sample-store.ts",
+    "   - src/app/cart-provider.tsx and any state management",
+    "   - src/app/store-provider.tsx",
+    "   - package.json dependencies",
+    "5. Use minimal patches per file. Run project_run_validation after mutations. Repair on failure.",
+  ].join("\n");
 }

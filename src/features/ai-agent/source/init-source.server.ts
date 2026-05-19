@@ -173,10 +173,30 @@ export function renderInfrastructureFiles(
       path: "src/data/categories.ts",
       content: `export const categories = ${categories} as const\n`,
     },
-    { path: "src/lib/cart-store.ts", content: cartStoreSource() },
     {
       path: "src/lib/format-money.ts",
-      content: `export function formatMoney(value: number) {\n  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)\n}\n`,
+      content: `import { divide, get, round } from 'lodash'
+import type { Product } from '@/services/store/use-products-list'
+
+export type FormatMoneyOptions = {
+  currency?: string
+}
+
+export function formatMoney(valueInCents: number | null | undefined, options: FormatMoneyOptions = {}) {
+  const currency = options.currency || 'AUD'
+  const amount = round(divide(Number(valueInCents ?? 0), 100), 2)
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
+}
+
+export function resolveProductPrice(product: Product | null | undefined): number | undefined {
+  if (!product) return undefined
+  const fromDefault = get(product, 'defaultModel.price') as number | undefined
+  if (typeof fromDefault === 'number') return fromDefault
+  const fromFirstModel = get(product, 'models[0].price') as number | undefined
+  if (typeof fromFirstModel === 'number') return fromFirstModel
+  return get(product, 'price') as number | undefined
+}
+`,
     },
     {
       path: "src/lib/website-config.ts",
@@ -424,10 +444,12 @@ VITE_API_BASE_URL=https://customer-api.myepis.cloud
 }
 
 export function renderStorefrontBaselineFiles(
-  _spec: WebsiteSpec,
+  spec: WebsiteSpec,
 ): GeneratedFile[] {
   return [
     { path: "src/app/store-provider.tsx", content: storeProviderSource() },
+    { path: "src/app/cart-provider.tsx", content: cartProviderSource() },
+    { path: "src/data/sample-store.ts", content: sampleStoreSource(spec) },
     { path: "src/components/ui/button.tsx", content: buttonSource() },
     { path: "src/components/ui/input.tsx", content: inputSource() },
     { path: "src/components/ui/select.tsx", content: selectSource() },
@@ -475,6 +497,7 @@ export function renderStorefrontBaselineFiles(
     { path: "src/services/store/use-products-list.ts", content: productsListQuerySource() },
     { path: "src/services/store/use-product-detail.ts", content: productDetailQuerySource() },
     { path: "src/services/store/use-categories-list.ts", content: categoriesListQuerySource() },
+    { path: "src/services/store/use-product-suggestions.ts", content: productSuggestionsQuerySource() },
     { path: "src/routes/__root.tsx", content: rootRouteSource() },
     { path: "src/routes/index.tsx", content: homeRouteSource() },
     {
@@ -526,11 +549,17 @@ function storeDetailQuerySource() {
   return `import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/services/http/client'
 
+export type StoreSetting = {
+  currency?: string
+  [key: string]: unknown
+}
+
 export type StoreDetail = {
   id: string
   slug: string
   name: string
   description?: string
+  setting?: StoreSetting
   [key: string]: unknown
 }
 
@@ -554,15 +583,31 @@ export function useStoreDetail() {
 }
 
 function productsListQuerySource() {
-  return `import { useQuery } from '@tanstack/react-query'
+  return `import { useInfiniteQuery } from '@tanstack/react-query'
 import { apiClient } from '@/services/http/client'
 import { hasStoreSlug } from '@/services/store/use-store-detail'
+import { products as sampleProducts } from '@/data/products'
+
+export const PRODUCTS_PAGE_SIZE = 12
+
+export type ProductModel = {
+  id?: string
+  price?: number
+  [key: string]: unknown
+}
 
 export type Product = {
   id: string
   entityId?: string
   name: string
+  description?: string
   price?: number
+  compareAtPrice?: number
+  image?: string
+  images?: string[]
+  category?: string
+  defaultModel?: ProductModel
+  models?: ProductModel[]
   [key: string]: unknown
 }
 
@@ -572,31 +617,84 @@ export type ProductsList = {
 }
 
 type ProductsListParams = {
-  limit?: number
-  page?: number
   storeId?: string
   query?: string
 }
 
-export async function getProductsList(params: ProductsListParams) {
+const sampleProductsArray = sampleProducts as unknown as Product[]
+
+export type UseProductsListResult = {
+  products: Product[]
+  total: number
+  fetchNextPage: () => Promise<unknown>
+  hasNextPage: boolean
+  isFetchingNextPage: boolean
+  isLoading: boolean
+  isError: boolean
+  error: unknown
+  refetch: () => Promise<unknown>
+}
+
+export async function getProductsList(params: ProductsListParams & { page: number; limit: number }) {
   const response = await apiClient.get<ProductsList>('/api/v1/products', { params })
   return response.data
 }
 
-export function useProductsList(params: ProductsListParams = {}) {
-  return useQuery({
+export function useProductsList(params: ProductsListParams = {}): UseProductsListResult {
+  const query = useInfiniteQuery({
     queryKey: ['products-list', params],
-    queryFn: () => getProductsList(params),
+    queryFn: ({ pageParam }) =>
+      getProductsList({ ...params, page: pageParam as number, limit: PRODUCTS_PAGE_SIZE }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((sum, page) => sum + page.data.length, 0)
+      return loaded < lastPage.total ? allPages.length + 1 : undefined
+    },
     enabled: hasStoreSlug && Boolean(params.storeId),
   })
+
+  if (!hasStoreSlug) {
+    const trimmed = params.query?.trim().toLowerCase() ?? ''
+    const filtered = trimmed
+      ? sampleProductsArray.filter((product) =>
+          (product.name ?? '').toLowerCase().includes(trimmed),
+        )
+      : sampleProductsArray
+    return {
+      products: filtered,
+      total: filtered.length,
+      fetchNextPage: () => Promise.resolve(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: () => Promise.resolve(),
+    }
+  }
+
+  const products = query.data?.pages.flatMap((page) => page.data) ?? []
+  const total = query.data?.pages[0]?.total ?? 0
+  return {
+    products,
+    total,
+    fetchNextPage: query.fetchNextPage,
+    hasNextPage: query.hasNextPage ?? false,
+    isFetchingNextPage: query.isFetchingNextPage,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    refetch: query.refetch,
+  }
 }
 `;
 }
 
 function productDetailQuerySource() {
-  return `import { useQuery } from '@tanstack/react-query'
+  return `import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { apiClient } from '@/services/http/client'
 import { hasStoreSlug, type StoreDetail } from '@/services/store/use-store-detail'
+import { products as sampleProducts } from '@/data/products'
 import type { Product } from '@/services/store/use-products-list'
 
 export type ProductDetail = Product & {
@@ -614,41 +712,170 @@ export async function getProductDetail(productId: string) {
   return response.data
 }
 
-export function useProductDetail(productId?: string) {
-  return useQuery({
+export function useProductDetail(productId?: string): UseQueryResult<ProductDetail> {
+  const query = useQuery({
     queryKey: ['product-detail', productId],
     queryFn: () => getProductDetail(productId ?? ''),
     enabled: hasStoreSlug && Boolean(productId),
   })
+  if (!hasStoreSlug) {
+    const list = sampleProducts as unknown as Product[]
+    const fallback = (list.find((p) => p.id === productId) ?? list[0]) as ProductDetail
+    return {
+      data: fallback,
+      isLoading: false,
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+      status: 'success',
+      refetch: () => Promise.resolve({ data: fallback } as never),
+    } as unknown as UseQueryResult<ProductDetail>
+  }
+  return query
 }
 `;
 }
 
 function categoriesListQuerySource() {
-  return `import { useQuery } from '@tanstack/react-query'
+  return `import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { apiClient } from '@/services/http/client'
 import { hasStoreSlug } from '@/services/store/use-store-detail'
+import { categories as sampleCategoryNames } from '@/data/categories'
 
 export type Category = {
   id: string
   name: string
-  slug?: string
+  storeId?: string
   [key: string]: unknown
 }
 
+export type CategoriesList = {
+  total: number
+  data: Category[]
+}
+
+const sampleCategoriesList: CategoriesList = {
+  total: sampleCategoryNames.length,
+  data: (sampleCategoryNames as readonly string[]).map((name, index) => ({
+    id: \`sample-category-\${index}\`,
+    name,
+  })),
+}
+
 export async function getCategoriesList(storeId?: string) {
-  const response = await apiClient.get<Category[]>('/api/v1/categories', {
+  const response = await apiClient.get<CategoriesList>('/api/v1/categories', {
     params: { storeId },
   })
   return response.data
 }
 
-export function useCategoriesList(storeId?: string) {
-  return useQuery({
+export function useCategoriesList(storeId?: string): UseQueryResult<CategoriesList> {
+  const query = useQuery({
     queryKey: ['categories-list', storeId],
     queryFn: () => getCategoriesList(storeId),
     enabled: hasStoreSlug && Boolean(storeId),
   })
+  if (!hasStoreSlug) {
+    return {
+      data: sampleCategoriesList,
+      isLoading: false,
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+      status: 'success',
+      refetch: () => Promise.resolve({ data: sampleCategoriesList } as never),
+    } as unknown as UseQueryResult<CategoriesList>
+  }
+  return query
+}
+`;
+}
+
+function productSuggestionsQuerySource() {
+  return `import { useQuery } from '@tanstack/react-query'
+import { apiClient } from '@/services/http/client'
+import { hasStoreSlug } from '@/services/store/use-store-detail'
+import { products as sampleProducts } from '@/data/products'
+
+export type ProductSuggestionsList = {
+  total: number
+  data: string[]
+}
+
+type ProductSuggestionsParams = {
+  storeId?: string
+  query?: string
+}
+
+const SUGGESTIONS_LIMIT = 8
+
+const sampleNamePool = Array.from(
+  new Set(
+    (sampleProducts as Array<{ name?: string }>)
+      .map((product) => product.name?.trim() ?? '')
+      .filter((name) => name.length > 0),
+  ),
+)
+
+function buildSampleSuggestions(query: string) {
+  const trimmed = query.trim().toLowerCase()
+  if (!trimmed) return [] as string[]
+  return sampleNamePool
+    .filter((name) => name.toLowerCase().includes(trimmed))
+    .slice(0, SUGGESTIONS_LIMIT)
+}
+
+export type UseProductSuggestionsResult = {
+  suggestions: string[]
+  total: number
+  isLoading: boolean
+  isError: boolean
+  error: unknown
+  refetch: () => Promise<unknown>
+}
+
+export async function getProductSuggestions(params: { storeId?: string; query: string }) {
+  const response = await apiClient.get<ProductSuggestionsList>(
+    '/api/v1/products/suggestions',
+    { params },
+  )
+  return response.data
+}
+
+export function useProductSuggestions(
+  params: ProductSuggestionsParams = {},
+): UseProductSuggestionsResult {
+  const trimmed = (params.query ?? '').trim()
+  const enabled = hasStoreSlug && Boolean(params.storeId) && trimmed.length > 0
+  const query = useQuery({
+    queryKey: ['product-suggestions', params.storeId, trimmed],
+    queryFn: () => getProductSuggestions({ storeId: params.storeId, query: trimmed }),
+    enabled,
+  })
+
+  if (!hasStoreSlug || trimmed.length === 0) {
+    const matched = buildSampleSuggestions(trimmed)
+    return {
+      suggestions: matched,
+      total: matched.length,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: () => Promise.resolve(),
+    }
+  }
+
+  const suggestions = query.data?.data ?? []
+  return {
+    suggestions,
+    total: query.data?.total ?? 0,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    refetch: query.refetch,
+  }
 }
 `;
 }
@@ -680,17 +907,316 @@ function dialogSource() {
 function sonnerSource() {
   return `import { Toaster as Sonner } from 'sonner'\nexport function Toaster() { return <Sonner richColors position='top-right' /> }\n`;
 }
-function cartStoreSource() {
-  return `import { atom } from 'jotai'\nimport { products } from '@/data/products'\n\nexport type CartItem = { productId: string; quantity: number }\nexport type Order = { id: string; date: string; status: 'processing' | 'paid' | 'fulfilled'; total: number; items: CartItem[]; customerName: string; shippingMethod: string }\nexport const cartItemsAtom = atom<CartItem[]>([])\nexport const ordersAtom = atom<Order[]>([])\nexport const cartCountAtom = atom((get) => get(cartItemsAtom).reduce((sum, item) => sum + item.quantity, 0))\nexport const cartSubtotalAtom = atom((get) => get(cartItemsAtom).reduce((sum, item) => { const product = products.find((p) => p.id === item.productId); return sum + (product?.price ?? 0) * item.quantity }, 0))\nexport const shippingAtom = atom((get) => get(cartSubtotalAtom) > 100 ? 0 : 9.95)\nexport const cartTotalAtom = atom((get) => get(cartSubtotalAtom) + (get(cartSubtotalAtom) > 0 ? get(shippingAtom) : 0))\n`;
+function sampleStoreSource(spec: WebsiteSpec) {
+  const sample = JSON.stringify(
+    {
+      id: "sample-store",
+      slug: "sample-store",
+      name: spec.store.name,
+      description: spec.store.description,
+      setting: {
+        currency: "AUD",
+      },
+    },
+    null,
+    2,
+  );
+  return `import type { StoreDetail } from '@/services/store/use-store-detail'
+
+export const sampleStore: StoreDetail = ${sample}
+`;
 }
 function storeProviderSource() {
-  return `import type { PropsWithChildren } from 'react'\nimport { createContext, useContext, useMemo } from 'react'\nimport { useAtom, useAtomValue, useSetAtom } from 'jotai'\nimport { cartCountAtom, cartItemsAtom, cartSubtotalAtom, cartTotalAtom, ordersAtom, shippingAtom, type CartItem, type Order } from '@/lib/cart-store'\nimport { products } from '@/data/products'\n\ntype CheckoutInput = { customerName: string; shippingMethod: string }\ntype StoreContextValue = { cartItems: CartItem[]; orders: Order[]; cartCount: number; subtotal: number; shipping: number; total: number; addToCart: (productId: string, quantity?: number) => void; removeFromCart: (productId: string) => void; updateQuantity: (productId: string, quantity: number) => void; clearCart: () => void; createOrder: (input: CheckoutInput) => Order; getOrder: (orderId: string) => Order | undefined }\nconst StoreContext = createContext<StoreContextValue | null>(null)\n\nexport function StoreProvider({ children }: PropsWithChildren) {\n  const [cartItems, setCartItems] = useAtom(cartItemsAtom)\n  const [orders, setOrders] = useAtom(ordersAtom)\n  const cartCount = useAtomValue(cartCountAtom)\n  const subtotal = useAtomValue(cartSubtotalAtom)\n  const shipping = useAtomValue(shippingAtom)\n  const total = useAtomValue(cartTotalAtom)\n  const clearCart = useSetAtom(cartItemsAtom)\n  const value = useMemo<StoreContextValue>(() => ({\n    cartItems, orders, cartCount, subtotal, shipping, total,\n    addToCart: (productId, quantity = 1) => setCartItems((items) => { const current = items.find((item) => item.productId === productId); if (current) return items.map((item) => item.productId === productId ? { ...item, quantity: item.quantity + quantity } : item); return [...items, { productId, quantity }] }),\n    removeFromCart: (productId) => setCartItems((items) => items.filter((item) => item.productId !== productId)),\n    updateQuantity: (productId, quantity) => setCartItems((items) => quantity <= 0 ? items.filter((item) => item.productId !== productId) : items.map((item) => item.productId === productId ? { ...item, quantity } : item)),\n    clearCart: () => clearCart([]),\n    createOrder: (input) => { const order: Order = { id: 'ord-' + Date.now().toString(36), date: new Date().toISOString(), status: 'paid', total, items: cartItems, customerName: input.customerName, shippingMethod: input.shippingMethod }; setOrders((current) => [order, ...current]); clearCart([]); return order },\n    getOrder: (orderId) => orders.find((order) => order.id === orderId),\n  }), [cartItems, orders, cartCount, subtotal, shipping, total, setCartItems, setOrders, clearCart])\n  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>\n}\n\nexport function useStore() { const context = useContext(StoreContext); if (!context) throw new Error('useStore must be used within StoreProvider'); return context }\nexport function getCartProducts(items: CartItem[]) { return items.map((item) => ({ item, product: products.find((product) => product.id === item.productId) })).filter((entry): entry is { item: CartItem; product: (typeof products)[number] } => Boolean(entry.product)) }\n`;
+  return `import type { PropsWithChildren } from 'react'
+import { createContext, useContext, useMemo } from 'react'
+import { useStoreDetail, hasStoreSlug, type StoreDetail } from '@/services/store/use-store-detail'
+import { sampleStore } from '@/data/sample-store'
+
+type StoreContextValue = {
+  storeDetail: StoreDetail
+  isLoading: boolean
+  error: unknown
+  refetch: () => void
+  isUsingSampleData: boolean
+}
+
+const StoreContext = createContext<StoreContextValue | null>(null)
+const NOOP = () => {}
+
+export function StoreProvider({ children }: PropsWithChildren) {
+  const query = useStoreDetail()
+  const value = useMemo<StoreContextValue>(() => {
+    if (!hasStoreSlug) {
+      return { storeDetail: sampleStore, isLoading: false, error: null, refetch: NOOP, isUsingSampleData: true }
+    }
+    return {
+      storeDetail: query.data ?? sampleStore,
+      isLoading: query.isLoading,
+      error: query.error,
+      refetch: () => { void query.refetch() },
+      isUsingSampleData: !query.data,
+    }
+  }, [query.data, query.error, query.isLoading, query.refetch])
+  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+}
+
+export function useStore() {
+  const context = useContext(StoreContext)
+  if (!context) throw new Error('useStore must be used within StoreProvider')
+  return context
+}
+`;
+}
+function cartProviderSource() {
+  return `import type { PropsWithChildren } from 'react'
+import { createContext, useContext } from 'react'
+
+export type CartContextValue = Record<string, never>
+
+const EMPTY_CART_VALUE: CartContextValue = Object.freeze({}) as CartContextValue
+const CartContext = createContext<CartContextValue | null>(null)
+
+export function CartProvider({ children }: PropsWithChildren) {
+  return <CartContext.Provider value={EMPTY_CART_VALUE}>{children}</CartContext.Provider>
+}
+
+export function useCart() {
+  const context = useContext(CartContext)
+  if (!context) throw new Error('useCart must be used within CartProvider')
+  return context
+}
+`;
 }
 function rootRouteSource() {
-  return `import { Outlet, createRootRoute, HeadContent, Scripts } from '@tanstack/react-router'\nimport { Providers } from '@/app/providers'\nimport { StoreProvider } from '@/app/store-provider'\nimport { SiteHeader } from '@/components/layout/site-header'\nimport { SiteFooter } from '@/components/layout/site-footer'\nimport { Toaster } from '@/components/ui/sonner'\nimport '@/styles/app.css'\n\nexport const Route = createRootRoute({ component: Root })\nfunction Root() { return <html lang='en'><head><HeadContent /></head><body><Providers><StoreProvider><SiteHeader /><Outlet /><SiteFooter /><Toaster /></StoreProvider></Providers><Scripts /></body></html> }\n`;
+  return `import { Outlet, createRootRoute, HeadContent, Scripts } from '@tanstack/react-router'
+import { Providers } from '@/app/providers'
+import { StoreProvider } from '@/app/store-provider'
+import { CartProvider } from '@/app/cart-provider'
+import { SiteHeader } from '@/components/layout/site-header'
+import { SiteFooter } from '@/components/layout/site-footer'
+import { Toaster } from '@/components/ui/sonner'
+import '@/styles/app.css'
+
+export const Route = createRootRoute({ component: Root })
+function Root() {
+  return (
+    <html lang='en'>
+      <head><HeadContent /></head>
+      <body>
+        <Providers>
+          <StoreProvider>
+            <CartProvider>
+              <SiteHeader />
+              <Outlet />
+              <SiteFooter />
+              <Toaster />
+            </CartProvider>
+          </StoreProvider>
+        </Providers>
+        <Scripts />
+      </body>
+    </html>
+  )
+}
+`;
 }
 function siteHeaderSource() {
-  return `import { Link } from '@tanstack/react-router'\nimport { Menu, ShoppingCart } from 'lucide-react'\nimport { useStore } from '@/app/store-provider'\nimport { Button } from '@/components/ui/button'\nimport { Badge } from '@/components/ui/badge'\nimport { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog'\nimport { websiteConfig } from '@/lib/website-config'\nexport function SiteHeader() { const { cartCount } = useStore(); const nav = [ ['/', 'Home'], ['/products', 'Products'], ['/orders', 'Orders'] ] as const; return <header className='sticky top-0 z-40 border-b bg-background/95 backdrop-blur'><div className='mx-auto flex h-16 max-w-7xl items-center justify-between px-4'><Link to='/' className='text-lg font-bold'>{websiteConfig.store.name}</Link><nav className='hidden items-center gap-6 md:flex'>{nav.map(([to, label]) => <Link key={to} to={to} className='text-sm font-medium text-muted-foreground hover:text-foreground'>{label}</Link>)}</nav><div className='flex items-center gap-2'><Button asChild variant='outline' size='sm'><Link to='/cart'><ShoppingCart className='h-4 w-4' /> Cart {cartCount > 0 && <Badge>{cartCount}</Badge>}</Link></Button><Dialog><DialogTrigger asChild><Button className='md:hidden' variant='ghost' size='icon'><Menu className='h-5 w-5' /></Button></DialogTrigger><DialogContent>{nav.map(([to, label]) => <Button key={to} asChild variant='ghost'><Link to={to}>{label}</Link></Button>)}</DialogContent></Dialog></div></div></header> }\n`;
+  return `import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { Link, useNavigate } from '@tanstack/react-router'
+import { Search, ShoppingCart } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { websiteConfig } from '@/lib/website-config'
+import { useStoreDetail } from '@/services/store/use-store-detail'
+import { useProductSuggestions } from '@/services/store/use-product-suggestions'
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&')
+}
+
+function highlightMatch(text: string, query: string) {
+  const trimmed = query.trim()
+  if (!trimmed) return <>{text}</>
+  const parts = text.split(new RegExp('(' + escapeRegExp(trimmed) + ')', 'gi'))
+  const lowered = trimmed.toLowerCase()
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.toLowerCase() === lowered ? (
+          <span key={index} className='text-primary'>{part}</span>
+        ) : (
+          <span key={index}>{part}</span>
+        ),
+      )}
+    </>
+  )
+}
+
+export function SiteHeader() {
+  const navigate = useNavigate()
+  const storeId = useStoreDetail().data?.id
+  const [value, setValue] = useState('')
+  const [debouncedValue, setDebouncedValue] = useState('')
+  const [open, setOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedValue(value), 800)
+    return () => window.clearTimeout(timer)
+  }, [value])
+
+  const { suggestions } = useProductSuggestions({ storeId, query: debouncedValue })
+  const trimmed = value.trim()
+  const debouncedTrimmed = debouncedValue.trim()
+  const visibleSuggestions = useMemo(
+    () => (debouncedTrimmed.length > 0 ? suggestions : []),
+    [suggestions, debouncedTrimmed],
+  )
+  const showDropdown = open && trimmed.length > 0 && visibleSuggestions.length > 0
+
+  useEffect(() => {
+    if (!showDropdown) return
+    const handleClick = (event: MouseEvent) => {
+      if (!wrapperRef.current) return
+      if (!wrapperRef.current.contains(event.target as Node)) {
+        setOpen(false)
+        setActiveIndex(-1)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showDropdown])
+
+  useEffect(() => {
+    setActiveIndex(-1)
+  }, [value])
+
+  const submitQuery = (next: string) => {
+    const query = next.trim()
+    if (!query) return
+    setOpen(false)
+    setActiveIndex(-1)
+    void navigate({ to: '/products', search: { q: query } })
+  }
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    submitQuery(value)
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown') {
+      if (visibleSuggestions.length === 0) return
+      event.preventDefault()
+      setOpen(true)
+      setActiveIndex((prev) => (prev + 1) % visibleSuggestions.length)
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      if (visibleSuggestions.length === 0) return
+      event.preventDefault()
+      setOpen(true)
+      setActiveIndex((prev) =>
+        prev <= 0 ? visibleSuggestions.length - 1 : prev - 1,
+      )
+      return
+    }
+    if (event.key === 'Enter') {
+      if (activeIndex >= 0 && visibleSuggestions[activeIndex]) {
+        event.preventDefault()
+        const picked = visibleSuggestions[activeIndex]
+        setValue(picked)
+        submitQuery(picked)
+      }
+      return
+    }
+    if (event.key === 'Escape') {
+      setOpen(false)
+      setActiveIndex(-1)
+    }
+  }
+
+  const handleSuggestionClick = (suggestion: string) => {
+    setValue(suggestion)
+    submitQuery(suggestion)
+  }
+
+  return (
+    <header className='sticky top-0 z-40 border-b bg-background/95 backdrop-blur'>
+      <div className='mx-auto flex h-16 max-w-7xl items-center gap-4 px-4'>
+        <Link to='/' className='shrink-0 text-lg font-bold'>
+          {websiteConfig.store.name}
+        </Link>
+        <div ref={wrapperRef} className='relative flex-1'>
+          <form onSubmit={handleSubmit} className='relative w-full'>
+            <Search
+              aria-hidden='true'
+              className='pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary/40'
+            />
+            <input
+              type='search'
+              role='combobox'
+              aria-expanded={showDropdown}
+              aria-controls='site-search-suggestions'
+              aria-autocomplete='list'
+              value={value}
+              onChange={(event) => {
+                setValue(event.target.value)
+                setOpen(true)
+              }}
+              onFocus={() => setOpen(true)}
+              onKeyDown={handleKeyDown}
+              placeholder='What are you looking for?'
+              className='h-11 w-full rounded-full border-0 bg-primary/5 pl-11 pr-12 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30'
+            />
+            <Button
+              type='submit'
+              size='icon'
+              aria-label='Search'
+              className='absolute right-1.5 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full bg-primary text-white hover:bg-primary/90'
+            >
+              <Search className='h-4 w-4' />
+            </Button>
+          </form>
+          {showDropdown && (
+            <ul
+              id='site-search-suggestions'
+              role='listbox'
+              className='absolute left-0 right-0 top-full z-50 mt-2 rounded-2xl bg-white p-3 shadow-lg shadow-black/5'
+            >
+              <li className='mb-1 px-2 text-xs font-medium text-slate-400'>Suggestions</li>
+              {visibleSuggestions.map((suggestion, index) => (
+                <li
+                  key={suggestion + ':' + index}
+                  role='option'
+                  aria-selected={index === activeIndex}
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                    handleSuggestionClick(suggestion)
+                  }}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  className={
+                    'flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-slate-700 ' +
+                    (index === activeIndex ? 'bg-primary/5' : 'hover:bg-primary/5')
+                  }
+                >
+                  <Search className='h-4 w-4 shrink-0 text-slate-400' aria-hidden='true' />
+                  <span>{highlightMatch(suggestion, value)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <Button asChild variant='outline' size='icon' aria-label='Cart' className='shrink-0'>
+          <Link to='/cart'>
+            <ShoppingCart className='h-4 w-4' />
+          </Link>
+        </Button>
+      </div>
+    </header>
+  )
+}
+`;
 }
 function siteFooterSource() {
   return `import { websiteConfig } from '@/lib/website-config'\nexport function SiteFooter() { return <footer className='bg-[#1E3932] text-white'><div className='mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4'><div><h3 className='text-xl font-semibold'>{websiteConfig.store.name}</h3><p className='mt-3 text-sm text-white/70'>{websiteConfig.store.description}</p></div>{['Shop','Support','Company'].map((title) => <div key={title}><h4 className='font-semibold'>{title}</h4><ul className='mt-3 space-y-2 text-sm text-white/70'><li>Products</li><li>Orders</li><li>Contact</li></ul></div>)}<div><h4 className='font-semibold'>Connect</h4><p className='mt-3 text-sm text-white/70'>Follow new drops and member offers.</p></div></div></footer> }\n`;
@@ -699,25 +1225,188 @@ function heroSectionSource() {
   return `import { Link } from '@tanstack/react-router'\nimport { Button } from '@/components/ui/button'\nimport { websiteConfig } from '@/lib/website-config'\nexport function HeroSection() { return <section className='mx-auto grid max-w-7xl gap-10 px-4 py-16 lg:grid-cols-2 lg:py-24'><div className='flex flex-col justify-center gap-6'><p className='text-sm font-semibold uppercase tracking-[0.25em] text-primary'>{websiteConfig.brand.tone}</p><h1 className='text-5xl font-bold tracking-tight md:text-7xl'>{websiteConfig.content.heroTitle}</h1><p className='max-w-xl text-lg text-muted-foreground'>{websiteConfig.content.heroSubtitle}</p><div className='flex gap-3'><Button asChild size='lg'><Link to='/products'>{websiteConfig.content.primaryCta ?? 'Shop now'}</Link></Button><Button asChild variant='outline' size='lg'><Link to='/checkout'>Checkout demo</Link></Button></div></div><div className='min-h-[420px] rounded-[2rem] bg-gradient-to-br from-[#00754A] via-[#CBA258] to-[#1E3932] p-8 shadow-2xl'><div className='h-full rounded-[1.5rem] border border-white/20 bg-white/20 backdrop-blur' /></div></section> }\n`;
 }
 function productCardSource() {
-  return `import { Link } from '@tanstack/react-router'\nimport { Heart } from 'lucide-react'\nimport { useStore } from '@/app/store-provider'\nimport { Badge } from '@/components/ui/badge'\nimport { Button } from '@/components/ui/button'\nimport { Card, CardContent, CardFooter } from '@/components/ui/card'\nimport { formatMoney } from '@/lib/format-money'\nimport type { Product } from '@/data/products'\nexport function ProductCard({ product }: { product: Product }) { const { addToCart } = useStore(); return <Card className='overflow-hidden'><Link to='/products/$productId' params={{ productId: product.id }}><div className='h-56 bg-gradient-to-br from-secondary to-primary/20' /></Link><CardContent className='space-y-3 p-5'><div className='flex items-center justify-between gap-3'><h3 className='font-semibold'>{product.name}</h3><Button variant='ghost' size='icon'><Heart className='h-4 w-4' /></Button></div><p className='line-clamp-2 text-sm text-muted-foreground'>{product.description}</p><div className='flex items-center gap-2'><span className='font-semibold'>{formatMoney(product.price)}</span>{product.compareAtPrice && <Badge variant='sale'>Sale</Badge>}</div></CardContent><CardFooter><Button className='w-full' onClick={() => addToCart(product.id)}>Add to cart</Button></CardFooter></Card> }\n`;
+  return `import { Link } from '@tanstack/react-router'
+import { Heart } from 'lucide-react'
+import { toast } from 'sonner'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardFooter } from '@/components/ui/card'
+import { formatMoney, resolveProductPrice } from '@/lib/format-money'
+import { useStore } from '@/app/store-provider'
+import type { Product } from '@/services/store/use-products-list'
+
+export function ProductCard({ product }: { product: Product }) {
+  const currency = useStore().storeDetail?.setting?.currency ?? 'AUD'
+  const heroImage = product.image ?? product.images?.[0]
+  return (
+    <Card className='overflow-hidden'>
+      {heroImage ? (
+        <img src={heroImage} alt={product.name} className='h-56 w-full object-cover' />
+      ) : (
+        <div className='h-56 bg-gradient-to-br from-secondary to-primary/20' />
+      )}
+      <CardContent className='space-y-3 p-5'>
+        <div className='flex items-center justify-between gap-3'>
+          <Link
+            to='/products/$productId'
+            params={{ productId: product.id }}
+            className='font-semibold hover:underline'
+          >
+            <h3>{product.name}</h3>
+          </Link>
+          <Button variant='ghost' size='icon'><Heart className='h-4 w-4' /></Button>
+        </div>
+        <p className='line-clamp-2 text-sm text-muted-foreground'>{product.description}</p>
+        <div className='flex items-center gap-2'>
+          <span className='font-semibold'>{formatMoney(resolveProductPrice(product), { currency })}</span>
+          {product.compareAtPrice && <Badge variant='sale'>Sale</Badge>}
+        </div>
+      </CardContent>
+      <CardFooter>
+        <Button className='w-full' onClick={() => toast.info('Cart coming soon')}>Add to cart</Button>
+      </CardFooter>
+    </Card>
+  )
+}
+`;
 }
 function productGridSource() {
-  return `import { products } from '@/data/products'\nimport { ProductCard } from '@/components/store/product-card'\nexport function ProductGrid() { return <section className='mx-auto max-w-7xl px-4 py-14'><div className='mb-8 flex items-end justify-between'><div><p className='text-sm font-semibold uppercase tracking-[0.2em] text-primary'>Featured</p><h2 className='text-3xl font-bold'>Shop customer favorites</h2></div><p className='text-sm text-muted-foreground'>{products.length} products</p></div><div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>{products.map((product) => <ProductCard key={product.id} product={product} />)}</div></section> }\n`;
+  return `import { useEffect, useRef } from 'react'
+import { ProductCard } from '@/components/store/product-card'
+import { Button } from '@/components/ui/button'
+import { useStoreDetail } from '@/services/store/use-store-detail'
+import { useProductsList } from '@/services/store/use-products-list'
+
+export function ProductGrid() {
+  const storeId = useStoreDetail().data?.id
+  const {
+    products,
+    total,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    isError,
+    refetch,
+  } = useProductsList({ storeId })
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const node = loadMoreRef.current
+    if (!node || !hasNextPage) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !isFetchingNextPage) {
+          void fetchNextPage()
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+
+  return (
+    <section className='mx-auto max-w-7xl px-4 py-14'>
+      <div className='mb-8 flex items-end justify-between'>
+        <div>
+          <p className='text-sm font-semibold uppercase tracking-[0.2em] text-primary'>Featured</p>
+          <h2 className='text-3xl font-bold'>Shop customer favorites</h2>
+        </div>
+        <p className='text-sm text-muted-foreground'>{total} products</p>
+      </div>
+      {isLoading ? (
+        <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className='h-72 animate-pulse rounded-lg border bg-muted/40' />
+          ))}
+        </div>
+      ) : isError ? (
+        <div className='rounded-3xl border border-destructive/30 bg-destructive/5 p-6 text-center'>
+          <p className='text-sm font-semibold uppercase tracking-[0.2em] text-destructive'>Products unavailable</p>
+          <h3 className='mt-2 text-2xl font-semibold'>We could not load products.</h3>
+          <Button type='button' className='mt-4' onClick={() => { void refetch() }}>Retry</Button>
+        </div>
+      ) : (
+        <>
+          <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+            {products.map((product) => <ProductCard key={product.id} product={product} />)}
+          </div>
+          {hasNextPage && (
+            <div ref={loadMoreRef} className='py-8 text-center text-sm text-muted-foreground'>
+              {isFetchingNextPage ? 'Loading more...' : ''}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+`;
 }
 function trustSignalsSource() {
   return `import { Headphones, RotateCcw, Shield, Truck } from 'lucide-react'\nconst items = [{ icon: Truck, label: 'Fast shipping' }, { icon: RotateCcw, label: 'Easy returns' }, { icon: Shield, label: 'Secure checkout' }, { icon: Headphones, label: 'Human support' }]\nexport function TrustSignals() { return <section className='mx-auto grid max-w-7xl gap-4 px-4 py-10 sm:grid-cols-2 lg:grid-cols-4'>{items.map(({ icon: Icon, label }) => <div key={label} className='rounded-lg border bg-card p-5'><Icon className='mb-3 h-6 w-6 text-primary' /><p className='font-medium'>{label}</p></div>)}</section> }\n`;
 }
 function categorySectionSource() {
-  return `import { categories } from '@/data/categories'\nexport function CategorySection() { return <section className='mx-auto max-w-7xl px-4 py-10'><h2 className='text-2xl font-bold'>Browse categories</h2><div className='mt-5 flex flex-wrap gap-3'>{categories.map((category) => <span key={category} className='rounded-full border bg-card px-4 py-2 text-sm'>{category}</span>)}</div></section> }\n`;
+  return `import { useStoreDetail } from '@/services/store/use-store-detail'
+import { useCategoriesList } from '@/services/store/use-categories-list'
+
+export function CategorySection() {
+  const storeId = useStoreDetail().data?.id
+  const { data } = useCategoriesList(storeId)
+  const categories = data?.data ?? []
+  return (
+    <section className='mx-auto max-w-7xl px-4 py-10'>
+      <h2 className='text-2xl font-bold'>Browse categories</h2>
+      <div className='mt-5 flex flex-wrap gap-3'>
+        {categories.map((category) => (
+          <span key={category.id} className='rounded-full border bg-card px-4 py-2 text-sm'>{category.name}</span>
+        ))}
+      </div>
+    </section>
+  )
+}
+`;
 }
 function cartDrawerSource() {
-  return `import { ShoppingCart } from 'lucide-react'\nimport { useStore } from '@/app/store-provider'\nexport function CartDrawer() { const { cartCount } = useStore(); return <div className='inline-flex items-center gap-2'><ShoppingCart className='h-4 w-4' />{cartCount}</div> }\n`;
+  return `import { ShoppingCart } from 'lucide-react'\nexport function CartDrawer() { return <div className='inline-flex items-center gap-2'><ShoppingCart className='h-4 w-4' /></div> }\n`;
 }
 function cartItemSource() {
-  return `import { Minus, Plus, Trash2 } from 'lucide-react'\nimport { useStore } from '@/app/store-provider'\nimport { Button } from '@/components/ui/button'\nimport { formatMoney } from '@/lib/format-money'\nimport type { Product } from '@/data/products'\nexport function CartItem({ product, quantity }: { product: Product; quantity: number }) { const { updateQuantity, removeFromCart } = useStore(); return <div className='flex items-center gap-4 rounded-lg border bg-card p-4'><div className='h-20 w-20 rounded-md bg-secondary' /><div className='flex-1'><h3 className='font-semibold'>{product.name}</h3><p className='text-sm text-muted-foreground'>{formatMoney(product.price)}</p></div><div className='flex items-center gap-2'><Button variant='outline' size='icon' onClick={() => updateQuantity(product.id, quantity - 1)}><Minus className='h-4 w-4' /></Button><span className='w-8 text-center'>{quantity}</span><Button variant='outline' size='icon' onClick={() => updateQuantity(product.id, quantity + 1)}><Plus className='h-4 w-4' /></Button><Button variant='ghost' size='icon' onClick={() => removeFromCart(product.id)}><Trash2 className='h-4 w-4' /></Button></div><strong>{formatMoney(product.price * quantity)}</strong></div> }\n`;
+  return `import { Minus, Plus, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { formatMoney, resolveProductPrice } from '@/lib/format-money'
+import { useStore } from '@/app/store-provider'
+import type { Product } from '@/services/store/use-products-list'
+
+export function CartItem({ product, quantity }: { product: Product; quantity: number }) {
+  const currency = useStore().storeDetail?.setting?.currency ?? 'AUD'
+  const unitPriceCents = resolveProductPrice(product) ?? 0
+  const thumbnail = product.image ?? product.images?.[0]
+  return (
+    <div className='flex items-center gap-4 rounded-lg border bg-card p-4'>
+      {thumbnail ? (
+        <img src={thumbnail} alt={product.name} className='h-20 w-20 rounded-md object-cover' />
+      ) : (
+        <div className='h-20 w-20 rounded-md bg-secondary' />
+      )}
+      <div className='flex-1'>
+        <h3 className='font-semibold'>{product.name}</h3>
+        <p className='text-sm text-muted-foreground'>{formatMoney(unitPriceCents, { currency })}</p>
+      </div>
+      <div className='flex items-center gap-2'>
+        <Button variant='outline' size='icon' disabled><Minus className='h-4 w-4' /></Button>
+        <span className='w-8 text-center'>{quantity}</span>
+        <Button variant='outline' size='icon' disabled><Plus className='h-4 w-4' /></Button>
+        <Button variant='ghost' size='icon' disabled><Trash2 className='h-4 w-4' /></Button>
+      </div>
+      <strong>{formatMoney(unitPriceCents * quantity, { currency })}</strong>
+    </div>
+  )
+}
+`;
 }
 function orderCardSource() {
-  return `import { Link } from '@tanstack/react-router'\nimport { Badge } from '@/components/ui/badge'\nimport { Button } from '@/components/ui/button'\nimport { Card, CardContent } from '@/components/ui/card'\nimport { formatMoney } from '@/lib/format-money'\nimport type { Order } from '@/lib/cart-store'\nexport function OrderCard({ order }: { order: Order }) { return <Card><CardContent className='flex flex-wrap items-center justify-between gap-4 p-5'><div><p className='font-semibold'>Order {order.id}</p><p className='text-sm text-muted-foreground'>{new Date(order.date).toLocaleDateString()}</p></div><Badge>{order.status}</Badge><strong>{formatMoney(order.total)}</strong><Button asChild variant='outline'><Link to='/orders/$orderId' params={{ orderId: order.id }}>View details</Link></Button></CardContent></Card> }\n`;
+  return `import { Link } from '@tanstack/react-router'\nimport { Badge } from '@/components/ui/badge'\nimport { Button } from '@/components/ui/button'\nimport { Card, CardContent } from '@/components/ui/card'\nimport { formatMoney } from '@/lib/format-money'\ntype OrderSummary = { id: string; date: string; status: string; total: number }\nexport function OrderCard({ order }: { order: OrderSummary }) { return <Card><CardContent className='flex flex-wrap items-center justify-between gap-4 p-5'><div><p className='font-semibold'>Order {order.id}</p><p className='text-sm text-muted-foreground'>{new Date(order.date).toLocaleDateString()}</p></div><Badge>{order.status}</Badge><strong>{formatMoney(order.total)}</strong><Button asChild variant='outline'><Link to='/orders/$orderId' params={{ orderId: order.id }}>View details</Link></Button></CardContent></Card> }\n`;
 }
 function homeRouteSource() {
   return `import { createFileRoute } from '@tanstack/react-router'\nimport { HeroSection } from '@/components/store/hero-section'\nimport { ProductGrid } from '@/components/store/product-grid'\nimport { TrustSignals } from '@/components/store/trust-signals'\nimport { CategorySection } from '@/components/store/category-section'\nexport const Route = createFileRoute('/')({ component: HomePage })\nfunction HomePage() { return <main><HeroSection /><CategorySection /><ProductGrid /><TrustSignals /><section className='bg-[#1E3932] px-4 py-16 text-center text-white'><h2 className='text-3xl font-bold'>Ready for your next favorite?</h2><p className='mt-3 text-white/70'>Checkout is mocked so you can test the full flow immediately.</p></section></main> }\n`;
@@ -726,20 +1415,193 @@ function productsLayoutRouteSource() {
   return `import { Outlet, createFileRoute } from '@tanstack/react-router'\nexport const Route = createFileRoute('/products')({ component: ProductsLayout })\nfunction ProductsLayout() { return <Outlet /> }\n`;
 }
 function productsIndexRouteSource() {
-  return `import { createFileRoute } from '@tanstack/react-router'\nimport { ProductCard } from '@/components/store/product-card'\nimport { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'\nimport { products } from '@/data/products'\nexport const Route = createFileRoute('/products/')({ component: ProductsPage })\nfunction ProductsPage() { return <main className='mx-auto max-w-7xl px-4 py-12'><div className='mb-8 flex flex-wrap items-center justify-between gap-4'><div><h1 className='text-4xl font-bold'>Products</h1><p className='text-muted-foreground'>{products.length} curated products</p></div><Select defaultValue='featured'><SelectTrigger className='w-44'><SelectValue placeholder='Sort' /></SelectTrigger><SelectContent><SelectItem value='featured'>Featured</SelectItem><SelectItem value='price-low'>Price low</SelectItem><SelectItem value='price-high'>Price high</SelectItem></SelectContent></Select></div><div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>{products.map((product) => <ProductCard key={product.id} product={product} />)}</div></main> }\n`;
+  return `import { createFileRoute } from '@tanstack/react-router'
+import { useEffect, useRef } from 'react'
+import { ProductCard } from '@/components/store/product-card'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useStoreDetail } from '@/services/store/use-store-detail'
+import { useProductsList } from '@/services/store/use-products-list'
+import { useCategoriesList } from '@/services/store/use-categories-list'
+
+type ProductsSearch = { q: string }
+
+export const Route = createFileRoute('/products/')({
+  component: ProductsPage,
+  validateSearch: (search: Record<string, unknown>): ProductsSearch => ({
+    q: typeof search.q === 'string' ? search.q.trim() : '',
+  }),
+})
+
+function ProductsPage() {
+  const { q } = Route.useSearch()
+  const storeId = useStoreDetail().data?.id
+  const productsQuery = useProductsList({ storeId, query: q })
+  const categoriesQuery = useCategoriesList(storeId)
+  const products = productsQuery.products
+  const total = productsQuery.total
+  const categories = categoriesQuery.data?.data ?? []
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const node = loadMoreRef.current
+    if (!node || !productsQuery.hasNextPage) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !productsQuery.isFetchingNextPage) {
+          void productsQuery.fetchNextPage()
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [productsQuery.hasNextPage, productsQuery.isFetchingNextPage, productsQuery.fetchNextPage])
+
+  const showEmptyState =
+    products.length === 0 && !productsQuery.isLoading && !productsQuery.isError
+
+  return (
+    <main className='mx-auto max-w-7xl px-4 py-12'>
+      <div className='mb-8 flex flex-wrap items-center justify-between gap-4'>
+        <div>
+          <h1 className='text-4xl font-bold'>Products</h1>
+          {q ? (
+            <p className='text-sm text-muted-foreground'>
+              Results for <span className='font-medium text-foreground'>"{q}"</span> · {total} products
+            </p>
+          ) : (
+            <p className='text-muted-foreground'>{total} curated products</p>
+          )}
+        </div>
+        <Select defaultValue='featured'>
+          <SelectTrigger className='w-44'><SelectValue placeholder='Sort' /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value='featured'>Featured</SelectItem>
+            <SelectItem value='price-low'>Price low</SelectItem>
+            <SelectItem value='price-high'>Price high</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {categories.length > 0 && (
+        <div className='mb-6 flex flex-wrap gap-2'>
+          {categories.map((category) => (
+            <Button key={category.id} variant='outline' size='sm'>{category.name}</Button>
+          ))}
+        </div>
+      )}
+      {productsQuery.isLoading ? (
+        <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className='h-72 animate-pulse rounded-lg border bg-muted/40' />
+          ))}
+        </div>
+      ) : productsQuery.isError ? (
+        <div className='rounded-3xl border border-destructive/30 bg-destructive/5 p-6 text-center'>
+          <p className='text-sm font-semibold uppercase tracking-[0.2em] text-destructive'>Products unavailable</p>
+          <h3 className='mt-2 text-2xl font-semibold'>We could not load products.</h3>
+          <Button type='button' className='mt-4' onClick={() => { void productsQuery.refetch() }}>Retry</Button>
+        </div>
+      ) : showEmptyState ? (
+        <div className='rounded-3xl border bg-muted/20 p-10 text-center'>
+          <p className='text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground'>No matches</p>
+          <h3 className='mt-2 text-2xl font-semibold'>
+            {q ? <>No products match "{q}"</> : 'No products yet'}
+          </h3>
+          <p className='mt-2 text-sm text-muted-foreground'>Try a different search term.</p>
+        </div>
+      ) : (
+        <>
+          <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+            {products.map((product) => <ProductCard key={product.id} product={product} />)}
+          </div>
+          {productsQuery.hasNextPage && (
+            <div ref={loadMoreRef} className='py-8 text-center text-sm text-muted-foreground'>
+              {productsQuery.isFetchingNextPage ? 'Loading more...' : ''}
+            </div>
+          )}
+        </>
+      )}
+    </main>
+  )
+}
+`;
 }
 function productDetailRouteSource() {
-  return `import { Link, createFileRoute } from '@tanstack/react-router'\nimport { useState } from 'react'\nimport { useStore } from '@/app/store-provider'\nimport { Badge } from '@/components/ui/badge'\nimport { Button } from '@/components/ui/button'\nimport { products } from '@/data/products'\nimport { formatMoney } from '@/lib/format-money'\nexport const Route = createFileRoute('/products/$productId')({ component: ProductDetailPage })\nfunction ProductDetailPage() { const { productId } = Route.useParams(); const product = products.find((item) => item.id === productId) ?? products[0]; const [quantity, setQuantity] = useState(1); const { addToCart } = useStore(); return <main className='mx-auto grid max-w-7xl gap-10 px-4 py-12 lg:grid-cols-2'><div className='min-h-[520px] rounded-[2rem] bg-gradient-to-br from-secondary to-primary/30' /><div className='space-y-6'><Link to='/products' className='text-sm text-muted-foreground'>← Products</Link><Badge variant='sale'>Featured</Badge><h1 className='text-5xl font-bold'>{product.name}</h1><p className='text-lg text-muted-foreground'>{product.description}</p><p className='text-3xl font-semibold'>{formatMoney(product.price)}</p><div className='flex items-center gap-3'><Button variant='outline' onClick={() => setQuantity(Math.max(1, quantity - 1))}>-</Button><span>{quantity}</span><Button variant='outline' onClick={() => setQuantity(quantity + 1)}>+</Button></div><Button size='lg' onClick={() => addToCart(product.id, quantity)}>Add to cart</Button></div></main> }\n`;
+  return `import { Link, createFileRoute } from '@tanstack/react-router'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { useProductDetail } from '@/services/store/use-product-detail'
+import { formatMoney, resolveProductPrice } from '@/lib/format-money'
+import { useStore } from '@/app/store-provider'
+
+export const Route = createFileRoute('/products/$productId')({ component: ProductDetailPage })
+
+function ProductDetailPage() {
+  const { productId } = Route.useParams()
+  const { data: product, isLoading, isError, refetch } = useProductDetail(productId)
+  const currency = useStore().storeDetail?.setting?.currency ?? 'AUD'
+  const [quantity, setQuantity] = useState(1)
+  if (isLoading) {
+    return (
+      <main className='mx-auto grid max-w-7xl gap-10 px-4 py-12 lg:grid-cols-2'>
+        <div className='min-h-[520px] animate-pulse rounded-[2rem] bg-muted/40' />
+        <div className='space-y-4'>
+          <div className='h-6 w-32 animate-pulse rounded bg-muted/40' />
+          <div className='h-12 w-3/4 animate-pulse rounded bg-muted/40' />
+          <div className='h-24 w-full animate-pulse rounded bg-muted/40' />
+        </div>
+      </main>
+    )
+  }
+  if (isError || !product) {
+    return (
+      <main className='mx-auto max-w-3xl px-4 py-16'>
+        <div className='rounded-3xl border border-destructive/30 bg-destructive/5 p-6 text-center'>
+          <p className='text-sm font-semibold uppercase tracking-[0.2em] text-destructive'>Product unavailable</p>
+          <h3 className='mt-2 text-2xl font-semibold'>We could not load this product.</h3>
+          <Button type='button' className='mt-4' onClick={() => { void refetch() }}>Retry</Button>
+        </div>
+      </main>
+    )
+  }
+  const heroImage = product.image ?? product.images?.[0]
+  return (
+    <main className='mx-auto grid max-w-7xl gap-10 px-4 py-12 lg:grid-cols-2'>
+      {heroImage ? (
+        <img src={heroImage} alt={product.name} className='min-h-[520px] w-full rounded-[2rem] object-cover' />
+      ) : (
+        <div className='min-h-[520px] rounded-[2rem] bg-gradient-to-br from-secondary to-primary/30' />
+      )}
+      <div className='space-y-6'>
+        <Link to='/products' className='text-sm text-muted-foreground'>← Products</Link>
+        <Badge variant='sale'>Featured</Badge>
+        <h1 className='text-5xl font-bold'>{product.name}</h1>
+        <p className='text-lg text-muted-foreground'>{product.description}</p>
+        <p className='text-3xl font-semibold'>{formatMoney(resolveProductPrice(product), { currency })}</p>
+        <div className='flex items-center gap-3'>
+          <Button variant='outline' onClick={() => setQuantity(Math.max(1, quantity - 1))}>-</Button>
+          <span>{quantity}</span>
+          <Button variant='outline' onClick={() => setQuantity(quantity + 1)}>+</Button>
+        </div>
+        <Button size='lg' onClick={() => toast.info('Cart coming soon')}>Add to cart</Button>
+      </div>
+    </main>
+  )
+}
+`;
 }
 function cartRouteSource() {
-  return `import { Link, createFileRoute } from '@tanstack/react-router'\nimport { ShoppingCart } from 'lucide-react'\nimport { useStore, getCartProducts } from '@/app/store-provider'\nimport { Button } from '@/components/ui/button'\nimport { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'\nimport { CartItem } from '@/components/store/cart-item'\nimport { formatMoney } from '@/lib/format-money'\nexport const Route = createFileRoute('/cart')({ component: CartPage })\nfunction CartPage() { const store = useStore(); const entries = getCartProducts(store.cartItems); return <main className='mx-auto max-w-7xl px-4 py-12'><h1 className='mb-8 text-4xl font-bold'>Cart</h1>{entries.length === 0 ? <div className='rounded-lg border bg-card p-12 text-center'><ShoppingCart className='mx-auto mb-4 h-10 w-10 text-muted-foreground' /><h2 className='text-2xl font-semibold'>Your cart is empty</h2><Button asChild className='mt-6'><Link to='/products'>Continue shopping</Link></Button></div> : <div className='grid gap-8 lg:grid-cols-[1fr_360px]'>{<div className='space-y-4'>{entries.map(({ item, product }) => <CartItem key={item.productId} product={product} quantity={item.quantity} />)}</div>}<Card><CardHeader><CardTitle>Summary</CardTitle></CardHeader><CardContent className='space-y-3'><Summary label='Subtotal' value={store.subtotal} /><Summary label='Shipping' value={store.shipping} /><Summary label='Total' value={store.total} strong /><Button asChild className='w-full'><Link to='/checkout'>Checkout</Link></Button></CardContent></Card></div>}</main> }\nfunction Summary({ label, value, strong }: { label: string; value: number; strong?: boolean }) { return <div className='flex justify-between'><span>{label}</span><span className={strong ? 'font-bold' : ''}>{formatMoney(value)}</span></div> }\n`;
+  return `import { Link, createFileRoute } from '@tanstack/react-router'\nimport { ShoppingCart } from 'lucide-react'\nimport { Button } from '@/components/ui/button'\nexport const Route = createFileRoute('/cart')({ component: CartPage })\nfunction CartPage() { return <main className='mx-auto max-w-7xl px-4 py-12'><h1 className='mb-8 text-4xl font-bold'>Cart</h1><div className='rounded-lg border bg-card p-12 text-center'><ShoppingCart className='mx-auto mb-4 h-10 w-10 text-muted-foreground' /><h2 className='text-2xl font-semibold'>Cart coming soon</h2><p className='mt-2 text-sm text-muted-foreground'>Cart is not yet wired up.</p><Button asChild className='mt-6'><Link to='/products'>Continue shopping</Link></Button></div></main> }\n`;
 }
 function checkoutRouteSource() {
-  return `import { createFileRoute } from '@tanstack/react-router'\nimport { useForm } from 'react-hook-form'\nimport { z } from 'zod'\nimport { toast } from 'sonner'\nimport { useStore } from '@/app/store-provider'\nimport { Button } from '@/components/ui/button'\nimport { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'\nimport { Input } from '@/components/ui/input'\nimport { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'\nimport { formatMoney } from '@/lib/format-money'\nconst checkoutSchema = z.object({ customerName: z.string().min(2), email: z.string().email(), address: z.string().min(6), shippingMethod: z.enum(['standard', 'express']) })\ntype CheckoutValues = z.infer<typeof checkoutSchema>\nexport const Route = createFileRoute('/checkout')({ component: CheckoutPage })\nfunction CheckoutPage() { const store = useStore(); const { register, handleSubmit, setValue, formState: { errors } } = useForm<CheckoutValues>({ defaultValues: { shippingMethod: 'standard' } }); return <main className='mx-auto grid max-w-7xl gap-8 px-4 py-12 lg:grid-cols-[1fr_380px]'><form className='space-y-5' onSubmit={handleSubmit((values) => { const parsed = checkoutSchema.safeParse(values); if (!parsed.success) return; const order = store.createOrder(parsed.data); toast.success('Order placed', { description: order.id }) })}><h1 className='text-4xl font-bold'>Checkout</h1><Input placeholder='Full name' {...register('customerName')} />{errors.customerName && <p className='text-sm text-destructive'>Name is required</p>}<Input placeholder='Email' {...register('email')} /><Input placeholder='Shipping address' {...register('address')} /><RadioGroup defaultValue='standard' onValueChange={(value) => setValue('shippingMethod', value as CheckoutValues['shippingMethod'])}><label className='flex items-center gap-2'><RadioGroupItem value='standard' /> Standard shipping</label><label className='flex items-center gap-2'><RadioGroupItem value='express' /> Express shipping</label></RadioGroup><Button type='submit'>Place order</Button></form><Card><CardHeader><CardTitle>Order summary</CardTitle></CardHeader><CardContent className='space-y-3'><div className='flex justify-between'><span>Items</span><span>{store.cartCount}</span></div><div className='flex justify-between'><span>Subtotal</span><span>{formatMoney(store.subtotal)}</span></div><div className='flex justify-between font-bold'><span>Total</span><span>{formatMoney(store.total)}</span></div></CardContent></Card></main> }\n`;
+  return `import { createFileRoute } from '@tanstack/react-router'\nimport { useForm } from 'react-hook-form'\nimport { z } from 'zod'\nimport { toast } from 'sonner'\nimport { Button } from '@/components/ui/button'\nimport { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'\nimport { Input } from '@/components/ui/input'\nimport { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'\nconst checkoutSchema = z.object({ customerName: z.string().min(2), email: z.string().email(), address: z.string().min(6), shippingMethod: z.enum(['standard', 'express']) })\ntype CheckoutValues = z.infer<typeof checkoutSchema>\nexport const Route = createFileRoute('/checkout')({ component: CheckoutPage })\nfunction CheckoutPage() { const { register, handleSubmit, setValue, formState: { errors } } = useForm<CheckoutValues>({ defaultValues: { shippingMethod: 'standard' } }); return <main className='mx-auto grid max-w-7xl gap-8 px-4 py-12 lg:grid-cols-[1fr_380px]'><form className='space-y-5' onSubmit={handleSubmit((values) => { const parsed = checkoutSchema.safeParse(values); if (!parsed.success) return; toast.success('Order placed (demo)', { description: 'Cart is not yet wired up.' }) })}><h1 className='text-4xl font-bold'>Checkout</h1><Input placeholder='Full name' {...register('customerName')} />{errors.customerName && <p className='text-sm text-destructive'>Name is required</p>}<Input placeholder='Email' {...register('email')} /><Input placeholder='Shipping address' {...register('address')} /><RadioGroup defaultValue='standard' onValueChange={(value) => setValue('shippingMethod', value as CheckoutValues['shippingMethod'])}><label className='flex items-center gap-2'><RadioGroupItem value='standard' /> Standard shipping</label><label className='flex items-center gap-2'><RadioGroupItem value='express' /> Express shipping</label></RadioGroup><Button type='submit'>Place order</Button></form><Card><CardHeader><CardTitle>Order summary</CardTitle></CardHeader><CardContent className='space-y-3'><p className='text-sm text-muted-foreground'>Order summary will appear here once the cart is connected.</p></CardContent></Card></main> }\n`;
 }
 function ordersIndexRouteSource() {
-  return `import { Link, createFileRoute } from '@tanstack/react-router'\nimport { useStore } from '@/app/store-provider'\nimport { Button } from '@/components/ui/button'\nimport { OrderCard } from '@/components/store/order-card'\nexport const Route = createFileRoute('/orders/')({ component: OrdersPage })\nfunction OrdersPage() { const { orders } = useStore(); return <main className='mx-auto max-w-7xl px-4 py-12'><h1 className='mb-8 text-4xl font-bold'>Orders</h1>{orders.length === 0 ? <div className='rounded-lg border bg-card p-12 text-center'><h2 className='text-2xl font-semibold'>No orders yet</h2><Button asChild className='mt-6'><Link to='/products'>Shop now</Link></Button></div> : <div className='space-y-4'>{orders.map((order) => <OrderCard key={order.id} order={order} />)}</div>}</main> }\n`;
+  return `import { Link, createFileRoute } from '@tanstack/react-router'\nimport { Button } from '@/components/ui/button'\nexport const Route = createFileRoute('/orders/')({ component: OrdersPage })\nfunction OrdersPage() { return <main className='mx-auto max-w-7xl px-4 py-12'><h1 className='mb-8 text-4xl font-bold'>Orders</h1><div className='rounded-lg border bg-card p-12 text-center'><h2 className='text-2xl font-semibold'>No orders yet</h2><Button asChild className='mt-6'><Link to='/products'>Shop now</Link></Button></div></main> }\n`;
 }
 function orderDetailRouteSource() {
-  return `import { Link, createFileRoute } from '@tanstack/react-router'\nimport { useStore, getCartProducts } from '@/app/store-provider'\nimport { Button } from '@/components/ui/button'\nimport { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'\nimport { formatMoney } from '@/lib/format-money'\nexport const Route = createFileRoute('/orders/$orderId')({ component: OrderDetailPage })\nfunction OrderDetailPage() { const { orderId } = Route.useParams(); const { getOrder } = useStore(); const order = getOrder(orderId); if (!order) return <main className='mx-auto max-w-3xl px-4 py-12'><h1 className='text-3xl font-bold'>Order not found</h1><Button asChild className='mt-6'><Link to='/orders'>Back to orders</Link></Button></main>; const entries = getCartProducts(order.items); return <main className='mx-auto max-w-5xl px-4 py-12'><Link to='/orders' className='text-sm text-muted-foreground'>← Orders</Link><h1 className='mt-4 text-4xl font-bold'>Order {order.id}</h1><div className='mt-8 grid gap-8 lg:grid-cols-[1fr_320px]'><div className='space-y-3'>{entries.map(({ item, product }) => <div key={item.productId} className='flex justify-between rounded-lg border bg-card p-4'><span>{product.name} × {item.quantity}</span><strong>{formatMoney(product.price * item.quantity)}</strong></div>)}</div><Card><CardHeader><CardTitle>Summary</CardTitle></CardHeader><CardContent className='space-y-2'><p>Status: {order.status}</p><p>Customer: {order.customerName}</p><p>Shipping: {order.shippingMethod}</p><p className='font-bold'>Total: {formatMoney(order.total)}</p></CardContent></Card></div></main> }\n`;
+  return `import { Link, createFileRoute } from '@tanstack/react-router'\nimport { Button } from '@/components/ui/button'\nimport { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'\nexport const Route = createFileRoute('/orders/$orderId')({ component: OrderDetailPage })\nfunction OrderDetailPage() { const { orderId } = Route.useParams(); return <main className='mx-auto max-w-3xl px-4 py-12'><Link to='/orders' className='text-sm text-muted-foreground'>← Orders</Link><h1 className='mt-4 text-4xl font-bold'>Order {orderId}</h1><Card className='mt-8'><CardHeader><CardTitle>Order details unavailable</CardTitle></CardHeader><CardContent className='space-y-2'><p className='text-sm text-muted-foreground'>Cart and order persistence are not yet wired up.</p><Button asChild className='mt-4'><Link to='/orders'>Back to orders</Link></Button></CardContent></Card></main> }\n`;
 }

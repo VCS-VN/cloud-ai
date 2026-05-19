@@ -4,6 +4,11 @@ import {
 import type { AgentRuntime } from "@/agent/agent-runtime";
 import type { AgentOrchestrator } from "@/features/ai-agent/agent/agent-orchestrator.server";
 import type { AgentStreamEvent } from "@/features/ai-agent/agent/agent-events";
+import {
+  type PresenterContext,
+  formatUserFacingStatus,
+  sanitizeForUser,
+} from "@/features/ai-agent/agent/user-facing-presenter";
 import type {
   ComposerReasoningEffort,
   Message,
@@ -285,7 +290,7 @@ export class MessageService {
       processingStatus: "streaming",
     });
 
-    const toUserFacingDelta = createAgentMessageDeltaPresenter();
+    const toUserFacingDelta = createAgentMessageDeltaPresenter({ userPrompt: args.prompt });
     let hasTerminalUserFacingDelta = false;
 
     const emitDelta = async (delta: string, providerEventType: string) => {
@@ -637,58 +642,34 @@ export class MessageService {
   }
 }
 
-function createAgentMessageDeltaPresenter() {
+function createAgentMessageDeltaPresenter(initialCtx: PresenterContext) {
   const emitted = new Set<string>();
+  const ctx: PresenterContext = { ...initialCtx };
 
   return (event: AgentStreamEvent) => {
-    const message = agentEventToUserFacingMessage(event);
+    if (event.type === "user_wish_extracted") {
+      ctx.userFacingUnderstanding = event.understanding;
+    }
+    if (event.type === "assistant_message_delta") {
+      const sanitized = sanitizeForUser(event.delta);
+      if (!sanitized) return undefined;
+      return sanitized;
+    }
+    const message = agentEventToUserFacingMessage(event, ctx);
     if (!message) return undefined;
-    const key =
-      event.type === "assistant_message_delta" ? `${event.type}:${message}` : message;
-    if (emitted.has(key)) return undefined;
-    emitted.add(key);
-    return `${message}${message.endsWith("\n") ? "" : "\n"}`;
+    if (emitted.has(message)) return undefined;
+    emitted.add(message);
+    return `${message}\n`;
   };
 }
 
-export function agentEventToUserFacingMessage(event: AgentStreamEvent) {
-  switch (event.type) {
-    case "thinking_started":
-      return event.message;
-    case "user_wish_extracted":
-      return `Understood: ${event.understanding}`;
-    case "thinking_completed":
-      return "Task identified. Planning...";
-    case "thinking_needs_clarification":
-      return `Clarification needed: ${event.question}`;
-    case "intent_detected":
-      if (event.intent.intent === "init_project") return "Initializing project...";
-      if (event.intent.intent === "explain_project") return "Inspecting project...";
-      return "Updating page...";
-    case "source_generation_started":
-      return /incremental|patch|update/i.test(event.message)
-        ? "Updating page..."
-        : "Creating page...";
-    case "assistant_message_delta":
-      return undefined;
-    case "done":
-      return getDoneMessageForUser(event.summary);
-    case "error":
-      return "Could not complete the request. Please try again or adjust your prompt.";
-    default:
-      return undefined;
-  }
-}
-
-
-function getDoneMessageForUser(summary: string) {
-  if (/init|initial|khởi tạo|generated|storefront files|from template/i.test(summary)) {
-    return "Done. Project initialized successfully.";
-  }
-  if (/add|create|new|thêm|tạo/i.test(summary)) {
-    return "Done. New request added successfully.";
-  }
-  return "Done. Content updated successfully.";
+export function agentEventToUserFacingMessage(
+  event: AgentStreamEvent,
+  ctx: PresenterContext,
+) {
+  const formatted = formatUserFacingStatus(event, ctx);
+  if (!formatted || formatted.kind === "technical" || !formatted.label) return undefined;
+  return formatted.detail ? `${formatted.label}: ${formatted.detail}` : formatted.label;
 }
 
 function appendUserFacingLine(content: string, line: string) {

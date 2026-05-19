@@ -1,23 +1,18 @@
-import { CheckCircle2, CircleDashed, FileText, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
+import { useMemo, useState } from "react";
+import { CheckCircle2, ChevronDown, ChevronRight, CircleDashed, FileText, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
 import type { AgentStreamEvent } from "../agent/agent-events";
+import {
+  type PresenterContext,
+  deriveContextFromEvents,
+  formatUserFacingStatus,
+} from "../agent/user-facing-presenter";
 
-const EVENT_LABELS: Record<AgentStreamEvent["type"], string> = {
-  agent_started: "Agent started",
+const TECHNICAL_FALLBACK_LABELS: Partial<Record<AgentStreamEvent["type"], string>> = {
   state_loaded: "Project state loaded",
-  thinking_started: "Understanding request",
   thinking_context_loaded: "Thinking context loaded",
-  user_wish_extracted: "User wishes extracted",
-  thinking_needs_clarification: "Clarification required",
-  thinking_completed: "Thinking completed",
   intent_detected: "Intent detected",
-  clarification_required: "Clarification required",
-  context_retrieved: "Context retrieved",
-  plan_created: "Plan created",
-  source_generation_started: "Generating source",
-  assistant_message_delta: "Assistant message",
   file_changed: "File changed",
   validation_started: "Validation started",
-  validation_finished: "Validation finished",
   code_tool_loop_started: "Code tool started",
   code_context_loaded: "Code context loaded",
   tool_call_requested: "Tool requested",
@@ -25,44 +20,122 @@ const EVENT_LABELS: Record<AgentStreamEvent["type"], string> = {
   snapshot_created: "Snapshot created",
   patch_applied: "Patch applied",
   repair_started: "Repair started",
-  preview_restart_required: "Preview restart required",
-  code_tool_loop_completed: "Code tool completed",
-  human_review_required: "Human review required",
-  project_state_updated: "Project state updated",
-  done: "Done",
-  error: "Error",
-  design_file_copied: "Design file copied",
+  design_file_generated: "Design file generated",
+  design_file_regenerated: "Design file regenerated",
   design_rules_loaded: "Design rules loaded",
-  dev_install_started: "Installing packages",
   dev_install_completed: "Packages installed",
-  dev_install_failed: "Install failed",
-  dev_starting: "Starting dev server",
-  dev_ready: "Dev server ready",
-  dev_error: "Dev server error",
-  dev_fix_attempt: "Attempting fix",
-  dev_fix_applied: "Fix applied",
-  dev_fix_failed: "Fix failed",
+  project_state_updated: "Project state updated",
+  context_retrieved: "Context retrieved",
 };
 
-export function AgentEventTimeline({ events }: { events: AgentStreamEvent[] }) {
-  if (events.length === 0) return null;
+function technicalDetail(event: AgentStreamEvent): string | undefined {
+  switch (event.type) {
+    case "state_loaded": return event.status;
+    case "thinking_context_loaded": return event.hasInitializedSource === undefined ? event.projectStatus : `${event.projectStatus} • Source ${event.hasInitializedSource ? "ready" : "not initialized"}`;
+    case "intent_detected": return `${event.intent.intent} (${Math.round(event.intent.confidence * 100)}%)`;
+    case "file_changed": return `${event.operation}: ${event.path}`;
+    case "code_tool_loop_started": return event.taskTitle;
+    case "code_context_loaded": return `${event.summary} • ${event.fileCount} files`;
+    case "tool_call_requested": return `${event.toolName}: ${event.safeSummary}`;
+    case "tool_call_completed": return `${event.toolName}: ${event.summary}`;
+    case "snapshot_created": return event.snapshotId;
+    case "patch_applied": return `${event.changedFiles.length} files changed • +${event.insertions} -${event.deletions}`;
+    case "repair_started": return `${event.reason} • Attempt ${event.attempt}`;
+    case "design_file_generated":
+    case "design_file_regenerated":
+      return `${event.data.source === "ai" ? "AI-generated" : "Heuristic fallback"} → ${event.data.destinationPath} (${(event.data.byteSize / 1024).toFixed(1)} KB)`;
+    case "design_rules_loaded": return event.data.summary;
+    case "dev_install_completed": return `Installed packages (${(event.durationMs / 1000).toFixed(1)}s)`;
+    case "project_state_updated": return event.projectState.status;
+    case "context_retrieved": return `${event.files.length} files`;
+    default: return undefined;
+  }
+}
+
+export type AgentEventTimelineProps = {
+  events: AgentStreamEvent[];
+  userPrompt?: string;
+};
+
+export function AgentEventTimeline({ events, userPrompt }: AgentEventTimelineProps) {
+  const [showTechnical, setShowTechnical] = useState(false);
+
+  const ctx = useMemo<PresenterContext>(
+    () => deriveContextFromEvents(events, { userPrompt }),
+    [events, userPrompt],
+  );
+
+  const items = useMemo(() => {
+    return events
+      .filter((event) => event.type !== "assistant_message_delta")
+      .map((event) => {
+        const formatted = formatUserFacingStatus(event, ctx);
+        if (formatted?.kind === "user" && formatted.label) {
+          return { event, label: formatted.label, detail: formatted.detail, technical: false };
+        }
+        const fallbackLabel = TECHNICAL_FALLBACK_LABELS[event.type];
+        if (!fallbackLabel) return null;
+        return { event, label: fallbackLabel, detail: technicalDetail(event), technical: true };
+      })
+      .filter((item): item is { event: AgentStreamEvent; label: string; detail?: string; technical: boolean } => item !== null)
+      .filter((item) => showTechnical || !item.technical);
+  }, [events, ctx, showTechnical]);
+
+  const hasTechnicalEvents = useMemo(
+    () => events.some((event) => {
+      if (event.type === "assistant_message_delta") return false;
+      const formatted = formatUserFacingStatus(event, ctx);
+      return formatted?.kind === "technical" && Boolean(TECHNICAL_FALLBACK_LABELS[event.type]);
+    }),
+    [events, ctx],
+  );
+
+  if (items.length === 0 && !hasTechnicalEvents) return null;
+
   return (
-    <section className="space-y-xs rounded-md border border-[var(--app-border)] bg-[var(--app-panel-bg)] p-sm text-[12px] text-[var(--app-panel-text)] transition-colors duration-200" aria-label="Agent progress timeline" aria-live="polite">
-      {events.filter((event) => event.type !== "assistant_message_delta").map((event, index) => (
-        <div key={`${event.type}-${index}`} className={`flex gap-xs rounded-sm px-xxs py-xxs transition-colors duration-200 hover:bg-[var(--app-control)] ${(event.type === "clarification_required" || event.type === "thinking_needs_clarification") ? "border border-[var(--app-border)] bg-[var(--app-control)]" : ""}`} role={(event.type === "clarification_required" || event.type === "thinking_needs_clarification") ? "status" : undefined}>
-          <span className="mt-[2px] text-[var(--app-icon-muted)]">{iconFor(event)}</span>
-          <div className="min-w-0 flex-1">
-            <p className="m-0 font-[520] leading-4">{EVENT_LABELS[event.type]}</p>
-            <p className="m-0 truncate leading-4 text-[var(--app-muted)]">{detailFor(event)}</p>
+    <section
+      className="space-y-xs rounded-md border border-[var(--app-border)] bg-[var(--app-panel-bg)] p-sm text-[12px] text-[var(--app-panel-text)] transition-colors duration-200"
+      aria-label="Agent progress timeline"
+      aria-live="polite"
+    >
+      {items.map((item, index) => {
+        const highlight =
+          item.event.type === "clarification_required" ||
+          item.event.type === "thinking_needs_clarification";
+        return (
+          <div
+            key={`${item.event.type}-${index}`}
+            className={`flex gap-xs rounded-sm px-xxs py-xxs transition-colors duration-200 hover:bg-[var(--app-control)] ${highlight ? "border border-[var(--app-border)] bg-[var(--app-control)]" : ""}`}
+            role={highlight ? "status" : undefined}
+          >
+            <span className="mt-[2px] text-[var(--app-icon-muted)]">{iconFor(item.event)}</span>
+            <div className="min-w-0 flex-1">
+              <p className="m-0 font-[520] leading-4">{item.label}</p>
+              {item.detail ? (
+                <p className="m-0 truncate leading-4 text-[var(--app-muted)]">{item.detail}</p>
+              ) : null}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
+
+      {hasTechnicalEvents ? (
+        <button
+          type="button"
+          onClick={() => setShowTechnical((value) => !value)}
+          className="mt-xs flex items-center gap-xxs text-[11px] text-[var(--app-muted)] hover:text-[var(--app-panel-text)] transition-colors"
+          aria-expanded={showTechnical}
+        >
+          {showTechnical ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
+          {showTechnical ? "Hide technical details" : "Show technical details"}
+        </button>
+      ) : null}
     </section>
   );
 }
 
 function iconFor(event: AgentStreamEvent) {
-  if ((event.type === "clarification_required" || event.type === "thinking_needs_clarification")) return <TriangleAlert aria-hidden="true" size={14} className="text-[var(--app-icon-selected)]" />;
+  if (event.type === "clarification_required" || event.type === "thinking_needs_clarification") return <TriangleAlert aria-hidden="true" size={14} className="text-[var(--app-icon-selected)]" />;
   if (event.type === "error" || event.type === "human_review_required") return <TriangleAlert aria-hidden="true" size={14} className="text-[var(--app-icon)]" />;
   if (event.type === "done" || event.type === "validation_finished" || event.type === "project_state_updated" || event.type === "thinking_completed" || event.type === "code_tool_loop_completed") return <CheckCircle2 aria-hidden="true" size={14} className="text-[var(--app-icon-selected)]" />;
   if (event.type === "file_changed" || event.type === "patch_applied") return <FileText aria-hidden="true" size={14} className="text-[var(--app-icon-muted)]" />;
@@ -72,48 +145,4 @@ function iconFor(event: AgentStreamEvent) {
   if (event.type === "dev_install_failed" || event.type === "dev_error" || event.type === "dev_fix_failed") return <TriangleAlert aria-hidden="true" size={14} className="text-[var(--app-icon)]" />;
   if (event.type === "dev_fix_attempt") return <RefreshCw aria-hidden="true" size={14} className="animate-spin text-[var(--app-icon-muted)]" />;
   return <CircleDashed aria-hidden="true" size={14} className="text-[var(--app-icon-subtle)]" />;
-}
-
-function detailFor(event: AgentStreamEvent) {
-  switch (event.type) {
-    case "agent_started": return event.message;
-    case "state_loaded": return event.status;
-    case "thinking_started": return event.message;
-    case "thinking_context_loaded": return event.hasInitializedSource === undefined ? event.projectStatus : `${event.projectStatus} • Source ${event.hasInitializedSource ? "ready" : "not initialized"}`;
-    case "user_wish_extracted": return `${event.understanding} (${event.wishes.length} wishes)`;
-    case "thinking_needs_clarification": return `${event.question} — ${event.reason}`;
-    case "thinking_completed": return `${event.summary ?? event.normalizedGoal} • Risk: ${event.riskLevel}`;
-    case "intent_detected": return `${event.intent.intent} (${Math.round(event.intent.confidence * 100)}%)`;
-    case "plan_created": return event.plan.summary;
-    case "source_generation_started": return event.message;
-    case "file_changed": return `${event.operation}: ${event.path}`;
-    case "validation_finished": return `${event.ok ? "Validation passed" : "Validation failed"}: ${event.summary}${event.errors?.length ? ` (${event.errors.length} errors)` : ""}`;
-    case "code_tool_loop_started": return event.taskTitle;
-    case "code_context_loaded": return `${event.summary} • ${event.fileCount} files`;
-    case "tool_call_requested": return `${event.toolName}: ${event.safeSummary}`;
-    case "tool_call_completed": return `${event.toolName}: ${event.summary}`;
-    case "snapshot_created": return event.snapshotId;
-    case "patch_applied": return `${event.changedFiles.length} files changed • +${event.insertions} -${event.deletions}`;
-    case "repair_started": return `${event.reason} • Attempt ${event.attempt}`;
-    case "preview_restart_required": return `${event.reason} • ${event.changedFiles.length} files`;
-    case "code_tool_loop_completed": return `${event.summary} • Validation: ${event.validationStatus}`;
-    case "human_review_required": return `${event.reason}${event.changedFiles.length ? ` • ${event.changedFiles.length} files` : ""}`;
-    case "done": return `${event.summary}${event.changedFiles.length ? ` • ${event.changedFiles.length} files changed` : ""}${event.previewUrl ? ` • Preview: ${event.previewUrl}` : ""}`;
-    case "error": return event.message;
-    case "project_state_updated": return event.projectState.status;
-    case "context_retrieved": return `${event.files.length} files`;
-    case "clarification_required": return `${event.question}${event.reason ? ` — ${event.reason}` : ""}`;
-    case "design_file_copied": return `${event.data.templateId} → ${event.data.destinationPath}`;
-    case "design_rules_loaded": return event.data.summary;
-    case "dev_install_started": return "Installing packages...";
-    case "dev_install_completed": return `Installed packages (${(event.durationMs / 1000).toFixed(1)}s)`;
-    case "dev_install_failed": return `Install error: ${event.error}`;
-    case "dev_starting": return "Starting dev server...";
-    case "dev_ready": return `Dev server ready at ${event.previewUrl}`;
-    case "dev_error": return `${event.error} (${event.tier})`;
-    case "dev_fix_attempt": return `Fixing error (attempt ${event.attempt}/3): ${event.error}`;
-    case "dev_fix_applied": return `Fix applied successfully — ${event.changedFiles.length} files updated`;
-    case "dev_fix_failed": return `Cannot auto-fix: ${event.reason}`;
-    default: return "";
-  }
 }

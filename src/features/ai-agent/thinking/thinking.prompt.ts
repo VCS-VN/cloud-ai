@@ -38,6 +38,11 @@ export const THINKING_RESULT_FORMAT_CONTRACT = `StructuredThinkingResult output 
 - Arrays MUST be arrays even when empty.
 - Nullable fields such as projectAction.clarificationQuestion MUST be null when absent, not omitted.
 - intent MUST be one of: init_project, add_feature, modify_design, modify_content, modify_products, fix_bug, integrate_service, explain_project, unknown.
+- ecommerceContext.storeType MUST be one of: fashion, cosmetics, electronics, furniture, food, digital, general, unknown. Use "unknown" if not derivable.
+- ecommerceContext.conversionGoal MUST be one of: increase_add_to_cart, increase_checkout_completion, improve_product_discovery, increase_trust, improve_brand_perception, improve_mobile_ux, none, unknown. Use "unknown" if not derivable; never invent new values.
+- downstream.recommendedNextStep MUST be one of: ask_clarification, init_source, create_plan, generate_patch, explain_only, reject_or_safe_redirect. Do NOT reuse values from intent (e.g. "init_project" is NOT a valid recommendedNextStep — use "init_source" instead).
+- downstream.priority MUST be one of: low, normal, high.
+- risk.level MUST be one of: low, medium, high.
 Minimal shape example:
 {
   "intent": "modify_design",

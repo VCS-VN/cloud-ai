@@ -27,8 +27,9 @@ RETAIL E-COMMERCE CONSTRAINT (STRICT):
 - You are ALWAYS building a RETAIL E-COMMERCE STOREFRONT that SELLS PRODUCTS.
 - NEVER create a blog, portfolio, SaaS landing page, or generic website.
 - Every section must serve the purpose of selling products.
-- Product cards MUST include: visual placeholder, product name, price, CTA button.
+- Product cards MUST include: product image rendered from product.image ?? product.images?.[0] (gradient placeholder fallback only when both are missing), product name wrapped in a TanStack Router <Link to='/products/$productId' params={{ productId: product.id }}> (the Link wraps the title text only — never the image), formatted price via formatMoney(resolveProductPrice(product), { currency: useStore().storeDetail?.setting?.currency ?? 'AUD' }), CTA button.
 - Header MUST include: brand name, navigation links, cart affordance.
+- Brand name and store name in any UI text (header logo, footer, hero eyebrow, page titles, meta) MUST come from websiteConfig.store.name (preferred for static layout chrome) or useStore().storeDetail?.name (when inside StoreProvider). NEVER hardcode literal brand strings such as "AI Storefront", "AI Store front", "Demo Store", or any placeholder name in generated JSX or text.
 - Hero MUST include: headline, supporting copy, CTA button, visual area.
 - Use product data from src/data/products.ts.
 - Use website config from src/lib/website-config.ts.

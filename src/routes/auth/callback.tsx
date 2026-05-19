@@ -1,18 +1,10 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { getCurrentRequestCallbackUri, getCurrentRequestOrigin } from '@/auth/request-origin.server'
-import { handleOAuthCallback } from '@/auth/oauth-callback.server'
+import { handleOAuthCallbackFn } from '@/server/functions/oauth'
 import type { OAuthCallbackQuery } from '@/auth/types'
-import { getRequestUrl } from '@tanstack/react-start/server'
 
 export const Route = createFileRoute('/auth/callback')({
   beforeLoad: async ({ search }) => {
-    const origin = getCurrentRequestOrigin()
-
-    const result = await handleOAuthCallback(search as OAuthCallbackQuery, {
-      origin,
-      redirectUri: `${origin}/auth/callback`,
-    })
-
+    const result = await handleOAuthCallbackFn({ data: search as OAuthCallbackQuery })
     throw redirect({ href: result.redirectHref })
   },
   component: CallbackRoute,

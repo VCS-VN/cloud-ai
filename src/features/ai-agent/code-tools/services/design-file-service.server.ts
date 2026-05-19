@@ -1,28 +1,15 @@
-import { access, copyFile, readFile } from "node:fs/promises";
+import { access, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
-
-export type StorefrontTemplateId =
-  | "basic-ecommerce"
-  | "ecommerce-fashion"
-  | "ecommerce-electronics"
-  | "ecommerce-cosmetics"
-  | "ecommerce-single-product";
-
-export type CopyDesignFileInput = {
-  projectId: string;
-  workspaceRoot: string;
-  templateId?: StorefrontTemplateId;
-  overwrite?: boolean;
-};
-
-export type CopyDesignFileResult = {
-  copied: boolean;
-  templateId: StorefrontTemplateId;
-  sourcePath: string;
-  destinationPath: "DESIGN.md";
-  restoredExisting: boolean;
-};
+import type { WebsiteSpec } from "../../project/project-state.schema";
+import type { OpenAIProvider } from "../../openai/openai-provider.server";
+import {
+  generateVisualDesignMarkdown,
+  type DesignGenerationResult,
+} from "./design-generation-service.server";
+import {
+  composeDesignMarkdown,
+} from "./design-static-boilerplate.server";
 
 export type ProjectDesignRuleContext = {
   source: "project-design-md";
@@ -34,69 +21,63 @@ export type ProjectDesignRuleContext = {
   hash: string;
 };
 
-export const DEFAULT_STOREFRONT_TEMPLATE_ID: StorefrontTemplateId = "basic-ecommerce";
-
-export const STOREFRONT_TEMPLATE_DESIGN_PATHS: Record<StorefrontTemplateId, string> = {
-  "basic-ecommerce": "templates/storefront/basic-ecommerce/DESIGN.md",
-  "ecommerce-fashion": "templates/storefront/ecommerce-fashion/DESIGN.md",
-  "ecommerce-electronics": "templates/storefront/ecommerce-electronics/DESIGN.md",
-  "ecommerce-cosmetics": "templates/storefront/ecommerce-cosmetics/DESIGN.md",
-  "ecommerce-single-product": "templates/storefront/ecommerce-single-product/DESIGN.md",
+export type GenerateDesignFileInput = {
+  projectId: string;
+  workspaceRoot: string;
+  websiteSpec: WebsiteSpec;
+  userPrompt: string;
+  provider?: OpenAIProvider;
+  model?: string;
+  signal?: AbortSignal;
 };
 
-export function resolveDesignTemplatePath(templateId: StorefrontTemplateId): string {
-  return STOREFRONT_TEMPLATE_DESIGN_PATHS[templateId];
-}
+export type GenerateDesignFileResult = {
+  generated: true;
+  source: DesignGenerationResult["source"];
+  destinationPath: "DESIGN.md";
+  hash: string;
+  byteSize: number;
+};
 
-export async function copyDesignFileToProject(input: CopyDesignFileInput): Promise<CopyDesignFileResult> {
-  const templateId = input.templateId ?? DEFAULT_STOREFRONT_TEMPLATE_ID;
-  const sourceRelative = resolveDesignTemplatePath(templateId);
-  const sourcePath = resolve(process.cwd(), sourceRelative);
+export async function generateAndWriteDesignFile(
+  input: GenerateDesignFileInput,
+): Promise<GenerateDesignFileResult> {
+  const generation = await generateVisualDesignMarkdown({
+    websiteSpec: input.websiteSpec,
+    userPrompt: input.userPrompt,
+    provider: input.provider,
+    model: input.model,
+    signal: input.signal,
+  });
+
+  const composed = composeDesignMarkdown(generation.visualMarkdown);
   const destinationPath = resolve(input.workspaceRoot, "DESIGN.md");
-
-  let restoredExisting = false;
-
-  try {
-    await access(sourcePath);
-  } catch {
-    throw Object.assign(new Error(`Template DESIGN.md not found: ${sourceRelative}`), { code: "TEMPLATE_NOT_FOUND" });
-  }
-
-  try {
-    await access(destinationPath);
-    restoredExisting = true;
-  } catch {
-    restoredExisting = false;
-  }
-
-  if (!restoredExisting || input.overwrite) {
-    await copyFile(sourcePath, destinationPath);
-  }
+  await writeFile(destinationPath, composed, "utf-8");
 
   return {
-    copied: !restoredExisting || !!input.overwrite,
-    templateId,
-    sourcePath: sourceRelative,
+    generated: true,
+    source: generation.source,
     destinationPath: "DESIGN.md",
-    restoredExisting,
+    hash: hashContent(composed),
+    byteSize: Buffer.byteLength(composed, "utf-8"),
   };
 }
 
 export async function loadProjectDesignRules(input: {
   projectId: string;
   workspaceRoot: string;
-  templateId?: StorefrontTemplateId;
 }): Promise<ProjectDesignRuleContext> {
   const designPath = resolve(input.workspaceRoot, "DESIGN.md");
 
   try {
     await access(designPath);
   } catch {
-    await copyDesignFileToProject({
-      projectId: input.projectId,
-      workspaceRoot: input.workspaceRoot,
-      templateId: input.templateId,
-    });
+    throw Object.assign(
+      new Error(
+        "DESIGN.md is missing in the project workspace. Generate it via generateAndWriteDesignFile during project init.",
+      ),
+      { code: "DESIGN_FILE_MISSING" },
+    );
   }
 
   const markdown = await readFile(designPath, "utf-8");
@@ -115,7 +96,7 @@ export async function loadProjectDesignRules(input: {
 }
 
 export function summarizeDesignMarkdown(_markdown: string): string {
-  return "Retail storefront design rules for layout, typography, colors, spacing, components, and responsive behavior.";
+  return "Project-specific storefront design rules covering theme, palette, typography, spacing, components, layout, and responsive behavior.";
 }
 
 export function hashContent(content: string): string {

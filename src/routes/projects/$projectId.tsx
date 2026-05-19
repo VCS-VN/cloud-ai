@@ -31,6 +31,7 @@ import {
   MessageSquarePlus,
   PanelLeftClose,
   PanelLeftOpen,
+  Play,
   RefreshCw,
   Settings,
   TriangleAlert,
@@ -992,7 +993,10 @@ function ProjectDetailPage() {
             <div className="min-h-0 h-1 flex-1 overflow-hidden px-sm ">
               <div className="flex h-full min-h-0 flex-col gap-sm">
                 {/* <StreamingTextPanel text={agentReasoning} isStreaming={project.processingStatus === "processing"} /> */}
-                <AgentEventTimeline events={agentEvents} />
+                <AgentEventTimeline
+                  events={agentEvents}
+                  userPrompt={[...messages].reverse().find((message) => message.role === "user")?.content}
+                />
                 <div className="min-h-0 flex-1 overflow-hidden">
                   <ProjectMessagesPanel
                     messages={messages}
@@ -1046,9 +1050,11 @@ function ProjectDetailPage() {
               mode={detailMode}
               previewPath={previewPath}
               runtimeState={runtimeState}
+              previewStarting={previewStarting}
               onToggleChat={toggleChat}
               onModeChange={setDetailMode}
               onPathChange={setPreviewPath}
+              onStartPreview={handleStartPreview}
               user={user}
             />
             <div className="min-h-0 flex-1 overflow-hidden p-sm">
@@ -1260,22 +1266,29 @@ function PreviewToolbar({
   mode,
   previewPath,
   runtimeState,
+  previewStarting,
   onToggleChat,
   onModeChange,
   onPathChange,
+  onStartPreview,
   user,
 }: {
   chatVisible: boolean;
   mode: DetailMode;
   previewPath: string;
   runtimeState: RuntimeUIState;
+  previewStarting: boolean;
   onToggleChat: () => void;
   onModeChange: (mode: DetailMode) => void;
   onPathChange: (path: string) => void;
+  onStartPreview: () => void;
   user?: import("@/auth/types").AuthUserSummary;
 }) {
   const previewUrl =
     runtimeState.status === "running" ? runtimeState.previewUrl : null;
+  const canStartPreview =
+    !previewUrl &&
+    ["idle", "stopped", "error"].includes(runtimeState.status);
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-sm pt-3  border-[var(--app-border)] px-sm transition-colors duration-300">
@@ -1336,6 +1349,21 @@ function PreviewToolbar({
 
       <div className="flex shrink-0 items-center gap-xs">
         <UserMenu user={user} compact />
+        {canStartPreview ? (
+          <button
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+            type="button"
+            onClick={onStartPreview}
+            disabled={previewStarting}
+            aria-label="Start preview"
+          >
+            {previewStarting ? (
+              <Loader2 aria-hidden="true" className="animate-spin" size={15} />
+            ) : (
+              <Play aria-hidden="true" size={15} />
+            )}
+          </button>
+        ) : null}
         {previewUrl ? (
           <a
             href={previewUrl}
