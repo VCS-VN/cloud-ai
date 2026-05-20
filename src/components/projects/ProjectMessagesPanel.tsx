@@ -130,15 +130,11 @@ export function ProjectMessagesPanel({
   }
 
   return (
-    <div className="relative min-h-0 flex-1">
+    <div className="relative flex h-full min-h-0 flex-1 flex-col">
       <section
         id="project-messages-viewport"
         ref={viewportRef}
-        className="builder-scrollbar-hidden flex min-h-0 h-full flex-col gap-sm overflow-y-auto pr-xs scroll-smooth"
-        style={{
-          height: "calc(100vh - 360px)",
-          overflowY: "scroll",
-        }}
+        className="builder-scrollbar-hidden flex h-full min-h-0 flex-1 flex-col gap-sm overflow-y-auto pr-xs scroll-smooth"
         aria-label="Message history"
         onScroll={() => {
           syncScrollState();

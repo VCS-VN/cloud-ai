@@ -103,7 +103,28 @@ export function renderInfrastructureFiles(
   spec: WebsiteSpec,
   packageJson: unknown,
 ): GeneratedFile[] {
-  const products = JSON.stringify(spec.products, null, 2);
+  const products = JSON.stringify(
+    spec.products.map((product) => {
+      const { description, category, ...rest } = product;
+      const next: Record<string, unknown> = { ...rest };
+      if (description !== undefined) next.descriptions = description;
+      if (typeof category === "string" && category.trim().length > 0) {
+        const trimmed = category.trim();
+        next.category = {
+          id: trimmed
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, ""),
+          name: trimmed,
+        };
+      } else if (category && typeof category === "object") {
+        next.category = category;
+      }
+      return next;
+    }),
+    null,
+    2,
+  );
   const categories = JSON.stringify(
     spec.store.type === "fashion"
       ? ["Sneakers", "Streetwear"]
@@ -455,6 +476,7 @@ export function renderStorefrontBaselineFiles(
     { path: "src/components/ui/select.tsx", content: selectSource() },
     { path: "src/components/ui/radio-group.tsx", content: radioGroupSource() },
     { path: "src/components/ui/dialog.tsx", content: dialogSource() },
+    { path: "src/components/ui/sheet.tsx", content: sheetSource() },
     { path: "src/components/ui/sonner.tsx", content: sonnerSource() },
     { path: "src/components/ui/badge.tsx", content: badgeSource() },
     { path: "src/components/ui/card.tsx", content: cardSource() },
@@ -600,12 +622,12 @@ export type Product = {
   id: string
   entityId?: string
   name: string
-  description?: string
+  descriptions?: string
   price?: number
   compareAtPrice?: number
   image?: string
   images?: string[]
-  category?: string
+  category?: { id: string; name: string }
   defaultModel?: ProductModel
   models?: ProductModel[]
   [key: string]: unknown
@@ -705,7 +727,7 @@ export type ProductDetail = Product & {
 export async function getProductDetail(productId: string) {
   const response = await apiClient.get<ProductDetail>(\`/api/v1/products/\${productId}\`, {
     params: {
-      isGettingModel: true,
+      isGettingModels: true,
       isGettingDefaultModel: true,
     },
   })
@@ -904,6 +926,47 @@ function radioGroupSource() {
 function dialogSource() {
   return `import * as DialogPrimitive from '@radix-ui/react-dialog'\nimport { X } from 'lucide-react'\nimport { cn } from '@/lib/utils'\nexport const Dialog = DialogPrimitive.Root\nexport const DialogTrigger = DialogPrimitive.Trigger\nexport const DialogClose = DialogPrimitive.Close\nexport const DialogPortal = DialogPrimitive.Portal\nexport const DialogOverlay = ({ className, ...props }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>) => <DialogPrimitive.Overlay className={cn('fixed inset-0 z-50 bg-black/60', className)} {...props} />\nexport const DialogContent = ({ className, children, ...props }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>) => <DialogPortal><DialogOverlay /><DialogPrimitive.Content className={cn('fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border bg-background p-6 shadow-lg', className)} {...props}>{children}<DialogPrimitive.Close className='absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100'><X className='h-4 w-4' /></DialogPrimitive.Close></DialogPrimitive.Content></DialogPortal>\nexport const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={cn('flex flex-col space-y-1.5 text-center sm:text-left', className)} {...props} />\nexport const DialogTitle = ({ className, ...props }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>) => <DialogPrimitive.Title className={cn('text-lg font-semibold leading-none tracking-tight', className)} {...props} />\nexport const DialogDescription = ({ className, ...props }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>) => <DialogPrimitive.Description className={cn('text-sm text-muted-foreground', className)} {...props} />\n`;
 }
+
+function sheetSource() {
+  return `import { Drawer as SheetPrimitive } from 'vaul'
+import { cn } from '@/lib/utils'
+
+export const Sheet = SheetPrimitive.Root
+export const SheetTrigger = SheetPrimitive.Trigger
+export const SheetClose = SheetPrimitive.Close
+export const SheetPortal = SheetPrimitive.Portal
+export const SheetOverlay = ({ className, ...props }: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Overlay>) => (
+  <SheetPrimitive.Overlay className={cn('fixed inset-0 z-50 bg-black/60', className)} {...props} />
+)
+export const SheetContent = ({ className, children, ...props }: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>) => (
+  <SheetPortal>
+    <SheetOverlay />
+    <SheetPrimitive.Content
+      className={cn(
+        'fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto max-h-[85vh] flex-col rounded-t-2xl border bg-background p-5 shadow-xl outline-none',
+        className,
+      )}
+      {...props}
+    >
+      <div className='mx-auto mb-4 h-1.5 w-12 rounded-full bg-muted' aria-hidden />
+      {children}
+    </SheetPrimitive.Content>
+  </SheetPortal>
+)
+export const SheetHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+  <div className={cn('flex flex-col gap-1.5 text-left', className)} {...props} />
+)
+export const SheetFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+  <div className={cn('mt-4 flex flex-col gap-2', className)} {...props} />
+)
+export const SheetTitle = ({ className, ...props }: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Title>) => (
+  <SheetPrimitive.Title className={cn('text-lg font-semibold leading-none tracking-tight', className)} {...props} />
+)
+export const SheetDescription = ({ className, ...props }: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Description>) => (
+  <SheetPrimitive.Description className={cn('text-sm text-muted-foreground', className)} {...props} />
+)
+`;
+}
 function sonnerSource() {
   return `import { Toaster as Sonner } from 'sonner'\nexport function Toaster() { return <Sonner richColors position='top-right' /> }\n`;
 }
@@ -1025,8 +1088,7 @@ function siteHeaderSource() {
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Search, ShoppingCart } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { websiteConfig } from '@/lib/website-config'
-import { useStoreDetail } from '@/services/store/use-store-detail'
+import { useStore } from '@/app/store-provider'
 import { useProductSuggestions } from '@/services/store/use-product-suggestions'
 
 function escapeRegExp(value: string) {
@@ -1053,7 +1115,8 @@ function highlightMatch(text: string, query: string) {
 
 export function SiteHeader() {
   const navigate = useNavigate()
-  const storeId = useStoreDetail().data?.id
+  const { storeDetail } = useStore()
+  const storeId = storeDetail?.id
   const [value, setValue] = useState('')
   const [debouncedValue, setDebouncedValue] = useState('')
   const [open, setOpen] = useState(false)
@@ -1145,7 +1208,7 @@ export function SiteHeader() {
     <header className='sticky top-0 z-40 border-b bg-background/95 backdrop-blur'>
       <div className='mx-auto flex h-16 max-w-7xl items-center gap-4 px-4'>
         <Link to='/' className='shrink-0 text-lg font-bold'>
-          {websiteConfig.store.name}
+          {storeDetail?.name}
         </Link>
         <div ref={wrapperRef} className='relative flex-1'>
           <form onSubmit={handleSubmit} className='relative w-full'>
@@ -1219,13 +1282,15 @@ export function SiteHeader() {
 `;
 }
 function siteFooterSource() {
-  return `import { websiteConfig } from '@/lib/website-config'\nexport function SiteFooter() { return <footer className='bg-[#1E3932] text-white'><div className='mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4'><div><h3 className='text-xl font-semibold'>{websiteConfig.store.name}</h3><p className='mt-3 text-sm text-white/70'>{websiteConfig.store.description}</p></div>{['Shop','Support','Company'].map((title) => <div key={title}><h4 className='font-semibold'>{title}</h4><ul className='mt-3 space-y-2 text-sm text-white/70'><li>Products</li><li>Orders</li><li>Contact</li></ul></div>)}<div><h4 className='font-semibold'>Connect</h4><p className='mt-3 text-sm text-white/70'>Follow new drops and member offers.</p></div></div></footer> }\n`;
+  return `import { useStore } from '@/app/store-provider'\nexport function SiteFooter() { const { storeDetail } = useStore(); return <footer className='bg-[#1E3932] text-white'><div className='mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4'><div><h3 className='text-xl font-semibold'>{storeDetail?.name}</h3><p className='mt-3 text-sm text-white/70'>{storeDetail?.description}</p></div>{['Shop','Support','Company'].map((title) => <div key={title}><h4 className='font-semibold'>{title}</h4><ul className='mt-3 space-y-2 text-sm text-white/70'><li>Products</li><li>Orders</li><li>Contact</li></ul></div>)}<div><h4 className='font-semibold'>Connect</h4><p className='mt-3 text-sm text-white/70'>Follow new drops and member offers.</p></div></div></footer> }\n`;
 }
 function heroSectionSource() {
   return `import { Link } from '@tanstack/react-router'\nimport { Button } from '@/components/ui/button'\nimport { websiteConfig } from '@/lib/website-config'\nexport function HeroSection() { return <section className='mx-auto grid max-w-7xl gap-10 px-4 py-16 lg:grid-cols-2 lg:py-24'><div className='flex flex-col justify-center gap-6'><p className='text-sm font-semibold uppercase tracking-[0.25em] text-primary'>{websiteConfig.brand.tone}</p><h1 className='text-5xl font-bold tracking-tight md:text-7xl'>{websiteConfig.content.heroTitle}</h1><p className='max-w-xl text-lg text-muted-foreground'>{websiteConfig.content.heroSubtitle}</p><div className='flex gap-3'><Button asChild size='lg'><Link to='/products'>{websiteConfig.content.primaryCta ?? 'Shop now'}</Link></Button><Button asChild variant='outline' size='lg'><Link to='/checkout'>Checkout demo</Link></Button></div></div><div className='min-h-[420px] rounded-[2rem] bg-gradient-to-br from-[#00754A] via-[#CBA258] to-[#1E3932] p-8 shadow-2xl'><div className='h-full rounded-[1.5rem] border border-white/20 bg-white/20 backdrop-blur' /></div></section> }\n`;
 }
 function productCardSource() {
   return `import { Link } from '@tanstack/react-router'
+import { useMemo } from 'react'
+import DOMPurify from 'dompurify'
 import { Heart } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -1238,6 +1303,10 @@ import type { Product } from '@/services/store/use-products-list'
 export function ProductCard({ product }: { product: Product }) {
   const currency = useStore().storeDetail?.setting?.currency ?? 'AUD'
   const heroImage = product.image ?? product.images?.[0]
+  const sanitizedDescriptions = useMemo(
+    () => DOMPurify.sanitize(product.descriptions ?? ''),
+    [product.descriptions],
+  )
   return (
     <Card className='overflow-hidden'>
       {heroImage ? (
@@ -1256,7 +1325,10 @@ export function ProductCard({ product }: { product: Product }) {
           </Link>
           <Button variant='ghost' size='icon'><Heart className='h-4 w-4' /></Button>
         </div>
-        <p className='line-clamp-2 text-sm text-muted-foreground'>{product.description}</p>
+        <div
+          className='line-clamp-2 text-sm text-muted-foreground'
+          dangerouslySetInnerHTML={{ __html: sanitizedDescriptions }}
+        />
         <div className='flex items-center gap-2'>
           <span className='font-semibold'>{formatMoney(resolveProductPrice(product), { currency })}</span>
           {product.compareAtPrice && <Badge variant='sale'>Sale</Badge>}
@@ -1529,21 +1601,49 @@ function ProductsPage() {
 }
 function productDetailRouteSource() {
   return `import { Link, createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import DOMPurify from 'dompurify'
 import { toast } from 'sonner'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet'
 import { useProductDetail } from '@/services/store/use-product-detail'
 import { formatMoney, resolveProductPrice } from '@/lib/format-money'
 import { useStore } from '@/app/store-provider'
+import type { ProductModel } from '@/services/store/use-products-list'
+
+const DESCRIPTION_THRESHOLD = 240
 
 export const Route = createFileRoute('/products/$productId')({ component: ProductDetailPage })
 
 function ProductDetailPage() {
   const { productId } = Route.useParams()
   const { data: product, isLoading, isError, refetch } = useProductDetail(productId)
-  const currency = useStore().storeDetail?.setting?.currency ?? 'AUD'
+  const { storeDetail } = useStore()
+  const currency = storeDetail?.setting?.currency ?? 'AUD'
+
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0)
+  const [selectedModel, setSelectedModel] = useState<ProductModel | undefined>(undefined)
   const [quantity, setQuantity] = useState(1)
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [isSheetOpen, setIsSheetOpen] = useState(false)
+
+  const models = useMemo(() => (product?.models ?? []) as ProductModel[], [product])
+  const initialModel = useMemo(() => product?.defaultModel ?? models[0], [product, models])
+  const activeModel = selectedModel ?? initialModel
+  const selectedPrice = activeModel?.price ?? resolveProductPrice(product) ?? 0
+  const totalPrice = selectedPrice * quantity
+
+  const images = product?.images ?? (product?.image ? [product.image] : [])
+  const mainImage = images[selectedImageIndex] ?? images[0] ?? product?.image
+  const showThumbnails = images.length > 1
+
+  const descriptions = product?.descriptions ?? ''
+  const isLongDescription = descriptions.length > DESCRIPTION_THRESHOLD
+  const sanitizedDescriptions = useMemo(
+    () => DOMPurify.sanitize(descriptions),
+    [descriptions],
+  )
+
   if (isLoading) {
     return (
       <main className='mx-auto grid max-w-7xl gap-10 px-4 py-12 lg:grid-cols-2'>
@@ -1567,27 +1667,236 @@ function ProductDetailPage() {
       </main>
     )
   }
-  const heroImage = product.image ?? product.images?.[0]
+
+  const handleConfirm = () => {
+    toast.info('Cart coming soon')
+    setIsSheetOpen(false)
+  }
+
   return (
-    <main className='mx-auto grid max-w-7xl gap-10 px-4 py-12 lg:grid-cols-2'>
-      {heroImage ? (
-        <img src={heroImage} alt={product.name} className='min-h-[520px] w-full rounded-[2rem] object-cover' />
-      ) : (
-        <div className='min-h-[520px] rounded-[2rem] bg-gradient-to-br from-secondary to-primary/30' />
-      )}
-      <div className='space-y-6'>
-        <Link to='/products' className='text-sm text-muted-foreground'>← Products</Link>
-        <Badge variant='sale'>Featured</Badge>
-        <h1 className='text-5xl font-bold'>{product.name}</h1>
-        <p className='text-lg text-muted-foreground'>{product.description}</p>
-        <p className='text-3xl font-semibold'>{formatMoney(resolveProductPrice(product), { currency })}</p>
-        <div className='flex items-center gap-3'>
-          <Button variant='outline' onClick={() => setQuantity(Math.max(1, quantity - 1))}>-</Button>
-          <span>{quantity}</span>
-          <Button variant='outline' onClick={() => setQuantity(quantity + 1)}>+</Button>
+    <main className='mx-auto max-w-7xl px-4 py-8 pb-28 md:pb-12'>
+      <Link to='/products' className='text-sm text-muted-foreground'>← Products</Link>
+      <div className='mt-6 grid gap-10 lg:grid-cols-2'>
+        <div className='space-y-4'>
+          {mainImage ? (
+            <img
+              src={mainImage}
+              alt={product.name}
+              className='min-h-[520px] w-full rounded-[2rem] object-cover'
+            />
+          ) : (
+            <div className='min-h-[520px] rounded-[2rem] bg-gradient-to-br from-secondary to-primary/30' />
+          )}
+          {showThumbnails && (
+            <div className='flex gap-3 overflow-x-auto py-2'>
+              {images.map((src, index) => (
+                <button
+                  key={src + index}
+                  type='button'
+                  onClick={() => setSelectedImageIndex(index)}
+                  className='shrink-0 rounded-full focus:outline-none'
+                  aria-label={\`Show image \${index + 1}\`}
+                >
+                  <img
+                    src={src}
+                    alt={\`\${product.name} thumbnail \${index + 1}\`}
+                    className={
+                      'h-20 w-20 rounded-full object-cover ring-2 transition ' +
+                      (index === selectedImageIndex ? 'ring-primary' : 'ring-transparent')
+                    }
+                  />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        <Button size='lg' onClick={() => toast.info('Cart coming soon')}>Add to cart</Button>
+
+        <div className='space-y-6'>
+          {product.category?.name && (
+            <p className='text-xs font-semibold uppercase tracking-[0.2em] text-primary'>
+              {product.category.name}
+            </p>
+          )}
+          <h1 className='text-4xl font-bold leading-tight md:text-5xl'>{product.name}</h1>
+          <div className='border-t pt-4'>
+            <p className='text-3xl font-semibold'>
+              {formatMoney(selectedPrice, { currency })}
+            </p>
+          </div>
+
+          {models.length > 0 && (
+            <div className='hidden md:block'>
+              <p className='mb-2 text-sm font-medium'>Select option</p>
+              <div className='flex flex-wrap gap-2'>
+                {models.map((model) => {
+                  const isActive = (model.id ?? '') === (activeModel?.id ?? '')
+                  return (
+                    <button
+                      key={(model.id ?? '') + (model.name ?? '')}
+                      type='button'
+                      onClick={() => setSelectedModel(model)}
+                      className={
+                        'rounded-full px-4 py-2 text-sm transition ' +
+                        (isActive
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-foreground hover:bg-muted/80')
+                      }
+                    >
+                      {(model.name as string) ?? model.id}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {descriptions && (
+            <div className='space-y-2'>
+              <div
+                className={
+                  'prose prose-sm max-w-none text-base text-muted-foreground ' +
+                  (isLongDescription && !isExpanded ? 'line-clamp-4' : '')
+                }
+                dangerouslySetInnerHTML={{ __html: sanitizedDescriptions }}
+              />
+              {isLongDescription && (
+                <button
+                  type='button'
+                  onClick={() => setIsExpanded((prev) => !prev)}
+                  className='text-sm font-semibold text-primary hover:underline'
+                >
+                  {isExpanded ? 'Read less' : 'Read more'}
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className='hidden space-y-4 rounded-2xl border bg-card p-5 md:block'>
+            <div className='flex items-center justify-between'>
+              <div>
+                <p className='text-sm font-semibold'>Quantity</p>
+                <p className='text-xs text-muted-foreground'>Current selected option quantity</p>
+              </div>
+              <div className='flex items-center gap-3'>
+                <Button
+                  variant='outline'
+                  size='icon'
+                  type='button'
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  aria-label='Decrease quantity'
+                >
+                  −
+                </Button>
+                <span className='w-6 text-center text-base font-medium'>{quantity}</span>
+                <Button
+                  variant='outline'
+                  size='icon'
+                  type='button'
+                  onClick={() => setQuantity((q) => q + 1)}
+                  aria-label='Increase quantity'
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+            <div className='flex items-center justify-between border-t pt-4'>
+              <p className='text-sm font-semibold'>Total</p>
+              <p className='text-xl font-semibold'>{formatMoney(totalPrice, { currency })}</p>
+            </div>
+            <Button
+              size='lg'
+              type='button'
+              className='w-full'
+              onClick={() => toast.info('Cart coming soon')}
+            >
+              Add to cart
+            </Button>
+          </div>
+        </div>
       </div>
+
+      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+        <SheetTrigger asChild>
+          <Button
+            size='lg'
+            type='button'
+            className='fixed inset-x-4 bottom-4 z-40 md:hidden'
+          >
+            Add to Cart
+          </Button>
+        </SheetTrigger>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>{product.name}</SheetTitle>
+            <p className='text-2xl font-semibold text-primary'>
+              {formatMoney(selectedPrice, { currency })}
+            </p>
+          </SheetHeader>
+          {models.length > 0 ? (
+            <div className='mt-4 max-h-[40vh] space-y-2 overflow-y-auto'>
+              {models.map((model) => {
+                const isActive = (model.id ?? '') === (activeModel?.id ?? '')
+                return (
+                  <button
+                    key={(model.id ?? '') + (model.name ?? '')}
+                    type='button'
+                    onClick={() => setSelectedModel(model)}
+                    className={
+                      'flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition ' +
+                      (isActive ? 'border-primary bg-primary/10' : 'border-transparent bg-muted')
+                    }
+                  >
+                    <span className='text-sm font-medium'>
+                      {(model.name as string) ?? model.id}
+                    </span>
+                    <span className='text-sm font-semibold'>
+                      {formatMoney(model.price ?? 0, { currency })}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
+          <div className='mt-4 flex items-center justify-between'>
+            <p className='text-sm font-semibold'>Quantity</p>
+            <div className='flex items-center gap-3'>
+              <Button
+                variant='outline'
+                size='icon'
+                type='button'
+                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                aria-label='Decrease quantity'
+              >
+                −
+              </Button>
+              <span className='w-6 text-center text-base font-medium'>{quantity}</span>
+              <Button
+                variant='outline'
+                size='icon'
+                type='button'
+                onClick={() => setQuantity((q) => q + 1)}
+                aria-label='Increase quantity'
+              >
+                +
+              </Button>
+            </div>
+          </div>
+          <div className='mt-4 flex items-center justify-between border-t pt-4'>
+            <p className='text-sm font-semibold'>Total</p>
+            <p className='text-lg font-semibold'>{formatMoney(totalPrice, { currency })}</p>
+          </div>
+          <div className='mt-4 flex gap-2'>
+            <SheetClose asChild>
+              <Button variant='outline' type='button' className='flex-1'>
+                Cancel
+              </Button>
+            </SheetClose>
+            <Button type='button' className='flex-1' onClick={handleConfirm}>
+              Add to cart
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </main>
   )
 }

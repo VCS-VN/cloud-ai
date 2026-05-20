@@ -10,6 +10,7 @@ import {
 import {
   composeDesignMarkdown,
 } from "./design-static-boilerplate.server";
+import type { TokenHint } from "../../planning/design-intent-heuristic";
 
 export type ProjectDesignRuleContext = {
   source: "project-design-md";
@@ -29,6 +30,8 @@ export type GenerateDesignFileInput = {
   provider?: OpenAIProvider;
   model?: string;
   signal?: AbortSignal;
+  tokenHints?: ReadonlyArray<TokenHint>;
+  skipLeakValidation?: boolean;
 };
 
 export type GenerateDesignFileResult = {
@@ -48,6 +51,8 @@ export async function generateAndWriteDesignFile(
     provider: input.provider,
     model: input.model,
     signal: input.signal,
+    tokenHints: input.tokenHints,
+    skipLeakValidation: input.skipLeakValidation,
   });
 
   const composed = composeDesignMarkdown(generation.visualMarkdown);

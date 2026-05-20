@@ -4,29 +4,29 @@ export type StoreRuntimePromptInput = {
 
 export type StoreRuntimePromptContext =
   | {
-      selectedStoreSlug: string;
-      generatedEnv: {
-        name: "VITE_STORE_SLUG";
-        value: string;
-        scope: "generated project-detail .env files only";
-      };
-      storeRuntimeContract: {
-        realDataEnabledBy: "import.meta.env.VITE_STORE_SLUG";
-        queryStateLibrary: "useQuery";
-        mockFallbackWhenSlugMissing: true;
-        demoFallbackWhenSlugPresentAndStoreDetailFails: false;
-      };
-    }
-  | {
-      selectedStoreSlug: null;
-      generatedEnv: {
-        name: "VITE_STORE_SLUG";
-        action: "do not add fake or blank value";
-      };
-      storeRuntimeContract: {
-        mockFallbackWhenSlugMissing: true;
-      };
+    selectedStoreSlug: string;
+    generatedEnv: {
+      name: "VITE_STORE_SLUG";
+      value: string;
+      scope: "generated project-detail .env files only";
     };
+    storeRuntimeContract: {
+      realDataEnabledBy: "import.meta.env.VITE_STORE_SLUG";
+      queryStateLibrary: "useQuery";
+      mockFallbackWhenSlugMissing: true;
+      demoFallbackWhenSlugPresentAndStoreDetailFails: false;
+    };
+  }
+  | {
+    selectedStoreSlug: null;
+    generatedEnv: {
+      name: "VITE_STORE_SLUG";
+      action: "do not add fake or blank value";
+    };
+    storeRuntimeContract: {
+      mockFallbackWhenSlugMissing: true;
+    };
+  };
 
 export function normalizeStoreSlug(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
@@ -106,7 +106,7 @@ export function buildStoreRuntimeInstructions(input: {
     "  - GET /api/v1/products with query params limit (default 12), page (1-indexed), storeId, query for products list. Response shape: { total, data: Product[] } and MUST stay compatible with the existing sample ProductsList contract. Generated useProductsList MUST use useInfiniteQuery from @tanstack/react-query with getNextPageParam returning the next 1-indexed page only when (sum of items.length across all loaded pages) < lastPage.total; otherwise return undefined to signal end of list. The hook returns { products: Product[] (flattened across pages via pages.flatMap(p => p.data)), total, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, error, refetch }. Sample fallback when VITE_STORE_SLUG is missing returns the full sample list with hasNextPage=false so consumers do not need to branch.",
   );
   lines.push(
-    "  - GET /api/v1/products/:productId for product detail with default query params isGettingModel=true and isGettingDefaultModel=true. Response carries defaultModel and models[] alongside the base Product fields.",
+    "  - GET /api/v1/products/:productId for product detail with default query params isGettingModels=true and isGettingDefaultModel=true. Response carries defaultModel and models[] alongside the base Product fields.",
   );
   lines.push(
     "  - GET /api/v1/categories with query param storeId for categories list. Response shape is CategoriesList { total, data: Category[] } where Category is { id, name, storeId? }.",
@@ -130,13 +130,22 @@ export function buildStoreRuntimeInstructions(input: {
     "- Generated route and component code (src/routes/products/index.tsx, src/components/store/product-grid.tsx, src/routes/products/$productId.tsx, src/components/store/category-section.tsx, src/components/layout/site-header.tsx) MUST consume useProductsList, useProductDetail, useCategoriesList, and useProductSuggestions from @/services/store and MUST NOT import { products } from @/data/products or { categories } from @/data/categories. Import the Product type from @/services/store/use-products-list and the Category type from @/services/store/use-categories-list when needed. The hook implementations themselves under @/services/store/* MAY import from @/data/products and @/data/categories internally to build their sample fallbacks (mirroring the existing pattern in useProductsList).",
   );
   lines.push(
+    "- The Product type stores the long-form product copy in the `descriptions` field (plural). The legacy singular `description` field is removed from Product/ProductDetail in @/services/store/use-products-list and @/services/store/use-product-detail. Sample data and generated UI MUST read product.descriptions; never read product.description.",
+  );
+  lines.push(
+    "- The Product.category field is an object `{ id: string; name: string }`. The legacy `category?: string` shape is removed. Generated UI MUST read `product.category?.name` for display (e.g. eyebrow text above the product name) and MUST NOT render `product.category` directly — that is an object and React will throw at runtime.",
+  );
+  lines.push(
+    "- Generated src/routes/products/$productId.tsx MUST render the following sections: (1) IMAGE GALLERY — compute images = product.images ?? (product.image ? [product.image] : []); track active index via useState<number>(0); main image is images[selectedImageIndex] ?? images[0] ?? product.image inside <img className='min-h-[520px] w-full object-cover rounded-[2rem]' />; thumbnail strip (flex gap-3 overflow-x-auto py-2) of every entry as <button onClick={() => setSelectedImageIndex(index)}> with thumbs <img className='h-20 w-20 rounded-full object-cover ring-2'> (active = ring-primary, inactive = ring-transparent), hidden when images.length <= 1; gradient fallback only when both product.image and product.images?.[0] are missing. (2) MODEL SELECTOR + PRICE — useState<ProductModel | undefined>(undefined) with initialModel = product.defaultModel ?? product.models?.[0] and activeModel = selectedModel ?? initialModel; selectedPrice = activeModel?.price ?? resolveProductPrice(product) ?? 0; render via formatMoney(selectedPrice, { currency }); when product.models?.length > 0 render desktop-only chips wrapped in <div className='hidden md:block'> mapping product.models to <button> rounded-full pills (active state bg-primary text-primary-foreground, inactive bg-muted text-foreground); selecting a model MUST re-render the displayed price. (3) DESCRIPTIONS / READ-MORE — read product.descriptions (the plural field; never product.description). The text in product.descriptions is HTML; generated code MUST sanitize via DOMPurify.sanitize(product.descriptions ?? '') (`import DOMPurify from 'dompurify'` — `dompurify` is already a project dependency) and render through `dangerouslySetInnerHTML={{ __html: sanitized }}` on a wrapping <div> (NOT a <p>). Memoize the sanitize call with useMemo keyed on product.descriptions. NEVER render product.descriptions raw without DOMPurify.sanitize. Use a module-level const DESCRIPTION_THRESHOLD = 240; when text length > threshold, default to line-clamp-4 on the wrapping <div> with a const [isExpanded, setIsExpanded] = useState(false) toggle button labelled exactly 'Read more' / 'Read less'; otherwise render the wrapping <div> with no toggle. (4) QUANTITY + TOTAL + DESKTOP ADD-TO-CART — useState<number>(1) with min 1; Total row formats (selectedPrice * quantity) via formatMoney; wrap quantity stepper, Total row and desktop Add-to-cart Button in a card-styled container with className 'hidden space-y-4 rounded-2xl border bg-card p-5 md:block'; desktop Add-to-cart calls toast.info('Cart coming soon'). (5) MOBILE BOTTOM SHEET — useState<boolean>(false) for isSheetOpen; <Sheet open onOpenChange> from @/components/ui/sheet (built on vaul Drawer); SheetTrigger wraps a Button with className 'fixed inset-x-4 bottom-4 z-40 md:hidden' labelled 'Add to Cart'; SheetContent header shows product.name and the live formatMoney(selectedPrice, { currency }); when product.models?.length > 0 render full-width selectable rows showing model.name and formatMoney(model.price ?? 0, { currency }) right-aligned, selecting a row updates selectedModel and re-renders the header; the sheet also contains the quantity stepper, Total row, and a Confirm Add-to-cart that calls toast.info and closes the sheet. NEVER render the mobile sheet trigger at md+ breakpoints, NEVER render the desktop chips below md. Add pb-28 md:pb-12 to the page <main> so the fixed mobile button does not overlap content. The Sheet primitive lives at src/components/ui/sheet.tsx.",
+  );
+  lines.push(
     "- Generated route and component code MUST derive storeId from useStoreDetail().data?.id and pass it into useProductsList and useCategoriesList; do not re-read import.meta.env.VITE_STORE_SLUG inside route or component code.",
   );
   lines.push(
     "- Generated product list UIs (home ProductGrid in src/components/store/product-grid.tsx and the /products route in src/routes/products/index.tsx) MUST implement infinite scroll: render an IntersectionObserver-watched sentinel <div ref={loadMoreRef} /> at the end of the product grid, and call fetchNextPage() when the sentinel intersects the viewport AND hasNextPage AND !isFetchingNextPage. Show a small inline 'Loading more...' indicator inside the sentinel while isFetchingNextPage is true. Initial loading skeleton (isLoading) and error UI with retry (isError, refetch) remain unchanged. Total product count text MUST read from the hook's total field, not products.length.",
   );
   lines.push(
-    "- Generated src/components/layout/site-header.tsx MUST render a search-bar header (NO Home/Products/Orders nav links, NO mobile Sheet menu): brand name on the left, a search-pill input in the middle, and a ShoppingCart icon Button on the right. Search-bar accent colors MUST bind to the project's DESIGN.md primary token (use the primary color's lighter tint for input fill, a soft primary tint for the focus ring, primary for the submit button background, and primary for the match-highlight text); do NOT hardcode rose/pink. Pill input: rounded-full, h-11, pl-5 pr-1.5 py-2.5, focus:outline-none focus:ring-2 with the primary-tinted ring, no border. Leading Lucide Search icon h-4 w-4 with a muted primary tint. Input class 'text-sm text-slate-700 placeholder:text-slate-400'; placeholder MUST be exactly 'What are you looking for?'. Trailing inset circular submit Button (type='submit', size='icon', h-9 w-9 rounded-full, bg-primary hover:bg-primary/90, text-white) containing a white Lucide Search icon h-4 w-4.",
+    "- Generated src/components/layout/site-header.tsx MUST render a search-bar header (NO Home/Products/Orders nav links, NO mobile Sheet menu): brand name on the left rendered as {storeDetail?.name} where storeDetail comes from `const { storeDetail } = useStore()` (StoreProvider resolves storeDetail from GET /api/v1/stores/:storeSlug when VITE_STORE_SLUG exists, else from sampleStore — do NOT use websiteConfig.store.name here, do NOT call useStoreDetail() directly inside SiteHeader, and do NOT hardcode the brand string), a search-pill input in the middle, and a ShoppingCart icon Button on the right. Search-bar accent colors MUST bind to the project's DESIGN.md primary token (use the primary color's lighter tint for input fill, a soft primary tint for the focus ring, primary for the submit button background, and primary for the match-highlight text); do NOT hardcode rose/pink. Pill input: rounded-full, h-11, pl-5 pr-1.5 py-2.5, focus:outline-none focus:ring-2 with the primary-tinted ring, no border. Leading Lucide Search icon h-4 w-4 with a muted primary tint. Input class 'text-sm text-slate-700 placeholder:text-slate-400'; placeholder MUST be exactly 'What are you looking for?'. Trailing inset circular submit Button (type='submit', size='icon', h-9 w-9 rounded-full, bg-primary hover:bg-primary/90, text-white) containing a white Lucide Search icon h-4 w-4.",
   );
   lines.push(
     "- SiteHeader MUST consume useProductSuggestions({ storeId: useStoreDetail().data?.id, query: debouncedValue }) where debouncedValue is the raw input value debounced by 800ms via a useEffect+setTimeout (track BOTH the raw input value and the debouncedValue separately — the raw value drives the input field, dropdown visibility gating, and form submit; the debouncedValue is the query passed to the suggestions hook). Render the suggestions dropdown below the input (absolute, w-full, mt-2) when the input is focused AND inputValue.trim().length > 0 AND suggestions.length > 0. Dropdown class 'rounded-2xl bg-white p-3 shadow-lg shadow-black/5' (no hard border). Header label 'Suggestions' (text-xs font-medium text-slate-400 mb-1). Each row: 'flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer' with a primary-tinted hover background, a leading Lucide Search icon h-4 w-4 text-slate-400, and the suggestion text (text-sm text-slate-700). No dividers between rows.",
@@ -154,7 +163,10 @@ export function buildStoreRuntimeInstructions(input: {
     "- Generated ProductCard MUST wrap the product title text node with a TanStack Router <Link to='/products/$productId' params={{ productId: product.id }}> — the product image renders as a bare <img> (or fallback gradient div) WITHOUT being wrapped by the Link.",
   );
   lines.push(
-    "- Brand and store name displayed anywhere in generated JSX/text (site header logo, site footer brand block, hero eyebrow, page titles, meta tags, share copy) MUST be sourced from websiteConfig.store.name (from @/lib/website-config) or useStore().storeDetail?.name (when inside StoreProvider). NEVER hardcode literal brand strings such as 'AI Storefront', 'AI Store front', 'Demo Store', or any other placeholder name in generated code.",
+    "- Generated ProductCard MUST render product.descriptions (when displayed in the card preview) as DOMPurify-sanitized HTML: `import DOMPurify from 'dompurify'`, memoize the sanitize call with `useMemo` keyed on product.descriptions, and render through `dangerouslySetInnerHTML={{ __html: sanitized }}` on a wrapping <div> (NOT a <p>) with the existing `line-clamp-2` truncation preserved. NEVER render product.descriptions raw without DOMPurify.sanitize.",
+  );
+  lines.push(
+    "- Brand and store name displayed anywhere in generated JSX/text (site header logo, site footer brand block, hero eyebrow, page titles, meta tags, share copy) MUST be rendered as {storeDetail?.name} where storeDetail comes from a single destructured call `const { storeDetail } = useStore()` near the top of the component (StoreProvider resolves storeDetail from GET /api/v1/stores/:storeSlug when VITE_STORE_SLUG is set, and to sampleStore otherwise — consumers do NOT branch on hasStoreSlug, do NOT call useStoreDetail() directly in routes/components, and do NOT call useStore().storeDetail?.name inline). Use websiteConfig.store.name from @/lib/website-config only for chrome rendered outside StoreProvider. NEVER hardcode literal brand strings such as 'AI Storefront', 'AI Store front', 'Demo Store', or any other placeholder name in generated code. websiteConfig is sample/static data; live brand identity always flows through the useStore() hook.",
   );
   lines.push(
     "- StoreDetail.setting.currency is the ISO 4217 currency code from the API; default to 'AUD' when missing. The sample fallback store also exposes setting.currency='AUD' so the slug-missing path renders consistently.",

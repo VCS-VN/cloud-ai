@@ -18,6 +18,7 @@ RULES:
 - Do not edit routeTree.gen.ts. Do not edit repository-level or Builder application .env or secret files. Allowed exception: add or update only VITE_STORE_SLUG inside generated project-detail .env files while preserving unrelated environment variables.
 - Before modifying UI code (routes, components, pages, styles), call project_read_design_rules.
 - DESIGN.md is the source of truth for UI quality, layout, colors, typography, spacing.
+- DESIGN.md is generated once by the storefront-design-authoring skill and kept stable across update prompts. NEVER regenerate DESIGN.md to satisfy an update prompt; the orchestrator handles redesign and token-level patches before invoking you. When you receive a token-level patch note, only patch the files that read the affected roles; do not rewrite unrelated UI.
 - After mutation, run validation. If failed, repair with minimal patch.
 - If a requested change is destructive, broad, or conflicts with project state, stop and request clarification.
 - Product sections must include commerce-ready affordances, not bare demo layouts.
@@ -29,7 +30,7 @@ RETAIL E-COMMERCE CONSTRAINT (STRICT):
 - Every section must serve the purpose of selling products.
 - Product cards MUST include: product image rendered from product.image ?? product.images?.[0] (gradient placeholder fallback only when both are missing), product name wrapped in a TanStack Router <Link to='/products/$productId' params={{ productId: product.id }}> (the Link wraps the title text only — never the image), formatted price via formatMoney(resolveProductPrice(product), { currency: useStore().storeDetail?.setting?.currency ?? 'AUD' }), CTA button.
 - Header MUST include: brand name, navigation links, cart affordance.
-- Brand name and store name in any UI text (header logo, footer, hero eyebrow, page titles, meta) MUST come from websiteConfig.store.name (preferred for static layout chrome) or useStore().storeDetail?.name (when inside StoreProvider). NEVER hardcode literal brand strings such as "AI Storefront", "AI Store front", "Demo Store", or any placeholder name in generated JSX or text.
+- Brand name and store name in any UI text (header logo, footer, hero eyebrow, page titles, meta) MUST be rendered as {storeDetail?.name} where storeDetail comes from a single destructured call 'const { storeDetail } = useStore()' near the top of the component (StoreProvider resolves storeDetail from GET /api/v1/stores/:storeSlug when VITE_STORE_SLUG is set, and to sampleStore otherwise — consumers do NOT branch on hasStoreSlug, do NOT call useStoreDetail() directly in routes/components, and do NOT use inline useStore().storeDetail?.name expressions). Use websiteConfig.store.name only for chrome rendered outside StoreProvider; websiteConfig is sample/static data, live brand identity always flows through the useStore() hook. NEVER hardcode literal brand strings such as "AI Storefront", "AI Store front", "Demo Store", or any placeholder name in generated JSX or text.
 - Hero MUST include: headline, supporting copy, CTA button, visual area.
 - Use product data from src/data/products.ts.
 - Use website config from src/lib/website-config.ts.

@@ -6,6 +6,12 @@ import type {
 } from "./code-agent-types";
 import type { CodeToolRegistry } from "./code-tool-registry.server";
 import { evaluateProjectRiskPolicy } from "./services/project-risk-policy.server";
+import {
+  scanPatchContent,
+  formatViolations,
+} from "./services/design-patch-content-validator.server";
+import { buildProjectTokenIndex } from "./services/design-token-extractor.server";
+import { loadProjectDesignRules } from "./services/design-file-service.server";
 
 export async function executeProjectTool(input: {
   registry: CodeToolRegistry;
@@ -116,6 +122,57 @@ export async function executeProjectTool(input: {
           "DESIGN.md must be read before modifying UI code. Call project_read_design_rules first.",
           true,
         );
+      }
+    }
+  }
+
+  if (tool.category === "mutate") {
+    const changedPaths = extractPotentialChangedFiles(args);
+    const hasUiPath = changedPaths.some((file) => isUiRelatedFilePath(file));
+    if (hasUiPath) {
+      const changedFilesWithContent = extractChangedFilesWithContent(tool.name, args);
+      if (changedFilesWithContent.length > 0) {
+        try {
+          const designRules = await loadProjectDesignRules({
+            projectId: input.context.projectId,
+            workspaceRoot: input.context.workspaceRoot,
+          });
+          const tokens = buildProjectTokenIndex(designRules.markdown);
+          const verdict = scanPatchContent({
+            changedFiles: changedFilesWithContent,
+            tokens,
+          });
+          if (!verdict.ok) {
+            console.warn(
+              JSON.stringify({
+                event: "design_token_literal_off_rule",
+                tool: tool.name,
+                violationCount: verdict.violations.length,
+              }),
+            );
+            return toolError(
+              input.context,
+              tool.name,
+              tool.category,
+              startedAt,
+              "DESIGN_TOKEN_LITERAL_OFF_RULE",
+              formatViolations(verdict.violations),
+              true,
+            );
+          }
+        } catch (error: any) {
+          if (error?.code !== "DESIGN_FILE_MISSING") {
+            console.warn(
+              JSON.stringify({
+                event: "design_patch_validator_load_failed",
+                error:
+                  error instanceof Error
+                    ? error.message.slice(0, 200)
+                    : String(error).slice(0, 200),
+              }),
+            );
+          }
+        }
       }
     }
   }
@@ -264,6 +321,76 @@ function extractPotentialChangedFiles(args: unknown) {
   }
   if (typeof args.path === "string") return [args.path];
   return [];
+}
+
+
+function extractChangedFilesWithContent(
+  toolName: string,
+  args: unknown,
+): Array<{ path: string; content: string }> {
+  if (!isRecord(args)) return [];
+  if (toolName === "project_create_file") {
+    const path = typeof args.path === "string" ? args.path : "";
+    const content = typeof args.content === "string" ? args.content : "";
+    if (!path) return [];
+    return [{ path, content }];
+  }
+  if (toolName === "project_apply_patch") {
+    const patch = typeof args.patch === "string" ? args.patch : "";
+    const expected = Array.isArray(args.expectedChangedFiles)
+      ? args.expectedChangedFiles.filter(
+          (file): file is string => typeof file === "string",
+        )
+      : [];
+    if (!patch || expected.length === 0) return [];
+    const synthesized = synthesizePatchContents(patch, expected);
+    return synthesized;
+  }
+  return [];
+}
+
+function synthesizePatchContents(
+  patch: string,
+  expectedChangedFiles: ReadonlyArray<string>,
+): Array<{ path: string; content: string }> {
+  const fileBlocks = parseUnifiedDiff(patch);
+  const out: Array<{ path: string; content: string }> = [];
+  for (const path of expectedChangedFiles) {
+    const block = fileBlocks.get(path);
+    if (block) {
+      out.push({ path, content: block });
+    } else {
+      out.push({ path, content: "" });
+    }
+  }
+  return out;
+}
+
+function parseUnifiedDiff(patch: string): Map<string, string> {
+  const blocks = new Map<string, string>();
+  const lines = patch.split("\n");
+  let currentPath: string | null = null;
+  let buffer: string[] = [];
+  const flush = () => {
+    if (currentPath) {
+      const existing = blocks.get(currentPath) ?? "";
+      blocks.set(currentPath, existing + buffer.join("\n"));
+    }
+    buffer = [];
+  };
+  for (const line of lines) {
+    const fileMatch = line.match(/^\+\+\+\s+(?:b\/)?(.+)$/);
+    if (fileMatch) {
+      flush();
+      currentPath = fileMatch[1].trim();
+      continue;
+    }
+    if (line.startsWith("+") && !line.startsWith("+++")) {
+      buffer.push(line.slice(1));
+    }
+  }
+  flush();
+  return blocks;
 }
 
 const UI_RELATED_GLOBS = [

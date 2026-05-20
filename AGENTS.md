@@ -59,3 +59,7 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+<!-- SPECKIT START -->
+Active feature plan: [specs/013-storefront-design-skill/plan.md](specs/013-storefront-design-skill/plan.md)
+<!-- SPECKIT END -->

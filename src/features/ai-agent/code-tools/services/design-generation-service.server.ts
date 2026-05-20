@@ -1,7 +1,12 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import type { WebsiteSpec } from "../../project/project-state.schema";
 import type { OpenAIProvider } from "../../openai/openai-provider.server";
+import type { TokenHint } from "../../planning/design-intent-heuristic";
+import { buildStructuralOutline } from "./design-skill-outline.server";
+import {
+  buildSensitiveTokenSet,
+  validateAntiTemplateLeak,
+  type AntiTemplateLeakVerdict,
+} from "./design-template-leak-validator.server";
 
 export type DesignGenerationInput = {
   websiteSpec: WebsiteSpec;
@@ -9,6 +14,8 @@ export type DesignGenerationInput = {
   provider?: OpenAIProvider;
   model?: string;
   signal?: AbortSignal;
+  tokenHints?: ReadonlyArray<TokenHint>;
+  skipLeakValidation?: boolean;
 };
 
 export type DesignGenerationResult = {
@@ -27,10 +34,8 @@ const REQUIRED_SECTION_HEADINGS: ReadonlyArray<{ index: number; heading: string 
   { index: 8, heading: "Responsive Behavior" },
 ];
 
-const FEW_SHOT_TEMPLATE_PATH = "templates/storefront/basic-ecommerce/DESIGN.md";
-const FEW_SHOT_MAX_CHARS = 3500;
-
-let cachedFewShot: string | null = null;
+// Structural outline replaces few-shot template content.
+// Anti-template-leak validation runs post-generation in init / redesign paths.
 
 export async function generateVisualDesignMarkdown(
   input: DesignGenerationInput,
@@ -42,9 +47,14 @@ export async function generateVisualDesignMarkdown(
     };
   }
 
-  const fewShot = await loadFewShotExample();
-  const systemPrompt = buildSystemPrompt(fewShot);
+  const outline = buildStructuralOutline();
+  const tokenHints = input.tokenHints ?? [];
+  const honoredValues = buildHonoredValueSet(tokenHints);
+  const systemPrompt = buildSystemPrompt(outline.body, tokenHints);
   const userMessage = buildUserMessage(input.websiteSpec, input.userPrompt);
+  const sensitiveSet = input.skipLeakValidation
+    ? null
+    : await safeBuildSensitiveTokenSet();
 
   try {
     const firstAttempt = await streamMarkdown({
@@ -54,24 +64,29 @@ export async function generateVisualDesignMarkdown(
       input: userMessage,
       signal: input.signal,
     });
-    const firstValidation = validateVisualMarkdown(firstAttempt);
-    if (firstValidation.ok) {
+    const firstStructural = validateVisualMarkdown(firstAttempt);
+    const firstLeak = sensitiveSet
+      ? validateAntiTemplateLeak(firstAttempt, sensitiveSet, { honoredValues })
+      : ({ ok: true } as AntiTemplateLeakVerdict);
+    if (firstStructural.ok && firstLeak.ok) {
       return { visualMarkdown: firstAttempt, source: "ai" };
     }
 
     console.info(
       JSON.stringify({
-        event: "design_generation_shape_retry",
-        missingSections: firstValidation.missingSections,
+        event: "design_generation_validation_retry",
+        missingSections: firstStructural.missingSections,
+        leaked: firstLeak.ok ? [] : firstLeak.leaked.map((l) => `${l.kind}:${l.value}`),
       }),
     );
 
+    const failureNote = buildFailureNote(firstStructural, firstLeak);
     const retryMessage =
       typeof userMessage === "string"
-        ? `${userMessage}\n\nYour previous output was missing sections: ${firstValidation.missingSections.join(", ")}. Regenerate the FULL sections 1-8 with the required headings.`
+        ? `${userMessage}\n\n${failureNote}`
         : {
             ...(userMessage as Record<string, unknown>),
-            previousFailure: `Missing sections: ${firstValidation.missingSections.join(", ")}. Regenerate full sections 1-8.`,
+            previousFailure: failureNote,
           };
 
     const retryAttempt = await streamMarkdown({
@@ -81,15 +96,19 @@ export async function generateVisualDesignMarkdown(
       input: retryMessage,
       signal: input.signal,
     });
-    const retryValidation = validateVisualMarkdown(retryAttempt);
-    if (retryValidation.ok) {
+    const retryStructural = validateVisualMarkdown(retryAttempt);
+    const retryLeak = sensitiveSet
+      ? validateAntiTemplateLeak(retryAttempt, sensitiveSet, { honoredValues })
+      : ({ ok: true } as AntiTemplateLeakVerdict);
+    if (retryStructural.ok && retryLeak.ok) {
       return { visualMarkdown: retryAttempt, source: "ai" };
     }
 
     console.warn(
       JSON.stringify({
         event: "design_generation_failed_after_retry_using_fallback",
-        missingSections: retryValidation.missingSections,
+        missingSections: retryStructural.missingSections,
+        leaked: retryLeak.ok ? [] : retryLeak.leaked.map((l) => `${l.kind}:${l.value}`),
       }),
     );
   } catch (error) {
@@ -105,6 +124,57 @@ export async function generateVisualDesignMarkdown(
     visualMarkdown: buildHeuristicVisualMarkdown(input.websiteSpec),
     source: "fallback",
   };
+}
+
+async function safeBuildSensitiveTokenSet() {
+  try {
+    return await buildSensitiveTokenSet();
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: "design_template_sensitive_set_unavailable",
+        error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
+      }),
+    );
+    return null;
+  }
+}
+
+function buildHonoredValueSet(
+  hints: ReadonlyArray<TokenHint>,
+): ReadonlySet<string> {
+  const set = new Set<string>();
+  for (const hint of hints) {
+    if (!hint.value) continue;
+    if (hint.value.startsWith("#")) {
+      set.add(hint.value.toUpperCase());
+    } else {
+      set.add(hint.value.toLowerCase().trim());
+    }
+  }
+  return set;
+}
+
+function buildFailureNote(
+  structural: { ok: boolean; missingSections: string[] },
+  leak: AntiTemplateLeakVerdict,
+): string {
+  const parts: string[] = [];
+  if (!structural.ok) {
+    parts.push(
+      `Previous output was missing required sections: ${structural.missingSections.join(", ")}. Regenerate the FULL sections 1-8 with the exact required headings.`,
+    );
+  }
+  if (!leak.ok) {
+    const samples = leak.leaked
+      .slice(0, 8)
+      .map((l) => `${l.kind}:${l.value}`)
+      .join(", ");
+    parts.push(
+      `Previous output reused values from the structural reference template (${samples}). Choose DIFFERENT concrete values that fit the chosen vibe and the project; never copy values from any reference template. User-specified values remain allowed.`,
+    );
+  }
+  return parts.join("\n\n");
 }
 
 async function streamMarkdown(args: {
@@ -128,10 +198,20 @@ async function streamMarkdown(args: {
   return accumulated.trim();
 }
 
-function buildSystemPrompt(fewShot: string): string {
-  return `You are the Design System Author for an AI E-commerce Website Builder.
+function buildSystemPrompt(
+  outlineBody: string,
+  tokenHints: ReadonlyArray<TokenHint>,
+): string {
+  const hintBlock =
+    tokenHints.length > 0
+      ? `\nUSER-SPECIFIED TOKEN VALUES (honor these for the matching role):\n${tokenHints
+          .map((h) => `- ${h.role}: ${h.value}`)
+          .join("\n")}\n`
+      : "";
 
-Your task: produce sections 1 through 8 of a project's DESIGN.md file. The DESIGN.md will be the single source of truth for the visual identity of one specific retail storefront project.
+  return `You are the Storefront Design Authoring agent for an AI E-commerce Website Builder.
+
+Your task: produce sections 1 through 8 of one project's DESIGN.md file. The DESIGN.md will be the single source of truth for the visual identity of one specific retail storefront project.
 
 OUTPUT CONTRACT:
 - Output ONLY raw markdown. Do not wrap in code fences. Do not add preface or trailing commentary.
@@ -149,18 +229,18 @@ OUTPUT CONTRACT:
 
 CONTENT RULES:
 - Tailor the entire visual identity to the project described in the user message: store type, products, brand tone, target customers.
-- Pick a coherent vibe (e.g. minimalist, luxury dark, playful pastel, streetwear, organic, tech, premium, friendly) that fits the products. Do not default to the example's vibe.
-- Section 2 must define every color role used elsewhere as concrete hex/rgba values: primary brand, accent (for CTAs), surfaces (page canvas, card, dark surface), text on light, text on dark, semantic colors. Honor any colors the user specified.
-- Section 3 must declare a public-font font-family stack and a typography hierarchy table (display, hero, h1, h2, h3, body, small, micro) with sizes, weights, line heights.
-- Section 6 must specify components for retail commerce: buttons (primary, outline, dark-surface variants), product card, header/nav, hero section, product grid, feature band, forms, optional floating cart CTA.
+- Pick ONE coherent vibe that genuinely fits the products and audience (e.g. minimalist, luxury, playful, organic, streetwear, tech / cyber, premium, friendly, editorial, handcrafted, retro). Do NOT default to a warm-beige + dark-green coffee vibe unless the prompt clearly calls for it.
+- Section 2 must declare every color role with a concrete hex / rgba value chosen FOR THIS PROJECT. NEVER copy concrete values from any structural reference template; choose values that match the chosen vibe.
+- Section 3 must declare a public font-family stack with system fallbacks and a typography hierarchy table covering display / hero / h1 / h2 / h3 / body large / body / small / micro with sizes, weights, line heights.
+- Section 6 must specify components for retail commerce: buttons (primary filled, primary outlined, dark-surface variants), product card, header/nav, hero, product grid, feature band, forms, optional floating cart CTA.
 - Section 8 must specify breakpoints and responsive behavior for retail layouts.
 - Use lists, tables, and short prose. Aim for 350-650 lines total across sections 1-8.
+${hintBlock}
+STRUCTURAL OUTLINE (use as shape only; do NOT copy any concrete values; this outline carries no token values to copy):
 
-EXAMPLE STRUCTURE (a different project — generate a DIFFERENT visual identity, do not copy these tokens):
-
-<example>
-${fewShot}
-</example>
+<outline>
+${outlineBody}
+</outline>
 
 Output the markdown now, starting with "## 1. Visual Theme & Atmosphere".`;
 }
@@ -213,25 +293,6 @@ export function validateVisualMarkdown(markdown: string): {
     ok: missing.length === 0,
     missingSections: missing.map(({ index, heading }) => `${index}. ${heading}`),
   };
-}
-
-async function loadFewShotExample(): Promise<string> {
-  if (cachedFewShot !== null) return cachedFewShot;
-  try {
-    const fullPath = resolve(process.cwd(), FEW_SHOT_TEMPLATE_PATH);
-    const raw = await readFile(fullPath, "utf-8");
-    const splitIndex = raw.indexOf("\n## 9.");
-    const sectionsOneToEight = splitIndex > 0 ? raw.slice(0, splitIndex) : raw;
-    const trimmed =
-      sectionsOneToEight.length > FEW_SHOT_MAX_CHARS
-        ? `${sectionsOneToEight.slice(0, FEW_SHOT_MAX_CHARS)}\n\n... (truncated)`
-        : sectionsOneToEight;
-    cachedFewShot = trimmed;
-    return trimmed;
-  } catch {
-    cachedFewShot = "";
-    return "";
-  }
 }
 
 function escapeRegex(value: string) {

@@ -456,6 +456,7 @@ export type AgentStreamEvent =
   | { type: "error"; code: string; message: string; recoverable: boolean }
   | { type: "design_file_generated"; projectId: string; messageId: string; data: { source: "ai" | "fallback"; destinationPath: string; byteSize: number } }
   | { type: "design_file_regenerated"; projectId: string; messageId: string; data: { source: "ai" | "fallback"; destinationPath: string; byteSize: number } }
+  | { type: "design_file_token_patched"; projectId: string; messageId: string; data: { destinationPath: string; appliedRoles: string[]; previousHash: string; hash: string; byteSize: number } }
   | { type: "design_rules_loaded"; projectId: string; messageId: string; data: { source: string; summary: string; hash: string } };
 
 export function createEmptyProjectState(projectId: string): ProjectState {

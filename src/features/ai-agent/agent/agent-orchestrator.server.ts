@@ -45,6 +45,12 @@ import {
   generateAndWriteDesignFile,
   loadProjectDesignRules,
 } from "../code-tools/services/design-file-service.server";
+import {
+  classifyDesignIntent,
+  extractTokenHints,
+  type DesignIntentLabel,
+} from "../planning/design-intent-heuristic";
+import { applyTokenPatches } from "../code-tools/services/design-rule-patch-service.server";
 
 export type HandlePromptInput = {
   projectId: string;
@@ -196,11 +202,96 @@ export class AgentOrchestrator {
       let activeProjectState = projectState;
       let effectiveUserPrompt = input.prompt;
       let redesignedHash: string | undefined;
-      const isRedesign =
-        intent.intent === "modify_design" &&
-        projectState.status === "initialized";
+      const designIntent: DesignIntentLabel = classifyDesignIntent({
+        prompt: input.prompt,
+        projectStatus: projectState.status,
+      });
+      console.info(
+        JSON.stringify({
+          event: "design_intent_classified",
+          kind: designIntent.kind,
+          tokenHintsCount:
+            designIntent.kind === "update_token"
+              ? designIntent.tokenHints.length
+              : designIntent.kind === "redesign"
+                ? designIntent.tokenHints?.length ?? 0
+                : 0,
+        }),
+      );
 
-      if (isRedesign) {
+      if (
+        designIntent.kind === "update_token" &&
+        projectState.status === "initialized"
+      ) {
+        if (designIntent.tokenHints.length === 0) {
+          const plan = createClarificationPlan(intent);
+          yield {
+            type: "clarification_required",
+            question:
+              "Bạn muốn đổi token nào? Hãy nêu rõ giá trị cụ thể (ví dụ: 'đổi màu primary thành #1F3A2E' hoặc 'đổi font sang \"Crimson Pro\"').",
+          };
+          await this.deps.runStore.waitForClarification(run, {
+            intent,
+            plan,
+            affectedFiles: [],
+          });
+          return;
+        }
+        const patchResult = await applyTokenPatches({
+          projectId: input.projectId,
+          workspaceRoot: `./projects/${input.projectId}`,
+          tokenHints: designIntent.tokenHints,
+        });
+        if (!patchResult.ok) {
+          const plan = createClarificationPlan(intent);
+          yield {
+            type: "clarification_required",
+            question:
+              patchResult.code === "DESIGN_PATCH_TOKEN_ROLE_NOT_FOUND"
+                ? `Không tìm thấy role tương ứng trong DESIGN.md (${patchResult.message}). Nếu bạn muốn thêm role mới, hãy gửi prompt redesign tổng thể.`
+                : patchResult.message,
+          };
+          await this.deps.runStore.waitForClarification(run, {
+            intent,
+            plan,
+            affectedFiles: [],
+          });
+          return;
+        }
+        yield {
+          type: "design_file_token_patched",
+          projectId: input.projectId,
+          messageId: input.messageId ?? run.id,
+          data: {
+            destinationPath: patchResult.destinationPath,
+            appliedRoles: patchResult.appliedRoles,
+            previousHash: patchResult.previousHash,
+            hash: patchResult.hash,
+            byteSize: patchResult.byteSize,
+          },
+        };
+        activeProjectState = await this.deps.projectStateStore.patch(
+          input.projectId,
+          {
+            designState: {
+              templateId: projectState.designState?.templateId ?? "ai-generated",
+              designSourcePath: "DESIGN.md",
+              designSourceHash: patchResult.hash,
+              designCopiedAt: new Date().toISOString(),
+            },
+          },
+          input.userId,
+        );
+        redesignedHash = patchResult.hash;
+        effectiveUserPrompt = buildTokenPatchRewritePrompt(
+          input.prompt,
+          patchResult.appliedRoles,
+        );
+        yield { type: "project_state_updated", projectState: activeProjectState };
+      } else if (
+        designIntent.kind === "redesign" &&
+        projectState.status === "initialized"
+      ) {
         const redesignWebsiteSpec = await extractWebsiteSpec({
           prompt: input.prompt,
           projectState,
@@ -215,6 +306,7 @@ export class AgentOrchestrator {
           provider: this.deps.openAIProvider,
           model: this.deps.agentConfig?.plannerModel,
           signal: input.signal,
+          tokenHints: designIntent.tokenHints,
         });
         yield {
           type: "design_file_regenerated",
@@ -240,7 +332,10 @@ export class AgentOrchestrator {
           input.userId,
         );
         redesignedHash = redesignResult.hash;
-        effectiveUserPrompt = buildRedesignRewritePrompt(input.prompt);
+        effectiveUserPrompt = buildRedesignRewritePrompt(
+          input.prompt,
+          designIntent.tokenHints,
+        );
         yield { type: "project_state_updated", projectState: activeProjectState };
       }
 
@@ -440,6 +535,7 @@ export class AgentOrchestrator {
       message: "Copying design rules and generating infrastructure...",
     };
 
+    const initTokenHints = extractTokenHints(input.prompt);
     const designResult = await runPhase("generate_design_file", () =>
       generateAndWriteDesignFile({
         projectId: input.projectId,
@@ -449,6 +545,7 @@ export class AgentOrchestrator {
         provider: this.deps.openAIProvider,
         model: this.deps.agentConfig?.plannerModel,
         signal: input.signal,
+        tokenHints: initTokenHints,
       }),
     );
     yield {
@@ -1151,10 +1248,42 @@ function logAgentPhase(
   console.info(JSON.stringify(payload));
 }
 
-function buildRedesignRewritePrompt(originalPrompt: string): string {
+function buildTokenPatchRewritePrompt(
+  originalPrompt: string,
+  appliedRoles: ReadonlyArray<string>,
+): string {
+  return [
+    "User token-level update request:",
+    originalPrompt,
+    "",
+    `DESIGN.md has been patched in place for these roles only: ${appliedRoles.join(", ")}.`,
+    "All other roles (vibe, typography, spacing, radius, shadow, components, layout, responsive) remain unchanged. The DESIGN.md hash has changed because token values changed.",
+    "",
+    "Task: update only the storefront UI surfaces that read the patched roles, so they reflect the new token values via tailwind config / CSS variables / token mapping.",
+    "",
+    "1. Call project_read_design_rules to load the new DESIGN.md.",
+    "2. Inspect existing UI files; identify references to the patched roles only.",
+    "3. Apply minimal patches; do NOT regenerate unrelated styles or sections.",
+    "4. Run project_run_validation after mutations; repair on failure.",
+  ].join("\n");
+}
+
+function buildRedesignRewritePrompt(
+  originalPrompt: string,
+  tokenHints?: ReadonlyArray<{ role: string; value: string }>,
+): string {
+  const hintLines =
+    tokenHints && tokenHints.length > 0
+      ? [
+          "",
+          "User-specified token values honored in the new DESIGN.md:",
+          ...tokenHints.map((h) => `   - ${h.role}: ${h.value}`),
+        ]
+      : [];
   return [
     "User redesign request:",
     originalPrompt,
+    ...hintLines,
     "",
     "DESIGN.md has just been regenerated for this project with a new visual identity (palette, typography, components, layout). It is the source of truth.",
     "",

@@ -39,6 +39,7 @@ export const INITIAL_PROJECT_PACKAGES: InitialProjectPackage[] = [
   { name: "react-hook-form", version: "^7.75.0", installType: "dependencies", reason: "Form handling." },
   { name: "sonner", version: "^2.0.7", installType: "dependencies", reason: "Toast notifications for checkout and cart feedback." },
   { name: "tailwind-merge", version: "^2.6.0", installType: "dependencies", reason: "Tailwind class merge utility for shadcn." },
+  { name: "vaul", version: "^1.1.2", installType: "dependencies", reason: "Bottom-sheet drawer primitive used by product-detail mobile model picker." },
   { name: "zod", version: "^4.4.3", installType: "dependencies", reason: "Runtime validation." },
   { name: "@tanstack/router-cli", version: "1.77.7", installType: "devDependencies", reason: "Route generation." },
   { name: "@tanstack/router-plugin", version: "^1.167.22", installType: "devDependencies", reason: "Router Vite plugin." },

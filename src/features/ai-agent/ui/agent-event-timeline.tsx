@@ -66,19 +66,21 @@ export function AgentEventTimeline({ events, userPrompt }: AgentEventTimelinePro
   );
 
   const items = useMemo(() => {
-    return events
-      .filter((event) => event.type !== "assistant_message_delta")
-      .map((event) => {
-        const formatted = formatUserFacingStatus(event, ctx);
-        if (formatted?.kind === "user" && formatted.label) {
-          return { event, label: formatted.label, detail: formatted.detail, technical: false };
-        }
-        const fallbackLabel = TECHNICAL_FALLBACK_LABELS[event.type];
-        if (!fallbackLabel) return null;
-        return { event, label: fallbackLabel, detail: technicalDetail(event), technical: true };
-      })
-      .filter((item): item is { event: AgentStreamEvent; label: string; detail?: string; technical: boolean } => item !== null)
-      .filter((item) => showTechnical || !item.technical);
+    type Item = { event: AgentStreamEvent; label: string; detail?: string; technical: boolean };
+    const result: Item[] = [];
+    for (const event of events) {
+      if (event.type === "assistant_message_delta") continue;
+      const formatted = formatUserFacingStatus(event, ctx);
+      if (formatted?.kind === "user" && formatted.label) {
+        result.push({ event, label: formatted.label, detail: formatted.detail, technical: false });
+        continue;
+      }
+      const fallbackLabel = TECHNICAL_FALLBACK_LABELS[event.type];
+      if (!fallbackLabel) continue;
+      if (!showTechnical) continue;
+      result.push({ event, label: fallbackLabel, detail: technicalDetail(event), technical: true });
+    }
+    return result;
   }, [events, ctx, showTechnical]);
 
   const hasTechnicalEvents = useMemo(

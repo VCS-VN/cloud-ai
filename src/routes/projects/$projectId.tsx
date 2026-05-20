@@ -972,7 +972,7 @@ function ProjectDetailPage() {
   }, [project?.id, previewStarting, router, startProjectPreview]);
 
   return (
-    <main className="h-25 min-h-0 overflow-hidden bg-(--app-bg) text-(--app-text)">
+    <main className="h-dvh min-h-0 overflow-hidden bg-(--app-bg) text-(--app-text)">
       {workspace && project ? (
         <div className="flex h-full min-h-0 min-w-0 overflow-hidden">
           <div
@@ -990,13 +990,15 @@ function ProjectDetailPage() {
               onToggleChat={toggleChat}
             />
 
-            <div className="min-h-0 h-1 flex-1 overflow-hidden px-sm ">
+            <div className="min-h-0 flex-1 overflow-hidden px-sm">
               <div className="flex h-full min-h-0 flex-col gap-sm">
                 {/* <StreamingTextPanel text={agentReasoning} isStreaming={project.processingStatus === "processing"} /> */}
-                <AgentEventTimeline
-                  events={agentEvents}
-                  userPrompt={[...messages].reverse().find((message) => message.role === "user")?.content}
-                />
+                <div className="builder-scrollbar-hidden max-h-[40vh] shrink-0 overflow-y-auto">
+                  <AgentEventTimeline
+                    events={agentEvents}
+                    userPrompt={[...messages].reverse().find((message) => message.role === "user")?.content}
+                  />
+                </div>
                 <div className="min-h-0 flex-1 overflow-hidden">
                   <ProjectMessagesPanel
                     messages={messages}
