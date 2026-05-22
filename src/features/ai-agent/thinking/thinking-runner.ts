@@ -7,6 +7,7 @@ import {
 } from "./thinking-fallback";
 import { preflightUserPrompt } from "./thinking-preflight";
 import { extractUserWishes } from "./user-wish-extractor.server";
+import { isProtectedProjectEnvPath } from "../code-tools/services/project-path-guard.server";
 import {
   thinkingInputSchema,
   thinkingResultSchema,
@@ -428,7 +429,7 @@ function buildThinkingInput(input: RunThinkingLayerInput): ThinkingInput {
     },
     projectContext: {
       status: mapProjectStatus(input.projectState?.status),
-      fileManifest: (input.projectState?.fileManifest ?? []).map((file) => ({
+      fileManifest: (input.projectState?.fileManifest ?? []).filter((file) => !isProtectedProjectEnvPath(file.path)).map((file) => ({
         path: file.path,
         purpose: file.purpose,
         kind: mapFileKind(file.kind),
@@ -455,7 +456,7 @@ function compactProjectState(projectState: ThinkingInput["projectState"]) {
     features: projectState.features,
     constraints: projectState.constraints,
     pages: projectState.pages,
-    fileManifest: projectState.fileManifest,
+    fileManifest: projectState.fileManifest.filter((file) => !isProtectedProjectEnvPath(file.path)),
   };
 }
 

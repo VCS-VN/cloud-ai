@@ -5,12 +5,7 @@ export type ProjectPathGuardResult =
   | { ok: false; code: "UNSAFE_PROJECT_PATH" | "FORBIDDEN_PROJECT_PATH"; message: string };
 
 const FORBIDDEN_EXACT_NAMES = new Set([
-  ".env.*",
   "routeTree.gen.ts",
-  ".env",
-  ".env.local",
-  ".env.development",
-  ".env.production",
   ".npmrc",
   ".pnpmrc",
 ]);
@@ -66,7 +61,13 @@ export function isForbiddenProjectPath(path: string) {
   const basename = segments.at(-1) ?? normalized;
 
   if (segments.some((segment) => FORBIDDEN_SEGMENTS.has(segment))) return true;
-  if (basename === ".env" || basename.startsWith(".env.")) return false;
+  if (isProtectedProjectEnvPath(normalized)) return true;
   if (FORBIDDEN_EXACT_NAMES.has(basename)) return true;
   return SECRET_FILE_PATTERNS.some((pattern) => pattern.test(basename));
+}
+
+export function isProtectedProjectEnvPath(path: string) {
+  const normalized = normalize(path).replaceAll("\\", "/");
+  const basename = normalized.split("/").filter(Boolean).at(-1) ?? normalized;
+  return basename === ".env" || (basename.startsWith(".env.") && basename !== ".env.example");
 }

@@ -96,7 +96,7 @@ export function buildProjectMessageInput({
 export function buildStoreSampleDataInstructions() {
   return [
     "After creating pages and components, initialize shared StoreProvider sample data.",
-    "Generated project .env is owned by the Builder app process. AI Agent must never create, edit, patch, delete, or rename generated project .env files; it may update .env.example only as sample documentation when directly relevant.",
+    "Generated project .env is owned by the Builder app process. AI Agent must never read, create, edit, patch, delete, or rename generated project .env files; it may update .env.example only as sample documentation when directly relevant.",
 
     `Create and preserve shared sample data files: ${SHARED_SAMPLE_DATA_FILE_PATHS.join(", ")}.`,
     "Use the fixed Store, Product, and ProductsList structures for sample data and do not add, remove, rename, or reshape fields.",

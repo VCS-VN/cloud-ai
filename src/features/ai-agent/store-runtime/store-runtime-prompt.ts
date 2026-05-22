@@ -85,7 +85,7 @@ export function buildStoreRuntimeInstructions(input: {
   if (slug) {
     lines.push(`- Current selected store slug: ${slug}.`);
     lines.push(
-      `- Builder app process owns generated project .env and should sync VITE_STORE_SLUG=${slug}; AI Agent must treat .env as read-only and must not add or update it.`,
+      `- Builder app process owns generated project .env values and contents and should sync VITE_STORE_SLUG=${slug}; AI Agent must treat .env as inaccessible and must not add or update it.`,
     );
   } else {
     lines.push(
@@ -94,7 +94,7 @@ export function buildStoreRuntimeInstructions(input: {
   }
 
   lines.push(
-    "- AI Agent must never create, edit, patch, delete, or rename generated project .env files (.env, .env.local, .env.production, .env.development, or .env.*). If the user asks for env changes, refuse and explain the Builder app process owns project env. .env.example may be updated only as sample documentation when directly relevant.",
+    "- AI Agent must never read, create, edit, patch, delete, or rename generated project .env files (.env, .env.local, .env.production, .env.development, or .env.*). If the user asks for env changes, refuse and explain the Builder app process owns project env. .env.example may be updated only as sample documentation when directly relevant.",
   );
   lines.push(
     "- Generated storefront API requests MUST always go through `apiClient` from `@/services/http/client`. NEVER use native `fetch` for customer/store API requests. Store hooks MUST import `import { apiClient } from '@/services/http/client'` and call `apiClient.get(...)` with `params`; do not use URLSearchParams, response.json(), or fetch('/api/...').",

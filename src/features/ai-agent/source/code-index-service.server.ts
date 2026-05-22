@@ -1,8 +1,9 @@
+import { isProtectedProjectEnvPath } from "../code-tools/services/project-path-guard.server";
 import type { FileManifestEntry } from "../project/project-state.schema";
 import type { GeneratedFile } from "./init-source.server";
 
 export function buildFileManifest(files: GeneratedFile[]): FileManifestEntry[] {
-  return files.map((file) => ({
+  return files.filter((file) => !isProtectedProjectEnvPath(file.path)).map((file) => ({
     path: file.path,
     kind: inferKind(file.path),
     purpose: inferPurpose(file.path),

@@ -3,7 +3,7 @@ import path from "node:path";
 import type { PatchResult } from "../code-agent-types";
 import { CODE_TOOL_LIMITS } from "../code-tool-registry.server";
 import { evaluateProjectRiskPolicy } from "./project-risk-policy.server";
-import { guardProjectPath } from "./project-path-guard.server";
+import { guardProjectPath, isProtectedProjectEnvPath } from "./project-path-guard.server";
 import { getPreviewRestartRequirement } from "./preview-restart-policy.server";
 
 const PROTECTED_FILES = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb"]);
@@ -154,8 +154,7 @@ export class ProjectPatchService {
 }
 
 export function isProtectedGeneratedEnvPath(relativePath: string) {
-  const basename = path.posix.basename(normalizeProjectPath(relativePath));
-  return basename === ".env" || (basename.startsWith(".env.") && basename !== ".env.example");
+  return isProtectedProjectEnvPath(normalizeProjectPath(relativePath));
 }
 
 export function normalizeProjectPath(relativePath: string) {
