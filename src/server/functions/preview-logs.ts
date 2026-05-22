@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { tailPm2PreviewLog } from "@/features/ai-agent/runtime/runtime-logs.server";
 import { requireServerUser } from "./auth";
-import { getProjectServices } from "../services/project-services";
 
 function validateInput(data: { projectId?: string; tail?: number }) {
   const projectId = data?.projectId?.trim();
@@ -9,12 +8,16 @@ function validateInput(data: { projectId?: string; tail?: number }) {
   const tail = typeof data?.tail === "number" ? data.tail : 200;
   return { projectId, tail };
 }
+async function loadProjectServices() {
+  return (await import('../services/project-services')).getProjectServices();
+}
+
 
 export const getPreviewLogs = createServerFn({ method: "GET" })
   .inputValidator(validateInput)
   .handler(async ({ data }) => {
     const user = await requireServerUser();
-    const { projectService } = await getProjectServices();
+    const { projectService } = await loadProjectServices();
     await projectService.getDevRuntimeState(data.projectId, user.id);
     return tailPm2PreviewLog(data.projectId, data.tail);
   });

@@ -9,7 +9,10 @@ export default defineConfig({
     sourcemap: true,
   },
   ssr: {
-    external: ['firebase-admin'],
+    external: ['firebase-admin', 'pm2'],
+  },
+  optimizeDeps: {
+    exclude: ['pm2'],
   },
   plugins: [
     tanstackStart(),

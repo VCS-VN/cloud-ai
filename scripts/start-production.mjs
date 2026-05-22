@@ -86,12 +86,24 @@ async function servePublicAsset(req, res) {
   return true;
 }
 
+function getSetCookieValues(headers) {
+  if (typeof headers.getSetCookie === "function") return headers.getSetCookie();
+  const value = headers.get("set-cookie");
+  return value ? [value] : [];
+}
+
 async function writeResponse(res, response) {
   res.statusCode = response.status;
   res.statusMessage = response.statusText;
   response.headers.forEach((value, key) => {
+    if (key.toLowerCase() === "set-cookie") return;
     res.setHeader(key, value);
   });
+
+  const setCookies = getSetCookieValues(response.headers);
+  if (setCookies.length > 0) {
+    res.setHeader("set-cookie", setCookies);
+  }
 
   if (!response.body) {
     res.end();
