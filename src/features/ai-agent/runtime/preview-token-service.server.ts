@@ -60,10 +60,11 @@ export class PreviewTokenService {
 
   getCookieOptions() {
     const config = getPreviewRuntimeConfig();
+    const production = process.env.NODE_ENV === "production";
     return {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax" as const,
+      secure: production,
+      sameSite: production ? "none" as const : "lax" as const,
       path: "/",
       maxAge: config.tokenTtlSeconds,
       ...(config.publicHost ? { domain: toCookieDomain(config.publicHost) } : {}),
