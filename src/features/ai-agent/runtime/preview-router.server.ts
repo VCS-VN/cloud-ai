@@ -33,20 +33,30 @@ export function startPreviewRouterOnce(options: PreviewRouterOptions) {
   const config = getPreviewRuntimeConfig();
   const proxy = httpProxy.createProxyServer({ ws: true, xfwd: true });
   proxy.on("proxyRes", stripFrameBlockingHeaders);
+  proxy.on("error", (error, request) => {
+    logRouterError("preview_proxy_error", request as IncomingMessage | undefined, error);
+  });
 
   server = http.createServer(async (request, response) => {
     await proxyRequest({ request, response, proxy, options });
   });
 
   server.on("upgrade", async (request, socket, head) => {
-    const result = await resolveProxyTargetResult(request, options);
-    if (!result.ok) {
-      logRouterReject(request, result);
-      socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
-      socket.destroy();
-      return;
+    try {
+      const result = await resolveProxyTargetResult(request, options);
+      if (!result.ok) {
+        logRouterReject(request, result);
+        safeCloseSocket(socket, statusForReject(result));
+        return;
+      }
+      proxy.ws(request, socket, head, { target: result.target }, (error) => {
+        logRouterError("preview_router_upgrade_error", request, error);
+        safeCloseSocket(socket, 503);
+      });
+    } catch (error) {
+      logRouterError("preview_router_upgrade_error", request, error);
+      safeCloseSocket(socket, 503);
     }
-    proxy.ws(request, socket, head, { target: result.target });
   });
 
   server.listen(options.port ?? config.routerPort, options.host ?? config.routerHost);
@@ -59,17 +69,21 @@ async function proxyRequest(input: {
   proxy: httpProxy;
   options: PreviewRouterOptions;
 }) {
-  const result = await resolveProxyTargetResult(input.request, input.options);
-  if (!result.ok) {
-    logRouterReject(input.request, result);
-    input.response.statusCode = 404;
-    input.response.end("Preview not found.");
-    return;
+  try {
+    const result = await resolveProxyTargetResult(input.request, input.options);
+    if (!result.ok) {
+      logRouterReject(input.request, result);
+      safeEndResponse(input.response, statusForReject(result), bodyForReject(result));
+      return;
+    }
+    input.proxy.web(input.request, input.response, { target: result.target }, (error) => {
+      logRouterError("preview_proxy_error", input.request, error);
+      safeEndResponse(input.response, 503, "Preview unavailable.");
+    });
+  } catch (error) {
+    logRouterError("preview_router_error", input.request, error);
+    safeEndResponse(input.response, 503, "Preview unavailable.");
   }
-  input.proxy.web(input.request, input.response, { target: result.target }, (error) => {
-    input.response.statusCode = 503;
-    input.response.end(error instanceof Error ? error.message : "Preview unavailable.");
-  });
 }
 
 export async function resolveProxyTarget(request: IncomingMessage, options: PreviewRouterOptions) {
@@ -77,19 +91,33 @@ export async function resolveProxyTarget(request: IncomingMessage, options: Prev
   return result.ok ? result.target : null;
 }
 
-async function resolveProxyTargetResult(request: IncomingMessage, options: PreviewRouterOptions): Promise<ProxyTargetResult> {
+export async function resolveProxyTargetResult(request: IncomingMessage, options: PreviewRouterOptions): Promise<ProxyTargetResult> {
   const projectId = extractProjectIdFromPreviewHost(request.headers.host, options.publicHost);
   if (!projectId) return { ok: false, reason: "host_mismatch" };
   if (options.tokenService) {
     const token = readCookie(request.headers.cookie, PREVIEW_TOKEN_COOKIE_NAME);
-    const verification = await options.tokenService.verifyToken({ token, projectId });
+    let verification: Awaited<ReturnType<PreviewTokenService["verifyToken"]>>;
+    try {
+      verification = await options.tokenService.verifyToken({ token, projectId });
+    } catch (error) {
+      return { ok: false, projectId, reason: "auth_error", details: { error: formatErrorMessage(error) } };
+    }
     if (!verification.ok) return { ok: false, projectId, reason: `auth_${verification.reason}` };
   }
-  const runtime = await options.runtimeOrchestrator.getRuntimeState(projectId);
+  let runtime: Awaited<ReturnType<RuntimeOrchestrator["getRuntimeState"]>>;
+  try {
+    runtime = await options.runtimeOrchestrator.getRuntimeState(projectId);
+  } catch (error) {
+    return { ok: false, projectId, reason: "runtime_error", details: { phase: "lookup", error: formatErrorMessage(error) } };
+  }
   let port = runtime.status === "running" ? runtime.port : null;
   if (!port && runtime.enabled && runtime.status === "stopped") {
-    const resumed = await options.runtimeOrchestrator.resumePreview(projectId);
-    if (resumed.success) port = resumed.port;
+    try {
+      const resumed = await options.runtimeOrchestrator.resumePreview(projectId);
+      if (resumed.success) port = resumed.port;
+    } catch (error) {
+      return { ok: false, projectId, reason: "runtime_error", details: { phase: "resume", error: formatErrorMessage(error) } };
+    }
   }
   if (!port) {
     return {
@@ -99,8 +127,57 @@ async function resolveProxyTargetResult(request: IncomingMessage, options: Previ
       details: { status: runtime.status, enabled: runtime.enabled, port: runtime.port, previewUrl: runtime.previewUrl },
     };
   }
-  await options.runtimeOrchestrator.touchLastAccessed(projectId);
+  try {
+    await options.runtimeOrchestrator.touchLastAccessed(projectId);
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: "preview_router_touch_failed",
+      projectId,
+      error: formatErrorMessage(error),
+    }));
+  }
   return { ok: true, projectId, target: `http://127.0.0.1:${port}` };
+}
+
+function statusForReject(result: Extract<ProxyTargetResult, { ok: false }>) {
+  if (result.reason.startsWith("auth_")) return 401;
+  if (result.reason === "runtime_error") return 503;
+  return 404;
+}
+
+function bodyForReject(result: Extract<ProxyTargetResult, { ok: false }>) {
+  if (result.reason.startsWith("auth_")) return "Preview access required.";
+  if (result.reason === "runtime_error") return "Preview unavailable.";
+  return "Preview not found.";
+}
+
+function safeEndResponse(response: ServerResponse, statusCode: number, body: string) {
+  if (response.destroyed || response.writableEnded) return;
+  if (!response.headersSent) response.statusCode = statusCode;
+  response.end(body);
+}
+
+function safeCloseSocket(socket: NodeJS.WritableStream & { destroyed?: boolean; destroy?: () => void }, statusCode: number) {
+  if (socket.destroyed) return;
+  try {
+    socket.write(`HTTP/1.1 ${statusCode} ${statusCode === 401 ? "Unauthorized" : statusCode === 503 ? "Service Unavailable" : "Not Found"}\r\n\r\n`);
+  } catch {
+    // Socket may already be closed.
+  } finally {
+    socket.destroy?.();
+  }
+}
+
+function logRouterError(event: string, request: IncomingMessage | undefined, error: unknown) {
+  console.warn(JSON.stringify({
+    event,
+    host: request?.headers.host,
+    error: formatErrorMessage(error),
+  }));
+}
+
+function formatErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200);
 }
 
 function logRouterReject(request: IncomingMessage, result: Extract<ProxyTargetResult, { ok: false }>) {

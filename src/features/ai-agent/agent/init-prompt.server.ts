@@ -62,6 +62,7 @@ export function buildRetailInitPrompt(input: {
     '- Route.useParams() for params',
     '- NEVER edit routeTree.gen.ts',
     "",
+    "Generated project .env is owned by the Builder app process. AI Agent must never create, edit, patch, delete, or rename generated project .env files (.env, .env.local, .env.production, .env.development, or .env.*). If the user asks for env changes, refuse and explain the Builder app process owns project env. .env.example may be updated only as sample documentation when directly relevant.",
     "Generated storefront API requests MUST always go through `apiClient` from `@/services/http/client`. NEVER use native `fetch` for customer/store API requests. Store hooks MUST import `import { apiClient } from '@/services/http/client'` and call `apiClient.get(...)` with `params`; do not use URLSearchParams, response.json(), or fetch('/api/...').",
     "",
     "CREATE THESE FILES:",

@@ -585,6 +585,9 @@ function ProjectDetailPage() {
           }));
         }
         if (event.type === "done") {
+          if (detailMode === "preview" && project?.id && runtimeState.status === "running" && runtimeState.previewUrl) {
+            void refreshPreviewToken(project.id);
+          }
           void queryClient.invalidateQueries({
             queryKey: ["project", project?.id],
           });
@@ -735,7 +738,7 @@ function ProjectDetailPage() {
         void router.invalidate();
       };
     },
-    [closeActiveStream, project?.id, queryClient, router],
+    [closeActiveStream, detailMode, project?.id, queryClient, refreshPreviewToken, router, runtimeState.previewUrl, runtimeState.status],
   );
 
   useEffect(() => {
@@ -1659,6 +1662,7 @@ function PreviewWorkspace({
         </div>
         {showIframe ? (
           <iframe
+            key={`${runtimeState.previewUrl}:${previewTokenState.refreshedAt ?? "ready"}`}
             src={runtimeState.previewUrl!}
             className="h-full w-full border-0"
             title="Project preview"

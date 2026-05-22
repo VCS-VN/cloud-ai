@@ -8,7 +8,7 @@ export type StoreRuntimePromptContext =
     generatedEnv: {
       name: "VITE_STORE_SLUG";
       value: string;
-      scope: "generated project-detail .env files only";
+      scope: "Builder app process owned; read-only for AI Agent";
     };
     storeRuntimeContract: {
       realDataEnabledBy: "import.meta.env.VITE_STORE_SLUG";
@@ -44,7 +44,7 @@ export function buildStoreRuntimePromptContext(
       generatedEnv: {
         name: "VITE_STORE_SLUG",
         value: slug,
-        scope: "generated project-detail .env files only",
+        scope: "Builder app process owned; read-only for AI Agent",
       },
       storeRuntimeContract: {
         realDataEnabledBy: "import.meta.env.VITE_STORE_SLUG",
@@ -85,7 +85,7 @@ export function buildStoreRuntimeInstructions(input: {
   if (slug) {
     lines.push(`- Current selected store slug: ${slug}.`);
     lines.push(
-      `- Generated project-detail .env MUST contain VITE_STORE_SLUG=${slug}. Add it when missing or update it when stale.`,
+      `- Builder app process owns generated project .env and should sync VITE_STORE_SLUG=${slug}; AI Agent must treat .env as read-only and must not add or update it.`,
     );
   } else {
     lines.push(
@@ -94,9 +94,8 @@ export function buildStoreRuntimeInstructions(input: {
   }
 
   lines.push(
-    "- Env edits are allowed only inside generated project-detail .env files. Never edit repository-level or Builder application .env or secret files.",
+    "- AI Agent must never create, edit, patch, delete, or rename generated project .env files (.env, .env.local, .env.production, .env.development, or .env.*). If the user asks for env changes, refuse and explain the Builder app process owns project env. .env.example may be updated only as sample documentation when directly relevant.",
   );
-  lines.push("- Preserve unrelated environment variables when adding or updating VITE_STORE_SLUG.");
   lines.push(
     "- Generated storefront API requests MUST always go through `apiClient` from `@/services/http/client`. NEVER use native `fetch` for customer/store API requests. Store hooks MUST import `import { apiClient } from '@/services/http/client'` and call `apiClient.get(...)` with `params`; do not use URLSearchParams, response.json(), or fetch('/api/...').",
   );

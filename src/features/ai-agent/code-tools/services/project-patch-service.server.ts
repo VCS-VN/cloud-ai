@@ -9,6 +9,7 @@ import { getPreviewRestartRequirement } from "./preview-restart-policy.server";
 const PROTECTED_FILES = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb"]);
 const FORBIDDEN_SEGMENTS = new Set([".git", "node_modules", "dist", "build", ".next", ".tanstack"]);
 const SECRET_PATTERN = /(api[_-]?key|secret|token|password|private[_-]?key)\s*[:=]\s*["'][^"']{8,}["']/i;
+export const GENERATED_PROJECT_ENV_POLICY_MESSAGE = "Generated project .env is managed by the Builder app process and cannot be changed by the AI Agent.";
 
 export type PatchPolicyViolationCode =
   | "EMPTY_PATCH"
@@ -16,6 +17,7 @@ export type PatchPolicyViolationCode =
   | "TOO_MANY_CHANGED_FILES"
   | "FORBIDDEN_PATH"
   | "PROTECTED_FILE"
+  | "PROTECTED_ENV_FILE"
   | "PACKAGE_POLICY_VIOLATION"
   | "SECRET_LIKE_ADDITION"
   | "PATCH_APPLY_FAILED";
@@ -113,6 +115,7 @@ export class ProjectPatchService {
   }
 
   async deleteFile(input: { workspaceRoot: string; relativePath: string }): Promise<PatchResult> {
+    this.assertMutablePath(input.relativePath);
     const guarded = guardProjectPath({ workspaceRoot: input.workspaceRoot, path: input.relativePath });
     if (!guarded.ok) throw new ProjectPatchPolicyError("FORBIDDEN_PATH", guarded.message);
     const { rm } = await import("node:fs/promises");
@@ -144,9 +147,15 @@ export class ProjectPatchService {
     const normalized = normalizeProjectPath(relativePath);
     const parts = normalized.split("/");
     if (parts.some((part) => FORBIDDEN_SEGMENTS.has(part))) throw new ProjectPatchPolicyError("FORBIDDEN_PATH", "Path targets a forbidden directory.");
+    if (isProtectedGeneratedEnvPath(normalized)) throw new ProjectPatchPolicyError("PROTECTED_ENV_FILE", GENERATED_PROJECT_ENV_POLICY_MESSAGE);
     if (PROTECTED_FILES.has(path.posix.basename(normalized))) throw new ProjectPatchPolicyError("PROTECTED_FILE", "Path targets a protected generated file.");
     if (normalized === "package.json") throw new ProjectPatchPolicyError("PACKAGE_POLICY_VIOLATION", "Package changes are not allowed by this mutation tool.");
   }
+}
+
+export function isProtectedGeneratedEnvPath(relativePath: string) {
+  const basename = path.posix.basename(normalizeProjectPath(relativePath));
+  return basename === ".env" || (basename.startsWith(".env.") && basename !== ".env.example");
 }
 
 export function normalizeProjectPath(relativePath: string) {

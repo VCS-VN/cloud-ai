@@ -13,6 +13,7 @@ import {
 import { buildProjectTokenIndex } from "./services/design-token-extractor.server";
 import { loadProjectDesignRules } from "./services/design-file-service.server";
 import { scanGeneratedApiClientPolicy, formatGeneratedApiClientPolicyViolations } from "./services/generated-api-client-policy.server";
+import { GENERATED_PROJECT_ENV_POLICY_MESSAGE, isProtectedGeneratedEnvPath } from "./services/project-patch-service.server";
 
 export async function executeProjectTool(input: {
   registry: CodeToolRegistry;
@@ -106,6 +107,25 @@ export async function executeProjectTool(input: {
     );
   }
   const args = softNormalizeToolArgs(tool, argParseResult.value);
+
+  if (tool.category === "mutate") {
+    const changedFiles = extractPotentialChangedFiles(args);
+    if (changedFiles.some(isProtectedGeneratedEnvPathSafe)) {
+      console.warn(JSON.stringify({
+        event: "generated_project_env_edit_blocked",
+        tool: tool.name,
+      }));
+      return toolError(
+        input.context,
+        tool.name,
+        tool.category,
+        startedAt,
+        "PROTECTED_ENV_FILE",
+        GENERATED_PROJECT_ENV_POLICY_MESSAGE,
+        true,
+      );
+    }
+  }
 
   if (tool.category === "mutate") {
     const changedFilesWithContent = extractChangedFilesWithContent(tool.name, args);
@@ -428,4 +448,12 @@ const UI_RELATED_GLOBS = [
 
 function isUiRelatedFilePath(filePath: string): boolean {
   return UI_RELATED_GLOBS.some((glob) => filePath.startsWith(glob) || filePath.includes(`/${glob}`));
+}
+
+function isProtectedGeneratedEnvPathSafe(filePath: string) {
+  try {
+    return isProtectedGeneratedEnvPath(filePath);
+  } catch {
+    return false;
+  }
 }

@@ -18,7 +18,7 @@ Core rules:
 - Preserve existing project direction and ProjectState.
 - Do not change package versions unless the AgentTask explicitly requires it and package policy allows it.
 - Do not edit routeTree.gen.ts manually.
-- Do not edit repository-level or Builder application .env or secret files. Allowed exception: add or update only VITE_STORE_SLUG inside generated project-detail .env files while preserving unrelated environment variables.
+- Do not create, edit, patch, delete, or rename any generated project .env file (.env, .env.local, .env.production, .env.development, or .env.*). Project .env values are owned by the Builder app process, not the AI Agent. If the user asks you to change .env, refuse and explain that the Builder app process manages project env. .env.example may be updated only as sample documentation when directly relevant.
 - If a requested change is destructive, broad, or conflicts with ProjectState, stop and request clarification.
 - After mutation, run validation.
 - If validation fails, inspect the error and perform a minimal repair patch.
