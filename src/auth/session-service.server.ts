@@ -4,7 +4,7 @@ import { AuthError } from './auth-errors'
 import { createSessionData, getSessionMaxAgeSeconds, isSessionExpired } from './session-codec'
 import type { AppSessionData, AuthUser } from './types'
 
-const SESSION_NAME = 'cloud_ai_session'
+export const SESSION_NAME = 'cloud_ai_session'
 const textEncoder = new TextEncoder()
 
 function getSessionSecret() {
@@ -18,7 +18,7 @@ function shouldUseSecureCookie() {
   return process.env.SESSION_COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production'
 }
 
-function getCookieOptions() {
+export function getSessionCookieOptions() {
   return {
     httpOnly: true,
     secure: shouldUseSecureCookie(),
@@ -67,11 +67,24 @@ async function readSessionValue(value: string): Promise<AppSessionData | null> {
   return parsed as AppSessionData
 }
 
+
+function serializeCookie(name: string, value: string, options: ReturnType<typeof getSessionCookieOptions>) {
+  const parts = [`${name}=${value}`, `Path=${options.path}`, `Max-Age=${options.maxAge}`, `SameSite=${options.sameSite}`];
+  if (options.httpOnly) parts.push('HttpOnly');
+  if (options.secure) parts.push('Secure');
+  return parts.join('; ');
+}
+
+export async function createSessionSetCookieHeaderForUserId(userId: string) {
+  const value = await createSessionValue(createSessionData(userId));
+  return serializeCookie(SESSION_NAME, value, getSessionCookieOptions());
+}
+
 export class SessionService {
   async createSessionCookie(user: AuthUser) {
     const value = await createSessionValue(createSessionData(user.id))
 
-    setCookie(SESSION_NAME, value, getCookieOptions())
+    setCookie(SESSION_NAME, value, getSessionCookieOptions())
   }
 
   async readSession() {

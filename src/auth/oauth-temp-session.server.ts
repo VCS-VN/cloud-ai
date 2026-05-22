@@ -4,7 +4,7 @@ import { AuthError } from './auth-errors'
 import { createOAuthTempSessionData } from './oauth-utils'
 import type { OAuthTempSessionData } from './types'
 
-const COOKIE_NAME = 'cloud_ai_oauth_temp'
+export const OAUTH_TEMP_COOKIE_NAME = 'cloud_ai_oauth_temp'
 const MAX_AGE_SECONDS = 10 * 60
 const textEncoder = new TextEncoder()
 
@@ -65,12 +65,12 @@ async function readCookieValue(value: string): Promise<OAuthTempSessionData | nu
 
 export async function createOAuthTempSession(data: OAuthTempSessionData) {
   const value = await createCookieValue(data)
-  setCookie(COOKIE_NAME, value, getCookieOptions())
+  setCookie(OAUTH_TEMP_COOKIE_NAME, value, getCookieOptions())
 }
 
 export async function readOAuthTempSession() {
   try {
-    const value = getCookie(COOKIE_NAME)
+    const value = getCookie(OAUTH_TEMP_COOKIE_NAME)
     if (!value) return null
     const data = await readCookieValue(value)
     if (!data) return null
@@ -84,7 +84,16 @@ export async function readOAuthTempSession() {
   }
 }
 
+
+export function createOAuthTempClearCookieHeader() {
+  const options = getCookieOptions();
+  const parts = [`${OAUTH_TEMP_COOKIE_NAME}=`, `Path=${options.path}`, 'Max-Age=0', `SameSite=${options.sameSite}`];
+  if (options.httpOnly) parts.push('HttpOnly');
+  if (options.secure) parts.push('Secure');
+  return parts.join('; ');
+}
+
 export async function clearOAuthTempSession() {
-  deleteCookie(COOKIE_NAME, { path: '/' })
+  deleteCookie(OAUTH_TEMP_COOKIE_NAME, { path: '/' })
 }
 
