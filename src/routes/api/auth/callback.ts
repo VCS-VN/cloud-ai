@@ -23,7 +23,10 @@ export const Route = createFileRoute(
           redirectUri: `${origin}/api/auth/callback`,
         });
 
-        return Response.redirect(result.redirectHref, 302);
+        return new Response(null, {
+          status: 302,
+          headers: { Location: result.redirectHref },
+        });
       },
     },
   },
