@@ -355,23 +355,34 @@ export type DevRuntimeStatus =
   | "installed"
   | "starting"
   | "running"
+  | "fixing"
   | "error"
   | "stopped";
 
+export type DevRuntimeDnsStatus = "none" | "creating" | "ready" | "delete_pending" | "error";
+export type DevRuntimeInstallStatus = "idle" | "installing" | "installed" | "failed";
+
 export type DevRuntime = {
   status: DevRuntimeStatus;
+  enabled: boolean;
   pid: number | null;
   port: number | null;
+  previewHost: string | null;
+  cloudflareDnsRecordId: string | null;
+  dnsStatus: DevRuntimeDnsStatus;
+  installStatus: DevRuntimeInstallStatus;
   installStartedAt: string | null;
   installCompletedAt: string | null;
   devStartedAt: string | null;
   previewUrl: string | null;
+  lastAccessedAt: string | null;
   installLog: string | null;
   devLog: string | null;
   lastError: string | null;
   lastErrorTier: "code" | "config" | "system" | null;
   retryCount: number;
   maxRetries: number;
+  operatorAttentionRequired: boolean;
   fixAttempts: Array<{
     attempt: number;
     changedFiles: string[];
@@ -383,18 +394,25 @@ export type DevRuntime = {
 
 export const EMPTY_DEV_RUNTIME: DevRuntime = {
   status: "stopped",
+  enabled: false,
   pid: null,
   port: null,
+  previewHost: null,
+  cloudflareDnsRecordId: null,
+  dnsStatus: "none",
+  installStatus: "idle",
   installStartedAt: null,
   installCompletedAt: null,
   devStartedAt: null,
   previewUrl: null,
+  lastAccessedAt: null,
   installLog: null,
   devLog: null,
   lastError: null,
   lastErrorTier: null,
   retryCount: 0,
   maxRetries: 3,
+  operatorAttentionRequired: false,
   fixAttempts: [],
 };
 

@@ -1,9 +1,10 @@
 import path from "node:path";
+import { getProjectsRoot } from "@/server/config/paths.server";
 
 const BLOCKED_SEGMENTS = new Set([".git", "node_modules"]);
 
 export class PathGuard {
-  constructor(private readonly rootPath = path.resolve(process.cwd(), "projects")) {}
+  constructor(private readonly rootPath = getProjectsRoot()) {}
 
   getWorkspacePath(projectId: string) {
     if (!/^[a-zA-Z0-9_-]+$/.test(projectId)) throw new Error("Invalid project id.");

@@ -73,7 +73,21 @@ export class ProjectStateStore {
 
   async readDevRuntime(projectId: string, userId?: string): Promise<DevRuntime> {
     const existing = await this.repository.getByProjectId(projectId, userId);
-    return existing?.devRuntime ?? EMPTY_DEV_RUNTIME;
+    return normalizeDevRuntime(existing?.devRuntime);
+  }
+
+  async patchDevRuntime(projectId: string, patch: Partial<DevRuntime>, userId?: string): Promise<DevRuntime> {
+    const current = await this.readDevRuntime(projectId, userId);
+    return this.saveDevRuntime(projectId, { ...current, ...patch }, userId);
+  }
+
+  async listDevRuntimes(): Promise<Array<{ projectId: string; userId?: string; devRuntime: DevRuntime }>> {
+    const records = await this.repository.list();
+    return records.map((record) => ({
+      projectId: record.projectId,
+      userId: record.userId,
+      devRuntime: normalizeDevRuntime(record.devRuntime),
+    }));
   }
 
   async saveDevRuntime(projectId: string, devRuntime: DevRuntime, userId?: string): Promise<DevRuntime> {
@@ -124,5 +138,13 @@ function mergeProjectStatePatch(current: ProjectState, patch: Partial<ProjectSta
     fileManifest: patch.fileManifest ?? current.fileManifest,
     decisionLog: patch.decisionLog ?? current.decisionLog,
     recentChanges: patch.recentChanges ?? current.recentChanges,
+  };
+}
+
+function normalizeDevRuntime(devRuntime?: Partial<DevRuntime> | null): DevRuntime {
+  return {
+    ...EMPTY_DEV_RUNTIME,
+    ...(devRuntime ?? {}),
+    fixAttempts: devRuntime?.fixAttempts ?? EMPTY_DEV_RUNTIME.fixAttempts,
   };
 }

@@ -78,6 +78,11 @@ export class PgProjectStateRepository {
     const [row] = await this.db.select().from(projectStates).where(filter);
     return row ? toRecord(row) : undefined;
   }
+
+  async list(): Promise<ProjectStateRecord[]> {
+    const rows = await this.db.select().from(projectStates);
+    return rows.map(toRecord);
+  }
 }
 
 export type { ProjectStateRecord };

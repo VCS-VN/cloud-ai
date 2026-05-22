@@ -11,6 +11,7 @@ import { requireServerUser } from "@/server/functions/auth";
 import type { MessageStreamEvent } from "@/shared/project-types";
 
 export const Route = createFileRoute(
+  // @ts-ignore API routes are runtime-only and omitted from routeTree.gen.ts.
   "/api/projects/$projectId/messages/$agentMessageId/stream",
 )({
   server: {

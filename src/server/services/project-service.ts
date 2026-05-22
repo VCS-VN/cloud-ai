@@ -8,6 +8,7 @@ import {
   type DevRuntime,
 } from "@/features/ai-agent/project/project-state.schema";
 import type { RuntimeService } from "@/features/ai-agent/runtime/runtime-service.server";
+import type { RuntimeOrchestrator } from "@/features/ai-agent/runtime/runtime-orchestrator.server";
 import type {
   Project,
   ProjectFileNode,
@@ -87,6 +88,7 @@ export class ProjectService {
     private readonly projectStateStore?: ProjectStateStore,
     private readonly runtimeService?: RuntimeService,
     private readonly envWriter?: GeneratedProjectEnvWriter,
+    private readonly runtimeOrchestrator?: RuntimeOrchestrator,
   ) {
     this.workspaceService = workspaceService ?? new ProjectWorkspaceService(fileNodeRepository);
   }
@@ -231,6 +233,10 @@ export class ProjectService {
     const project = await this.projectRepository.getProject(projectId, userId);
     if (!project) throw new Error("Project not found.");
 
+    if (this.runtimeOrchestrator) {
+      return this.runtimeOrchestrator.getRuntimeState(projectId, userId);
+    }
+
     const runtime = await this.readReconciledDevRuntime(projectId, userId);
 
     return runtime;
@@ -242,6 +248,11 @@ export class ProjectService {
   ): Promise<StartPreviewResult> {
     const project = await this.projectRepository.getProject(projectId, userId);
     if (!project) throw new Error("Project not found.");
+    const workspaceRoot = await this.workspaceService.ensureWorkspace(projectId);
+    if (this.runtimeOrchestrator) {
+      return this.runtimeOrchestrator.startPreview({ projectId, userId, workspaceRoot });
+    }
+
     if (!this.processManager || !this.projectStateStore || !this.runtimeService) {
       return {
         success: false,
@@ -268,7 +279,6 @@ export class ProjectService {
       };
     }
 
-    const workspaceRoot = await this.workspaceService.ensureWorkspace(projectId);
     const runId = crypto.randomUUID();
 
     for await (const event of this.runtimeService.runPostInitDev({
@@ -413,7 +423,12 @@ export class ProjectService {
     projectId: string,
     userId?: string,
   ): Promise<{ success: true }> {
-    await this.processManager?.stop(projectId);
+    if (this.runtimeOrchestrator) {
+      const teardown = await this.runtimeOrchestrator.teardownPreview(projectId, userId);
+      if (!teardown.success) throw new Error(teardown.error);
+    } else {
+      await this.processManager?.stop(projectId);
+    }
     const deleted = await this.projectRepository.deleteProject(projectId, userId);
     if (!deleted) throw new Error("Project not found.");
     await this.workspaceService.deleteWorkspace(projectId);

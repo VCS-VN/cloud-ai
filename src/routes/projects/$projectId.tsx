@@ -9,6 +9,7 @@ import {
 import {
   InfiniteData,
   useInfiniteQuery,
+  useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import {
@@ -66,6 +67,7 @@ import {
   updateProjectSettings,
 } from "@/server/functions/projects";
 import { getDevRuntimeState, startPreview } from "@/server/functions/preview";
+import { refreshPreviewToken } from "@/server/functions/preview-token-refresh";
 import type { AgentStreamEvent } from "@/features/ai-agent/agent/agent-events";
 import type {
   ComposerReasoningEffort,
@@ -100,6 +102,7 @@ function mapDevRuntimeStatus(s: string): RuntimeUIState["status"] {
   if (s === "starting") return "starting";
   if (s === "running") return "running";
   if (s === "stopped") return "stopped";
+  if (s === "fixing") return "fixing";
   if (s === "error") return "error";
   return "idle";
 }
@@ -224,6 +227,7 @@ function ProjectDetailPage() {
   const saveProjectSettings = useServerFn(updateProjectSettings);
   const getRuntimeState = useServerFn(getDevRuntimeState);
   const startProjectPreview = useServerFn(startPreview);
+  const refreshProjectPreviewToken = useServerFn(refreshPreviewToken);
   const { workspace } = Route.useLoaderData();
   const router = useRouter();
   const { user } = Route.useRouteContext();
@@ -331,16 +335,28 @@ function ProjectDetailPage() {
     [messagesQuery.data?.pages],
   );
 
+  const runtimeQuery = useQuery({
+    queryKey: ["project-runtime", project?.id],
+    queryFn: () => getRuntimeState({ data: { projectId: project!.id } }),
+    enabled: !!project?.id && detailMode === "preview",
+    refetchInterval: (query) => {
+      const runtime = query.state.data;
+      if (runtime?.status === "running") return 10000;
+      return 3000;
+    },
+    refetchOnWindowFocus: true,
+  });
+
   const runtimeState = useMemo<RuntimeUIState>(() => {
     const base = createInitialAgentEventState();
-    if (workspace?.devRuntime)
-      base.runtime = toRuntimeUIState(workspace.devRuntime);
+    const runtime = runtimeQuery.data ?? workspace?.devRuntime;
+    if (runtime) base.runtime = toRuntimeUIState(runtime);
     if (manualRuntime) base.runtime = manualRuntime;
     return agentEvents.reduce(
       (state, event) => agentEventReducer(state, event),
       base,
     ).runtime;
-  }, [agentEvents, manualRuntime, workspace?.devRuntime]);
+  }, [agentEvents, manualRuntime, runtimeQuery.data, workspace?.devRuntime]);
 
   const { isActive } = useUserPresence({
     projectId: project?.id ?? "",
@@ -597,22 +613,23 @@ function ProjectDetailPage() {
     );
   }, [closeActiveStream, workspace?.project.id, workspace?.fileTree]);
 
+  useEffect(() => () => closeActiveStream(), [closeActiveStream]);
+
   useEffect(() => {
-    if (!project?.id) return;
+    if (!project?.id || detailMode !== "preview") return;
     let cancelled = false;
-    void getRuntimeState({ data: { projectId: project.id } })
-      .then((runtime) => {
-        if (!cancelled) setManualRuntime(toRuntimeUIState(runtime));
-      })
-      .catch(() => {
-        if (!cancelled) setManualRuntime(null);
+    const refresh = () => {
+      void refreshProjectPreviewToken({ data: { projectId: project.id } }).catch(() => {
+        if (!cancelled) setPreviewStartError("Unable to refresh preview access.");
       });
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 10 * 60 * 1000);
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
     };
-  }, [getRuntimeState, project?.id]);
-
-  useEffect(() => () => closeActiveStream(), [closeActiveStream]);
+  }, [detailMode, project?.id, refreshProjectPreviewToken]);
 
   const selectedNode = useMemo(
     () => findNode(workspace?.fileTree ?? [], selectedNodeId),
@@ -1137,6 +1154,7 @@ function ProjectDetailPage() {
 
 function runtimeStatusBadge(
   state: RuntimeUIState,
+  previewStarting = false,
 ): { label: string; tone: string; icon: React.ReactNode } | null {
   switch (state.status) {
     case "installing":
@@ -1168,9 +1186,13 @@ function runtimeStatusBadge(
       };
     case "stopped":
       return {
-        label: "Stopped",
+        label: previewStarting ? "Resuming..." : "Stopped",
         tone: "border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)]",
-        icon: <TriangleAlert aria-hidden="true" size={12} />,
+        icon: previewStarting ? (
+          <Loader2 aria-hidden="true" className="animate-spin" size={12} />
+        ) : (
+          <TriangleAlert aria-hidden="true" size={12} />
+        ),
       };
     case "error":
       return {
@@ -1417,9 +1439,9 @@ function PreviewWorkspace({
   const showIframe =
     runtimeState.status === "running" && runtimeState.previewUrl;
   const showInitPanel =
-    !runtimeState.previewUrl &&
-    ["idle", "stopped", "error"].includes(runtimeState.status);
-  const statusBadge = runtimeStatusBadge(runtimeState);
+    ["idle", "stopped", "error"].includes(runtimeState.status) &&
+    runtimeState.status !== "running";
+  const statusBadge = runtimeStatusBadge(runtimeState, previewStarting);
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--app-panel)] transition-colors duration-300">

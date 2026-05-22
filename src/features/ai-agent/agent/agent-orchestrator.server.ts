@@ -13,6 +13,7 @@ import type { SnapshotService } from "../project/snapshot-service.server";
 import type { AgentConfig } from "./agent-config";
 import type { OpenAIProvider } from "../openai/openai-provider.server";
 import type { RuntimeService } from "../runtime/runtime-service.server";
+import type { RuntimeOrchestrator } from "../runtime/runtime-orchestrator.server";
 import { sanitizeForUser } from "./user-facing-presenter";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { buildFileManifest } from "../source/code-index-service.server";
@@ -51,6 +52,7 @@ import {
   type DesignIntentLabel,
 } from "../planning/design-intent-heuristic";
 import { applyTokenPatches } from "../code-tools/services/design-rule-patch-service.server";
+import { getProjectWorkspaceRoot } from "@/server/config/paths.server";
 
 export type HandlePromptInput = {
   projectId: string;
@@ -71,6 +73,7 @@ export type AgentOrchestratorDeps = {
   openAIProvider?: OpenAIProvider;
   agentConfig?: AgentConfig;
   runtimeService?: RuntimeService;
+  runtimeOrchestrator?: RuntimeOrchestrator;
   selectedStoreSlugResolver?: (projectId: string, userId?: string) => Promise<string | null>;
 };
 
@@ -239,7 +242,7 @@ export class AgentOrchestrator {
         }
         const patchResult = await applyTokenPatches({
           projectId: input.projectId,
-          workspaceRoot: `./projects/${input.projectId}`,
+          workspaceRoot: getProjectWorkspaceRoot(input.projectId),
           tokenHints: designIntent.tokenHints,
         });
         if (!patchResult.ok) {
@@ -300,7 +303,7 @@ export class AgentOrchestrator {
         });
         const redesignResult = await generateAndWriteDesignFile({
           projectId: input.projectId,
-          workspaceRoot: `./projects/${input.projectId}`,
+          workspaceRoot: getProjectWorkspaceRoot(input.projectId),
           websiteSpec: redesignWebsiteSpec,
           userPrompt: input.prompt,
           provider: this.deps.openAIProvider,
@@ -343,7 +346,7 @@ export class AgentOrchestrator {
         userId: input.userId ?? "",
         projectId: input.projectId,
         messageId: input.messageId ?? run.id,
-        workspaceRoot: `./projects/${input.projectId}`,
+        workspaceRoot: getProjectWorkspaceRoot(input.projectId),
         projectState: activeProjectState,
       };
       (toolExecutionContext as unknown as { __codeToolSnapshotId: string }).__codeToolSnapshotId = `update-${run.id}`;
@@ -539,7 +542,7 @@ export class AgentOrchestrator {
     const designResult = await runPhase("generate_design_file", () =>
       generateAndWriteDesignFile({
         projectId: input.projectId,
-        workspaceRoot: `./projects/${input.projectId}`,
+        workspaceRoot: getProjectWorkspaceRoot(input.projectId),
         websiteSpec,
         userPrompt: input.prompt,
         provider: this.deps.openAIProvider,
@@ -562,7 +565,7 @@ export class AgentOrchestrator {
     const designRules = await runPhase("load_design_rules", () =>
       loadProjectDesignRules({
         projectId: input.projectId,
-        workspaceRoot: `./projects/${input.projectId}`,
+        workspaceRoot: getProjectWorkspaceRoot(input.projectId),
       }),
     );
     yield {
@@ -611,7 +614,7 @@ export class AgentOrchestrator {
       userId: input.userId ?? "",
       projectId: input.projectId,
       messageId: input.messageId ?? args.runId,
-      workspaceRoot: `./projects/${input.projectId}`,
+      workspaceRoot: getProjectWorkspaceRoot(input.projectId),
       projectState,
       flags: {
         designRulesLoaded: true,
@@ -870,8 +873,17 @@ export class AgentOrchestrator {
 
     let previewUrl: string | undefined;
 
-    const workspaceRoot = `./projects/${input.projectId}`;
-    if (this.deps.runtimeService) {
+    const workspaceRoot = getProjectWorkspaceRoot(input.projectId);
+    if (this.deps.runtimeOrchestrator) {
+      void this.deps.runtimeOrchestrator.scheduleEnsureRunning({
+        projectId: input.projectId,
+        workspaceRoot,
+        userId: input.userId,
+        signal: input.signal,
+      }).catch((error) => {
+        logAgentPhase("failed", "runtime_schedule", phaseContext, error);
+      });
+    } else if (this.deps.runtimeService) {
       const installYield = this.deps.runtimeService.runPostInitInstall({
         projectId: input.projectId,
         workspaceRoot,
@@ -893,34 +905,10 @@ export class AgentOrchestrator {
           runId: args.runId,
           signal: input.signal,
         });
-        let devFailed = false;
-        let devErrorTier: "code" | "config" | "system" | null = null;
-        let devErrorMessage: string | null = null;
         for await (const event of devYield) {
           yield event;
           if (event.type === "dev_ready") {
             previewUrl = event.previewUrl;
-          }
-          if (event.type === "dev_error") {
-            devFailed = true;
-            devErrorTier = event.tier;
-            devErrorMessage = event.error;
-          }
-        }
-
-        if (devFailed && devErrorTier && devErrorTier !== "system" && this.deps.runtimeService) {
-          const fixYield = this.deps.runtimeService.runErrorFixLoop({
-            projectId: input.projectId,
-            workspaceRoot,
-            runId: args.runId,
-            currentDevLog: devErrorMessage ?? "",
-            signal: input.signal,
-          });
-          for await (const event of fixYield) {
-            yield event;
-            if (event.type === "dev_ready") {
-              previewUrl = event.previewUrl;
-            }
           }
         }
       }

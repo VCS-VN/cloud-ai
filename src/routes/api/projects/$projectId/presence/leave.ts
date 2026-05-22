@@ -11,6 +11,7 @@ const LEAVE_REASONS = new Set<PresenceLeaveReason>([
 ]);
 
 export const Route = createFileRoute(
+  // @ts-ignore API routes are runtime-only and omitted from routeTree.gen.ts.
   "/api/projects/$projectId/presence/leave",
 )({
   server: {

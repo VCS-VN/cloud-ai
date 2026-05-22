@@ -5,6 +5,7 @@ import { presenceService } from "@/features/ai-agent/runtime/presence-service.se
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
 export const Route = createFileRoute(
+  // @ts-ignore API routes are runtime-only and omitted from routeTree.gen.ts.
   "/api/projects/$projectId/presence/heartbeat",
 )({
   server: {

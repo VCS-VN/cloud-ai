@@ -1,0 +1,2 @@
+ALTER TABLE project_states
+ALTER COLUMN dev_runtime SET DEFAULT '{"status":"stopped","enabled":false,"pid":null,"port":null,"previewHost":null,"cloudflareDnsRecordId":null,"dnsStatus":"none","installStatus":"idle","installStartedAt":null,"installCompletedAt":null,"devStartedAt":null,"previewUrl":null,"lastAccessedAt":null,"installLog":null,"devLog":null,"lastError":null,"lastErrorTier":null,"retryCount":0,"maxRetries":3,"operatorAttentionRequired":false,"fixAttempts":[]}'::json;
