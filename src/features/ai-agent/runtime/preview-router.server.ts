@@ -4,6 +4,10 @@ import type { RuntimeOrchestrator } from "./runtime-orchestrator.server";
 import { PREVIEW_TOKEN_COOKIE_NAME, type PreviewTokenService } from "./preview-token-service.server";
 import { getPreviewRuntimeConfig } from "./preview-runtime-config.server";
 
+type ProxyTargetResult =
+  | { ok: true; projectId: string; target: string }
+  | { ok: false; reason: string; projectId?: string; details?: Record<string, unknown> };
+
 export type PreviewRouterOptions = {
   runtimeOrchestrator: RuntimeOrchestrator;
   tokenService?: Pick<PreviewTokenService, "verifyToken">;
@@ -34,13 +38,14 @@ export function startPreviewRouterOnce(options: PreviewRouterOptions) {
   });
 
   server.on("upgrade", async (request, socket, head) => {
-    const target = await resolveProxyTarget(request, options);
-    if (!target) {
+    const result = await resolveProxyTargetResult(request, options);
+    if (!result.ok) {
+      logRouterReject(request, result);
       socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
       socket.destroy();
       return;
     }
-    proxy.ws(request, socket, head, { target });
+    proxy.ws(request, socket, head, { target: result.target });
   });
 
   server.listen(options.port ?? config.routerPort, options.host ?? config.routerHost);
@@ -53,25 +58,31 @@ async function proxyRequest(input: {
   proxy: httpProxy;
   options: PreviewRouterOptions;
 }) {
-  const target = await resolveProxyTarget(input.request, input.options);
-  if (!target) {
+  const result = await resolveProxyTargetResult(input.request, input.options);
+  if (!result.ok) {
+    logRouterReject(input.request, result);
     input.response.statusCode = 404;
     input.response.end("Preview not found.");
     return;
   }
-  input.proxy.web(input.request, input.response, { target }, (error) => {
+  input.proxy.web(input.request, input.response, { target: result.target }, (error) => {
     input.response.statusCode = 503;
     input.response.end(error instanceof Error ? error.message : "Preview unavailable.");
   });
 }
 
 export async function resolveProxyTarget(request: IncomingMessage, options: PreviewRouterOptions) {
+  const result = await resolveProxyTargetResult(request, options);
+  return result.ok ? result.target : null;
+}
+
+async function resolveProxyTargetResult(request: IncomingMessage, options: PreviewRouterOptions): Promise<ProxyTargetResult> {
   const projectId = extractProjectIdFromPreviewHost(request.headers.host, options.publicHost);
-  if (!projectId) return null;
+  if (!projectId) return { ok: false, reason: "host_mismatch" };
   if (options.tokenService) {
     const token = readCookie(request.headers.cookie, PREVIEW_TOKEN_COOKIE_NAME);
     const verification = await options.tokenService.verifyToken({ token, projectId });
-    if (!verification.ok) return null;
+    if (!verification.ok) return { ok: false, projectId, reason: `auth_${verification.reason}` };
   }
   const runtime = await options.runtimeOrchestrator.getRuntimeState(projectId);
   let port = runtime.status === "running" ? runtime.port : null;
@@ -79,9 +90,26 @@ export async function resolveProxyTarget(request: IncomingMessage, options: Prev
     const resumed = await options.runtimeOrchestrator.resumePreview(projectId);
     if (resumed.success) port = resumed.port;
   }
-  if (!port) return null;
+  if (!port) {
+    return {
+      ok: false,
+      projectId,
+      reason: "runtime_not_running",
+      details: { status: runtime.status, enabled: runtime.enabled, port: runtime.port, previewUrl: runtime.previewUrl },
+    };
+  }
   await options.runtimeOrchestrator.touchLastAccessed(projectId);
-  return `http://127.0.0.1:${port}`;
+  return { ok: true, projectId, target: `http://127.0.0.1:${port}` };
+}
+
+function logRouterReject(request: IncomingMessage, result: Extract<ProxyTargetResult, { ok: false }>) {
+  console.info(JSON.stringify({
+    event: "preview_router_rejected",
+    host: request.headers.host,
+    reason: result.reason,
+    projectId: result.projectId,
+    details: result.details,
+  }));
 }
 
 function readCookie(header: string | undefined, name: string) {

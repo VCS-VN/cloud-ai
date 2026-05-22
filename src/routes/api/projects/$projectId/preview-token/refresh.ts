@@ -13,7 +13,7 @@ export const Route = createFileRoute(
         const { getProjectServices } = await import("@/server/services/project-services");
         const { previewTokenService } = await getProjectServices();
         const result = await previewTokenService.issueToken({ projectId: params.projectId, userId: user.id });
-        const headers = new Headers({ "content-type": "application/json" });
+        const headers = new Headers({ "content-type": "application/json", "cache-control": "no-store" });
         headers.append(
           "Set-Cookie",
           serializeCookie(PREVIEW_TOKEN_COOKIE_NAME, result.token, previewTokenService.getCookieOptions()),
