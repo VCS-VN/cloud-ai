@@ -143,10 +143,6 @@ export function renderInfrastructureFiles(
       content: `${JSON.stringify(packageJson, null, 2)}\n`,
     },
     {
-      path: ".env",
-      content: renderEnvSource(),
-    },
-    {
       path: ".env.example",
       content: renderEnvExampleSource(),
     },

@@ -38,7 +38,7 @@ export class GeneratedProjectEnvWriter {
   async syncStoreSlug(projectId: string, slug: string | null): Promise<void> {
     let content: string;
     try {
-      content = await this.projectFileStore.readTextFile(projectId, ".env");
+      content = await this.projectFileStore.readManagedEnvFile(projectId);
     } catch (err) {
       if (isFileNotFoundError(err)) return;
       throw err;
@@ -46,7 +46,7 @@ export class GeneratedProjectEnvWriter {
 
     const next = applyStoreSlugToEnv(content, slug);
     if (next === content) return;
-    await this.projectFileStore.writeTextFile(projectId, ".env", next);
+    await this.projectFileStore.writeManagedEnvFile(projectId, next);
   }
 }
 
