@@ -12,6 +12,7 @@ import {
 } from "./services/design-patch-content-validator.server";
 import { buildProjectTokenIndex } from "./services/design-token-extractor.server";
 import { loadProjectDesignRules } from "./services/design-file-service.server";
+import { scanGeneratedApiClientPolicy, formatGeneratedApiClientPolicyViolations } from "./services/generated-api-client-policy.server";
 
 export async function executeProjectTool(input: {
   registry: CodeToolRegistry;
@@ -105,6 +106,29 @@ export async function executeProjectTool(input: {
     );
   }
   const args = softNormalizeToolArgs(tool, argParseResult.value);
+
+  if (tool.category === "mutate") {
+    const changedFilesWithContent = extractChangedFilesWithContent(tool.name, args);
+    if (changedFilesWithContent.length > 0) {
+      const apiClientPolicy = scanGeneratedApiClientPolicy(changedFilesWithContent);
+      if (!apiClientPolicy.ok) {
+        console.warn(JSON.stringify({
+          event: "generated_api_client_policy_violation",
+          tool: tool.name,
+          violationCount: apiClientPolicy.violations.length,
+        }));
+        return toolError(
+          input.context,
+          tool.name,
+          tool.category,
+          startedAt,
+          "GENERATED_API_CLIENT_POLICY_VIOLATION",
+          formatGeneratedApiClientPolicyViolations(apiClientPolicy.violations),
+          true,
+        );
+      }
+    }
+  }
 
   if (tool.category === "mutate") {
     const flags = (input.context as any).flags;

@@ -98,6 +98,9 @@ export function buildStoreRuntimeInstructions(input: {
   );
   lines.push("- Preserve unrelated environment variables when adding or updating VITE_STORE_SLUG.");
   lines.push(
+    "- Generated storefront API requests MUST always go through `apiClient` from `@/services/http/client`. NEVER use native `fetch` for customer/store API requests. Store hooks MUST import `import { apiClient } from '@/services/http/client'` and call `apiClient.get(...)` with `params`; do not use URLSearchParams, response.json(), or fetch('/api/...').",
+  );
+  lines.push(
     "- Generated storefront code MUST handle store detail, products list, product detail, and categories list state via useQuery from @tanstack/react-query. Each list/detail hook returns real API data when VITE_STORE_SLUG exists and a sample fallback (resolved internally) when it is missing.",
   );
   lines.push("- Required generated store data functions and contracts:");
@@ -112,7 +115,7 @@ export function buildStoreRuntimeInstructions(input: {
     "  - GET /api/v1/categories with query param storeId for categories list. Response shape is CategoriesList { total, data: Category[] } where Category is { id, name, storeId? }.",
   );
   lines.push(
-    "  - GET /api/v1/products/suggestions with query params storeId and query for product name suggestions. Response shape: ProductSuggestionsList { total: number, data: string[] }. Generated useProductSuggestions({ storeId, query }) MUST use useQuery from @tanstack/react-query with queryKey ['product-suggestions', storeId, query.trim()] and enabled = hasStoreSlug && Boolean(storeId) && query.trim().length > 0. The hook returns { suggestions: string[], total, isLoading, isError, error, refetch }. Sample fallback when VITE_STORE_SLUG is missing OR query is empty returns a deterministic case-insensitive substring match of product names from @/data/products against query, deduped and capped at 8.",
+    "  - GET /api/v1/products/suggestions with query params storeId and query for product name suggestions. Response shape: ProductSuggestionsList { total: number, data: string[] }. Generated useProductSuggestions({ storeId, query }) MUST use useQuery from @tanstack/react-query and apiClient.get<ProductSuggestionsList>('/api/v1/products/suggestions', { params }) with queryKey ['product-suggestions', storeId, query.trim()] and enabled = hasStoreSlug && Boolean(storeId) && query.trim().length > 0. The hook returns { suggestions: string[], total, isLoading, isError, error, refetch }. Sample fallback when VITE_STORE_SLUG is missing OR query is empty returns a deterministic case-insensitive substring match of product names from @/data/products against query, deduped and capped at 8.",
   );
   lines.push(
     "- Do not invent additional store API endpoints, query params, or response schemas beyond the five listed contracts.",

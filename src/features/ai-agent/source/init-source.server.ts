@@ -838,7 +838,7 @@ export function useCategoriesList(storeId?: string): UseQueryResult<CategoriesLi
 `;
 }
 
-function productSuggestionsQuerySource() {
+export function productSuggestionsQuerySource() {
   return `import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/services/http/client'
 import { hasStoreSlug } from '@/services/store/use-store-detail'

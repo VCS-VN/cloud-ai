@@ -17,7 +17,7 @@ import type { RuntimeOrchestrator } from "../runtime/runtime-orchestrator.server
 import { sanitizeForUser } from "./user-facing-presenter";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { buildFileManifest } from "../source/code-index-service.server";
-import { initInfrastructureSource, initSource } from "../source/init-source.server";
+import { initInfrastructureSource, initSource, productSuggestionsQuerySource } from "../source/init-source.server";
 import { REQUIRED_GENERATED_STOREFRONT_FILES } from "../source/generated-project-layout";
 import { buildRetailInitPrompt } from "./init-prompt.server";
 import {
@@ -980,6 +980,28 @@ export class AgentOrchestrator {
         event: "init_invariant_repair_failed",
         projectId,
         path: rootPath,
+        error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
+      }));
+    }
+
+    const suggestionsPath = "src/services/store/use-product-suggestions.ts";
+    try {
+      const suggestionsSource = await this.deps.projectFileStore.readTextFile(projectId, suggestionsPath);
+      if (suggestionsSource.includes("fetch(") || !suggestionsSource.includes("@/services/http/client") || !suggestionsSource.includes("apiClient.get<ProductSuggestionsList>")) {
+        await this.deps.projectFileStore.writeTextFile(projectId, suggestionsPath, productSuggestionsQuerySource());
+        changedFiles.push(suggestionsPath);
+        console.info(JSON.stringify({
+          event: "init_invariant_repaired",
+          projectId,
+          path: suggestionsPath,
+          invariant: "product_suggestions_uses_api_client",
+        }));
+      }
+    } catch (error) {
+      console.warn(JSON.stringify({
+        event: "init_invariant_repair_failed",
+        projectId,
+        path: suggestionsPath,
         error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
       }));
     }

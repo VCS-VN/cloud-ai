@@ -31,21 +31,21 @@ const STEP_BY_EVENT: Partial<Record<AgentStreamEvent["type"], string>> = {
 };
 
 const FALLBACK_LABELS: Record<string, string> = {
-  analyzing: "Analyzing your request",
-  understanding: "Understanding storefront requirements",
-  planning: "Planning changes",
-  design: "Preparing design rules",
-  generating: "Creating project files",
-  validating: "Checking generated project",
-  saving: "Saving project state",
-  installing: "Installing dependencies",
+  analyzing: "Understanding your request",
+  understanding: "Understanding your request",
+  planning: "Planning storefront",
+  design: "Preparing design",
+  generating: "Creating storefront files",
+  validating: "Checking setup",
+  saving: "Saving progress",
+  installing: "Installing packages",
   "starting-preview": "Starting preview",
   "preview-ready": "Preview ready",
   done: "Done",
-  error: "Could not complete",
+  error: "Something went wrong",
 };
 
-const STALE_CONTENT = new Set(["Analyzing your request", "### Status\n- Preparing to process your request..."]);
+const STALE_CONTENT = new Set(["Analyzing your request", "Understanding your request", "### Status\n- Preparing to process your request..."]);
 
 export function deriveAgentProgressSteps(events: AgentStreamEvent[], userPrompt?: string): AgentProgressStep[] {
   const ctx = deriveContextFromEvents(events, { userPrompt });
@@ -56,10 +56,11 @@ export function deriveAgentProgressSteps(events: AgentStreamEvent[], userPrompt?
     if (!key) continue;
     const formatted = formatUserFacingStatus(event, ctx);
     const failed = event.type === "error" || event.type === "dev_error" || event.type === "dev_install_failed" || event.type === "dev_fix_failed";
+    const preferFallback = event.type === "file_changed" || event.type === "project_state_updated" || event.type.startsWith("design_") || event.type.startsWith("dev_");
     steps.set(key, {
       key,
-      label: formatted?.kind === "user" && formatted.label ? formatted.label : FALLBACK_LABELS[key],
-      detail: formatted?.kind === "user" ? formatted.detail : undefined,
+      label: preferFallback ? FALLBACK_LABELS[key] : formatted?.kind === "user" && formatted.label ? formatted.label : FALLBACK_LABELS[key],
+      detail: preferFallback ? undefined : formatted?.kind === "user" ? formatted.detail : undefined,
       status: failed ? "failed" : "completed",
     });
   }

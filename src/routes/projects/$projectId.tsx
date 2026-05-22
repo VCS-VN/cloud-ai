@@ -46,10 +46,10 @@ import {
 import type { RuntimeUIState } from "@/features/ai-agent/ui/agent-event-reducer";
 import { AgentEventTimeline } from "@/features/ai-agent/ui/agent-event-timeline";
 import { synthesizeAgentProgressContent, shouldReplaceStaleAgentContent } from "@/features/ai-agent/ui/agent-progress";
+import { isProjectPreviewStartAvailable, isProjectPreviewTemporarilyUnavailable } from "@/features/ai-agent/ui/preview-availability";
 import { StreamingTextPanel } from "@/features/ai-agent/ui/streaming-text-panel";
 import { useUserPresence } from "@/hooks/useUserPresence";
 import { UserMenu } from "@/components/auth/UserMenu";
-import { FilePreviewPanel } from "@/components/projects/FilePreviewPanel";
 import { MessageComposer } from "@/components/projects/MessageComposer";
 import { ProjectFileExplorer } from "@/components/projects/ProjectFileExplorer";
 import { ProjectMessagesPanel } from "@/components/projects/ProjectMessagesPanel";
@@ -637,7 +637,7 @@ function ProjectDetailPage() {
             {
               type: "error",
               code: "STREAM_DISCONNECTED",
-              message: "The response stream disconnected before completion.",
+              message: "Something interrupted the response. You can retry safely.",
               recoverable: true,
             },
           ];
@@ -646,13 +646,13 @@ function ProjectDetailPage() {
           ...message,
           content: shouldReplaceStaleAgentContent(message.content)
             ? `${synthesizeAgentProgressContent(agentEvents, [...messages].reverse().find((item) => item.role === "user")?.content)}
-- ✕ Stream disconnected. Retry the request if it does not resume.`
+- ✕ Something interrupted the response. You can retry safely.`
             : message.content,
           processingStatus: "failed",
-          errorMessage: "The response stream disconnected before completion.",
+          errorMessage: "Something interrupted the response. You can retry safely.",
           updatedAt: new Date().toISOString(),
         }));
-        setSendError("The response stream disconnected before completion.");
+        setSendError("Something interrupted the response. You can retry safely.");
 
         setProject((currentProject) =>
           currentProject
@@ -1044,6 +1044,12 @@ function ProjectDetailPage() {
 
   const handleStartPreview = useCallback(async () => {
     if (!project?.id || previewStarting) return;
+    if (!isProjectPreviewStartAvailable({
+      projectStatus: project.status,
+      projectProcessingStatus: project.processingStatus,
+      runtimeStatus: runtimeState.status,
+      previewUrl: runtimeState.previewUrl,
+    })) return;
     setPreviewStarting(true);
     setPreviewStartError(null);
     setManualRuntime((current) => ({
@@ -1092,7 +1098,7 @@ function ProjectDetailPage() {
     } finally {
       setPreviewStarting(false);
     }
-  }, [project?.id, previewStarting, refreshPreviewToken, router, startProjectPreview]);
+  }, [project, previewStarting, refreshPreviewToken, router, runtimeState.previewUrl, runtimeState.status, startProjectPreview]);
 
   return (
     <main className={`h-dvh min-h-0 overflow-hidden bg-(--app-bg) text-(--app-text) ${resizingChat ? "cursor-col-resize select-none" : ""}`}>
@@ -1178,6 +1184,8 @@ function ProjectDetailPage() {
               previewPath={previewPath}
               runtimeState={runtimeState}
               previewStarting={previewStarting}
+              projectStatus={project.status}
+              projectProcessingStatus={project.processingStatus}
               onToggleChat={toggleChat}
               onModeChange={setDetailMode}
               onPathChange={setPreviewPath}
@@ -1188,11 +1196,12 @@ function ProjectDetailPage() {
               <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-md  border-[var(--app-border)] bg-[var(--app-panel)] transition-colors duration-300">
                 {detailMode === "preview" ? (
                   <PreviewWorkspace
-                    selectedNode={selectedNode}
                     previewPath={previewPath}
                     runtimeState={runtimeState}
                     projectId={project?.id ?? ""}
                     previewStarting={previewStarting}
+                    projectStatus={project.status}
+                    projectProcessingStatus={project.processingStatus}
                     previewTokenState={previewTokenState}
                     onRefreshPreviewToken={() => project?.id ? void refreshPreviewToken(project.id) : undefined}
                     previewStartError={previewStartError}
@@ -1401,6 +1410,8 @@ function PreviewToolbar({
   previewPath,
   runtimeState,
   previewStarting,
+  projectStatus,
+  projectProcessingStatus,
   onToggleChat,
   onModeChange,
   onPathChange,
@@ -1412,6 +1423,8 @@ function PreviewToolbar({
   previewPath: string;
   runtimeState: RuntimeUIState;
   previewStarting: boolean;
+  projectStatus: Project["status"];
+  projectProcessingStatus: Project["processingStatus"];
   onToggleChat: () => void;
   onModeChange: (mode: DetailMode) => void;
   onPathChange: (path: string) => void;
@@ -1420,9 +1433,13 @@ function PreviewToolbar({
 }) {
   const previewUrl =
     runtimeState.status === "running" ? runtimeState.previewUrl : null;
-  const canStartPreview =
-    !previewUrl &&
-    ["idle", "stopped", "error"].includes(runtimeState.status);
+  const canStartPreview = isProjectPreviewStartAvailable({
+    projectStatus,
+    projectProcessingStatus,
+    runtimeStatus: runtimeState.status,
+    previewUrl,
+  });
+  const previewTemporarilyUnavailable = isProjectPreviewTemporarilyUnavailable({ projectStatus, projectProcessingStatus });
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-sm pt-3  border-[var(--app-border)] px-sm transition-colors duration-300">
@@ -1483,7 +1500,12 @@ function PreviewToolbar({
 
       <div className="flex shrink-0 items-center gap-xs">
         <UserMenu user={user} compact />
-        {canStartPreview ? (
+        {previewTemporarilyUnavailable ? (
+          <span className="inline-flex h-8 items-center gap-xxs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm text-[12px] text-[var(--app-muted)]">
+            <Loader2 aria-hidden="true" className="animate-spin" size={13} />
+            Building storefront…
+          </span>
+        ) : canStartPreview ? (
           <button
             className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
             type="button"
@@ -1530,21 +1552,23 @@ function PreviewToolbar({
 }
 
 function PreviewWorkspace({
-  selectedNode,
   previewPath: _previewPath,
   runtimeState,
   projectId,
   previewStarting,
+  projectStatus,
+  projectProcessingStatus,
   previewTokenState,
   previewStartError,
   onStartPreview,
   onRefreshPreviewToken,
 }: {
-  selectedNode?: ProjectFileNode;
   previewPath: string;
   runtimeState: RuntimeUIState;
   projectId: string;
   previewStarting: boolean;
+  projectStatus: Project["status"];
+  projectProcessingStatus: Project["processingStatus"];
   previewTokenState: PreviewTokenState;
   previewStartError: string | null;
   onStartPreview: () => void;
@@ -1552,7 +1576,9 @@ function PreviewWorkspace({
 }) {
   const showIframe =
     runtimeState.status === "running" && runtimeState.previewUrl && previewTokenState.status === "ready";
+  const previewTemporarilyUnavailable = isProjectPreviewTemporarilyUnavailable({ projectStatus, projectProcessingStatus });
   const showInitPanel =
+    !previewTemporarilyUnavailable &&
     ["idle", "stopped", "error"].includes(runtimeState.status) &&
     runtimeState.status !== "running";
   const statusBadge = runtimeStatusBadge(runtimeState, previewStarting);
@@ -1607,6 +1633,14 @@ function PreviewWorkspace({
               </button>
             </div>
           </div>
+        ) : previewTemporarilyUnavailable ? (
+          <div className="flex h-full items-center justify-center p-md text-center text-sm text-[var(--app-muted)]">
+            <div className="max-w-sm space-y-xs rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] p-md">
+              <Loader2 className="mx-auto animate-spin text-[var(--app-icon-muted)]" aria-hidden="true" size={22} />
+              <p className="m-0 font-[560] text-[var(--app-text)]">Your storefront is being prepared.</p>
+              <p className="m-0 text-[12px] leading-5">Preview will be available when setup is complete.</p>
+            </div>
+          </div>
         ) : showInitPanel ? (
           <PreviewInitPanel
             projectId={projectId}
@@ -1616,8 +1650,8 @@ function PreviewWorkspace({
             onRetry={onStartPreview}
           />
         ) : (
-          <div className="min-h-0 min-w-0 flex-1 overflow-auto p-sm">
-            <FilePreviewPanel node={selectedNode} />
+          <div className="flex h-full items-center justify-center p-md text-center text-sm text-[var(--app-muted)]">
+            Start preview when your storefront is ready.
           </div>
         )}
       </div>

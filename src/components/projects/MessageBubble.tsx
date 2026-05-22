@@ -29,7 +29,7 @@ function getAgentDisplayContent(
 ) {
   const fallback =
     status === "failed"
-      ? "Could not complete the request. Please try again or adjust your prompt."
+      ? "Something went wrong. You can retry safely."
       : status === "stopped"
         ? "Processing stopped. You can continue with a new prompt."
         : "### Status\n- Preparing to process your request...";

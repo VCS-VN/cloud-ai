@@ -33,7 +33,7 @@ export function sanitizeForUser(text: string): string {
 
 export function mapErrorCodeToFriendly(code?: string): string {
   if (code === "PROVIDER_NOT_CONFIGURED") return "AI is not available right now. Please try again later.";
-  return "Could not complete the request. Please try again or adjust your prompt.";
+  return "Something went wrong. You can retry safely.";
 }
 
 function shortPrompt(ctx: PresenterContext, max = 80): string | undefined {
@@ -52,7 +52,7 @@ export function formatUserFacingStatus(
 ): PresentedStatus | undefined {
   switch (event.type) {
     case "agent_started":
-      return { kind: "user", label: "Analyzing your request" };
+      return { kind: "user", label: "Understanding your request" };
     case "thinking_started":
       return { kind: "user", label: "Understanding your request" };
     case "user_wish_extracted": {
@@ -62,11 +62,11 @@ export function formatUserFacingStatus(
     case "thinking_needs_clarification":
       return { kind: "user", label: "Need clarification", detail: sanitizeForUser(event.question) || undefined };
     case "thinking_completed":
-      return { kind: "user", label: "Ready to build" };
+      return { kind: "user", label: "Planning storefront" };
     case "clarification_required":
       return { kind: "user", label: "Need clarification", detail: sanitizeForUser(event.question) || undefined };
     case "plan_created":
-      return { kind: "user", label: "Plan ready" };
+      return { kind: "user", label: "Planning storefront" };
     case "source_generation_started": {
       const isUpdate = /incremental|patch|update/i.test(event.message ?? "");
       return { kind: "user", label: isUpdate ? "Updating your storefront" : "Building your storefront" };
@@ -76,19 +76,19 @@ export function formatUserFacingStatus(
       return { kind: "user", label: ok ? "Checks passed" : "Some issues to fix" };
     }
     case "code_tool_loop_completed":
-      return { kind: "user", label: "Build completed" };
+      return { kind: "user", label: "Done" };
     case "human_review_required":
       return { kind: "user", label: "Needs your review", detail: sanitizeForUser(event.reason) || undefined };
     case "preview_restart_required":
-      return { kind: "user", label: "Restarting preview" };
+      return { kind: "user", label: "Starting preview" };
     case "dev_install_started":
-      return { kind: "user", label: "Setting up your storefront" };
+      return { kind: "user", label: "Installing packages" };
     case "dev_install_failed":
       return { kind: "user", label: "Setup failed" };
     case "dev_starting":
       return { kind: "user", label: "Starting your preview" };
     case "dev_ready":
-      return { kind: "user", label: "Your preview is ready" };
+      return { kind: "user", label: "Preview ready" };
     case "dev_error":
       return { kind: "user", label: "Preview hit an error" };
     case "dev_fix_attempt":
@@ -102,7 +102,7 @@ export function formatUserFacingStatus(
       return { kind: "user", label: "Done", detail };
     }
     case "error":
-      return { kind: "user", label: "Could not complete", detail: mapErrorCodeToFriendly(event.code) };
+      return { kind: "user", label: "Something went wrong", detail: mapErrorCodeToFriendly(event.code) };
 
     case "state_loaded":
     case "thinking_context_loaded":
