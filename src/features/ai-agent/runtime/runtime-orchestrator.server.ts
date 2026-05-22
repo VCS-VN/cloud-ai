@@ -349,23 +349,49 @@ export class RuntimeOrchestrator {
   }
 }
 
-function defaultRunInstall(input: { workspaceRoot: string; signal?: AbortSignal }): Promise<InstallRunResult> {
+async function defaultRunInstall(input: { workspaceRoot: string; signal?: AbortSignal }): Promise<InstallRunResult> {
+  const startedAt = Date.now();
+  const approval = await runPnpm(["approve-builds", "--all"], input);
+  const install = await runPnpm(["install"], input).catch(async (error: Error & { stdout?: string; stderr?: string }) => {
+    const output = `${error.stdout ?? ""}
+${error.stderr ?? ""}`;
+    if (!/ERR_PNPM_IGNORED_BUILDS|Ignored build scripts/i.test(output)) throw error;
+    const retryApproval = await runPnpm(["approve-builds", "--all"], input);
+    const retryInstall = await runPnpm(["install"], input);
+    return {
+      stdout: `${error.stdout ?? ""}
+${retryApproval.stdout}
+${retryInstall.stdout}`,
+      stderr: `${error.stderr ?? ""}
+${retryApproval.stderr}
+${retryInstall.stderr}`,
+    };
+  });
+  return {
+    exitCode: 0,
+    stdout: `${approval.stdout}
+${install.stdout}`,
+    stderr: `${approval.stderr}
+${install.stderr}`,
+    durationMs: Date.now() - startedAt,
+  };
+}
+
+function runPnpm(args: string[], input: { workspaceRoot: string; signal?: AbortSignal }): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     let child: ChildProcess | null = null;
-    const startedAt = Date.now();
     const abortHandler = () => {
       child?.kill("SIGTERM");
       reject(new Error("Install aborted."));
     };
     input.signal?.addEventListener("abort", abortHandler, { once: true });
-    child = execFile("pnpm", ["install"], { cwd: input.workspaceRoot, timeout: INSTALL_TIMEOUT_MS, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+    child = execFile("pnpm", args, { cwd: input.workspaceRoot, timeout: INSTALL_TIMEOUT_MS, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
       input.signal?.removeEventListener("abort", abortHandler);
-      const durationMs = Date.now() - startedAt;
       if (error) {
-        reject(new Error(`pnpm install failed: ${stderr || error.message}`));
+        reject(Object.assign(new Error(`pnpm ${args.join(" ")} failed: ${stderr || error.message}`), { stdout, stderr }));
         return;
       }
-      resolve({ exitCode: 0, stdout, stderr, durationMs });
+      resolve({ stdout, stderr });
     });
   });
 }

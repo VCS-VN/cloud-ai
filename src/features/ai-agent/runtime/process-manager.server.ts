@@ -54,6 +54,34 @@ export function parseViteError(line: string): { hasError: boolean; error?: strin
   return { hasError: false };
 }
 
+function runPnpm(args: string[], workspaceRoot: string, signal?: AbortSignal): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    let child: ChildProcess | null = null;
+    const abortHandler = () => {
+      child?.kill("SIGTERM");
+      reject(new Error("Install aborted."));
+    };
+    signal?.addEventListener("abort", abortHandler, { once: true });
+    child = execFile(
+      "pnpm",
+      args,
+      {
+        cwd: workspaceRoot,
+        timeout: INSTALL_TIMEOUT_MS,
+        maxBuffer: 10 * 1024 * 1024,
+      },
+      (error, stdout, stderr) => {
+        signal?.removeEventListener("abort", abortHandler);
+        if (error) {
+          reject(Object.assign(new Error(`pnpm ${args.join(" ")} failed: ${stderr || error.message}`), { stdout, stderr }));
+          return;
+        }
+        resolve({ stdout, stderr });
+      },
+    );
+  });
+}
+
 export class ProcessManager {
   private processes = new Map<string, ChildProcess>();
 
@@ -68,50 +96,37 @@ export class ProcessManager {
     });
   }
 
-  runInstall(
+  async runInstall(
     projectId: string,
     workspaceRoot: string,
     signal?: AbortSignal,
   ): Promise<InstallResult> {
-    return new Promise((resolve, reject) => {
-      const startedAt = Date.now();
-
-      const abortHandler = () => reject(new Error("Install aborted."));
-      signal?.addEventListener("abort", abortHandler, { once: true });
-
-      execFile(
-        "pnpm",
-        ["install"],
-        {
-          cwd: workspaceRoot,
-          timeout: INSTALL_TIMEOUT_MS,
-          maxBuffer: 10 * 1024 * 1024,
-        },
-        (error, stdout, stderr) => {
-          signal?.removeEventListener("abort", abortHandler);
-          const durationMs = Date.now() - startedAt;
-          if (error) {
-            reject(
-              Object.assign(
-                new Error(
-                  `pnpm install failed with code ${(error as NodeJS.ErrnoException).code ?? "unknown"}: ${stderr || error.message}`,
-                ),
-                {
-                  exitCode: (error as NodeJS.ErrnoException).code === "ERR_CHILD_PROCESS_TIMEOUT"
-                    ? 124
-                    : (error as { status?: number }).status ?? 1,
-                  stdout,
-                  stderr,
-                  durationMs,
-                },
-              ),
-            );
-            return;
-          }
-          resolve({ exitCode: 0, stdout, stderr, durationMs });
-        },
-      );
+    void projectId;
+    const startedAt = Date.now();
+    const approval = await runPnpm(["approve-builds", "--all"], workspaceRoot, signal);
+    const install = await runPnpm(["install"], workspaceRoot, signal).catch(async (error: Error & { stdout?: string; stderr?: string }) => {
+      const output = `${error.stdout ?? ""}
+${error.stderr ?? ""}`;
+      if (!/ERR_PNPM_IGNORED_BUILDS|Ignored build scripts/i.test(output)) throw error;
+      const retryApproval = await runPnpm(["approve-builds", "--all"], workspaceRoot, signal);
+      const retryInstall = await runPnpm(["install"], workspaceRoot, signal);
+      return {
+        stdout: `${error.stdout ?? ""}
+${retryApproval.stdout}
+${retryInstall.stdout}`,
+        stderr: `${error.stderr ?? ""}
+${retryApproval.stderr}
+${retryInstall.stderr}`,
+      };
     });
+    return {
+      exitCode: 0,
+      stdout: `${approval.stdout}
+${install.stdout}`,
+      stderr: `${approval.stderr}
+${install.stderr}`,
+      durationMs: Date.now() - startedAt,
+    };
   }
 
   async startDevServer(
