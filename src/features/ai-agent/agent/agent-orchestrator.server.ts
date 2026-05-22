@@ -804,9 +804,15 @@ export class AgentOrchestrator {
       };
     }
 
+    const invariantFixes = await this.ensureGeneratedProjectInvariants(input.projectId);
+    for (const path of invariantFixes) {
+      yield { type: "file_changed", path, operation: "modified" };
+    }
+
     const allChangedFiles = [
       ...initResult.files.map((f) => f.path),
       ...loopResult.changedFiles,
+      ...invariantFixes,
     ];
     const uniqueChangedFiles = [...new Set(allChangedFiles)];
     const infraManifest = buildFileManifest(initResult.files);
@@ -932,6 +938,53 @@ export class AgentOrchestrator {
       changedFiles: uniqueChangedFiles,
       previewUrl,
     };
+  }
+
+
+  private async ensureGeneratedProjectInvariants(projectId: string) {
+    if (!this.deps.projectFileStore) return [];
+    const changedFiles: string[] = [];
+    const rootPath = "src/routes/__root.tsx";
+
+    try {
+      const rootSource = await this.deps.projectFileStore.readTextFile(projectId, rootPath);
+      let nextRootSource = rootSource
+        .replace(/^import\s+['\"]\.\.\/app\.css['\"];?\s*$/m, "")
+        .replace(/^import\s+['\"]\.\/app\.css['\"];?\s*$/m, "")
+        .replace(/^import\s+appCss\s+from\s+['\"]\.\.\/app\.css\?url['\"];?\s*$/m, "")
+        .replace(/^import\s+appCss\s+from\s+['\"]@\/styles\/app\.css\?url['\"];?\s*$/m, "");
+
+      if (!nextRootSource.includes("@vitejs/plugin-react/preamble")) {
+        nextRootSource = `import '@vitejs/plugin-react/preamble'\n${nextRootSource}`;
+      }
+      if (!nextRootSource.includes("@/styles/app.css")) {
+        const preambleImport = "import '@vitejs/plugin-react/preamble'";
+        nextRootSource = nextRootSource.includes(preambleImport)
+          ? nextRootSource.replace(preambleImport, `${preambleImport}\nimport '@/styles/app.css'`)
+          : `import '@/styles/app.css'\n${nextRootSource}`;
+      }
+      nextRootSource = nextRootSource.replace(/\n{3,}/g, "\n\n");
+
+      if (nextRootSource !== rootSource) {
+        await this.deps.projectFileStore.writeTextFile(projectId, rootPath, nextRootSource);
+        changedFiles.push(rootPath);
+        console.info(JSON.stringify({
+          event: "init_invariant_repaired",
+          projectId,
+          path: rootPath,
+          invariant: "react_preamble_and_styles_alias",
+        }));
+      }
+    } catch (error) {
+      console.warn(JSON.stringify({
+        event: "init_invariant_repair_failed",
+        projectId,
+        path: rootPath,
+        error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
+      }));
+    }
+
+    return changedFiles;
   }
 
   private async resolveSelectedStoreSlug(projectId: string, userId?: string) {

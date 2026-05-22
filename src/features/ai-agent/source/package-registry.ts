@@ -24,7 +24,6 @@ export const INITIAL_PROJECT_PACKAGES: InitialProjectPackage[] = [
   { name: "@tanstack/react-query", version: "^5.100.9", installType: "dependencies", reason: "Server-state/cache layer." },
   { name: "@tanstack/react-router", version: "^1.169.1", installType: "dependencies", reason: "Routing for generated app." },
   { name: "@tanstack/react-start", version: "^1.167.62", installType: "dependencies", reason: "Full-stack React framework." },
-  { name: "@vitejs/plugin-react", version: "6.0.1", installType: "dependencies", reason: "React plugin per policy." },
   { name: "axios", version: "^1.16.0", installType: "dependencies", reason: "HTTP client." },
   { name: "class-variance-authority", version: "^0.7.1", installType: "dependencies", reason: "shadcn component variants." },
   { name: "clsx", version: "^2.1.1", installType: "dependencies", reason: "Classname utility for shadcn." },
@@ -45,12 +44,13 @@ export const INITIAL_PROJECT_PACKAGES: InitialProjectPackage[] = [
   { name: "@types/lodash", version: "^4.17.13", installType: "devDependencies", reason: "Types for lodash." },
   { name: "@types/react", version: "19.2.14", installType: "devDependencies", reason: "React types." },
   { name: "@types/react-dom", version: "19.2.3", installType: "devDependencies", reason: "React DOM types." },
+  { name: "@vitejs/plugin-react", version: "5.2.0", installType: "devDependencies", reason: "React Vite plugin." },
   { name: "autoprefixer", version: "^10.4.21", installType: "devDependencies", reason: "PostCSS plugin." },
   { name: "postcss", version: "^8.5.6", installType: "devDependencies", reason: "CSS pipeline." },
   { name: "tailwindcss", version: "^3.4.17", installType: "devDependencies", reason: "CSS framework." },
   { name: "tsx", version: "^4.21.0", installType: "devDependencies", reason: "TS scripts." },
   { name: "typescript", version: "^6.0.3", installType: "devDependencies", reason: "Compiler." },
-  { name: "vite", version: "^8.0.11", installType: "devDependencies", reason: "Vite bundler." },
+  { name: "vite", version: "^7.3.3", installType: "devDependencies", reason: "Vite bundler." },
 ];
 
 export function resolvePackageRegistry(args: { basePackages?: InitialProjectPackage[]; overrides?: PackageVersionOverride[] }) {

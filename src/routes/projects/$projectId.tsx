@@ -45,6 +45,7 @@ import {
 } from "@/features/ai-agent/ui/agent-event-reducer";
 import type { RuntimeUIState } from "@/features/ai-agent/ui/agent-event-reducer";
 import { AgentEventTimeline } from "@/features/ai-agent/ui/agent-event-timeline";
+import { synthesizeAgentProgressContent, shouldReplaceStaleAgentContent } from "@/features/ai-agent/ui/agent-progress";
 import { StreamingTextPanel } from "@/features/ai-agent/ui/streaming-text-panel";
 import { useUserPresence } from "@/hooks/useUserPresence";
 import { UserMenu } from "@/components/auth/UserMenu";
@@ -81,6 +82,7 @@ import type {
 } from "@/shared/project-types";
 
 type DetailMode = "preview" | "code";
+type PreviewTokenState = { status: "idle" | "refreshing" | "ready" | "failed"; error: string | null; refreshedAt: string | null };
 
 const CHAT_WIDTH_KEY = "project-detail-chat-width";
 const CHAT_VISIBLE_KEY = "project-detail-chat-visible";
@@ -251,7 +253,7 @@ function ProjectDetailPage() {
   const [previewStartError, setPreviewStartError] = useState<string | null>(
     null,
   );
-  const [previewTokenReady, setPreviewTokenReady] = useState(false);
+  const [previewTokenState, setPreviewTokenState] = useState<PreviewTokenState>({ status: "idle", error: null, refreshedAt: null });
   const [manualRuntime, setManualRuntime] = useState<RuntimeUIState | null>(
     null,
   );
@@ -357,6 +359,36 @@ function ProjectDetailPage() {
       base,
     ).runtime;
   }, [agentEvents, manualRuntime, runtimeQuery.data, workspace?.devRuntime]);
+  const refreshPreviewToken = useCallback(async (projectId: string, signal?: AbortSignal) => {
+    setPreviewTokenState({ status: "refreshing", error: null, refreshedAt: null });
+    const timeout = new AbortController();
+    const timer = window.setTimeout(() => timeout.abort(), 15000);
+    const abort = () => timeout.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    try {
+      const response = await fetch(`/api/projects/${projectId}/preview-token/refresh`, {
+        method: "POST",
+        credentials: "include",
+        signal: timeout.signal,
+      });
+      if (!response.ok) throw new Error("Unable to refresh preview access.");
+      setPreviewTokenState({ status: "ready", error: null, refreshedAt: new Date().toISOString() });
+      setPreviewStartError(null);
+      return true;
+    } catch (cause) {
+      if (signal?.aborted) return false;
+      const message = cause instanceof Error && cause.name === "AbortError"
+        ? "Timed out while preparing secure preview access."
+        : "Unable to refresh preview access.";
+      setPreviewTokenState({ status: "failed", error: message, refreshedAt: null });
+      setPreviewStartError(message);
+      return false;
+    } finally {
+      window.clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+    }
+  }, []);
+
 
   const { isActive } = useUserPresence({
     projectId: project?.id ?? "",
@@ -453,7 +485,17 @@ function ProjectDetailPage() {
         const event = JSON.parse(
           (rawEvent as MessageEvent<string>).data,
         ) as AgentStreamEvent;
-        setAgentEvents((current) => [...current, event]);
+        setAgentEvents((current) => {
+          const next = [...current, event];
+          if (event.type !== "assistant_message_delta") {
+            const synthesized = synthesizeAgentProgressContent(next, [...messages].reverse().find((message) => message.role === "user")?.content);
+            updateMessage((message) => shouldReplaceStaleAgentContent(message.content) || message.processingStatus === "streaming"
+              ? { ...message, content: synthesized, processingStatus: "streaming", updatedAt: new Date().toISOString() }
+              : message,
+            );
+          }
+          return next;
+        });
         if (event.type === "assistant_message_delta") {
           setAgentReasoning((prev) => prev + event.delta);
         }
@@ -474,6 +516,16 @@ function ProjectDetailPage() {
           void queryClient.invalidateQueries({
             queryKey: ["project-runs", project?.id],
           });
+        }
+        if (event.type === "dev_ready") {
+          setManualRuntime((current) => ({
+            ...(current ?? createInitialAgentEventState().runtime),
+            status: "running",
+            previewUrl: event.previewUrl,
+            previewPort: event.port,
+            error: null,
+            errorTier: null,
+          }));
         }
         if (event.type === "done") {
           void queryClient.invalidateQueries({
@@ -498,15 +550,19 @@ function ProjectDetailPage() {
         if (activeStreamRef.current?.agentMessageId === event.messageId) {
           activeStreamRef.current.hasTerminalEvent = true;
         }
-        updateMessage((message) => ({
-          ...message,
-          content: event.content,
-          processingStatus: event.processingStatus,
-          providerResponseId: event.providerResponseId,
-          errorMessage: event.error?.message,
-          completedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }));
+        updateMessage((message) => {
+          const synthesized = synthesizeAgentProgressContent(agentEvents, [...messages].reverse().find((item) => item.role === "user")?.content, event.content || "Request completed.");
+          const nextContent = shouldReplaceStaleAgentContent(event.content) ? synthesized : event.content;
+          return {
+            ...message,
+            content: nextContent,
+            processingStatus: event.processingStatus,
+            providerResponseId: event.providerResponseId,
+            errorMessage: event.error?.message,
+            completedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+        });
         setProject((currentProject) =>
           currentProject
             ? {
@@ -586,6 +642,16 @@ function ProjectDetailPage() {
             },
           ];
         });
+        updateMessage((message) => ({
+          ...message,
+          content: shouldReplaceStaleAgentContent(message.content)
+            ? `${synthesizeAgentProgressContent(agentEvents, [...messages].reverse().find((item) => item.role === "user")?.content)}
+- ✕ Stream disconnected. Retry the request if it does not resume.`
+            : message.content,
+          processingStatus: "failed",
+          errorMessage: "The response stream disconnected before completion.",
+          updatedAt: new Date().toISOString(),
+        }));
         setSendError("The response stream disconnected before completion.");
 
         setProject((currentProject) =>
@@ -636,7 +702,7 @@ function ProjectDetailPage() {
     setSendError(undefined);
     setPreviewStarting(false);
     setPreviewStartError(null);
-    setPreviewTokenReady(false);
+    setPreviewTokenState({ status: "idle", error: null, refreshedAt: null });
     setManualRuntime(null);
     setAgentEvents([]);
     setAgentReasoning("");
@@ -656,36 +722,18 @@ function ProjectDetailPage() {
   useEffect(() => () => closeActiveStream(), [closeActiveStream]);
 
   useEffect(() => {
-    if (!project?.id || detailMode !== "preview") {
-      setPreviewTokenReady(false);
+    if (!project?.id || detailMode !== "preview" || runtimeState.status !== "running" || !runtimeState.previewUrl) {
+      setPreviewTokenState({ status: "idle", error: null, refreshedAt: null });
       return;
     }
-    let cancelled = false;
-    const refresh = async () => {
-      try {
-        const response = await fetch(`/api/projects/${project.id}/preview-token/refresh`, {
-          method: "POST",
-          credentials: "include",
-        });
-        if (!response.ok) throw new Error("Unable to refresh preview access.");
-        if (!cancelled) {
-          setPreviewTokenReady(true);
-          setPreviewStartError(null);
-        }
-      } catch {
-        if (!cancelled) {
-          setPreviewTokenReady(false);
-          setPreviewStartError("Unable to refresh preview access.");
-        }
-      }
-    };
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), 10 * 60 * 1000);
+    const abortController = new AbortController();
+    void refreshPreviewToken(project.id, abortController.signal);
+    const interval = window.setInterval(() => void refreshPreviewToken(project.id, abortController.signal), 10 * 60 * 1000);
     return () => {
-      cancelled = true;
+      abortController.abort();
       window.clearInterval(interval);
     };
-  }, [detailMode, project?.id]);
+  }, [detailMode, project?.id, refreshPreviewToken, runtimeState.previewUrl, runtimeState.status]);
 
   const selectedNode = useMemo(
     () => findNode(workspace?.fileTree ?? [], selectedNodeId),
@@ -1029,6 +1077,7 @@ function ProjectDetailPage() {
         error: null,
         errorTier: null,
       }));
+      await refreshPreviewToken(project.id);
       await router.invalidate();
     } catch (cause) {
       const message =
@@ -1043,7 +1092,7 @@ function ProjectDetailPage() {
     } finally {
       setPreviewStarting(false);
     }
-  }, [project?.id, previewStarting, router, startProjectPreview]);
+  }, [project?.id, previewStarting, refreshPreviewToken, router, startProjectPreview]);
 
   return (
     <main className={`h-dvh min-h-0 overflow-hidden bg-(--app-bg) text-(--app-text) ${resizingChat ? "cursor-col-resize select-none" : ""}`}>
@@ -1144,7 +1193,8 @@ function ProjectDetailPage() {
                     runtimeState={runtimeState}
                     projectId={project?.id ?? ""}
                     previewStarting={previewStarting}
-                    previewTokenReady={previewTokenReady}
+                    previewTokenState={previewTokenState}
+                    onRefreshPreviewToken={() => project?.id ? void refreshPreviewToken(project.id) : undefined}
                     previewStartError={previewStartError}
                     onStartPreview={handleStartPreview}
                   />
@@ -1485,21 +1535,23 @@ function PreviewWorkspace({
   runtimeState,
   projectId,
   previewStarting,
-  previewTokenReady,
+  previewTokenState,
   previewStartError,
   onStartPreview,
+  onRefreshPreviewToken,
 }: {
   selectedNode?: ProjectFileNode;
   previewPath: string;
   runtimeState: RuntimeUIState;
   projectId: string;
   previewStarting: boolean;
-  previewTokenReady: boolean;
+  previewTokenState: PreviewTokenState;
   previewStartError: string | null;
   onStartPreview: () => void;
+  onRefreshPreviewToken: () => void;
 }) {
   const showIframe =
-    runtimeState.status === "running" && runtimeState.previewUrl && previewTokenReady;
+    runtimeState.status === "running" && runtimeState.previewUrl && previewTokenState.status === "ready";
   const showInitPanel =
     ["idle", "stopped", "error"].includes(runtimeState.status) &&
     runtimeState.status !== "running";
@@ -1534,9 +1586,26 @@ function PreviewWorkspace({
             title="Project preview"
             sandbox="allow-scripts allow-same-origin allow-forms"
           />
-        ) : runtimeState.status === "running" && runtimeState.previewUrl && !previewTokenReady ? (
+        ) : runtimeState.status === "running" && runtimeState.previewUrl && previewTokenState.status === "refreshing" ? (
           <div className="flex h-full items-center justify-center text-sm text-[var(--app-muted)]">
             Preparing secure preview access…
+          </div>
+        ) : runtimeState.status === "running" && runtimeState.previewUrl && previewTokenState.status === "failed" ? (
+          <div className="flex h-full items-center justify-center p-md text-center text-sm text-[var(--app-muted)]">
+            <div className="max-w-sm space-y-sm rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] p-md">
+              <TriangleAlert className="mx-auto text-[var(--app-icon)]" aria-hidden="true" size={22} />
+              <p className="m-0 font-[560] text-[var(--app-text)]">Could not prepare secure preview access.</p>
+              <p className="m-0 text-[12px] leading-5">{previewTokenState.error ?? "Unable to refresh preview access."}</p>
+              <p className="m-0 text-[11px] leading-4 text-[var(--app-muted)]">Runtime is running and preview URL is available. Token refresh failed.</p>
+              <button
+                type="button"
+                onClick={onRefreshPreviewToken}
+                className="inline-flex items-center gap-xxs rounded-pill border border-[var(--app-border)] bg-[var(--app-control)] px-sm py-xs text-[12px] font-[520] text-[var(--app-text)] hover:border-[var(--app-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+              >
+                <RefreshCw aria-hidden="true" size={13} />
+                Retry secure access
+              </button>
+            </div>
           </div>
         ) : showInitPanel ? (
           <PreviewInitPanel
