@@ -156,11 +156,34 @@ export function renderInfrastructureFiles(
     },
     {
       path: "vite.config.ts",
-      content: `import { fileURLToPath, URL } from 'node:url'\nimport { defineConfig } from 'vite'\nimport { tanstackStart } from '@tanstack/react-start/plugin/vite'\nimport viteReact from '@vitejs/plugin-react'\n\nconst previewHost = process.env.VITE_PREVIEW_HOST?.trim()\nconst previewPort = Number(process.env.VITE_PORT) || 5173\n\nexport default defineConfig({\n  resolve: {\n    alias: {\n      '@': fileURLToPath(new URL('./src', import.meta.url)),\n    },\n  },\n  server: {\n    host: '127.0.0.1',\n    port: previewPort,\n    strictPort: true,\n    allowedHosts: previewHost ? [previewHost] : true,\n    hmr: previewHost\n      ? { protocol: 'wss', host: previewHost, clientPort: 443 }\n      : true,\n  },\n  plugins: [viteReact(), tanstackStart()],\n})\n`,
+      content: `import { fileURLToPath, URL } from 'node:url'\nimport { defineConfig } from 'vite'\nimport { tanstackStart } from '@tanstack/react-start/plugin/vite'\nimport viteReact from '@vitejs/plugin-react'\n\nconst previewHost = process.env.VITE_PREVIEW_HOST?.trim()\nconst previewPort = Number(process.env.VITE_PORT) || 5173\n\nexport default defineConfig({\n  resolve: {\n    alias: {\n      '@': fileURLToPath(new URL('./src', import.meta.url)),\n    },\n  },\n  server: {\n    host: '127.0.0.1',\n    port: previewPort,\n    strictPort: true,\n    allowedHosts: previewHost ? [previewHost] : true,\n    hmr: previewHost\n      ? { protocol: 'wss', host: previewHost, clientPort: 443 }\n      : true,\n  },\n  plugins: [tanstackStart(), viteReact()],\n})\n`,
     },
     {
       path: "tsconfig.json",
-      content: `${JSON.stringify({ compilerOptions: { jsx: "react-jsx", moduleResolution: "Bundler", module: "ESNext", target: "ES2022", skipLibCheck: true, strictNullChecks: true, baseUrl: ".", paths: { "@/*": ["./src/*"] } } }, null, 2)}\n`,
+      content: `${JSON.stringify({
+        compilerOptions: {
+          target: "ES2022",
+          lib: ["ES2022", "DOM", "DOM.Iterable"],
+          module: "ESNext",
+          moduleResolution: "Bundler",
+          jsx: "react-jsx",
+          strict: true,
+          esModuleInterop: true,
+          skipLibCheck: true,
+          forceConsistentCasingInFileNames: true,
+          resolveJsonModule: true,
+          noEmit: true,
+          types: ["node"],
+          baseUrl: ".",
+          paths: {
+            "@/*": ["src/*"],
+            "@app/*": ["app/*"],
+          },
+          ignoreDeprecations: "6.0",
+        },
+        include: ["app", "src", "vite.config.ts", "tailwind.config.ts"],
+      }, null, 2)}
+`,
     },
     {
       path: "postcss.config.js",
@@ -196,7 +219,7 @@ export function renderInfrastructureFiles(
     },
     {
       path: "src/lib/format-money.ts",
-      content: `import { divide, get, round } from 'lodash'
+      content: `import lodash from 'lodash'
 import type { Product } from '@/services/store/use-products-list'
 
 export type FormatMoneyOptions = {
@@ -205,17 +228,17 @@ export type FormatMoneyOptions = {
 
 export function formatMoney(valueInCents: number | null | undefined, options: FormatMoneyOptions = {}) {
   const currency = options.currency || 'AUD'
-  const amount = round(divide(Number(valueInCents ?? 0), 100), 2)
+  const amount = lodash.round(lodash.divide(Number(valueInCents ?? 0), 100), 2)
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
 }
 
 export function resolveProductPrice(product: Product | null | undefined): number | undefined {
   if (!product) return undefined
-  const fromDefault = get(product, 'defaultModel.price') as number | undefined
+  const fromDefault = lodash.get(product, 'defaultModel.price') as number | undefined
   if (typeof fromDefault === 'number') return fromDefault
-  const fromFirstModel = get(product, 'models[0].price') as number | undefined
+  const fromFirstModel = lodash.get(product, 'models[0].price') as number | undefined
   if (typeof fromFirstModel === 'number') return fromFirstModel
-  return get(product, 'price') as number | undefined
+  return lodash.get(product, 'price') as number | undefined
 }
 `,
     },
@@ -1058,6 +1081,7 @@ import { CartProvider } from '@/app/cart-provider'
 import { SiteHeader } from '@/components/layout/site-header'
 import { SiteFooter } from '@/components/layout/site-footer'
 import { Toaster } from '@/components/ui/sonner'
+import '@vitejs/plugin-react/preamble'
 import '@/styles/app.css'
 
 export const Route = createRootRoute({ component: Root })
