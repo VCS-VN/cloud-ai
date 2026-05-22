@@ -32,6 +32,7 @@ export function startPreviewRouterOnce(options: PreviewRouterOptions) {
   if (server) return server;
   const config = getPreviewRuntimeConfig();
   const proxy = httpProxy.createProxyServer({ ws: true, xfwd: true });
+  proxy.on("proxyRes", stripFrameBlockingHeaders);
 
   server = http.createServer(async (request, response) => {
     await proxyRequest({ request, response, proxy, options });
@@ -110,6 +111,12 @@ function logRouterReject(request: IncomingMessage, result: Extract<ProxyTargetRe
     projectId: result.projectId,
     details: result.details,
   }));
+}
+
+function stripFrameBlockingHeaders(proxyRes: IncomingMessage) {
+  delete proxyRes.headers["x-frame-options"];
+  delete proxyRes.headers["content-security-policy"];
+  delete proxyRes.headers["content-security-policy-report-only"];
 }
 
 function readCookie(header: string | undefined, name: string) {

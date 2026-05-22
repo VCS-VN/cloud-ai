@@ -254,7 +254,6 @@ pnpm build:prod
 set -a
 . /etc/cloud-ai/.env
 set +a
-pnpm db:migrate
 pm2 reload /etc/cloud-ai/ecosystem.config.cjs --only cloud-ai-builder --update-env
 pm2 save
 ```
