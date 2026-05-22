@@ -431,7 +431,8 @@ export class ProjectService {
     }
     const deleted = await this.projectRepository.deleteProject(projectId, userId);
     if (!deleted) throw new Error("Project not found.");
-    await this.workspaceService.deleteWorkspace(projectId);
+    const deletedWorkspacePath = await this.workspaceService.deleteWorkspace(projectId);
+    console.info(JSON.stringify({ event: "project_workspace_deleted", projectId, workspacePath: deletedWorkspacePath }));
     await this.messageRepository.bulkUpdateMessageStatusByProject(
       projectId,
       0,

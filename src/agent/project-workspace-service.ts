@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getProjectsRoot } from "@/server/config/paths.server";
 import type { ProjectFileNode, ProjectFileNodeRepository } from "@/shared/project-types";
@@ -45,6 +45,10 @@ export class ProjectWorkspaceService {
   async deleteWorkspace(projectId: string) {
     const workspacePath = this.getWorkspacePath(projectId);
     await rm(workspacePath, { recursive: true, force: true });
+    if (await pathExists(workspacePath)) {
+      throw new Error(`Project workspace still exists after delete: ${workspacePath}`);
+    }
+    return workspacePath;
   }
 
   resolveWorkspacePath(projectId: string, relativePath = ".") {
@@ -215,4 +219,13 @@ function contentTypeFor(fileName: string) {
   if (extension === ".html") return "text/html";
   if (extension === ".md") return "text/markdown";
   return "text/plain";
+}
+
+async function pathExists(targetPath: string) {
+  try {
+    await access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
 }
