@@ -52,7 +52,10 @@ export const updateProjectSettings = createServerFn({ method: "POST" })
 
     return projectService.updateProjectSettings(
       data.projectId,
-      { name: data.name, selectedStoreSlug: data.selectedStoreSlug ?? null },
+      {
+        name: data.name,
+        ...("selectedStoreSlug" in data ? { selectedStoreSlug: data.selectedStoreSlug ?? null } : {}),
+      },
       user.id,
     );
   });
