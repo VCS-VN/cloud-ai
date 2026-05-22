@@ -67,7 +67,6 @@ import {
   updateProjectSettings,
 } from "@/server/functions/projects";
 import { getDevRuntimeState, startPreview } from "@/server/functions/preview";
-import { refreshPreviewToken } from "@/server/functions/preview-token-refresh";
 import type { AgentStreamEvent } from "@/features/ai-agent/agent/agent-events";
 import type {
   ComposerReasoningEffort,
@@ -227,7 +226,6 @@ function ProjectDetailPage() {
   const saveProjectSettings = useServerFn(updateProjectSettings);
   const getRuntimeState = useServerFn(getDevRuntimeState);
   const startProjectPreview = useServerFn(startPreview);
-  const refreshProjectPreviewToken = useServerFn(refreshPreviewToken);
   const { workspace } = Route.useLoaderData();
   const router = useRouter();
   const { user } = Route.useRouteContext();
@@ -253,6 +251,7 @@ function ProjectDetailPage() {
   const [previewStartError, setPreviewStartError] = useState<string | null>(
     null,
   );
+  const [previewTokenReady, setPreviewTokenReady] = useState(false);
   const [manualRuntime, setManualRuntime] = useState<RuntimeUIState | null>(
     null,
   );
@@ -637,6 +636,7 @@ function ProjectDetailPage() {
     setSendError(undefined);
     setPreviewStarting(false);
     setPreviewStartError(null);
+    setPreviewTokenReady(false);
     setManualRuntime(null);
     setAgentEvents([]);
     setAgentReasoning("");
@@ -656,20 +656,36 @@ function ProjectDetailPage() {
   useEffect(() => () => closeActiveStream(), [closeActiveStream]);
 
   useEffect(() => {
-    if (!project?.id || detailMode !== "preview") return;
+    if (!project?.id || detailMode !== "preview") {
+      setPreviewTokenReady(false);
+      return;
+    }
     let cancelled = false;
-    const refresh = () => {
-      void refreshProjectPreviewToken({ data: { projectId: project.id } }).catch(() => {
-        if (!cancelled) setPreviewStartError("Unable to refresh preview access.");
-      });
+    const refresh = async () => {
+      try {
+        const response = await fetch(`/api/projects/${project.id}/preview-token/refresh`, {
+          method: "POST",
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error("Unable to refresh preview access.");
+        if (!cancelled) {
+          setPreviewTokenReady(true);
+          setPreviewStartError(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setPreviewTokenReady(false);
+          setPreviewStartError("Unable to refresh preview access.");
+        }
+      }
     };
-    refresh();
-    const interval = window.setInterval(refresh, 10 * 60 * 1000);
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 10 * 60 * 1000);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [detailMode, project?.id, refreshProjectPreviewToken]);
+  }, [detailMode, project?.id]);
 
   const selectedNode = useMemo(
     () => findNode(workspace?.fileTree ?? [], selectedNodeId),
@@ -1128,6 +1144,7 @@ function ProjectDetailPage() {
                     runtimeState={runtimeState}
                     projectId={project?.id ?? ""}
                     previewStarting={previewStarting}
+                    previewTokenReady={previewTokenReady}
                     previewStartError={previewStartError}
                     onStartPreview={handleStartPreview}
                   />
@@ -1468,6 +1485,7 @@ function PreviewWorkspace({
   runtimeState,
   projectId,
   previewStarting,
+  previewTokenReady,
   previewStartError,
   onStartPreview,
 }: {
@@ -1476,11 +1494,12 @@ function PreviewWorkspace({
   runtimeState: RuntimeUIState;
   projectId: string;
   previewStarting: boolean;
+  previewTokenReady: boolean;
   previewStartError: string | null;
   onStartPreview: () => void;
 }) {
   const showIframe =
-    runtimeState.status === "running" && runtimeState.previewUrl;
+    runtimeState.status === "running" && runtimeState.previewUrl && previewTokenReady;
   const showInitPanel =
     ["idle", "stopped", "error"].includes(runtimeState.status) &&
     runtimeState.status !== "running";
@@ -1515,6 +1534,10 @@ function PreviewWorkspace({
             title="Project preview"
             sandbox="allow-scripts allow-same-origin allow-forms"
           />
+        ) : runtimeState.status === "running" && runtimeState.previewUrl && !previewTokenReady ? (
+          <div className="flex h-full items-center justify-center text-sm text-[var(--app-muted)]">
+            Preparing secure preview access…
+          </div>
         ) : showInitPanel ? (
           <PreviewInitPanel
             projectId={projectId}
