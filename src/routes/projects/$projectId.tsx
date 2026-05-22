@@ -142,6 +142,63 @@ function updateMessagePages(
   };
 }
 
+function appendTerminalAgentEvent(
+  events: AgentStreamEvent[],
+  event: MessageTerminalEvent,
+): AgentStreamEvent[] {
+  const last = events.at(-1);
+  if (last?.type === "done" || last?.type === "error") return events;
+  if (event.type === "message.completed") {
+    return [
+      ...events,
+      {
+        type: "done",
+        runId: event.messageId,
+        summary: shouldReplaceStaleAgentContent(event.content)
+          ? "Done. Your storefront is ready."
+          : event.content,
+        changedFiles: [],
+      },
+    ];
+  }
+  return [
+    ...events,
+    {
+      type: "error",
+      code: event.error?.code ?? event.type,
+      message:
+        event.type === "message.stopped"
+          ? "Processing stopped. You can continue with a new prompt."
+          : "Something went wrong. You can retry safely.",
+      recoverable: event.type !== "message.stopped",
+    },
+  ];
+}
+
+function chooseTerminalMessageContent(
+  eventContent: string,
+  synthesizedContent: string,
+  eventType: MessageTerminalEvent["type"],
+) {
+  if (shouldReplaceStaleAgentContent(eventContent)) return synthesizedContent;
+  const trimmed = eventContent.trim();
+  if (
+    eventType === "message.completed" &&
+    /\b(?:Done|Preview ready|storefront is ready)\b/i.test(trimmed)
+  ) {
+    return eventContent;
+  }
+  if (
+    eventType !== "message.completed" &&
+    /\b(?:Something went wrong|interrupted|retry safely|Processing stopped)\b/i.test(
+      trimmed,
+    )
+  ) {
+    return eventContent;
+  }
+  return `${trimmed}\n${synthesizedContent}`;
+}
+
 function appendMessagesToNewestPage(
   data: InfiniteData<MessagePage> | undefined,
   messages: Message[],
@@ -550,18 +607,32 @@ function ProjectDetailPage() {
         if (activeStreamRef.current?.agentMessageId === event.messageId) {
           activeStreamRef.current.hasTerminalEvent = true;
         }
-        updateMessage((message) => {
-          const synthesized = synthesizeAgentProgressContent(agentEvents, [...messages].reverse().find((item) => item.role === "user")?.content, event.content || "Request completed.");
-          const nextContent = shouldReplaceStaleAgentContent(event.content) ? synthesized : event.content;
-          return {
-            ...message,
-            content: nextContent,
-            processingStatus: event.processingStatus,
-            providerResponseId: event.providerResponseId,
-            errorMessage: event.error?.message,
-            completedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
+        const userPrompt = [...messages].reverse().find((item) => item.role === "user")?.content;
+        setAgentEvents((current) => {
+          const combinedEvents = appendTerminalAgentEvent(current, event);
+          updateMessage((message) => {
+            const synthesized = synthesizeAgentProgressContent(
+              combinedEvents,
+              userPrompt,
+              event.type === "message.completed"
+                ? "Done. Your storefront is ready."
+                : "Something went wrong. You can retry safely.",
+            );
+            return {
+              ...message,
+              content: chooseTerminalMessageContent(
+                event.content,
+                synthesized,
+                event.type,
+              ),
+              processingStatus: event.processingStatus,
+              providerResponseId: event.providerResponseId,
+              errorMessage: event.error?.message,
+              completedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+          });
+          return combinedEvents;
         });
         setProject((currentProject) =>
           currentProject
@@ -582,30 +653,6 @@ function ProjectDetailPage() {
         );
         void queryClient.invalidateQueries({
           queryKey: ["project-runs", project?.id],
-        });
-        setAgentEvents((current) => {
-          const last = current.at(-1);
-          if (last?.type === "done" || last?.type === "error") return current;
-          if (event.type === "message.completed") {
-            return [
-              ...current,
-              {
-                type: "done",
-                runId: event.messageId,
-                summary: event.content || "Request completed.",
-                changedFiles: [],
-              },
-            ];
-          }
-          return [
-            ...current,
-            {
-              type: "error",
-              code: event.error?.code ?? event.type,
-              message: event.error?.message ?? (event.type === "message.stopped" ? "Processing stopped." : "Could not complete the request."),
-              recoverable: event.type !== "message.stopped",
-            },
-          ];
         });
         if (event.type === "message.failed" && event.error?.message) {
           setSendError(event.error.message);
@@ -629,29 +676,34 @@ function ProjectDetailPage() {
 
         if (hasTerminalEvent) return;
 
+        const userPrompt = [...messages].reverse().find((item) => item.role === "user")?.content;
         setAgentEvents((current) => {
           const last = current.at(-1);
-          if (last?.type === "done" || last?.type === "error") return current;
-          return [
-            ...current,
-            {
-              type: "error",
-              code: "STREAM_DISCONNECTED",
-              message: "Something interrupted the response. You can retry safely.",
-              recoverable: true,
-            },
-          ];
+          const disconnectEvent: AgentStreamEvent = {
+            type: "error",
+            code: "STREAM_DISCONNECTED",
+            message: "Something interrupted the response. You can retry safely.",
+            recoverable: true,
+          };
+          const combinedEvents =
+            last?.type === "done" || last?.type === "error"
+              ? current
+              : [...current, disconnectEvent];
+          const synthesized = `${synthesizeAgentProgressContent(
+            combinedEvents,
+            userPrompt,
+            "Something went wrong. You can retry safely.",
+          )}
+- ✕ Something interrupted the response. You can retry safely.`;
+          updateMessage((message) => ({
+            ...message,
+            content: synthesized,
+            processingStatus: "failed",
+            errorMessage: "Something interrupted the response. You can retry safely.",
+            updatedAt: new Date().toISOString(),
+          }));
+          return combinedEvents;
         });
-        updateMessage((message) => ({
-          ...message,
-          content: shouldReplaceStaleAgentContent(message.content)
-            ? `${synthesizeAgentProgressContent(agentEvents, [...messages].reverse().find((item) => item.role === "user")?.content)}
-- ✕ Something interrupted the response. You can retry safely.`
-            : message.content,
-          processingStatus: "failed",
-          errorMessage: "Something interrupted the response. You can retry safely.",
-          updatedAt: new Date().toISOString(),
-        }));
         setSendError("Something interrupted the response. You can retry safely.");
 
         setProject((currentProject) =>

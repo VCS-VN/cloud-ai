@@ -28,6 +28,9 @@ const STEP_BY_EVENT: Partial<Record<AgentStreamEvent["type"], string>> = {
   dev_ready: "preview-ready",
   done: "done",
   error: "error",
+  dev_error: "error",
+  dev_install_failed: "error",
+  dev_fix_failed: "error",
 };
 
 const FALLBACK_LABELS: Record<string, string> = {
@@ -45,7 +48,12 @@ const FALLBACK_LABELS: Record<string, string> = {
   error: "Something went wrong",
 };
 
-const STALE_CONTENT = new Set(["Analyzing your request", "Understanding your request", "### Status\n- Preparing to process your request..."]);
+const STALE_CONTENT = new Set([
+  "Analyzing your request",
+  "Understanding your request",
+  "Preparing to process your request...",
+  "### Status\n- Preparing to process your request...",
+]);
 
 export function deriveAgentProgressSteps(events: AgentStreamEvent[], userPrompt?: string): AgentProgressStep[] {
   const ctx = deriveContextFromEvents(events, { userPrompt });

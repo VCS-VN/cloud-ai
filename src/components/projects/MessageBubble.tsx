@@ -23,16 +23,11 @@ function AgentMessageContent({ content }: { content: string }) {
   );
 }
 
-function getAgentDisplayContent(
+export function getAgentDisplayContent(
   content: string,
   status: Message["processingStatus"],
 ) {
-  const fallback =
-    status === "failed"
-      ? "Something went wrong. You can retry safely."
-      : status === "stopped"
-        ? "Processing stopped. You can continue with a new prompt."
-        : "### Status\n- Preparing to process your request...";
+  const fallback = getAgentFallbackContent(status);
 
   if (!content.trim()) return fallback;
 
@@ -45,13 +40,57 @@ function getAgentDisplayContent(
   return [...new Set(userFacingLines)].join("\n");
 }
 
-function isUserFacingAgentLine(line: string) {
-  return (
-    /^(Analyzing|Understood:|Task identified|Clarification needed:|Initializing project|Creating page|Updating page|Inspecting project|Done\.|Could not complete|Processing stopped)/.test(
-      line,
-    ) && !/\b\d+\s+file\b/i.test(line)
+function getAgentFallbackContent(status: Message["processingStatus"]) {
+  if (status === "pending" || status === "streaming") {
+    return "Understanding your request...";
+  }
+  if (status === "failed") return "Something went wrong. You can retry safely.";
+  if (status === "stopped") {
+    return "Processing stopped. You can continue with a new prompt.";
+  }
+  return "Done. Your storefront is ready.";
+}
+
+export function isUserFacingAgentLine(line: string) {
+  if (!line) return false;
+  if (isTechnicalAgentLine(line)) return false;
+  if (line === "### Progress") return true;
+
+  const progressMatch = line.match(/^- (✓|…|✕) (.+)$/);
+  if (progressMatch) return isFriendlyAgentLabel(progressMatch[2]);
+
+  return /^(Analyzing|Understood:|Task identified|Clarification needed:|Initializing project|Creating page|Updating page|Inspecting project|Done\.|Could not complete|Processing stopped)/.test(
+    line,
   );
 }
+
+function isFriendlyAgentLabel(value: string) {
+  const label = value.split(" — ")[0]?.trim();
+  return FRIENDLY_AGENT_LABELS.has(label);
+}
+
+function isTechnicalAgentLine(line: string) {
+  return (
+    /\b\d+\s+file\b/i.test(line) ||
+    /(?:^|[\s`'"])(?:\/[\w.-]+|\.{0,2}\/[\w.-]+|[\w.-]+\/[\w./-]+)(?:[`\s'"]|$)/.test(line) ||
+    /\b[A-Z][A-Z0-9_]{2,}\b/.test(line) ||
+    /\b(?:tool|model|gpt-|claude|gemini|openai|anthropic|llm|api key)\b/i.test(line)
+  );
+}
+
+const FRIENDLY_AGENT_LABELS = new Set([
+  "Understanding your request",
+  "Planning storefront",
+  "Preparing design",
+  "Creating storefront files",
+  "Checking setup",
+  "Saving progress",
+  "Installing packages",
+  "Starting preview",
+  "Preview ready",
+  "Done",
+  "Something went wrong",
+]);
 
 export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
   const isUser = message.role === "user";

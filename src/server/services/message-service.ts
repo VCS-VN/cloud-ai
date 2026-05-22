@@ -26,6 +26,10 @@ import {
   getProjectMessageStreamUrl,
 } from "@/server/functions/project-message-stream";
 
+const COMPLETED_FALLBACK_CONTENT = "Done. Your storefront is ready.";
+const FAILED_FALLBACK_CONTENT = "Something went wrong. You can retry safely.";
+const STOPPED_FALLBACK_CONTENT = "Processing stopped. You can continue with a new prompt.";
+
 type SendMessageOptions = {
   reasoningEffort?: ComposerReasoningEffort;
   planMode?: boolean;
@@ -53,6 +57,23 @@ function assertMessageContent(content: string) {
   const trimmed = content.trim();
   if (!trimmed) throw new Error("Message cannot be empty.");
   return trimmed;
+}
+
+function isStaleAgentContent(content: string) {
+  const trimmed = content.trim();
+  if (!trimmed) return true;
+  return (
+    trimmed === "Analyzing your request" ||
+    trimmed === "Understanding your request" ||
+    trimmed === "Preparing to process your request..." ||
+    trimmed === "### Status\n- Preparing to process your request..." ||
+    /^### Status\s*- Preparing to process your request\.\.\.$/m.test(trimmed)
+  );
+}
+
+function ensureFinalAgentContent(content: string, fallback: string) {
+  if (isStaleAgentContent(content)) return `${fallback}\n`;
+  return content;
 }
 
 export class MessageService {
@@ -351,6 +372,10 @@ export class MessageService {
         }
       }
 
+      aggregatedContent = ensureFinalAgentContent(
+        aggregatedContent,
+        COMPLETED_FALLBACK_CONTENT,
+      );
       await this.messageRepository.updateMessage(args.agentMessageId, {
         content: aggregatedContent,
         processingStatus: "completed",
@@ -386,11 +411,15 @@ export class MessageService {
       const processingStatus = aborted ? "stopped" : "failed";
       const message = error instanceof Error ? error.message : "Agent orchestrator failed.";
       if (aborted && !hasTerminalUserFacingDelta) {
-        aggregatedContent = appendUserFacingLine(aggregatedContent, "Processing stopped. You can continue with a new prompt.");
+        aggregatedContent = appendUserFacingLine(aggregatedContent, STOPPED_FALLBACK_CONTENT);
       }
       if (!aborted && !hasTerminalUserFacingDelta) {
-        aggregatedContent = appendUserFacingLine(aggregatedContent, "Could not complete the request. Please try again or adjust your prompt.");
+        aggregatedContent = appendUserFacingLine(aggregatedContent, FAILED_FALLBACK_CONTENT);
       }
+      aggregatedContent = ensureFinalAgentContent(
+        aggregatedContent,
+        aborted ? STOPPED_FALLBACK_CONTENT : FAILED_FALLBACK_CONTENT,
+      );
       await this.messageRepository.updateMessage(args.agentMessageId, {
         content: aggregatedContent,
         processingStatus,
@@ -502,11 +531,16 @@ export class MessageService {
         emit: emitDelta,
       });
 
-      const finalDelta = result.summary.trim()
-        ? `${aggregatedContent ? "\n" : ""}${result.summary.trim()}`
+      const summary = sanitizeForUser(result.summary);
+      const finalDelta = summary
+        ? `${aggregatedContent ? "\n" : ""}${summary}`
         : "";
       if (finalDelta) await emitDelta(finalDelta);
 
+      aggregatedContent = ensureFinalAgentContent(
+        aggregatedContent,
+        COMPLETED_FALLBACK_CONTENT,
+      );
       await this.messageRepository.updateMessage(args.agentMessageId, {
         content: aggregatedContent,
         processingStatus: "completed",
@@ -532,6 +566,10 @@ export class MessageService {
         args.signal?.aborted ||
         (error instanceof DOMException && error.name === "AbortError");
       const processingStatus = aborted ? "stopped" : "failed";
+      aggregatedContent = ensureFinalAgentContent(
+        aggregatedContent,
+        aborted ? STOPPED_FALLBACK_CONTENT : FAILED_FALLBACK_CONTENT,
+      );
       await this.messageRepository.updateMessage(args.agentMessageId, {
         content: aggregatedContent,
         processingStatus,
