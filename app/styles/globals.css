@@ -214,7 +214,7 @@
 }
 
 html {
-  color: var(--color-ink);
+  color: var(--app-text);
   background: var(--app-control);
   font-family: figmaSans, Inter, system-ui, sans-serif;
 }
@@ -222,7 +222,7 @@ html {
 body {
   margin: 0;
   min-width: 320px;
-  color: var(--color-ink);
+  color: var(--app-text);
   background: var(--app-control);
   font-family: figmaSans, Inter, system-ui, sans-serif;
   font-size: 16px;

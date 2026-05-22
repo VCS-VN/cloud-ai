@@ -121,6 +121,9 @@ export function buildStoreRuntimeInstructions(input: {
     "- When VITE_STORE_SLUG is missing, generated StoreProvider MUST return the sampleStore constant from @/data/sample-store instead of calling /api/v1/stores/:storeSlug. The sample fallback for products, product detail, categories, and product suggestions is encapsulated inside useProductsList, useProductDetail, useCategoriesList, and useProductSuggestions — components and routes consume those hooks unconditionally and do NOT branch on hasStoreSlug to swap data sources.",
   );
   lines.push(
+    "- Generated src/routes/__root.tsx MUST import Providers from @/app/providers and render exactly this provider order inside <body>: <Providers><StoreProvider><CartProvider><SiteHeader /><Outlet /><SiteFooter /><Toaster /></CartProvider></StoreProvider></Providers><Scripts />. NEVER remove Providers, NEVER place StoreProvider outside Providers, and NEVER call React Query hooks before QueryClientProvider is mounted.",
+  );
+  lines.push(
     "- When VITE_STORE_SLUG exists and store detail, products list, product detail, categories list, or product suggestions loading fails, generated code MUST show a load error UI with a retry/refetch button for that screen, render a loading skeleton during the pending state, and MUST NOT silently fall back to demo store, @/data/products, or @/data/categories sample values. The hook-encapsulated sample path never errors, so error UI only appears when hasStoreSlug is true. SiteHeader suggestions are non-critical: on isError, hide the dropdown rather than render an error UI.",
   );
   lines.push(

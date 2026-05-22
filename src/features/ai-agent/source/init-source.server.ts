@@ -184,7 +184,7 @@ export function renderInfrastructureFiles(
     },
     {
       path: "src/app/query-client.ts",
-      content: `import { QueryClient } from '@tanstack/react-query'\nexport const queryClient = new QueryClient()\n`,
+      content: `import { QueryClient } from '@tanstack/react-query'\nexport const queryClient = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: true } } })\n`,
     },
     {
       path: "src/data/products.ts",

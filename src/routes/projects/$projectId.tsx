@@ -262,6 +262,7 @@ function ProjectDetailPage() {
   const [previewPath, setPreviewPath] = useState("/");
   const [chatWidth, setChatWidth] = useState(DEFAULT_CHAT_WIDTH);
   const [chatVisible, setChatVisible] = useState(true);
+  const [resizingChat, setResizingChat] = useState(false);
   const [codeQuery, setCodeQuery] = useState("");
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(
     new Set(),
@@ -527,6 +528,30 @@ function ProjectDetailPage() {
         void queryClient.invalidateQueries({
           queryKey: ["project-runs", project?.id],
         });
+        setAgentEvents((current) => {
+          const last = current.at(-1);
+          if (last?.type === "done" || last?.type === "error") return current;
+          if (event.type === "message.completed") {
+            return [
+              ...current,
+              {
+                type: "done",
+                runId: event.messageId,
+                summary: event.content || "Request completed.",
+                changedFiles: [],
+              },
+            ];
+          }
+          return [
+            ...current,
+            {
+              type: "error",
+              code: event.error?.code ?? event.type,
+              message: event.error?.message ?? (event.type === "message.stopped" ? "Processing stopped." : "Could not complete the request."),
+              recoverable: event.type !== "message.stopped",
+            },
+          ];
+        });
         if (event.type === "message.failed" && event.error?.message) {
           setSendError(event.error.message);
         }
@@ -548,6 +573,21 @@ function ProjectDetailPage() {
         closeActiveStream(agentMessageId);
 
         if (hasTerminalEvent) return;
+
+        setAgentEvents((current) => {
+          const last = current.at(-1);
+          if (last?.type === "done" || last?.type === "error") return current;
+          return [
+            ...current,
+            {
+              type: "error",
+              code: "STREAM_DISCONNECTED",
+              message: "The response stream disconnected before completion.",
+              recoverable: true,
+            },
+          ];
+        });
+        setSendError("The response stream disconnected before completion.");
 
         setProject((currentProject) =>
           currentProject
@@ -584,7 +624,7 @@ function ProjectDetailPage() {
   useEffect(() => {
     const savedWidth = Number(window.localStorage.getItem(CHAT_WIDTH_KEY));
     if (Number.isFinite(savedWidth) && savedWidth >= MIN_CHAT_WIDTH) {
-      setChatWidth(savedWidth);
+      setChatWidth(clamp(savedWidth, MIN_CHAT_WIDTH, getMaxChatWidth()));
     }
 
     const savedVisible = window.localStorage.getItem(CHAT_VISIBLE_KEY);
@@ -732,16 +772,14 @@ function ProjectDetailPage() {
   function beginResize(event: PointerEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    const maxWidth = Math.max(
-      MIN_CHAT_WIDTH,
-      Math.floor(window.innerWidth * 0.55),
-    );
+    const maxWidth = getMaxChatWidth();
     resizeRef.current = {
       startX: event.clientX,
       startWidth: chatWidth,
       latestWidth: chatWidth,
       maxWidth,
     };
+    setResizingChat(true);
   }
 
   function resize(event: PointerEvent<HTMLButtonElement>) {
@@ -757,12 +795,15 @@ function ProjectDetailPage() {
 
   function endResize(event: PointerEvent<HTMLButtonElement>) {
     if (!resizeRef.current) return;
-    event.currentTarget.releasePointerCapture(event.pointerId);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
     window.localStorage.setItem(
       CHAT_WIDTH_KEY,
       String(resizeRef.current.latestWidth),
     );
     resizeRef.current = null;
+    setResizingChat(false);
   }
 
   function toggleFolder(node: ProjectFileNode) {
@@ -989,7 +1030,7 @@ function ProjectDetailPage() {
   }, [project?.id, previewStarting, router, startProjectPreview]);
 
   return (
-    <main className="h-dvh min-h-0 overflow-hidden bg-(--app-bg) text-(--app-text)">
+    <main className={`h-dvh min-h-0 overflow-hidden bg-(--app-bg) text-(--app-text) ${resizingChat ? "cursor-col-resize select-none" : ""}`}>
       {workspace && project ? (
         <div className="flex h-full min-h-0 min-w-0 overflow-hidden">
           <div
@@ -997,6 +1038,7 @@ function ProjectDetailPage() {
             style={{
               width: chatVisible ? chatWidth : 0,
               borderRightWidth: chatVisible ? undefined : 0,
+              transitionDuration: resizingChat ? "0ms" : undefined,
             }}
           >
             <ChatHeader
@@ -1056,6 +1098,7 @@ function ProjectDetailPage() {
             onPointerMove={resize}
             onPointerUp={endResize}
             onPointerCancel={endResize}
+            onLostPointerCapture={endResize}
           >
             <span
               className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--app-border-strong)] transition-colors duration-200 group-hover:bg-[var(--app-accent)]"
@@ -1622,6 +1665,10 @@ function firstFileNode(nodes: ProjectFileNode[]): ProjectFileNode | undefined {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function getMaxChatWidth(): number {
+  return Math.max(MIN_CHAT_WIDTH, Math.floor(window.innerWidth * 0.55));
 }
 
 function findNode(

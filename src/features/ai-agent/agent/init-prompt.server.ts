@@ -114,7 +114,7 @@ export function buildRetailInitPrompt(input: {
     "",
     "src/components/store/order-card.tsx - Card with order#, date, status Badge, total, Link to detail",
     "",
-    "src/routes/__root.tsx - createRootRoute, html/head(HeadContent)/body(Providers wrapping StoreProvider wrapping CartProvider wrapping SiteHeader/Outlet/SiteFooter/Toaster, then Scripts), import app.css",
+    "src/routes/__root.tsx - createRootRoute, html/head(HeadContent)/body(Providers wrapping StoreProvider wrapping CartProvider wrapping SiteHeader/Outlet/SiteFooter/Toaster, then Scripts), import app.css. NEVER remove Providers or place StoreProvider outside Providers; StoreProvider uses React Query and MUST always be inside QueryClientProvider via Providers.",
     "",
     "src/routes/index.tsx - createFileRoute('/'), compose HeroSection/ProductGrid/TrustSignals/FeatureBand/NewsletterSection",
     "",
