@@ -8,7 +8,7 @@ When `PREVIEW_PUBLIC_HOST` is unset, previews use `http://127.0.0.1:<port>` dire
 
 ## Production Mode
 
-When `PREVIEW_PUBLIC_HOST=preview.myepis.cloud`, each project gets `<projectId>.preview.myepis.cloud`. Cloudflare Tunnel is managed by devops and forwards wildcard traffic to `127.0.0.1:9000`. The app starts the internal preview router once and proxies requests to the project's allocated local port.
+When `PREVIEW_PUBLIC_HOST=myepis.cloud`, each project gets `<projectId>-preview.myepis.cloud`. Cloudflare Tunnel is managed by devops and forwards wildcard traffic to `127.0.0.1:9000`. The app starts the internal preview router once and proxies requests to the project's allocated local port.
 
 ## Ownership
 

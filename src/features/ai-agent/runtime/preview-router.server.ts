@@ -17,7 +17,7 @@ let server: http.Server | null = null;
 export function extractProjectIdFromPreviewHost(hostHeader: string | undefined, publicHost: string): string | null {
   if (!hostHeader) return null;
   const host = hostHeader.split(":")[0]?.toLowerCase();
-  const suffix = `.${publicHost.toLowerCase()}`;
+  const suffix = `-preview.${publicHost.toLowerCase()}`;
   if (!host || !host.endsWith(suffix)) return null;
   const projectId = host.slice(0, -suffix.length);
   if (!/^[a-z0-9_-]+$/i.test(projectId)) return null;

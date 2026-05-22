@@ -41,11 +41,11 @@ A user opens a production preview URL for a generated storefront and reaches the
 
 **Why this priority**: `localhost` preview URLs do not work for remote users on production VPS deployments.
 
-**Independent Test**: In a production-like environment with preview public host configured, start a project preview and open `<projectId>.preview.myepis.cloud` from a browser outside the VPS.
+**Independent Test**: In a production-like environment with preview public host configured, start a project preview and open `<projectId>-preview.myepis.cloud` from a browser outside the VPS.
 
 **Acceptance Scenarios**:
 
-1. **Given** production preview is configured, **When** a project preview is created, **Then** the system creates or reuses one DNS record for `<projectId>.preview.myepis.cloud`.
+1. **Given** production preview is configured, **When** a project preview is created, **Then** the system creates or reuses one DNS record for `<projectId>-preview.myepis.cloud`.
 2. **Given** the preview subdomain receives an HTTP request, **When** the project is running, **Then** the request is routed to the correct project preview.
 3. **Given** the preview subdomain receives a websocket upgrade request, **When** the project is running, **Then** the connection reaches the same project preview so live updates continue working.
 4. **Given** the application runs in local development without production preview host configuration, **When** a preview starts, **Then** the UI uses a local loopback URL and does not call external DNS or tunnel services.
@@ -143,7 +143,7 @@ An operator deploys the app repeatedly without losing generated project workspac
 - **FR-003**: The system MUST expose a runtime state query that reflects the external supervised process state as the source of truth for live preview status.
 - **FR-004**: The UI MUST poll runtime state while the preview tab is active and reduce polling frequency after the preview is stable.
 - **FR-005**: The system MUST support local preview mode without Cloudflare Tunnel, external DNS changes, or host-based router requirements.
-- **FR-006**: The system MUST support production preview mode where each project has a DNS name formatted as `<projectId>.preview.myepis.cloud`.
+- **FR-006**: The system MUST support production preview mode where each project has a DNS name formatted as `<projectId>-preview.myepis.cloud`.
 - **FR-007**: The system MUST create and delete per-project DNS records for production previews through the configured DNS provider API.
 - **FR-008**: The system MUST route production preview HTTP and websocket traffic by subdomain host to the correct running project.
 - **FR-009**: The system MUST deny preview HTTP and websocket traffic unless a valid preview access token is present.
@@ -200,7 +200,7 @@ An operator deploys the app repeatedly without losing generated project workspac
 - Production preview mode is enabled only when production preview host configuration is present; otherwise the system behaves as local development preview.
 - Cloudflare Tunnel itself is provisioned and supervised outside the app by operations, with a catch-all ingress targeting the app's internal preview router on `127.0.0.1:9000`.
 - The app manages per-project DNS records through Cloudflare API credentials supplied by environment variables.
-- The preview public host is `preview.myepis.cloud`, producing project hosts like `<projectId>.preview.myepis.cloud`.
+- The preview public host is `myepis.cloud`, producing project hosts like `<projectId>-preview.myepis.cloud`.
 - Default preview port pool is 10000 through 19999.
 - Default per-process memory restart threshold is 512 MB.
 - Default preview log retention is 10 MB × 5 rotated files, capped at 50 MB per project.

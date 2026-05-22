@@ -17,7 +17,7 @@ Internet
   │      → http://127.0.0.1:3000
   │          PM2 app: cloud-ai-builder
   │
-  └─ <projectId>.preview.myepis.cloud
+  └─ <projectId>-preview.myepis.cloud
        Cloudflare DNS record per project
        Cloudflare Tunnel: preview-tunnel
          → http://127.0.0.1:9000
@@ -113,7 +113,7 @@ OPENAI_API_KEY=...
 PROJECTS_ROOT=/var/bin/projects
 
 # Production preview mode
-PREVIEW_PUBLIC_HOST=preview.myepis.cloud
+PREVIEW_PUBLIC_HOST=myepis.cloud
 PREVIEW_ROUTER_HOST=127.0.0.1
 PREVIEW_ROUTER_PORT=9000
 PREVIEW_PORT_MIN=10000
@@ -134,7 +134,7 @@ CLOUDFLARE_TUNNEL_ID=<preview-tunnel-id>
 
 Notes:
 
-- `PREVIEW_PUBLIC_HOST=preview.myepis.cloud` enables production preview mode.
+- `PREVIEW_PUBLIC_HOST=myepis.cloud` enables production preview mode.
 - If `PREVIEW_PUBLIC_HOST` is unset, app stays in local preview mode and does not call Cloudflare DNS APIs.
 - `CLOUDFLARE_TUNNEL_ID` must be the preview tunnel id, not the builder tunnel id.
 - App reads `PREVIEW_TOKEN_SECRET`; if unset, it falls back to `SESSION_SECRET`.
@@ -205,7 +205,7 @@ tunnel: <preview-tunnel-id>
 credentials-file: /etc/cloudflared/<preview-tunnel-id>.json
 
 ingress:
-  - hostname: "*.preview.myepis.cloud"
+  - hostname: "*.myepis.cloud"
     service: http://127.0.0.1:9000
   - service: http_status:404
 ```
@@ -219,7 +219,7 @@ cloudflared tunnel route dns <builder-tunnel-name-or-id> builder.myepis.cloud
 For preview DNS, the app creates one DNS record per project:
 
 ```text
-<projectId>.preview.myepis.cloud CNAME <preview-tunnel-id>.cfargotunnel.com proxied=true
+<projectId>-preview.myepis.cloud CNAME <preview-tunnel-id>.cfargotunnel.com proxied=true
 ```
 
 ## Firewall
@@ -335,7 +335,7 @@ ls -lah /var/log/cloud-ai/previews
 Likely causes:
 
 - `CLOUDFLARE_TUNNEL_ID` is builder tunnel id instead of preview tunnel id.
-- Preview tunnel ingress does not include `*.preview.myepis.cloud`.
+- Preview tunnel ingress does not include `*.myepis.cloud`.
 - Generated Vite dev server did not receive `VITE_PREVIEW_HOST`.
 
 ### Project files disappear after deploy

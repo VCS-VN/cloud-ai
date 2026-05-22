@@ -25,7 +25,7 @@ Devops prerequisites:
 
 ```yaml
 ingress:
-  - hostname: "*.preview.myepis.cloud"
+  - hostname: "*.myepis.cloud"
     service: http://127.0.0.1:9000
   - service: http_status:404
 ```
@@ -42,7 +42,7 @@ sudo chown -R <app-user>:<app-group> /var/bin/projects
 
 ```bash
 NODE_ENV=production
-PREVIEW_PUBLIC_HOST=preview.myepis.cloud
+PREVIEW_PUBLIC_HOST=myepis.cloud
 PROJECTS_ROOT=/var/bin/projects # optional; production default is /var/bin/projects
 CLOUDFLARE_API_TOKEN=...
 CLOUDFLARE_ZONE_ID=...
@@ -64,7 +64,7 @@ PREVIEW_PROCESS_MAX_MEMORY=512M
 4. Confirm Cloudflare DNS record exists:
 
 ```text
-<projectId>.preview.myepis.cloud CNAME <tunnelId>.cfargotunnel.com proxied=true
+<projectId>-preview.myepis.cloud CNAME <tunnelId>.cfargotunnel.com proxied=true
 ```
 
 5. Open project page while signed in and verify iframe loads.

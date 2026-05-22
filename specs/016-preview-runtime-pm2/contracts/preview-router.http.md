@@ -7,7 +7,7 @@ The router listens on `127.0.0.1:9000` in production mode only. Cloudflare Tunne
 ## Host Matching
 
 ```text
-Host: <projectId>.preview.myepis.cloud
+Host: <projectId>-preview.myepis.cloud
 ```
 
 Rules:

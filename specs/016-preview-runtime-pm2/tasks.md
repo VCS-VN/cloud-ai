@@ -80,7 +80,7 @@
 
 ## Phase 4: User Story 2 - Use Production Preview URLs on VPS (Priority: P1)
 
-**Goal**: Production previews resolve through `<projectId>.preview.myepis.cloud` and proxy HTTP/WS correctly; local mode remains loopback.
+**Goal**: Production previews resolve through `<projectId>-preview.myepis.cloud` and proxy HTTP/WS correctly; local mode remains loopback.
 
 **Independent Test**: With production preview env set, start a project and open its subdomain externally; with env unset, confirm local loopback and no Cloudflare calls.
 

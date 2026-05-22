@@ -29,8 +29,6 @@ export const INITIAL_PROJECT_PACKAGES: InitialProjectPackage[] = [
   { name: "class-variance-authority", version: "^0.7.1", installType: "dependencies", reason: "shadcn component variants." },
   { name: "clsx", version: "^2.1.1", installType: "dependencies", reason: "Classname utility for shadcn." },
   { name: "dompurify", version: "^3.4.2", installType: "dependencies", reason: "HTML sanitization." },
-  { name: "firebase", version: "^12.12.1", installType: "dependencies", reason: "Optional Firebase client SDK." },
-  { name: "firebase-admin", version: "^13.8.0", installType: "dependencies", reason: "Optional server Firebase SDK." },
   { name: "jotai", version: "^2.20.0", installType: "dependencies", reason: "Lightweight client state." },
   { name: "lodash", version: "^4.17.21", installType: "dependencies", reason: "Safe-access and arithmetic helpers (get, divide, round) for price formatting." },
   { name: "lucide-react", version: "^1.14.0", installType: "dependencies", reason: "Icons." },

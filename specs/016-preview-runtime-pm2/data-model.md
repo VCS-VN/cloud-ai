@@ -11,7 +11,7 @@ Represents desired and cached preview state for one project.
 | `pid` | number|null | no | Cached supervisor pid; not source of truth. |
 | `port` | number|null | no | Allocated port from 10000–19999. Stable until delete. |
 | `previewUrl` | string|null | no | Local loopback URL or production HTTPS URL. |
-| `previewHost` | string|null | no | Production hostname `<projectId>.preview.myepis.cloud`. |
+| `previewHost` | string|null | no | Production hostname `<projectId>-preview.myepis.cloud`. |
 | `cloudflareDnsRecordId` | string|null | no | Provider record id for delete/retry. |
 | `dnsStatus` | enum | yes | `none`, `creating`, `ready`, `delete_pending`, `error`. |
 | `installStatus` | enum | yes | `idle`, `installing`, `installed`, `failed`. |
@@ -30,7 +30,7 @@ Represents desired and cached preview state for one project.
 ### Validation Rules
 
 - `port` must be null or within 10000–19999.
-- `previewHost` must be null in local mode and must match `<projectId>.preview.myepis.cloud` in production mode.
+- `previewHost` must be null in local mode and must match `<projectId>-preview.myepis.cloud` in production mode.
 - `cloudflareDnsRecordId` is required when `dnsStatus=ready` in production.
 - `enabled=false` projects must not be lazy-resumed.
 - `operatorAttentionRequired=true` must surface in admin/operator logs and runtime state response.
@@ -70,7 +70,7 @@ Live process state derived from pm2.
 | Field | Type | Notes |
 |---|---:|---|
 | `projectId` | uuid/string | Project id |
-| `hostname` | string | `<projectId>.preview.myepis.cloud` |
+| `hostname` | string | `<projectId>-preview.myepis.cloud` |
 | `recordId` | string | Cloudflare DNS record id |
 | `target` | string | `<tunnelId>.cfargotunnel.com` |
 | `proxied` | boolean | true |

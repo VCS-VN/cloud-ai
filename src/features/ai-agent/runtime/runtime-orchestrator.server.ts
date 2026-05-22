@@ -54,6 +54,10 @@ export type EvictionCandidate = {
 const MAX_LOG_CHARS = 10000;
 const INSTALL_TIMEOUT_MS = 120000;
 
+export function buildPreviewHostname(projectId: string, publicHost: string | null) {
+  return publicHost ? `${projectId}-preview.${publicHost}` : null;
+}
+
 function truncateLog(log: string | null | undefined) {
   if (!log) return null;
   return log.length > MAX_LOG_CHARS ? log.slice(-MAX_LOG_CHARS) : log;
@@ -321,7 +325,7 @@ export class RuntimeOrchestrator {
 
   private resolvePreviewTarget(projectId: string, port: number) {
     const config = getPreviewRuntimeConfig();
-    const previewHost = config.publicHost ? `${projectId}.${config.publicHost}` : null;
+    const previewHost = buildPreviewHostname(projectId, config.publicHost);
     return {
       previewHost,
       previewUrl: previewHost ? `https://${previewHost}` : `http://127.0.0.1:${port}`,
