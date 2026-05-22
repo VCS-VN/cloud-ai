@@ -40,9 +40,7 @@ export class AuthService {
         codeVerifier: input.codeVerifier,
         redirectUri: input.redirectUri
       })
-      console.log("🚀 ~ AuthService ~ signInWithOAuthCode ~ tokenSet:", tokenSet)
       const profile = await this.merchantGateway.getProfile({ apiKey: tokenSet.apiKey })
-      console.log("🚀 ~ AuthService ~ signInWithOAuthCode ~ profile:", profile)
       const user = await this.users.upsertFromOAuth({
         providerUid: profile.id,
         email: profile.email,
@@ -50,13 +48,11 @@ export class AuthService {
         provider: 'MONMI_OAUTH',
         apiKey: encryptUserApiKey(tokenSet.apiKey)
       })
-      console.log("🚀 ~ AuthService ~ signInWithOAuthCode ~ user:", user)
 
       await this.sessions.createSessionCookie(user)
 
       return { ok: true, user: toAuthUserSummary(user), redirectTo: '/dashboard' }
     } catch (error) {
-      console.log('jasodfjoasdfojsdf', error)
       console.error(JSON.stringify({
         event: 'cloud_ai_oauth_login_failed',
         reason: error instanceof AuthError ? error.code : error instanceof Error ? error.message : 'unknown'

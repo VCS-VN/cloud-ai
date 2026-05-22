@@ -6,5 +6,5 @@ export function getCurrentRequestOrigin() {
 }
 
 export function getCurrentRequestCallbackUri() {
-  return `${getCurrentRequestOrigin()}/auth/callback`
+  return `${getCurrentRequestOrigin()}/api/auth/callback`
 }

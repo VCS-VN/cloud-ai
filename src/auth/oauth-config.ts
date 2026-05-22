@@ -19,7 +19,7 @@ export function getOauthClientId() {
 }
 
 export function getOauthRedirectUri() {
-  return requireEnv('OAUTH_REDIRECT_URI', `${getCloudAiOrigin()}/auth/callback`)
+  return requireEnv('OAUTH_REDIRECT_URI', `${getCloudAiOrigin()}/api/auth/callback`)
 }
 
 export function getMerchantApiBaseUrl() {
