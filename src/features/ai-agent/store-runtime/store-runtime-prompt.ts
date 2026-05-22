@@ -157,6 +157,12 @@ export function buildStoreRuntimeInstructions(input: {
     "- SiteHeader MUST consume useProductSuggestions({ storeId: useStoreDetail().data?.id, query: debouncedValue }) where debouncedValue is the raw input value debounced by 800ms via a useEffect+setTimeout (track BOTH the raw input value and the debouncedValue separately — the raw value drives the input field, dropdown visibility gating, and form submit; the debouncedValue is the query passed to the suggestions hook). Render the suggestions dropdown below the input (absolute, w-full, mt-2) when the input is focused AND inputValue.trim().length > 0 AND suggestions.length > 0. Dropdown class 'rounded-2xl bg-white p-3 shadow-lg shadow-black/5' (no hard border). Header label 'Suggestions' (text-xs font-medium text-slate-400 mb-1). Each row: 'flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer' with a primary-tinted hover background, a leading Lucide Search icon h-4 w-4 text-slate-400, and the suggestion text (text-sm text-slate-700). No dividers between rows.",
   );
   lines.push(
+    "- SiteHeader search suggestions MUST use this exact state contract: inputValue controls the input; debouncedValue goes to useProductSuggestions; open closes only on outside click, Escape, submit, or suggestion click; showDropdown = open && inputValue.trim().length > 0 && suggestions.length > 0 && !isError. Render suggestions.map directly inside #site-search-suggestions. Do NOT hide suggestions while debouncedValue differs from inputValue or while the next request is loading. Suggestion rows MUST use onMouseDown(event.preventDefault()) so input blur cannot close the dropdown before row selection.",
+  );
+  lines.push(
+    "- SiteHeader MUST derive `const storeId = storeDetail?.id` from `const { storeDetail } = useStore()` and pass useProductSuggestions({ storeId, query: debouncedValue }); do NOT call useStoreDetail() inside SiteHeader.",
+  );
+  lines.push(
     "- SiteHeader form submit AND suggestion-row click MUST call useNavigate() from @tanstack/react-router and navigate({ to: '/products', search: { q: value.trim() } }) when value is non-empty, then close the dropdown. The /products route MUST declare validateSearch on createFileRoute to coerce ?q to a trimmed string defaulting to '', read it via Route.useSearch(), and pass it as the query argument to useProductsList({ storeId, query }) so the search query becomes part of the queryKey and useInfiniteQuery resets to page 1 naturally when q changes.",
   );
   lines.push(

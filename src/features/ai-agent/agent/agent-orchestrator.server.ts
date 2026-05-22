@@ -17,7 +17,7 @@ import type { RuntimeOrchestrator } from "../runtime/runtime-orchestrator.server
 import { sanitizeForUser } from "./user-facing-presenter";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { buildFileManifest } from "../source/code-index-service.server";
-import { initInfrastructureSource, initSource, productSuggestionsQuerySource } from "../source/init-source.server";
+import { hasSiteHeaderSearchSuggestionContract, initInfrastructureSource, initSource, productSuggestionsQuerySource, siteHeaderSource } from "../source/init-source.server";
 import { REQUIRED_GENERATED_STOREFRONT_FILES } from "../source/generated-project-layout";
 import { buildRetailInitPrompt } from "./init-prompt.server";
 import {
@@ -1002,6 +1002,28 @@ export class AgentOrchestrator {
         event: "init_invariant_repair_failed",
         projectId,
         path: suggestionsPath,
+        error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
+      }));
+    }
+
+    const siteHeaderPath = "src/components/layout/site-header.tsx";
+    try {
+      const siteHeader = await this.deps.projectFileStore.readTextFile(projectId, siteHeaderPath);
+      if (!hasSiteHeaderSearchSuggestionContract(siteHeader)) {
+        await this.deps.projectFileStore.writeTextFile(projectId, siteHeaderPath, siteHeaderSource());
+        changedFiles.push(siteHeaderPath);
+        console.info(JSON.stringify({
+          event: "init_invariant_repaired",
+          projectId,
+          path: siteHeaderPath,
+          invariant: "site_header_search_suggestions_dropdown",
+        }));
+      }
+    } catch (error) {
+      console.warn(JSON.stringify({
+        event: "init_invariant_repair_failed",
+        projectId,
+        path: siteHeaderPath,
         error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
       }));
     }

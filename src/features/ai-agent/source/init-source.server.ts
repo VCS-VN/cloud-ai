@@ -838,6 +838,20 @@ export function useCategoriesList(storeId?: string): UseQueryResult<CategoriesLi
 `;
 }
 
+export function hasSiteHeaderSearchSuggestionContract(source: string) {
+  const requiredMarkers = [
+    "useProductSuggestions",
+    "site-search-suggestions",
+    "role='combobox'",
+    "role='listbox'",
+    "showDropdown",
+    "suggestions.map",
+    "onMouseDown={(event) =>",
+    "event.preventDefault()",
+  ];
+  return requiredMarkers.every((marker) => source.includes(marker));
+}
+
 export function productSuggestionsQuerySource() {
   return `import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/services/http/client'
@@ -886,7 +900,14 @@ export async function getProductSuggestions(params: { storeId?: string; query: s
     '/api/v1/products/suggestions',
     { params },
   )
-  return response.data
+  const data = response.data
+  if (!Array.isArray(data?.data)) {
+    if (import.meta.env.DEV) {
+      console.info('[storefront] product suggestions response had no data array')
+    }
+    return { total: 0, data: [] }
+  }
+  return { total: typeof data.total === 'number' ? data.total : data.data.length, data: data.data }
 }
 
 export function useProductSuggestions(
@@ -1107,8 +1128,8 @@ function Root() {
 }
 `;
 }
-function siteHeaderSource() {
-  return `import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+export function siteHeaderSource() {
+  return `import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Search, ShoppingCart } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -1141,25 +1162,30 @@ export function SiteHeader() {
   const navigate = useNavigate()
   const { storeDetail } = useStore()
   const storeId = storeDetail?.id
-  const [value, setValue] = useState('')
+  const [inputValue, setInputValue] = useState('')
   const [debouncedValue, setDebouncedValue] = useState('')
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
   const wrapperRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedValue(value), 800)
+    const timer = window.setTimeout(() => setDebouncedValue(inputValue), 800)
     return () => window.clearTimeout(timer)
-  }, [value])
+  }, [inputValue])
 
-  const { suggestions } = useProductSuggestions({ storeId, query: debouncedValue })
-  const trimmed = value.trim()
-  const debouncedTrimmed = debouncedValue.trim()
-  const visibleSuggestions = useMemo(
-    () => (debouncedTrimmed.length > 0 ? suggestions : []),
-    [suggestions, debouncedTrimmed],
-  )
-  const showDropdown = open && trimmed.length > 0 && visibleSuggestions.length > 0
+  const { suggestions, isError } = useProductSuggestions({ storeId, query: debouncedValue })
+  const trimmed = inputValue.trim()
+  const showDropdown = open && trimmed.length > 0 && suggestions.length > 0 && !isError
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    console.info('[storefront] search suggestions state', {
+      inputLength: inputValue.length,
+      debouncedLength: debouncedValue.length,
+      suggestionsCount: suggestions.length,
+      open,
+    })
+  }, [inputValue.length, debouncedValue.length, suggestions.length, open])
 
   useEffect(() => {
     if (!showDropdown) return
@@ -1176,7 +1202,7 @@ export function SiteHeader() {
 
   useEffect(() => {
     setActiveIndex(-1)
-  }, [value])
+  }, [inputValue, suggestions.length])
 
   const submitQuery = (next: string) => {
     const query = next.trim()
@@ -1188,31 +1214,31 @@ export function SiteHeader() {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    submitQuery(value)
+    submitQuery(inputValue)
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown') {
-      if (visibleSuggestions.length === 0) return
+      if (suggestions.length === 0) return
       event.preventDefault()
       setOpen(true)
-      setActiveIndex((prev) => (prev + 1) % visibleSuggestions.length)
+      setActiveIndex((prev) => (prev + 1) % suggestions.length)
       return
     }
     if (event.key === 'ArrowUp') {
-      if (visibleSuggestions.length === 0) return
+      if (suggestions.length === 0) return
       event.preventDefault()
       setOpen(true)
       setActiveIndex((prev) =>
-        prev <= 0 ? visibleSuggestions.length - 1 : prev - 1,
+        prev <= 0 ? suggestions.length - 1 : prev - 1,
       )
       return
     }
     if (event.key === 'Enter') {
-      if (activeIndex >= 0 && visibleSuggestions[activeIndex]) {
+      if (activeIndex >= 0 && suggestions[activeIndex]) {
         event.preventDefault()
-        const picked = visibleSuggestions[activeIndex]
-        setValue(picked)
+        const picked = suggestions[activeIndex]
+        setInputValue(picked)
         submitQuery(picked)
       }
       return
@@ -1224,7 +1250,7 @@ export function SiteHeader() {
   }
 
   const handleSuggestionClick = (suggestion: string) => {
-    setValue(suggestion)
+    setInputValue(suggestion)
     submitQuery(suggestion)
   }
 
@@ -1246,9 +1272,9 @@ export function SiteHeader() {
               aria-expanded={showDropdown}
               aria-controls='site-search-suggestions'
               aria-autocomplete='list'
-              value={value}
+              value={inputValue}
               onChange={(event) => {
-                setValue(event.target.value)
+                setInputValue(event.target.value)
                 setOpen(true)
               }}
               onFocus={() => setOpen(true)}
@@ -1272,7 +1298,7 @@ export function SiteHeader() {
               className='absolute left-0 right-0 top-full z-50 mt-2 rounded-2xl bg-white p-3 shadow-lg shadow-black/5'
             >
               <li className='mb-1 px-2 text-xs font-medium text-slate-400'>Suggestions</li>
-              {visibleSuggestions.map((suggestion, index) => (
+              {suggestions.map((suggestion, index) => (
                 <li
                   key={suggestion + ':' + index}
                   role='option'
@@ -1288,7 +1314,7 @@ export function SiteHeader() {
                   }
                 >
                   <Search className='h-4 w-4 shrink-0 text-slate-400' aria-hidden='true' />
-                  <span>{highlightMatch(suggestion, value)}</span>
+                  <span>{highlightMatch(suggestion, inputValue)}</span>
                 </li>
               ))}
             </ul>
