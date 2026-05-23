@@ -11,6 +11,12 @@ export type TokenMappingResult =
 export function buildCssVariableMapping(designMarkdown: string): string {
   const block = parseDesignTokenBlock(designMarkdown);
   const colors = block?.tokens?.colors ?? {};
+  const deepSurface =
+    readMarkdownRoleValue(designMarkdown, ["Deep Brand", "Dark Surface", "Deep Surface"]) ??
+    readTokenValue(colors.primary);
+  const deepForeground =
+    readMarkdownRoleValue(designMarkdown, ["Text On Dark"]) ??
+    readTokenValue(colors["primary-foreground"]);
   const lines = [":root {"];
   const map: Array<[string, string]> = [
     ["background", "background"],
@@ -37,15 +43,30 @@ export function buildCssVariableMapping(designMarkdown: string): string {
     ["success", "success"],
     ["warning", "warning"],
     ["error", "error"],
-    ["deep", "primary"],
-    ["deep-foreground", "primary-foreground"],
   ];
   for (const [semantic, tokenKey] of map) {
     const value = readTokenValue(colors[tokenKey]);
     if (value) lines.push(`  --${semantic}: ${value};`);
   }
+  if (deepSurface) lines.push(`  --deep: ${deepSurface};`);
+  if (deepForeground) lines.push(`  --deep-foreground: ${deepForeground};`);
   lines.push("}");
   return lines.join("\n");
+}
+
+function readMarkdownRoleValue(
+  markdown: string,
+  roleNames: ReadonlyArray<string>,
+): string | undefined {
+  for (const role of roleNames) {
+    const escaped = role.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = markdown.match(
+      new RegExp(`- \\*\\*${escaped}\\*\\* \\(\\\`([^\\\`]+)\\\`\\):`, "i"),
+    );
+    const value = match?.[1]?.trim();
+    if (value) return value;
+  }
+  return undefined;
 }
 
 export function replaceOwnedDesignTokenRegion(

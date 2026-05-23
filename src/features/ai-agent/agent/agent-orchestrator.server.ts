@@ -19,6 +19,7 @@ import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { buildFileManifest } from "../source/code-index-service.server";
 import { hasSiteHeaderSearchSuggestionContract, initInfrastructureSource, initSource, productSuggestionsQuerySource, renderEnvSource, siteHeaderSource } from "../source/init-source.server";
 import { REQUIRED_GENERATED_STOREFRONT_FILES } from "../source/generated-project-layout";
+import { applyStoreSlugToEnv } from "../store-runtime/generated-project-env";
 import { buildRetailInitPrompt } from "./init-prompt.server";
 import {
   selectTemplate,
@@ -551,6 +552,7 @@ export class AgentOrchestrator {
     const plan = createInitPlan(intent);
     logAgentPhase("finished", "create_plan", phaseContext);
     yield { type: "plan_created", plan };
+    const selectedStoreSlug = await this.resolveSelectedStoreSlug(input.projectId, input.userId);
 
     const websiteSpec = await runPhase("extract_website_spec", () =>
       extractWebsiteSpec({
@@ -598,7 +600,7 @@ export class AgentOrchestrator {
     await runPhase("write_project_env", () =>
       this.deps.projectFileStore?.writeManagedEnvFile(
         input.projectId,
-        renderEnvSource(),
+        applyStoreSlugToEnv(renderEnvSource(), selectedStoreSlug),
       ),
     );
     yield { type: "file_changed", path: ".env", operation: "created" };
@@ -674,7 +676,6 @@ export class AgentOrchestrator {
     (toolExecutionContext as any).__codeToolSnapshotId = "init-snapshot";
 
     const registry = createInitCodeToolRegistry();
-    const selectedStoreSlug = await this.resolveSelectedStoreSlug(input.projectId, input.userId);
     const retailInitPrompt = buildRetailInitPrompt({
       userPrompt: input.prompt,
       websiteSpec,
@@ -1429,9 +1430,10 @@ function buildTokenPatchRewritePrompt(
     "Scope constraint: do NOT validate or modify unrelated storefront surfaces.",
     "",
     "1. Call project_read_design_rules to load the new DESIGN.md.",
-    "2. Inspect existing UI files; identify references to the patched roles only.",
-    "3. Apply minimal patches; do NOT regenerate unrelated styles or sections.",
-    "4. Run project_run_validation after mutations; repair on failure.",
+    "2. Refresh token mapping in src/styles/app.css when patched roles map to CSS variables.",
+    "3. Inspect existing UI files; identify references to the patched roles only.",
+    "4. Apply minimal patches; do NOT regenerate unrelated styles or sections.",
+    "5. Run project_run_validation after mutations; repair on failure.",
   ].join("\n");
 }
 

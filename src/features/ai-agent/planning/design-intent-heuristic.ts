@@ -102,6 +102,23 @@ const ROLE_KEYWORD_MAP: Array<{
   { match: /\b(shadow|bóng|bong)\b/i, role: "shadowCard" },
 ];
 
+const LIGHT_YELLOW_THEME: Record<
+  "primaryBrand" | "accentBrand" | "pageCanvas" | "sectionSurface",
+  string
+> = {
+  primaryBrand: "#B45309",
+  accentBrand: "#F59E0B",
+  pageCanvas: "#FFFBEB",
+  sectionSurface: "#FEF3C7",
+};
+
+const NATURAL_COLOR_THEMES = [
+  {
+    match: /\b(light yellow|soft yellow|pale yellow|pastel yellow|vang nhe|vang nhat|mau vang nhe|mau vang nhat)\b/i,
+    values: LIGHT_YELLOW_THEME,
+  },
+];
+
 export function classifyDesignIntent(input: {
   prompt: string;
   projectStatus: ProjectStatusLike;
@@ -198,7 +215,49 @@ export function extractTokenHints(prompt: string): TokenHint[] {
     }
   }
 
+  if (hints.length === 0) {
+    hints.push(...extractNaturalColorHints(prompt));
+  }
+
   return hints;
+}
+
+function extractNaturalColorHints(prompt: string): TokenHint[] {
+  const folded = stripDiacritics(prompt.toLowerCase());
+  const mentionsColorChange =
+    /(màu|mau|color|colour|theme|tone|giao diện|giao dien|trang web|website)/i.test(prompt) ||
+    /(mau|color|theme|tone|giao dien|trang web|website)/i.test(folded);
+  if (!mentionsColorChange) return [];
+
+  const theme = NATURAL_COLOR_THEMES.find((item) => item.match.test(folded));
+  if (!theme) return [];
+
+  const explicitRole = inferRole(prompt, false);
+  if (explicitRole && explicitRole in theme.values) {
+    return [{
+      role: explicitRole as keyof typeof theme.values,
+      value: theme.values[explicitRole as keyof typeof theme.values],
+      source: "user_prompt",
+    }];
+  }
+
+  const broadThemeRequest =
+    /(trang web|website|giao diện|giao dien|theme|tone|toàn bộ|toan bo|site|overall)/i.test(prompt) ||
+    /(trang web|website|giao dien|theme|tone|toan bo|site|overall)/i.test(folded);
+  if (!broadThemeRequest) {
+    return [{
+      role: "pageCanvas",
+      value: theme.values.pageCanvas,
+      source: "user_prompt",
+    }];
+  }
+
+  return [
+    { role: "primaryBrand", value: theme.values.primaryBrand, source: "user_prompt" },
+    { role: "accentBrand", value: theme.values.accentBrand, source: "user_prompt" },
+    { role: "pageCanvas", value: theme.values.pageCanvas, source: "user_prompt" },
+    { role: "sectionSurface", value: theme.values.sectionSurface, source: "user_prompt" },
+  ];
 }
 
 function inferRole(context: string, isFont: boolean): TokenHintRole | null {

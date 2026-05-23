@@ -247,6 +247,8 @@ export function resolveProductPrice(product: Product | null | undefined): number
       content: `import { type ClassValue, clsx } from "clsx"\nimport { twMerge } from "tailwind-merge"\n\nexport function cn(...inputs: ClassValue[]) {\n  return twMerge(clsx(inputs))\n}\n`,
     },
     { path: "src/styles/app.css", content: appCssSource() },
+    { path: "src/vite-env.d.ts", content: `/// <reference types="vite/client" />
+` },
     { path: "src/services/http/client.ts", content: renderHttpClientSource() },
   ];
 }
@@ -1102,7 +1104,6 @@ import { CartProvider } from '@/app/cart-provider'
 import { SiteHeader } from '@/components/layout/site-header'
 import { SiteFooter } from '@/components/layout/site-footer'
 import { Toaster } from '@/components/ui/sonner'
-import '@vitejs/plugin-react/preamble'
 import '@/styles/app.css'
 
 export const Route = createRootRoute({ component: Root })
@@ -1332,7 +1333,7 @@ export function SiteHeader() {
 `;
 }
 function siteFooterSource() {
-  return `import { useStore } from '@/app/store-provider'\nexport function SiteFooter() { const { storeDetail } = useStore(); return <footer className='bg-[#1E3932] text-white'><div className='mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4'><div><h3 className='text-xl font-semibold'>{storeDetail?.name}</h3><p className='mt-3 text-sm text-white/70'>{storeDetail?.description}</p></div>{['Shop','Support','Company'].map((title) => <div key={title}><h4 className='font-semibold'>{title}</h4><ul className='mt-3 space-y-2 text-sm text-white/70'><li>Products</li><li>Orders</li><li>Contact</li></ul></div>)}<div><h4 className='font-semibold'>Connect</h4><p className='mt-3 text-sm text-white/70'>Follow new drops and member offers.</p></div></div></footer> }\n`;
+  return `import { useStore } from '@/app/store-provider'\nexport function SiteFooter() { const { storeDetail } = useStore(); return <footer className='bg-deep text-deep-foreground'><div className='mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4'><div><h3 className='text-xl font-semibold'>{storeDetail?.name}</h3><p className='mt-3 text-sm text-deep-foreground/70'>{storeDetail?.description}</p></div>{['Shop','Support','Company'].map((title) => <div key={title}><h4 className='font-semibold'>{title}</h4><ul className='mt-3 space-y-2 text-sm text-deep-foreground/70'><li>Products</li><li>Orders</li><li>Contact</li></ul></div>)}<div><h4 className='font-semibold'>Connect</h4><p className='mt-3 text-sm text-deep-foreground/70'>Follow new drops and member offers.</p></div></div></footer> }\n`;
 }
 function heroSectionSource() {
   return `import { Link } from '@tanstack/react-router'\nimport { Button } from '@/components/ui/button'\nimport { websiteConfig } from '@/lib/website-config'\nexport function HeroSection() { return <section className='mx-auto grid max-w-7xl gap-10 px-4 py-16 lg:grid-cols-2 lg:py-24'><div className='flex flex-col justify-center gap-6'><p className='text-sm font-semibold uppercase tracking-[0.25em] text-primary'>{websiteConfig.brand.tone}</p><h1 className='text-5xl font-bold tracking-tight md:text-7xl'>{websiteConfig.content.heroTitle}</h1><p className='max-w-xl text-lg text-muted-foreground'>{websiteConfig.content.heroSubtitle}</p><div className='flex gap-3'><Button asChild size='lg'><Link to='/products'>{websiteConfig.content.primaryCta ?? 'Shop now'}</Link></Button><Button asChild variant='outline' size='lg'><Link to='/checkout'>Checkout demo</Link></Button></div></div><div className='min-h-[420px] rounded-[2rem] bg-gradient-to-br from-[#00754A] via-[#CBA258] to-[#1E3932] p-8 shadow-2xl'><div className='h-full rounded-[1.5rem] border border-white/20 bg-white/20 backdrop-blur' /></div></section> }\n`;
