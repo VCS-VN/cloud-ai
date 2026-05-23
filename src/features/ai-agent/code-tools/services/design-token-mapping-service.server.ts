@@ -37,6 +37,8 @@ export function buildCssVariableMapping(designMarkdown: string): string {
     ["success", "success"],
     ["warning", "warning"],
     ["error", "error"],
+    ["deep", "primary"],
+    ["deep-foreground", "primary-foreground"],
   ];
   for (const [semantic, tokenKey] of map) {
     const value = readTokenValue(colors[tokenKey]);

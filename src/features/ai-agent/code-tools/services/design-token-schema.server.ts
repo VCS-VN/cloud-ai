@@ -24,6 +24,8 @@ export const PHASE1_COLOR_TOKEN_KEYS = [
   "success",
   "warning",
   "error",
+  "deep",
+  "deep-foreground",
 ] as const;
 
 export type Phase1ColorTokenKey = (typeof PHASE1_COLOR_TOKEN_KEYS)[number];
@@ -101,6 +103,8 @@ export const APPROVED_SEMANTIC_COLOR_UTILITIES = [
   "success",
   "warning",
   "error",
+  "deep",
+  "deep-foreground",
 ] as const;
 
 export type DesignTokenEntry = {
