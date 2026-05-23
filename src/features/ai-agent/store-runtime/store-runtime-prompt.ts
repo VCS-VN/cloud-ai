@@ -123,16 +123,28 @@ export function buildStoreRuntimeInstructions(input: {
     "- When VITE_STORE_SLUG is missing, generated StoreProvider MUST return the sampleStore constant from @/data/sample-store instead of calling /api/v1/stores/:storeSlug. The sample fallback for products, product detail, categories, and product suggestions is encapsulated inside useProductsList, useProductDetail, useCategoriesList, and useProductSuggestions — components and routes consume those hooks unconditionally and do NOT branch on hasStoreSlug to swap data sources.",
   );
   lines.push(
+    "- When VITE_STORE_SLUG exists, generated StoreProvider MUST block app rendering with a full-page loading skeleton while useStoreDetail is loading, and show a store load error UI with retry on error. Do not render sample fallback during this loading/error phase.",
+  );
+  lines.push(
     "- Generated src/routes/__root.tsx MUST import '@vitejs/plugin-react/preamble' first, then import '@/styles/app.css'. NEVER import '../app.css', './app.css', or any relative CSS path. It MUST import Providers from @/app/providers and render exactly this provider order inside <body>: <Providers><StoreProvider><CartProvider><RouteLoadingBar /><SiteHeader /><Outlet /><SiteFooter /><Toaster /></CartProvider></StoreProvider></Providers><Scripts />. RouteLoadingBar MUST render before SiteHeader. NEVER remove Providers, RouteLoadingBar, NEVER place StoreProvider outside Providers, and NEVER call React Query hooks before QueryClientProvider is mounted.",
   );
   lines.push(
     "- When VITE_STORE_SLUG exists and store detail, products list, product detail, categories list, or product suggestions loading fails, generated code MUST show a load error UI with a retry/refetch button for that screen, render a loading skeleton during the pending state, and MUST NOT silently fall back to demo store, @/data/products, or @/data/categories sample values. The hook-encapsulated sample path never errors, so error UI only appears when hasStoreSlug is true. SiteHeader suggestions are non-critical: on isError, hide the dropdown rather than render an error UI.",
   );
   lines.push(
+    "- Any generated route or component that consumes useProductsList MUST handle productsQuery.isLoading with a product-grid skeleton, productsQuery.isError with a products load error UI and retry/refetch button, and isFetchingNextPage with a loading-more indicator. This applies to pages and reusable components such as ProductGrid; never render an empty list while the query is pending.",
+  );
+  lines.push(
+    "- Any generated route or component that consumes useProductDetail MUST handle isLoading with a product-detail skeleton and isError or missing product data with a product load error UI and retry/refetch button before reading product fields. This applies to pages and reusable product detail components.",
+  );
+  lines.push(
     "- Generated storefront UI MUST follow DESIGN.md tokens for loading, empty, error, and retry states.",
   );
   lines.push(
     "- Generated route and component code (src/routes/products/index.tsx, src/components/store/product-grid.tsx, src/routes/products/$productId.tsx, src/components/store/category-section.tsx, src/components/layout/site-header.tsx) MUST consume useProductsList, useProductDetail, useCategoriesList, and useProductSuggestions from @/services/store and MUST NOT import { products } from @/data/products or { categories } from @/data/categories. Import the Product type from @/services/store/use-products-list and the Category type from @/services/store/use-categories-list when needed. The hook implementations themselves under @/services/store/* MAY import from @/data/products and @/data/categories internally to build their sample fallbacks (mirroring the existing pattern in useProductsList).",
+  );
+  lines.push(
+    "- Generated route and component code that reads query/provider/API data MUST use optional chaining and nullish fallbacks for nested or nullable values before rendering or computing values. Examples: storeDetail?.setting?.currency ?? 'AUD', product?.category?.name, product?.images?.[0], product?.models?.length. Direct property access is allowed only after an explicit loading/error/missing-data guard proves the value exists in that branch.",
   );
   lines.push(
     "- The Product type stores the long-form product copy in the `descriptions` field (plural). The legacy singular `description` field is removed from Product/ProductDetail in @/services/store/use-products-list and @/services/store/use-product-detail. Sample data and generated UI MUST read product.descriptions; never read product.description.",

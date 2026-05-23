@@ -1071,6 +1071,51 @@ export function StoreProvider({ children }: PropsWithChildren) {
       isUsingSampleData: !query.data,
     }
   }, [query.data, query.error, query.isLoading, query.refetch])
+
+  if (hasStoreSlug && query.isLoading) {
+    return (
+      <div className='min-h-screen bg-background px-4 py-10'>
+        <div className='mx-auto max-w-7xl space-y-8'>
+          <div className='flex items-center justify-between gap-4'>
+            <div className='h-8 w-40 animate-pulse rounded bg-muted/60' />
+            <div className='hidden gap-3 md:flex'>
+              <div className='h-5 w-20 animate-pulse rounded bg-muted/50' />
+              <div className='h-5 w-20 animate-pulse rounded bg-muted/50' />
+              <div className='h-5 w-20 animate-pulse rounded bg-muted/50' />
+            </div>
+          </div>
+          <div className='grid gap-8 lg:grid-cols-[1.1fr_0.9fr]'>
+            <div className='space-y-4'>
+              <div className='h-5 w-32 animate-pulse rounded bg-muted/50' />
+              <div className='h-16 w-full max-w-xl animate-pulse rounded bg-muted/60' />
+              <div className='h-5 w-full max-w-lg animate-pulse rounded bg-muted/50' />
+              <div className='h-5 w-2/3 animate-pulse rounded bg-muted/50' />
+            </div>
+            <div className='h-80 animate-pulse rounded-[2rem] bg-muted/50' />
+          </div>
+          <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-4'>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className='h-72 animate-pulse rounded-lg border bg-muted/40' />
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (hasStoreSlug && query.isError) {
+    return (
+      <div className='flex min-h-screen items-center justify-center bg-background px-4 py-10'>
+        <div className='max-w-md rounded-3xl border border-destructive/30 bg-destructive/5 p-6 text-center'>
+          <p className='text-sm font-semibold uppercase tracking-[0.2em] text-destructive'>Store unavailable</p>
+          <h1 className='mt-2 text-2xl font-semibold'>We could not load this store.</h1>
+          <p className='mt-2 text-sm text-muted-foreground'>Please retry the store request.</p>
+          <button type='button' className='mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground' onClick={() => { void query.refetch() }}>Retry</button>
+        </div>
+      </div>
+    )
+  }
+
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
 }
 

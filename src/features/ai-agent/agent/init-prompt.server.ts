@@ -74,7 +74,7 @@ export function buildRetailInitPrompt(input: {
     "",
     "src/components/ui/card.tsx - shadcn Card/CardHeader/CardContent/CardFooter/CardTitle/CardDescription, rounded-lg border shadow-sm",
     "",
-    "src/app/store-provider.tsx - StoreProvider focuses ONLY on store detail. When VITE_STORE_SLUG is set, fetch store detail via useStoreDetail and expose { storeDetail, isLoading, error, refetch, isUsingSampleData=false }. When VITE_STORE_SLUG is missing, return sampleStore from @/data/sample-store with isUsingSampleData=true. Do NOT include cart, order, or checkout state.",
+    "src/app/store-provider.tsx - StoreProvider focuses ONLY on store detail. When VITE_STORE_SLUG is set, fetch store detail via useStoreDetail, block app rendering with a full-page loading skeleton while loading, show a store load error UI with retry on error, and expose { storeDetail, isLoading, error, refetch, isUsingSampleData=false }. When VITE_STORE_SLUG is missing, return sampleStore from @/data/sample-store with isUsingSampleData=true. Do NOT include cart, order, or checkout state.",
     "",
     "src/app/cart-provider.tsx - CartProvider scaffold that wraps children with a CartContext. For now, expose an empty context value and useCart hook. Do NOT add cart state, atoms, or handlers yet.",
     "",
