@@ -596,9 +596,8 @@ export class AgentOrchestrator {
     // Write .env with VITE_API_BASE_URL after DESIGN.md is created.
     // The AI Agent is NOT allowed to read or write .env; the app process owns it.
     await runPhase("write_project_env", () =>
-      this.deps.projectFileStore?.writeTextFile(
+      this.deps.projectFileStore?.writeManagedEnvFile(
         input.projectId,
-        ".env",
         renderEnvSource(),
       ),
     );
