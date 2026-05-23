@@ -12,6 +12,7 @@ import {
 } from "./design-static-boilerplate.server";
 import { buildDeterministicDesignSeed, type TokenHint } from "../../planning/design-intent-heuristic";
 import { validateManagedDesignFile } from "./design-file-validator.server";
+import { contrastRatioForHex } from "./design-color-contrast.server";
 
 export type ProjectDesignRuleContext = {
   source: "project-design-md";
@@ -171,6 +172,44 @@ type ManagedPalette = {
   colors: Record<string, string>;
 };
 
+
+const MANAGED_PALETTE_CONTRAST_PAIRS: Array<[string, string]> = [
+  ["primary-foreground", "primary"],
+  ["accent-foreground", "accent"],
+  ["highlight-foreground", "highlight"],
+  ["foreground", "background"],
+  ["foreground", "surface"],
+  ["foreground", "surface-muted"],
+];
+
+/**
+ * Validates that all required contrast pairs in a managed palette meet 4.5:1.
+ * Returns the palette unchanged if valid, or logs a warning and returns null if invalid.
+ */
+function validateManagedPalette(palette: ManagedPalette): ManagedPalette | null {
+  for (const [fgKey, bgKey] of MANAGED_PALETTE_CONTRAST_PAIRS) {
+    const fg = palette.colors[fgKey];
+    const bg = palette.colors[bgKey];
+    if (!fg || !bg) continue;
+    const ratio = contrastRatioForHex(fg, bg);
+    if (ratio === null) continue;
+    if (ratio < 4.5) {
+      console.warn(
+        JSON.stringify({
+          event: "managed_palette_contrast_failed",
+          archetype: palette.archetype,
+          pair: `${fgKey}/${bgKey}`,
+          ratio: Number(ratio.toFixed(2)),
+          fg,
+          bg,
+        }),
+      );
+      return null;
+    }
+  }
+  return palette;
+}
+
 function pickManagedPalette(seed: string): ManagedPalette {
   const palettes: ManagedPalette[] = [
     {
@@ -179,7 +218,7 @@ function pickManagedPalette(seed: string): ManagedPalette {
       colors: {
         primary: "#1746A2",
         "primary-foreground": "#FFFFFF",
-        accent: "#E85D04",
+        accent: "#B45309",
         "accent-foreground": "#FFFFFF",
         highlight: "#F4B400",
         "highlight-foreground": "#1F1300",
@@ -238,7 +277,27 @@ function pickManagedPalette(seed: string): ManagedPalette {
     },
   ];
   const index = Number.parseInt(hashContent(seed).slice(0, 8), 16) % palettes.length;
-  return palettes[index];
+  const picked = palettes[index];
+  const validated = validateManagedPalette(picked);
+  if (validated) return validated;
+
+  // Fallback: tìm palette đầu tiên pass contrast, nếu không có thì dùng palette 2 (đã verified an toàn)
+  for (const p of palettes) {
+    if (p === picked) continue;
+    const alt = validateManagedPalette(p);
+    if (alt) {
+      console.warn(
+        JSON.stringify({
+          event: "managed_palette_fallback_used",
+          original: picked.archetype,
+          fallback: alt.archetype,
+        }),
+      );
+      return alt;
+    }
+  }
+  // Should never reach here since palette 2 is verified safe.
+  return palettes[1];
 }
 
 function normalizeDesignFact(value: unknown, fallback: string): string {
