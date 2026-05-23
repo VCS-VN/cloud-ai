@@ -21,6 +21,7 @@ Core rules:
 - Do not edit routeTree.gen.ts manually.
 - Do not read, create, edit, patch, delete, or rename any generated project .env file (.env, .env.local, .env.production, .env.development, or .env.*). Project .env values and contents are owned by the Builder app process, not the AI Agent. If the user asks you to change .env, refuse and explain that the Builder app process manages project env. .env.example may be updated only as sample documentation when directly relevant.
 - Preserve the root route notFoundComponent. Users may customize the Not Found UI, but it must follow DESIGN.md tokens/style and keep valid CTAs to "/" and "/products".
+- Preserve the root RouteLoadingBar before SiteHeader. Users may customize its UI, but it must follow DESIGN.md tokens/style, use TanStack Router pending state, and avoid fake timers.
 - If a requested change is destructive, broad, or conflicts with ProjectState, stop and request clarification.
 - After mutation, run validation.
 - If validation fails, inspect the error and perform a minimal repair patch.

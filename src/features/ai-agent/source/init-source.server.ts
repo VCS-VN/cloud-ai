@@ -502,6 +502,10 @@ export function renderStorefrontBaselineFiles(
     { path: "src/components/ui/badge.tsx", content: badgeSource() },
     { path: "src/components/ui/card.tsx", content: cardSource() },
     {
+      path: "src/components/layout/route-loading-bar.tsx",
+      content: routeLoadingBarSource(),
+    },
+    {
       path: "src/components/layout/site-header.tsx",
       content: siteHeaderSource(),
     },
@@ -1097,11 +1101,12 @@ export function useCart() {
 }
 `;
 }
-function rootRouteSource() {
+export function rootRouteSource() {
   return `import { Outlet, createRootRoute, HeadContent, Scripts } from '@tanstack/react-router'
 import { Providers } from '@/app/providers'
 import { StoreProvider } from '@/app/store-provider'
 import { CartProvider } from '@/app/cart-provider'
+import { RouteLoadingBar } from '@/components/layout/route-loading-bar'
 import { SiteHeader } from '@/components/layout/site-header'
 import { SiteFooter } from '@/components/layout/site-footer'
 import { NotFound } from '@/components/store/not-found'
@@ -1117,6 +1122,7 @@ function Root() {
         <Providers>
           <StoreProvider>
             <CartProvider>
+              <RouteLoadingBar />
               <SiteHeader />
               <Outlet />
               <SiteFooter />
@@ -1127,6 +1133,41 @@ function Root() {
         <Scripts />
       </body>
     </html>
+  )
+}
+`;
+}
+export function ensureRootRouteLoadingBarContract(source: string) {
+  if (/<RouteLoadingBar\b/.test(source)) return source;
+  let nextSource = source;
+  if (!nextSource.includes("@/components/layout/route-loading-bar")) {
+    const siteHeaderImport = "import { SiteHeader } from '@/components/layout/site-header'";
+    nextSource = nextSource.includes(siteHeaderImport)
+      ? nextSource.replace(siteHeaderImport, `import { RouteLoadingBar } from '@/components/layout/route-loading-bar'\n${siteHeaderImport}`)
+      : `import { RouteLoadingBar } from '@/components/layout/route-loading-bar'\n${nextSource}`;
+  }
+  return nextSource.replace(
+    /(\s*)<SiteHeader\s*\/>/,
+    "$1<RouteLoadingBar />$1<SiteHeader />",
+  );
+}
+export function routeLoadingBarSource() {
+  return `import { useRouterState } from '@tanstack/react-router'
+
+export function RouteLoadingBar() {
+  const status = useRouterState({ select: (state) => state.status })
+  const visible = status === 'pending'
+
+  return (
+    <div
+      role='progressbar'
+      aria-hidden={!visible}
+      className='pointer-events-none fixed inset-x-0 top-0 z-50 h-1 overflow-hidden bg-transparent'
+    >
+      <div
+        className={\`h-full w-full bg-primary transition-all duration-300 ease-out \${visible ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0'}\`}
+      />
+    </div>
   )
 }
 `;

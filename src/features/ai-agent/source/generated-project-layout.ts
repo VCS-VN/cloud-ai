@@ -19,6 +19,7 @@ export const REQUIRED_GENERATED_STOREFRONT_FILES = [
   "src/app/query-client.ts",
   "src/app/store-provider.tsx",
   "src/app/cart-provider.tsx",
+  "src/components/layout/route-loading-bar.tsx",
   "src/components/layout/site-header.tsx",
   "src/components/layout/site-footer.tsx",
   "src/components/store/hero-section.tsx",

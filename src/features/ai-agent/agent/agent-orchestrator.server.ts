@@ -17,7 +17,7 @@ import type { RuntimeOrchestrator } from "../runtime/runtime-orchestrator.server
 import { sanitizeForUser } from "./user-facing-presenter";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { buildFileManifest } from "../source/code-index-service.server";
-import { hasSiteHeaderSearchSuggestionContract, initInfrastructureSource, initSource, notFoundSource, productSuggestionsQuerySource, renderEnvSource, siteHeaderSource } from "../source/init-source.server";
+import { ensureRootRouteLoadingBarContract, hasSiteHeaderSearchSuggestionContract, initInfrastructureSource, initSource, notFoundSource, productSuggestionsQuerySource, renderEnvSource, routeLoadingBarSource, siteHeaderSource } from "../source/init-source.server";
 import { REQUIRED_GENERATED_STOREFRONT_FILES } from "../source/generated-project-layout";
 import { applyStoreSlugToEnv } from "../store-runtime/generated-project-env";
 import { buildRetailInitPrompt } from "./init-prompt.server";
@@ -1027,6 +1027,7 @@ export class AgentOrchestrator {
           "createRootRoute({ component: Root, notFoundComponent: NotFound })",
         );
       }
+      nextRootSource = ensureRootRouteLoadingBarContract(nextRootSource);
       nextRootSource = nextRootSource.replace(/\n{3,}/g, "\n\n");
 
       if (nextRootSource !== rootSource) {
@@ -1053,6 +1054,19 @@ export class AgentOrchestrator {
             invariant: "root_route_not_found_component",
           }));
         }
+      }
+      const routeLoadingBarPath = "src/components/layout/route-loading-bar.tsx";
+      try {
+        await this.deps.projectFileStore.readTextFile(projectId, routeLoadingBarPath);
+      } catch {
+        await this.deps.projectFileStore.writeTextFile(projectId, routeLoadingBarPath, routeLoadingBarSource());
+        changedFiles.push(routeLoadingBarPath);
+        console.info(JSON.stringify({
+          event: "init_invariant_repaired",
+          projectId,
+          path: routeLoadingBarPath,
+          invariant: "root_route_loading_bar",
+        }));
       }
     } catch (error) {
       console.warn(JSON.stringify({
