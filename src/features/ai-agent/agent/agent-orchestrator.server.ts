@@ -17,7 +17,7 @@ import type { RuntimeOrchestrator } from "../runtime/runtime-orchestrator.server
 import { sanitizeForUser } from "./user-facing-presenter";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { buildFileManifest } from "../source/code-index-service.server";
-import { hasSiteHeaderSearchSuggestionContract, initInfrastructureSource, initSource, productSuggestionsQuerySource, siteHeaderSource } from "../source/init-source.server";
+import { hasSiteHeaderSearchSuggestionContract, initInfrastructureSource, initSource, productSuggestionsQuerySource, renderEnvSource, siteHeaderSource } from "../source/init-source.server";
 import { REQUIRED_GENERATED_STOREFRONT_FILES } from "../source/generated-project-layout";
 import { buildRetailInitPrompt } from "./init-prompt.server";
 import {
@@ -592,6 +592,17 @@ export class AgentOrchestrator {
         byteSize: designResult.byteSize,
       },
     };
+
+    // Write .env with VITE_API_BASE_URL after DESIGN.md is created.
+    // The AI Agent is NOT allowed to read or write .env; the app process owns it.
+    await runPhase("write_project_env", () =>
+      this.deps.projectFileStore?.writeTextFile(
+        input.projectId,
+        ".env",
+        renderEnvSource(),
+      ),
+    );
+    yield { type: "file_changed", path: ".env", operation: "created" };
 
     const designRules = await runPhase("load_design_rules", () =>
       loadProjectDesignRules({
