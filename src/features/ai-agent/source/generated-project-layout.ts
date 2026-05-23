@@ -29,6 +29,7 @@ export const REQUIRED_GENERATED_STOREFRONT_FILES = [
   "src/components/store/cart-drawer.tsx",
   "src/components/store/cart-item.tsx",
   "src/components/store/order-card.tsx",
+  "src/components/store/not-found.tsx",
   "src/components/ui/button.tsx",
   "src/components/ui/input.tsx",
   "src/components/ui/select.tsx",

@@ -1,8 +1,8 @@
-import axios from "axios";
 import { ProjectWorkspaceService } from "@/agent/project-workspace-service";
 import type { ProcessManager } from "@/features/ai-agent/runtime/process-manager.server";
 import type { ProjectStateStore } from "@/features/ai-agent/project/project-state-store.server";
 import type { GeneratedProjectEnvWriter } from "@/features/ai-agent/store-runtime/generated-project-env-writer.server";
+import { waitForPreviewHealthy } from "@/features/ai-agent/runtime/preview-health.server";
 import {
   EMPTY_DEV_RUNTIME,
   type DevRuntime,
@@ -391,12 +391,7 @@ export class ProjectService {
   }
 
   private async isPreviewEndpointHealthy(previewUrl: string): Promise<boolean> {
-    try {
-      const response = await axios.head(previewUrl, { validateStatus: () => true });
-      return response.status >= 200 && response.status < 500;
-    } catch {
-      return false;
-    }
+    return waitForPreviewHealthy(previewUrl);
   }
 
   async getWorkspace(

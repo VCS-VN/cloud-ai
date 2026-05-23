@@ -47,6 +47,7 @@ import type { RuntimeUIState } from "@/features/ai-agent/ui/agent-event-reducer"
 import { AgentEventTimeline } from "@/features/ai-agent/ui/agent-event-timeline";
 import { synthesizeAgentProgressContent, shouldReplaceStaleAgentContent } from "@/features/ai-agent/ui/agent-progress";
 import { isProjectPreviewStartAvailable, isProjectPreviewTemporarilyUnavailable } from "@/features/ai-agent/ui/preview-availability";
+import { buildPreviewUrl, normalizePreviewPath } from "@/features/ai-agent/ui/preview-path";
 import { StreamingTextPanel } from "@/features/ai-agent/ui/streaming-text-panel";
 import { useUserPresence } from "@/hooks/useUserPresence";
 import { UserMenu } from "@/components/auth/UserMenu";
@@ -317,7 +318,10 @@ function ProjectDetailPage() {
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
   const [detailMode, setDetailMode] = useState<DetailMode>("preview");
-  const [previewPath, setPreviewPath] = useState("/");
+  const [previewDraftPath, setPreviewDraftPath] = useState("/");
+  const [previewCommittedPath, setPreviewCommittedPath] = useState("/");
+  const [previewPathError, setPreviewPathError] = useState<string | null>(null);
+  const [previewReloadKey, setPreviewReloadKey] = useState(0);
   const [chatWidth, setChatWidth] = useState(DEFAULT_CHAT_WIDTH);
   const [chatVisible, setChatVisible] = useState(true);
   const [resizingChat, setResizingChat] = useState(false);
@@ -763,7 +767,10 @@ function ProjectDetailPage() {
     setAgentReasoning("");
     setSelectedNodeId(firstFileNode(workspace?.fileTree ?? [])?.id);
     setDetailMode("preview");
-    setPreviewPath("/");
+    setPreviewDraftPath("/");
+    setPreviewCommittedPath("/");
+    setPreviewPathError(null);
+    setPreviewReloadKey(0);
     setCodeQuery("");
     setExpandedFolderIds(
       new Set(
@@ -803,6 +810,38 @@ function ProjectDetailPage() {
         : undefined,
     [messages, project?.activeAgentMessageId],
   );
+  const previewReady =
+    runtimeState.status === "running" &&
+    !!runtimeState.previewUrl &&
+    previewTokenState.status === "ready";
+  const activePreviewUrl =
+    previewReady && runtimeState.previewUrl
+      ? buildPreviewUrl(runtimeState.previewUrl, previewCommittedPath)
+      : null;
+  const previewControlsLoading =
+    previewStarting ||
+    ["installing", "starting", "fixing"].includes(runtimeState.status) ||
+    previewTokenState.status === "refreshing";
+  const handlePreviewPathChange = useCallback((path: string) => {
+    setPreviewDraftPath(path);
+    setPreviewPathError(null);
+  }, []);
+  const handlePreviewPathReset = useCallback(() => {
+    setPreviewDraftPath(previewCommittedPath);
+    setPreviewPathError(null);
+  }, [previewCommittedPath]);
+  const handlePreviewReload = useCallback(() => {
+    if (!previewReady) return;
+    const normalized = normalizePreviewPath(previewDraftPath);
+    if (!normalized.ok) {
+      setPreviewPathError(normalized.error);
+      return;
+    }
+    setPreviewPathError(null);
+    setPreviewDraftPath(normalized.path);
+    setPreviewCommittedPath(normalized.path);
+    setPreviewReloadKey((current) => current + 1);
+  }, [previewDraftPath, previewReady]);
 
   useEffect(() => {
     if (
@@ -1107,6 +1146,10 @@ function ProjectDetailPage() {
     })) return;
     setPreviewStarting(true);
     setPreviewStartError(null);
+    setPreviewDraftPath("/");
+    setPreviewCommittedPath("/");
+    setPreviewPathError(null);
+    setPreviewReloadKey(0);
     setManualRuntime((current) => ({
       ...(current ?? createInitialAgentEventState().runtime),
       status: "starting",
@@ -1236,14 +1279,20 @@ function ProjectDetailPage() {
             <PreviewToolbar
               chatVisible={chatVisible}
               mode={detailMode}
-              previewPath={previewPath}
+              previewDraftPath={previewDraftPath}
+              previewPathError={previewPathError}
+              previewReady={previewReady}
+              previewControlsLoading={previewControlsLoading}
+              activePreviewUrl={activePreviewUrl}
               runtimeState={runtimeState}
               previewStarting={previewStarting}
               projectStatus={project.status}
               projectProcessingStatus={project.processingStatus}
               onToggleChat={toggleChat}
               onModeChange={setDetailMode}
-              onPathChange={setPreviewPath}
+              onPathChange={handlePreviewPathChange}
+              onPathSubmit={handlePreviewReload}
+              onPathReset={handlePreviewPathReset}
               onStartPreview={handleStartPreview}
               user={user}
             />
@@ -1251,7 +1300,8 @@ function ProjectDetailPage() {
               <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-md  border-[var(--app-border)] bg-[var(--app-panel)] transition-colors duration-300">
                 {detailMode === "preview" ? (
                   <PreviewWorkspace
-                    previewPath={previewPath}
+                    previewUrl={activePreviewUrl}
+                    previewReloadKey={previewReloadKey}
                     runtimeState={runtimeState}
                     projectId={project?.id ?? ""}
                     previewStarting={previewStarting}
@@ -1462,7 +1512,11 @@ function ChatHeader({
 function PreviewToolbar({
   chatVisible,
   mode,
-  previewPath,
+  previewDraftPath,
+  previewPathError,
+  previewReady,
+  previewControlsLoading,
+  activePreviewUrl,
   runtimeState,
   previewStarting,
   projectStatus,
@@ -1470,12 +1524,18 @@ function PreviewToolbar({
   onToggleChat,
   onModeChange,
   onPathChange,
+  onPathSubmit,
+  onPathReset,
   onStartPreview,
   user,
 }: {
   chatVisible: boolean;
   mode: DetailMode;
-  previewPath: string;
+  previewDraftPath: string;
+  previewPathError: string | null;
+  previewReady: boolean;
+  previewControlsLoading: boolean;
+  activePreviewUrl: string | null;
   runtimeState: RuntimeUIState;
   previewStarting: boolean;
   projectStatus: Project["status"];
@@ -1483,18 +1543,19 @@ function PreviewToolbar({
   onToggleChat: () => void;
   onModeChange: (mode: DetailMode) => void;
   onPathChange: (path: string) => void;
+  onPathSubmit: () => void;
+  onPathReset: () => void;
   onStartPreview: () => void;
   user?: import("@/auth/types").AuthUserSummary;
 }) {
-  const previewUrl =
-    runtimeState.status === "running" ? runtimeState.previewUrl : null;
   const canStartPreview = isProjectPreviewStartAvailable({
     projectStatus,
     projectProcessingStatus,
     runtimeStatus: runtimeState.status,
-    previewUrl,
+    previewUrl: runtimeState.status === "running" ? runtimeState.previewUrl : null,
   });
   const previewTemporarilyUnavailable = isProjectPreviewTemporarilyUnavailable({ projectStatus, projectProcessingStatus });
+  const pathInputId = "preview-path";
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-sm pt-3  border-[var(--app-border)] px-sm transition-colors duration-300">
@@ -1534,24 +1595,52 @@ function PreviewToolbar({
         </button>
       </div>
 
-      <label
-        className="mx-auto flex h-9 w-full max-w-[640px] items-center gap-xs rounded-pill border border-[var(--app-border)] bg-[var(--app-control)] px-sm text-[12px] text-[var(--app-text)]"
-        htmlFor="preview-path"
-      >
-        <Globe
-          aria-hidden="true"
-          className="text-[var(--app-icon-subtle)]"
-          size={14}
-        />
+      <div className="mx-auto flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 items-center gap-xs">
+          <label
+            className={`flex h-9 min-w-0 flex-1 items-center gap-xs rounded-pill border px-sm text-[12px] text-[var(--app-text)] ${previewPathError ? "border-[var(--app-border-strong)] bg-[var(--app-control)]" : "border-[var(--app-border)] bg-[var(--app-control)]"}`}
+            htmlFor={pathInputId}
+          >
+            <Globe
+              aria-hidden="true"
+              className="text-[var(--app-icon-subtle)]"
+              size={14}
+            />
 
-        <input
-          id="preview-path"
-          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] text-[var(--app-page-text)] outline-none placeholder:text-[var(--app-subtle-text)]"
-          value={previewPath}
-          placeholder="/"
-          onChange={(event) => onPathChange(event.target.value)}
-        />
-      </label>
+            <input
+              id={pathInputId}
+              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] text-[var(--app-page-text)] outline-none placeholder:text-[var(--app-subtle-text)] disabled:cursor-not-allowed disabled:text-[var(--app-muted)]"
+              value={previewDraftPath}
+              placeholder="/"
+              disabled={!previewReady}
+              aria-invalid={previewPathError ? "true" : undefined}
+              onChange={(event) => onPathChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") onPathSubmit();
+                if (event.key === "Escape") onPathReset();
+              }}
+            />
+          </label>
+          <button
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+            type="button"
+            onClick={onPathSubmit}
+            disabled={!previewReady}
+            aria-label="Reload preview"
+          >
+            {previewControlsLoading ? (
+              <Loader2 aria-hidden="true" className="animate-spin" size={15} />
+            ) : (
+              <RefreshCw aria-hidden="true" size={15} />
+            )}
+          </button>
+        </div>
+        {previewPathError ? (
+          <span className="mt-xxs truncate text-[11px] leading-3 text-[var(--app-danger-text)]">
+            {previewPathError}
+          </span>
+        ) : null}
+      </div>
 
       <div className="flex shrink-0 items-center gap-xs">
         <UserMenu user={user} compact />
@@ -1575,9 +1664,9 @@ function PreviewToolbar({
             )}
           </button>
         ) : null}
-        {previewUrl ? (
+        {activePreviewUrl ? (
           <a
-            href={previewUrl}
+            href={activePreviewUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
@@ -1587,27 +1676,22 @@ function PreviewToolbar({
           </a>
         ) : (
           <button
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] opacity-60"
             type="button"
+            disabled
             aria-label="Open preview"
           >
             <ExternalLink aria-hidden="true" size={15} />
           </button>
         )}
-        <button
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
-          type="button"
-          aria-label="Refresh preview"
-        >
-          <RefreshCw aria-hidden="true" size={15} />
-        </button>
       </div>
     </header>
   );
 }
 
 function PreviewWorkspace({
-  previewPath: _previewPath,
+  previewUrl,
+  previewReloadKey,
   runtimeState,
   projectId,
   previewStarting,
@@ -1618,7 +1702,8 @@ function PreviewWorkspace({
   onStartPreview,
   onRefreshPreviewToken,
 }: {
-  previewPath: string;
+  previewUrl: string | null;
+  previewReloadKey: number;
   runtimeState: RuntimeUIState;
   projectId: string;
   previewStarting: boolean;
@@ -1629,8 +1714,7 @@ function PreviewWorkspace({
   onStartPreview: () => void;
   onRefreshPreviewToken: () => void;
 }) {
-  const showIframe =
-    runtimeState.status === "running" && runtimeState.previewUrl && previewTokenState.status === "ready";
+  const showIframe = !!previewUrl;
   const previewTemporarilyUnavailable = isProjectPreviewTemporarilyUnavailable({ projectStatus, projectProcessingStatus });
   const showInitPanel =
     !previewTemporarilyUnavailable &&
@@ -1662,8 +1746,8 @@ function PreviewWorkspace({
         </div>
         {showIframe ? (
           <iframe
-            key={`${runtimeState.previewUrl}:${previewTokenState.refreshedAt ?? "ready"}`}
-            src={runtimeState.previewUrl!}
+            key={`${previewUrl}:${previewTokenState.refreshedAt ?? "ready"}:${previewReloadKey}`}
+            src={previewUrl}
             className="h-full w-full border-0"
             title="Project preview"
             sandbox="allow-scripts allow-same-origin allow-forms"

@@ -1,9 +1,9 @@
-import axios from "axios";
 import { parseViteReady, parseViteError, type ProcessManager } from "./process-manager.server";
 import type { ProjectStateStore } from "../project/project-state-store.server";
 import { EMPTY_DEV_RUNTIME, type DevRuntime } from "../project/project-state.schema";
 import type { DevRuntimeEvent } from "./runtime-events";
 import { ErrorAnalyzer, ErrorFixer } from "./error-analyzer.server";
+import { waitForPreviewHealthy } from "./preview-health.server";
 
 export type RuntimeServiceDeps = {
   processManager: ProcessManager;
@@ -232,7 +232,11 @@ export class RuntimeService {
 
     const devLog = truncateLog(devLogLines.join("\n"));
 
-    if (outcome === "ready" && readyUrl) {
+    const healthy = outcome === "ready" && readyUrl
+      ? await this.isPreviewEndpointHealthy(readyUrl)
+      : false;
+
+    if (healthy && readyUrl) {
       const runningRuntime: DevRuntime = {
         ...currentRuntime,
         status: "running",
@@ -252,6 +256,9 @@ export class RuntimeService {
         port: readyPort ?? 5173,
       };
     } else {
+      if (outcome === "ready" && readyUrl) {
+        devError = "Preview process started but did not become healthy.";
+      }
       const errorRuntime: DevRuntime = {
         ...currentRuntime,
         status: "error",
@@ -274,12 +281,7 @@ export class RuntimeService {
   }
 
   private async isPreviewEndpointHealthy(previewUrl: string): Promise<boolean> {
-    try {
-      const response = await axios.head(previewUrl, { validateStatus: () => true });
-      return response.status >= 200 && response.status < 500;
-    } catch {
-      return false;
-    }
+    return waitForPreviewHealthy(previewUrl);
   }
 
   async *runErrorFixLoop(input: {

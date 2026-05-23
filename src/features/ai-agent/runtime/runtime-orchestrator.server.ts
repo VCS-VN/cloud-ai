@@ -1,5 +1,4 @@
 import { execFile, type ChildProcess } from "node:child_process";
-import axios from "axios";
 import type { ProjectStateStore } from "@/features/ai-agent/project/project-state-store.server";
 import type { DevRuntime } from "@/features/ai-agent/project/project-state.schema";
 import type { Pm2Driver, PreviewPm2Process } from "./pm2-driver.server";
@@ -7,6 +6,7 @@ import type { CloudflareDnsClient, CloudflareDnsResult } from "./cloudflare-dns.
 import { getPreviewRuntimeConfig } from "./preview-runtime-config.server";
 import type { PortAllocator } from "./port-allocator.server";
 import { getProjectWorkspaceRoot } from "@/server/config/paths.server";
+import { waitForPreviewHealthy } from "./preview-health.server";
 
 export type RuntimeOrchestratorDeps = {
   projectStateStore: ProjectStateStore;
@@ -173,7 +173,7 @@ export class RuntimeOrchestrator {
 
     await this.scheduleEnsureRunning(input);
     const runtime = await this.deps.projectStateStore.readDevRuntime(input.projectId, input.userId);
-    if (runtime.previewUrl && runtime.port) {
+    if (runtime.status === "running" && runtime.previewUrl && runtime.port) {
       return { success: true, previewUrl: runtime.previewUrl, previewHost: runtime.previewHost, port: runtime.port };
     }
     return { success: false, error: runtime.lastError ?? "Preview runtime is starting.", errorTier: runtime.lastErrorTier ?? "system" };
@@ -342,7 +342,7 @@ export class RuntimeOrchestrator {
         lastErrorTier: "system",
       };
     }
-    if (pm2.status === "online" && runtime.previewUrl && runtime.port) {
+    if (runtime.status === "running" && pm2.status === "online" && runtime.previewUrl && runtime.port) {
       return { ...runtime, status: "running", pid: pm2.pid };
     }
     return runtime;
@@ -397,12 +397,7 @@ function runPnpm(args: string[], input: { workspaceRoot: string; signal?: AbortS
 }
 
 async function defaultHealthCheck(previewUrl: string) {
-  try {
-    const response = await axios.head(previewUrl, { validateStatus: () => true });
-    return response.status >= 200 && response.status < 500;
-  } catch {
-    return false;
-  }
+  return waitForPreviewHealthy(previewUrl);
 }
 
 function parseAccessTime(value: string | null | undefined): number {

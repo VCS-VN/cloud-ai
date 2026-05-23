@@ -17,7 +17,7 @@ import type { RuntimeOrchestrator } from "../runtime/runtime-orchestrator.server
 import { sanitizeForUser } from "./user-facing-presenter";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { buildFileManifest } from "../source/code-index-service.server";
-import { hasSiteHeaderSearchSuggestionContract, initInfrastructureSource, initSource, productSuggestionsQuerySource, renderEnvSource, siteHeaderSource } from "../source/init-source.server";
+import { hasSiteHeaderSearchSuggestionContract, initInfrastructureSource, initSource, notFoundSource, productSuggestionsQuerySource, renderEnvSource, siteHeaderSource } from "../source/init-source.server";
 import { REQUIRED_GENERATED_STOREFRONT_FILES } from "../source/generated-project-layout";
 import { applyStoreSlugToEnv } from "../store-runtime/generated-project-env";
 import { buildRetailInitPrompt } from "./init-prompt.server";
@@ -1015,6 +1015,18 @@ export class AgentOrchestrator {
           ? nextRootSource.replace(preambleImport, `${preambleImport}\nimport '@/styles/app.css'`)
           : `import '@/styles/app.css'\n${nextRootSource}`;
       }
+      if (!nextRootSource.includes("notFoundComponent")) {
+        if (!nextRootSource.includes("@/components/store/not-found")) {
+          const footerImport = "import { SiteFooter } from '@/components/layout/site-footer'";
+          nextRootSource = nextRootSource.includes(footerImport)
+            ? nextRootSource.replace(footerImport, `${footerImport}\nimport { NotFound } from '@/components/store/not-found'`)
+            : `import { NotFound } from '@/components/store/not-found'\n${nextRootSource}`;
+        }
+        nextRootSource = nextRootSource.replace(
+          /createRootRoute\(\{\s*component:\s*Root\s*\}\)/,
+          "createRootRoute({ component: Root, notFoundComponent: NotFound })",
+        );
+      }
       nextRootSource = nextRootSource.replace(/\n{3,}/g, "\n\n");
 
       if (nextRootSource !== rootSource) {
@@ -1026,6 +1038,21 @@ export class AgentOrchestrator {
           path: rootPath,
           invariant: "react_preamble_and_styles_alias",
         }));
+      }
+      if (!rootSource.includes("notFoundComponent")) {
+        const notFoundPath = "src/components/store/not-found.tsx";
+        try {
+          await this.deps.projectFileStore.readTextFile(projectId, notFoundPath);
+        } catch {
+          await this.deps.projectFileStore.writeTextFile(projectId, notFoundPath, notFoundSource());
+          changedFiles.push(notFoundPath);
+          console.info(JSON.stringify({
+            event: "init_invariant_repaired",
+            projectId,
+            path: notFoundPath,
+            invariant: "root_route_not_found_component",
+          }));
+        }
       }
     } catch (error) {
       console.warn(JSON.stringify({

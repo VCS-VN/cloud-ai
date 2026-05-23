@@ -535,6 +535,7 @@ export function renderStorefrontBaselineFiles(
     },
     { path: "src/components/store/cart-item.tsx", content: cartItemSource() },
     { path: "src/components/store/order-card.tsx", content: orderCardSource() },
+    { path: "src/components/store/not-found.tsx", content: notFoundSource() },
     { path: "src/components/store/store-detail-error.tsx", content: storeDetailErrorSource() },
     { path: "src/services/store/use-store-detail.ts", content: storeDetailQuerySource() },
     { path: "src/services/store/use-products-list.ts", content: productsListQuerySource() },
@@ -1103,10 +1104,11 @@ import { StoreProvider } from '@/app/store-provider'
 import { CartProvider } from '@/app/cart-provider'
 import { SiteHeader } from '@/components/layout/site-header'
 import { SiteFooter } from '@/components/layout/site-footer'
+import { NotFound } from '@/components/store/not-found'
 import { Toaster } from '@/components/ui/sonner'
 import '@/styles/app.css'
 
-export const Route = createRootRoute({ component: Root })
+export const Route = createRootRoute({ component: Root, notFoundComponent: NotFound })
 function Root() {
   return (
     <html lang='en'>
@@ -1125,6 +1127,33 @@ function Root() {
         <Scripts />
       </body>
     </html>
+  )
+}
+`;
+}
+export function notFoundSource() {
+  return `import { Link } from '@tanstack/react-router'
+import { SearchX } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+
+export function NotFound() {
+  return (
+    <main className='mx-auto flex min-h-[60vh] max-w-5xl items-center px-4 py-16'>
+      <Card className='w-full border-border bg-card text-card-foreground'>
+        <CardContent className='grid gap-6 p-8 text-center md:p-12'>
+          <SearchX aria-hidden='true' className='mx-auto h-12 w-12 text-primary' />
+          <div className='mx-auto max-w-2xl space-y-3'>
+            <h1 className='text-3xl font-bold tracking-tight md:text-5xl'>Page not found</h1>
+            <p className='text-muted-foreground'>This preview path does not exist yet. Return to the storefront or browse products.</p>
+          </div>
+          <div className='flex flex-col justify-center gap-3 sm:flex-row'>
+            <Button asChild><Link to='/'>Go home</Link></Button>
+            <Button asChild variant='outline'><Link to='/products'>View products</Link></Button>
+          </div>
+        </CardContent>
+      </Card>
+    </main>
   )
 }
 `;
