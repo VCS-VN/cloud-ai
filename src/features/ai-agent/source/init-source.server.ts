@@ -1147,7 +1147,8 @@ export function useCart() {
 `;
 }
 export function rootRouteSource() {
-  return `import { Outlet, createRootRoute, HeadContent, Scripts } from '@tanstack/react-router'
+  return `import { Suspense } from 'react'
+import { Outlet, createRootRoute, HeadContent, Scripts } from '@tanstack/react-router'
 import { Providers } from '@/app/providers'
 import { StoreProvider } from '@/app/store-provider'
 import { CartProvider } from '@/app/cart-provider'
@@ -1169,7 +1170,9 @@ function Root() {
             <CartProvider>
               <RouteLoadingBar />
               <SiteHeader />
-              <Outlet />
+              <Suspense fallback={<RouteSuspenseFallback />}>
+                <Outlet />
+              </Suspense>
               <SiteFooter />
               <Toaster />
             </CartProvider>
@@ -1178,6 +1181,25 @@ function Root() {
         <Scripts />
       </body>
     </html>
+  )
+}
+
+function RouteSuspenseFallback() {
+  return (
+    <main className='mx-auto min-h-[60vh] max-w-7xl px-4 py-12'>
+      <div className='space-y-8'>
+        <div className='space-y-4'>
+          <div className='h-5 w-32 animate-pulse rounded bg-muted/50' />
+          <div className='h-12 w-full max-w-xl animate-pulse rounded bg-muted/60' />
+          <div className='h-5 w-full max-w-2xl animate-pulse rounded bg-muted/50' />
+        </div>
+        <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-4'>
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className='h-72 animate-pulse rounded-lg border bg-muted/40' />
+          ))}
+        </div>
+      </div>
+    </main>
   )
 }
 `;
