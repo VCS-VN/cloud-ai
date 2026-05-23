@@ -149,6 +149,13 @@ export class RuntimeOrchestrator {
     }, userId);
   }
 
+  async restartPreview(input: ScheduleEnsureRunningInput): Promise<void> {
+    const current = await this.getRuntimeState(input.projectId, input.userId);
+    if (current.status !== "running" && current.pm2.status === "missing") return;
+    await this.stopPreview(input.projectId, input.userId);
+    await this.scheduleEnsureRunning(input);
+  }
+
   async findIdleEligible(): Promise<EvictionCandidate[]> {
     const config = getPreviewRuntimeConfig();
     const idleThresholdMs = Math.max(0, config.idleTimeoutSeconds) * 1000;

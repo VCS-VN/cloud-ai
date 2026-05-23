@@ -201,6 +201,9 @@ export class ProjectService {
     settings: ProjectSettingsInput,
     userId?: string,
   ): Promise<Project> {
+    const previousStoreSlug = settings.selectedStoreSlug === undefined
+      ? undefined
+      : normalizeSelectedStoreSlug((await this.projectRepository.getProject(projectId, userId))?.selectedStoreSlug ?? null);
     const project = await this.projectRepository.updateProjectSettings(
       projectId,
       {
@@ -222,8 +225,27 @@ export class ProjectService {
             }),
           ),
         );
+      if (previousStoreSlug !== normalizeSelectedStoreSlug(project.selectedStoreSlug)) {
+        void this.restartPreviewAfterStoreChange(projectId, userId);
+      }
     }
     return project;
+  }
+
+  private async restartPreviewAfterStoreChange(projectId: string, userId?: string) {
+    if (!this.runtimeOrchestrator) return;
+    try {
+      const workspaceRoot = await this.workspaceService.ensureWorkspace(projectId);
+      await this.runtimeOrchestrator.restartPreview({ projectId, userId, workspaceRoot });
+    } catch (err) {
+      console.warn(
+        JSON.stringify({
+          event: "preview_restart_after_store_change_failed",
+          projectId,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
   }
 
   async getDevRuntimeState(
