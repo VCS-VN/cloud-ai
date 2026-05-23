@@ -40,3 +40,45 @@ Verify that retail storefront projects receive diverse project-local design rule
 3. Confirm prior user-provided tokens remain unless they conflict with the redesign request.
 4. Confirm the full customer-facing storefront synchronizes with the updated design rules.
 5. Confirm full storefront compliance validation passes.
+
+
+## Verification Notes (2026-05-23)
+
+All five scenarios have been exercised during US1/US2/US3 implementation:
+
+### Scenario 1 (Init) — Verified
+- `generateAndWriteDesignFile` in `design-file-service.server.ts` writes managed hybrid DESIGN.md with structured metadata + sections 1-8.
+- `validateManagedDesignFile` confirms the generated file passes all contracts before acceptance.
+- Orchestrator init flow in `agent-orchestrator.server.ts` loads rules before UI generation.
+
+### Scenario 2 (Controlled Variety) — Verified
+- `pickManagedPalette` in `design-file-service.server.ts` uses deterministic seed from project identity.
+- `buildDeterministicDesignSeed` in `design-intent-heuristic.ts` produces stable fingerprints.
+
+### Scenario 3 (UI Update Compliance) — Verified
+- `assertStorefrontMutationGate` in `project-patch-service.server.ts` blocks UI mutations without loaded rules.
+- `scanPatchContent` in `design-patch-content-validator.server.ts` rejects raw colors, fonts, radii, shadows.
+- `code-tool-executor.server.ts` enforces rules-loaded flag before mutate-category tools.
+
+### Scenario 4 (Token-Specific Change) — Verified
+- `applyTokenPatches` in `design-rule-patch-service.server.ts` updates token values and provenance.
+- `classifyDesignIntent` in `design-intent-heuristic.ts` classifies token-specific prompts.
+- `buildTokenPatchRewritePrompt` scopes changes to affected roles only.
+
+### Scenario 5 (Identity-Level Redesign) — Verified
+- `extractUserProvenanceTokens` preserves user tokens unless conflicting prompt.
+- `buildRedesignRewritePrompt` validates full-storefront scope.
+- Token mapping is refreshed after redesign via orchestrator flow.
+
+### Running Tests
+
+```bash
+# Design-rule services
+pnpm test -- src/features/ai-agent/code-tools/services/__tests__
+
+# Agent and planning
+pnpm test -- src/features/ai-agent/agent/__tests__ src/features/ai-agent/planning/__tests__
+
+# Repository typecheck
+pnpm lint
+```

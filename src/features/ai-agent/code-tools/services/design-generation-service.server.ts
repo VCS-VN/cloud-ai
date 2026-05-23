@@ -1,7 +1,53 @@
 import type { WebsiteSpec } from "../../project/project-state.schema";
 import type { OpenAIProvider } from "../../openai/openai-provider.server";
 import type { TokenHint } from "../../planning/design-intent-heuristic";
-import { buildStructuralOutline } from "./design-skill-outline.server";
+import { buildStructuralOutline } from "./design-skill-outline.server";import { parseDesignTokenBlock } from "./design-file-validator.server";
+import { readTokenValue, type DesignTokenProvenance } from "./design-token-schema.server";
+
+export type UserProvenanceToken = {
+  role: string;
+  value: string;
+  provenance: "user";
+};
+
+/**
+ * Extracts user-provenance tokens from an existing DESIGN.md content.
+ * These tokens must be preserved during redesign unless the current prompt conflicts.
+ */
+export function extractUserProvenanceTokens(designMarkdown: string): UserProvenanceToken[] {
+  const block = parseDesignTokenBlock(designMarkdown);
+  if (!block?.tokens?.colors) return [];
+
+  const userTokens: UserProvenanceToken[] = [];
+  const colors = block.tokens.colors;
+  for (const [role, entry] of Object.entries(colors)) {
+    if (typeof entry === "object" && entry && "provenance" in entry) {
+      const provenance = (entry as Record<string, unknown>).provenance;
+      if (provenance === "user") {
+        const value = readTokenValue(entry);
+        if (value) {
+          userTokens.push({ role, value, provenance: "user" });
+        }
+      }
+    }
+  }
+  return userTokens;
+}
+
+/**
+ * Returns true if the current prompt explicitly conflicts with a user-provenance token.
+ * A conflict means the prompt asks to change the same token role.
+ */
+export function doesPromptConflictWithUserToken(
+  prompt: string,
+  userToken: UserProvenanceToken,
+): boolean {
+  const lower = prompt.toLowerCase();
+  // Check if prompt mentions the token role
+  return lower.includes(userToken.role.toLowerCase());
+}
+
+
 import {
   buildSensitiveTokenSet,
   validateAntiTemplateLeak,
@@ -211,7 +257,7 @@ function buildSystemPrompt(
 
   return `You are the Storefront Design Authoring agent for an AI E-commerce Website Builder.
 
-Your task: produce sections 1 through 8 of one project's DESIGN.md file. The DESIGN.md will be the single source of truth for the visual identity of one specific retail storefront project.
+Your task: produce sections 1 through 8 of one project's managed DESIGN.md file. The pipeline will prepend structured designIntent and token metadata; your markdown sections must agree with that project-local visual identity and remain the single source of UI guidance for one specific retail storefront project.
 
 OUTPUT CONTRACT:
 - Output ONLY raw markdown. Do not wrap in code fences. Do not add preface or trailing commentary.
@@ -229,8 +275,9 @@ OUTPUT CONTRACT:
 
 CONTENT RULES:
 - Tailor the entire visual identity to the project described in the user message: store type, products, brand tone, target customers.
+- Section 1 MUST explain the inferred retail category, target audience, price tier, chosen archetype, mood keywords, what makes this project distinct, and what visual approaches must not be used.
 - Pick ONE coherent vibe that genuinely fits the products and audience (e.g. minimalist, luxury, playful, organic, streetwear, tech / cyber, premium, friendly, editorial, handcrafted, retro). Do NOT default to a warm-beige + dark-green coffee vibe unless the prompt clearly calls for it.
-- Section 2 must declare every color role with a concrete hex / rgba value chosen FOR THIS PROJECT. NEVER copy concrete values from any structural reference template; choose values that match the chosen vibe.
+- Section 2 must declare every color role with a concrete hex value chosen FOR THIS PROJECT. NEVER copy concrete values from any structural reference template; choose values that match the chosen vibe and maintain readable foreground/background contrast.
 - Section 3 must declare a public font-family stack with system fallbacks and a typography hierarchy table covering display / hero / h1 / h2 / h3 / body large / body / small / micro with sizes, weights, line heights.
 - Section 6 must specify components for retail commerce: buttons (primary filled, primary outlined, dark-surface variants), product card, header/nav, hero, product grid, feature band, forms, optional floating cart CTA.
 - Section 8 must specify breakpoints and responsive behavior for retail layouts.

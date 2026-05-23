@@ -1,4 +1,5 @@
 import type { ProjectTokenIndex } from "./design-token-extractor.server";
+import { APPROVED_SEMANTIC_COLOR_UTILITIES } from "./design-token-schema.server";
 
 export type PatchChangedFile = {
   path: string;
@@ -17,7 +18,7 @@ export type PatchContentVerdict =
       violations: Array<{
         filePath: string;
         literal: string;
-        kind: "hex" | "rgb" | "hsl" | "oklch" | "fontFamily" | "radius" | "shadow";
+        kind: "hex" | "rgb" | "hsl" | "oklch" | "tailwindColor" | "fontFamily" | "radius" | "shadow";
         lineHint?: number;
         suggestedRole?: string;
       }>;
@@ -81,6 +82,9 @@ const TAILWIND_RADIUS_REGEX = /rounded-\[([^\]]+)\]/g;
 const INLINE_RADIUS_REGEX = /border-radius\s*:\s*([^;\n]+)/gi;
 const TAILWIND_SHADOW_REGEX = /shadow-\[([^\]]+)\]/g;
 const INLINE_SHADOW_REGEX = /box-shadow\s*:\s*([^;\n]+)/gi;
+const TAILWIND_COLOR_UTILITY_REGEX = /\b(?:bg|text|border|ring|from|via|to)-([a-z]+(?:-[a-z]+)*)(?:-(?:50|100|200|300|400|500|600|700|800|900|950))?\b/g;
+const APPROVED_COLOR_UTILITIES = new Set<string>(APPROVED_SEMANTIC_COLOR_UTILITIES);
+const STRUCTURAL_COLOR_UTILITY_NAMES = new Set<string>(["transparent", "current", "white", "black"]);
 
 type PatchContentViolation = Extract<
   PatchContentVerdict,
@@ -131,6 +135,14 @@ export function scanPatchContent(input: PatchContentScanInput): PatchContentVerd
         const compact = match[0].toLowerCase().replace(/\s+/g, "");
         if (input.tokens.rgbValues.has(compact)) return;
         pushViolation(violations, seen, file.path, compact, "oklch", i + 1);
+      });
+
+
+      forEachMatch(line, TAILWIND_COLOR_UTILITY_REGEX, (match) => {
+        const role = match[1];
+        if (APPROVED_COLOR_UTILITIES.has(role)) return;
+        if (STRUCTURAL_COLOR_UTILITY_NAMES.has(role)) return;
+        pushViolation(violations, seen, file.path, match[0], "tailwindColor", i + 1);
       });
 
       forEachMatch(line, TAILWIND_FONT_REGEX, (match) => {

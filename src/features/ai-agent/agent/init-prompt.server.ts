@@ -25,7 +25,7 @@ export function buildRetailInitPrompt(input: {
     "PRODUCTS:",
     productList,
     "",
-    "DESIGN: This project has its own DESIGN.md (visual identity generated for THIS store using the storefront-design-authoring skill). Call project_read_design_rules BEFORE creating UI files. Use ONLY the palette, typography, spacing, and component values declared in sections 1-8 of THIS project's DESIGN.md. Do NOT introduce hex / font / radius / shadow literals that are not declared there. Do NOT use the example colors from any other project or any structural reference template.",
+    "DESIGN: This project has its own DESIGN.md (visual identity generated for THIS store using the storefront-design-authoring skill). Call project_read_design_rules BEFORE creating UI files. Use ONLY the palette, typography, spacing, and component values declared in sections 1-8 of THIS project's DESIGN.md. Do NOT introduce hex / font / radius / shadow literals that are not declared there. Do NOT use the example colors from any other project or any structural reference template. Use mapped token utilities such as bg-primary, text-foreground, bg-card, text-muted-foreground, border-border, ring-ring, bg-highlight, and text-highlight-foreground instead of raw visual literals.",
     "",
     "IMPORTS AVAILABLE:",
     '- { websiteConfig } from "@/lib/website-config"',

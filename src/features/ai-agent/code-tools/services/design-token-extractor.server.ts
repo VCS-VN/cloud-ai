@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { parseDesignTokenBlock } from "./design-file-validator.server";
+import { readTokenValue } from "./design-token-schema.server";
 
 export type ProjectTokenIndex = {
   hexes: ReadonlySet<string>;
@@ -43,6 +45,31 @@ export function buildProjectTokenIndex(designMarkdown: string): ProjectTokenInde
   const radii = new Set<string>();
   const shadows = new Set<string>();
   const roleByValue = new Map<string, string[]>();
+
+  const structured = parseDesignTokenBlock(designMarkdown);
+  const colorTokens = structured?.tokens?.colors ?? {};
+  for (const [role, entry] of Object.entries(colorTokens)) {
+    const value = readTokenValue(entry);
+    if (value) recordColorToken(value, role, hexes, rgbValues, roleByValue);
+  }
+
+  const typographyTokens = structured?.tokens?.typography ?? {};
+  for (const entry of Object.values(typographyTokens)) {
+    const value = readTokenValue(entry);
+    if (value) recordFontStack(value, fonts);
+  }
+
+  const radiusTokens = structured?.tokens?.radius ?? {};
+  for (const entry of Object.values(radiusTokens)) {
+    const value = readTokenValue(entry);
+    if (value) radii.add(normalizeRadius(value));
+  }
+
+  const shadowTokens = structured?.tokens?.shadows ?? {};
+  for (const entry of Object.values(shadowTokens)) {
+    const value = readTokenValue(entry);
+    if (value) shadows.add(normalizeShadow(value));
+  }
 
   let currentSection = 0;
   let inCodeBlock = false;

@@ -71,3 +71,17 @@ export function isProtectedProjectEnvPath(path: string) {
   const basename = normalized.split("/").filter(Boolean).at(-1) ?? normalized;
   return basename === ".env" || (basename.startsWith(".env.") && basename !== ".env.example");
 }
+
+
+export function isStorefrontUiPath(filePath: string): boolean {
+  const normalized = normalize(filePath).replaceAll("\\", "/");
+  const exact = normalized === "tailwind.config.ts" || normalized === "tailwind.config.js" || normalized === "postcss.config.js";
+  if (exact) return true;
+  return [
+    "src/components/",
+    "src/routes/",
+    "src/styles/",
+    "app/styles/",
+    "src/app/",
+  ].some((prefix) => normalized.startsWith(prefix));
+}

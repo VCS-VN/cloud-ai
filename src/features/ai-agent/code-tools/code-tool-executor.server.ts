@@ -14,6 +14,7 @@ import { buildProjectTokenIndex } from "./services/design-token-extractor.server
 import { loadProjectDesignRules } from "./services/design-file-service.server";
 import { scanGeneratedApiClientPolicy, formatGeneratedApiClientPolicyViolations } from "./services/generated-api-client-policy.server";
 import { GENERATED_PROJECT_ENV_POLICY_MESSAGE, isProtectedGeneratedEnvPath } from "./services/project-patch-service.server";
+import { isStorefrontUiPath } from "./services/project-path-guard.server";
 
 export async function executeProjectTool(input: {
   registry: CodeToolRegistry;
@@ -150,23 +151,25 @@ export async function executeProjectTool(input: {
     }
   }
 
+  // Storefront UI mutation gate: block UI changes without loaded design rules.
   if (tool.category === "mutate") {
     const flags = (input.context as any).flags;
     const designRulesLoaded = flags?.designRulesLoaded === true;
-    if (!designRulesLoaded) {
-      const changedFiles = extractPotentialChangedFiles(args);
-      const hasUiFile = changedFiles.some((file) => isUiRelatedFilePath(file));
-      if (hasUiFile) {
-        return toolError(
-          input.context,
-          tool.name,
-          tool.category,
-          startedAt,
-          "DESIGN_RULES_REQUIRED",
-          "DESIGN.md must be read before modifying UI code. Call project_read_design_rules first.",
-          true,
-        );
-      }
+    const changedFiles = extractPotentialChangedFiles(args);
+    const storefrontPaths = changedFiles.filter((file) => isUiRelatedFilePath(file));
+
+    if (!designRulesLoaded && storefrontPaths.length > 0) {
+      return toolError(
+        input.context,
+        tool.name,
+        tool.category,
+        startedAt,
+        "DESIGN_RULES_REQUIRED",
+        `Customer-facing storefront UI cannot be modified without loaded design rules. ` +
+        `Affected paths: ${storefrontPaths.join(", ")}. ` +
+        `Call project_read_design_rules first to load DESIGN.md.`,
+        true,
+      );
     }
   }
 
@@ -181,6 +184,7 @@ export async function executeProjectTool(input: {
             projectId: input.context.projectId,
             workspaceRoot: input.context.workspaceRoot,
           });
+          (input.context as any).designRuleHash = designRules.hash;
           const tokens = buildProjectTokenIndex(designRules.markdown);
           const verdict = scanPatchContent({
             changedFiles: changedFilesWithContent,
@@ -437,17 +441,8 @@ function parseUnifiedDiff(patch: string): Map<string, string> {
   return blocks;
 }
 
-const UI_RELATED_GLOBS = [
-  "src/routes/",
-  "src/components/",
-  "src/features/",
-  "src/styles/",
-  "tailwind.config",
-  "postcss.config",
-];
-
 function isUiRelatedFilePath(filePath: string): boolean {
-  return UI_RELATED_GLOBS.some((glob) => filePath.startsWith(glob) || filePath.includes(`/${glob}`));
+  return isStorefrontUiPath(filePath) || filePath.startsWith("public/");
 }
 
 function isProtectedGeneratedEnvPathSafe(filePath: string) {

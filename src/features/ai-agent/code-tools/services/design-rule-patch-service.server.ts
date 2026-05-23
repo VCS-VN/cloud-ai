@@ -140,6 +140,26 @@ export async function applyTokenPatches(
   };
 }
 
+function updateTokenProvenance(
+  markdown: string,
+  role: string,
+  newProvenance: string,
+): string {
+  // Update provenance in the structured token block for color tokens
+  const pattern = new RegExp(
+    `(tokens:\\s*\\n\\s*colors:\\s*\\n(?:\\s*[a-z-]+:\\s*\\n\\s*value:.*\\n)*\\s*)(${escapeRegexForProvenance(role)}:\\s*\\n\\s*value:.*\\n\\s*provenance:\\s*)\"[^\"]*\"`,
+    "m",
+  );
+  if (pattern.test(markdown)) {
+    return markdown.replace(pattern, `$1$2"${newProvenance}"`);
+  }
+  return markdown;
+}
+
+function escapeRegexForProvenance(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function replaceRoleValue(
   markdown: string,
   humanNames: ReadonlyArray<string>,

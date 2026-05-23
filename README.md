@@ -63,3 +63,11 @@ AI Agent generated storefront source is written outside the Builder Web runtime 
 ## Store/Product Sample Data Rules
 
 Generated storefront projects must initialize shared sample data after pages and components are created. Store, Product, and ProductsList structures are fixed: AI updates may change values, add/remove/reorder products, but must not add, remove, rename, or reshape fields. Product updates match stable product `id` first, every product keeps `entityId === id`, and `productsList.total` must equal `productsList.data.length`. Ambiguous store/product update prompts must ask for clarification before changing data.
+
+## Project Design Rules
+
+Generated retail storefront projects use a project-local `DESIGN.md` at the generated workspace root as the source of truth for customer-facing UI design. The file is created during project initialization before storefront UI generation.
+
+`DESIGN.md` is a managed, read-only design artifact. Users change storefront design through chat prompts rather than direct file edits. The structured token block provides source-of-truth values for colors, typography, spacing, radii, shadows, and component roles; prose sections 1-8 explain how those tokens should be used.
+
+Storefront UI should use mapped token utilities and semantic roles instead of raw visual literals. When design rules are created, patched, or regenerated, token mappings must be refreshed so UI updates remain consistent with the current project design.

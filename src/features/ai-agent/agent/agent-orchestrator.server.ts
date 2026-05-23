@@ -47,12 +47,21 @@ import {
   loadProjectDesignRules,
 } from "../code-tools/services/design-file-service.server";
 import {
+  extractUserProvenanceTokens,
+  doesPromptConflictWithUserToken,
+} from "../code-tools/services/design-generation-service.server";
+import { buildCssVariableMapping, replaceOwnedDesignTokenRegion } from "../code-tools/services/design-token-mapping-service.server";
+import {
   classifyDesignIntent,
   extractTokenHints,
   type DesignIntentLabel,
 } from "../planning/design-intent-heuristic";
 import { applyTokenPatches } from "../code-tools/services/design-rule-patch-service.server";
 import { getProjectWorkspaceRoot } from "@/server/config/paths.server";
+import {
+  runProjectDesignComplianceValidation,
+  resolveDesignComplianceScope,
+} from "../code-tools/services/project-validation-service.server";
 
 export type HandlePromptInput = {
   projectId: string;
@@ -295,6 +304,28 @@ export class AgentOrchestrator {
         designIntent.kind === "redesign" &&
         projectState.status === "initialized"
       ) {
+        // Extract existing user-provenance tokens that should be preserved
+        // unless the current redesign prompt explicitly conflicts with them.
+        const existingDesign = await loadProjectDesignRules({
+          projectId: input.projectId,
+          workspaceRoot: getProjectWorkspaceRoot(input.projectId),
+        }).catch(() => null);
+        const userTokens = existingDesign
+          ? extractUserProvenanceTokens(existingDesign.markdown)
+          : [];
+        const preservedTokens = userTokens.filter(
+          (t) => !doesPromptConflictWithUserToken(input.prompt, t),
+        );
+        if (preservedTokens.length > 0) {
+          console.info(
+            JSON.stringify({
+              event: "redesign_preserving_user_tokens",
+              count: preservedTokens.length,
+              roles: preservedTokens.map((t) => t.role),
+            }),
+          );
+        }
+
         const redesignWebsiteSpec = await extractWebsiteSpec({
           prompt: input.prompt,
           projectState,
@@ -588,6 +619,16 @@ export class AgentOrchestrator {
         websiteSpec,
       }),
     );
+
+    const tokenMapping = buildCssVariableMapping(designRules.markdown);
+    for (const file of initResult.files) {
+      if (file.path !== "src/styles/app.css") continue;
+      const mapped = replaceOwnedDesignTokenRegion(file.content, tokenMapping);
+      if (!mapped.ok) {
+        throw new Error(mapped.message);
+      }
+      file.content = mapped.content;
+    }
 
     logAgentPhase("started", "write_infrastructure_files", phaseContext);
     try {
@@ -1333,6 +1374,34 @@ function logAgentPhase(
   console.info(JSON.stringify(payload));
 }
 
+function buildStorefrontCompliancePrompt(
+  designHash: string,
+  scope: "full-storefront" | "changed-files",
+): string {
+  const scopeNote = scope === "full-storefront"
+    ? "Validate the FULL customer-facing storefront against current DESIGN.md."
+    : "Validate only changed customer-facing UI files against current DESIGN.md.";
+
+  return [
+    "Storefront Design Compliance Check",
+    `DESIGN.md hash: ${designHash}`,
+    `Validation scope: ${scope}`,
+    "",
+    scopeNote,
+    "",
+    "Rules:",
+    "1. No raw color values (hex, rgb, hsl, oklch) in storefront UI files.",
+    "2. No palette utilities outside approved token utility set.",
+    "3. No inline styles for color, background, border-radius, shadow, or font-family.",
+    "4. No raw font family strings.",
+    "5. No raw shadow values.",
+    "6. Use approved semantic token utilities derived from project DESIGN.md.",
+    "",
+    "If violations are found, replace raw values with mapped token utilities from DESIGN.md.",
+    "Call project_read_design_rules to load current design rules before patching.",
+  ].join("\n");
+}
+
 function buildTokenPatchRewritePrompt(
   originalPrompt: string,
   appliedRoles: ReadonlyArray<string>,
@@ -1345,6 +1414,9 @@ function buildTokenPatchRewritePrompt(
     "All other roles (vibe, typography, spacing, radius, shadow, components, layout, responsive) remain unchanged. The DESIGN.md hash has changed because token values changed.",
     "",
     "Task: update only the storefront UI surfaces that read the patched roles, so they reflect the new token values via tailwind config / CSS variables / token mapping.",
+    "",
+    "Validation scope: changed-files (only affected UI surfaces).",
+    "Scope constraint: do NOT validate or modify unrelated storefront surfaces.",
     "",
     "1. Call project_read_design_rules to load the new DESIGN.md.",
     "2. Inspect existing UI files; identify references to the patched roles only.",
@@ -1374,9 +1446,14 @@ function buildRedesignRewritePrompt(
     "",
     "Task: rewrite the storefront UI to match the new DESIGN.md.",
     "",
+    "Validation scope: full-storefront (all customer-facing UI must comply with new DESIGN.md).",
+    "User-provenance tokens have been preserved unless the redesign prompt explicitly conflicted.",
+    "Token mapping must be refreshed to match the new DESIGN.md hash.",
+    "",
     "1. FIRST call project_read_design_rules to load the new DESIGN.md.",
-    "2. Inspect existing UI files with project_get_file_tree and project_read_file before patching.",
-    "3. Update these files so they match sections 1-8 of DESIGN.md (palette, typography, spacing, radii, components, layout):",
+    "2. Refresh token mapping: verify CSS variables / tailwind config match new token values.",
+    "3. Inspect existing UI files with project_get_file_tree and project_read_file before patching.",
+    "4. Update these files so they match sections 1-8 of DESIGN.md (palette, typography, spacing, radii, components, layout):",
     "   - tailwind.config.ts (theme colors, fonts, radii)",
     "   - src/styles/* (CSS variables / tokens, if present)",
     "   - src/components/layout/site-header.tsx",
@@ -1388,13 +1465,14 @@ function buildRedesignRewritePrompt(
     "   - src/components/store/trust-signals.tsx",
     "   - src/components/store/newsletter-section.tsx",
     "   - src/components/ui/button.tsx, badge.tsx (variants/colors only)",
-    "4. Out of scope (do NOT modify):",
+    "5. Out of scope (do NOT modify):",
     "   - src/routes/** route structure (only update className when strictly needed)",
     "   - src/data/** product/category data",
     "   - src/data/sample-store.ts",
     "   - src/app/cart-provider.tsx and any state management",
     "   - src/app/store-provider.tsx",
     "   - package.json dependencies",
-    "5. Use minimal patches per file. Run project_run_validation after mutations. Repair on failure.",
+    "6. Use minimal patches per file. Run project_run_validation after mutations. Repair on failure.",
+    "7. Validate full storefront compliance with new DESIGN.md before completion.",
   ].join("\n");
 }

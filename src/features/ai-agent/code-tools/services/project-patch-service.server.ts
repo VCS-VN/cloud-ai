@@ -3,7 +3,7 @@ import path from "node:path";
 import type { PatchResult } from "../code-agent-types";
 import { CODE_TOOL_LIMITS } from "../code-tool-registry.server";
 import { evaluateProjectRiskPolicy } from "./project-risk-policy.server";
-import { guardProjectPath, isProtectedProjectEnvPath } from "./project-path-guard.server";
+import { guardProjectPath, isProtectedProjectEnvPath, isStorefrontUiPath } from "./project-path-guard.server";
 import { getPreviewRestartRequirement } from "./preview-restart-policy.server";
 
 const PROTECTED_FILES = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb"]);
@@ -21,6 +21,17 @@ export type PatchPolicyViolationCode =
   | "PACKAGE_POLICY_VIOLATION"
   | "SECRET_LIKE_ADDITION"
   | "PATCH_APPLY_FAILED";
+
+export type DesignRuleGateContext = {
+  designRulesLoaded: boolean;
+  designRuleHash?: string;
+};
+
+export const STOREFRONT_MUTATION_GATE_POLICY_MESSAGE =
+  "Customer-facing storefront UI cannot be mutated without loaded design rules. Call project_read_design_rules first.";
+
+export const STOREFRONT_COMPLIANCE_MESSAGE =
+  "Storefront UI must comply with project DESIGN.md. Use approved token utilities instead of raw visual values.";
 
 export class ProjectPatchPolicyError extends Error {
   constructor(public readonly code: PatchPolicyViolationCode, message: string) {
@@ -132,6 +143,33 @@ export class ProjectPatchService {
       warnings: [],
     };
   }
+  /**
+   * Checks if any changed file paths affect customer-facing storefront UI.
+   * Returns the list of storefront paths among the changed files.
+   */
+  getStorefrontChangedPaths(changedFiles: string[]): string[] {
+    return changedFiles.filter((f) => isStorefrontUiPath(f));
+  }
+
+  /**
+   * Validates that storefront UI mutations are allowed given the design rule context.
+   * Throws if storefront paths are changed without loaded design rules.
+   */
+  assertStorefrontMutationGate(
+    changedFiles: string[],
+    gateContext: DesignRuleGateContext,
+  ): void {
+    const storefrontPaths = this.getStorefrontChangedPaths(changedFiles);
+    if (storefrontPaths.length === 0) return;
+
+    if (!gateContext.designRulesLoaded) {
+      throw new ProjectPatchPolicyError(
+        "FORBIDDEN_PATH",
+        STOREFRONT_MUTATION_GATE_POLICY_MESSAGE,
+      );
+    }
+  }
+
   async getDiff(input: { workspaceRoot: string; baselineRoot?: string; includePatch?: boolean; maxBytes?: number }) {
     if (!input.baselineRoot) return { changedFiles: [], patch: input.includePatch ? "" : undefined, truncated: false };
     const changedFiles = await diffDirectories(input.baselineRoot, input.workspaceRoot);

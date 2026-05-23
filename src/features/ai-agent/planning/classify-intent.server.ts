@@ -1,4 +1,35 @@
 import type { BuilderIntent, ProjectState } from "../project/project-state.schema";
+import { classifyDesignIntent, type DesignIntentLabel } from "./design-intent-heuristic";
+
+export type DesignChangeClassification =
+  | { kind: "feature_update"; label: "Feature or content update - DESIGN.md unchanged" }
+  | { kind: "token_specific"; label: "Token-specific design change - patch relevant token values" }
+  | { kind: "identity_redesign"; label: "Identity-level redesign - regenerate design direction" };
+
+/**
+ * Classifies a user prompt into one of three design change categories
+ * for storefront design evolution:
+ * - feature_update: behavior/copy/data changes, DESIGN.md unchanged
+ * - token_specific: names a specific design role (color, font, radius, shadow)
+ * - identity_redesign: broad style/mood/audience/positioning change
+ */
+export function classifyDesignChange(
+  prompt: string,
+  projectStatus: string,
+): DesignChangeClassification {
+  const label = classifyDesignIntent({ prompt, projectStatus });
+
+  switch (label.kind) {
+    case "init":
+      return { kind: "identity_redesign", label: "Identity-level redesign - regenerate design direction" };
+    case "update_no_design":
+      return { kind: "feature_update", label: "Feature or content update - DESIGN.md unchanged" };
+    case "update_token":
+      return { kind: "token_specific", label: "Token-specific design change - patch relevant token values" };
+    case "redesign":
+      return { kind: "identity_redesign", label: "Identity-level redesign - regenerate design direction" };
+  }
+}
 
 const HIGH_RISK_PATTERNS = {
   payment: /stripe|paypal|payment|thanh toán thật|real payment/i,

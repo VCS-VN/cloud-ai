@@ -1,3 +1,5 @@
+import { prependManagedDesignNotice } from "./design-file-contract.server";
+
 export const STOREFRONT_DESIGN_STATIC_SECTIONS = `## 9. Stack Implementation Rules
 
 This project uses:
@@ -114,5 +116,7 @@ A generated or updated storefront should satisfy:
 `;
 
 export function composeDesignMarkdown(visualMarkdown: string): string {
-  return `${visualMarkdown.trimEnd()}\n\n---\n\n${STOREFRONT_DESIGN_STATIC_SECTIONS}`;
+  return prependManagedDesignNotice(
+    `${visualMarkdown.trimEnd()}\n\n---\n\n${STOREFRONT_DESIGN_STATIC_SECTIONS}`,
+  );
 }

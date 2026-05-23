@@ -17,10 +17,10 @@
 
 **Purpose**: Prepare shared constants, contracts, and documentation surfaces used by all stories.
 
-- [ ] T001 Create fixed Phase 1 design token role constants in `src/features/ai-agent/code-tools/services/design-token-schema.server.ts`
-- [ ] T002 Create design section heading constants and managed notice constants in `src/features/ai-agent/code-tools/services/design-file-contract.server.ts`
-- [ ] T003 [P] Add project design rules overview to `README.md`
-- [ ] T004 [P] Update generated project design rules notes in `src/features/ai-agent/code-tools/README.md`
+- [X] T001 Create fixed Phase 1 design token role constants in `src/features/ai-agent/code-tools/services/design-token-schema.server.ts`
+- [X] T002 Create design section heading constants and managed notice constants in `src/features/ai-agent/code-tools/services/design-file-contract.server.ts`
+- [X] T003 [P] Add project design rules overview to `README.md`
+- [X] T004 [P] Update generated project design rules notes in `src/features/ai-agent/code-tools/README.md`
 
 ---
 
@@ -30,16 +30,16 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T005 Add parseable hybrid `DESIGN.md` metadata/token block support to `src/features/ai-agent/code-tools/services/design-file-service.server.ts`
-- [ ] T006 Implement lightweight managed design file validator in `src/features/ai-agent/code-tools/services/design-file-validator.server.ts`
-- [ ] T007 [P] Implement color parsing and WCAG contrast helpers in `src/features/ai-agent/code-tools/services/design-color-contrast.server.ts`
-- [ ] T008 [P] Implement deterministic design seed helper from project identity and normalized prompt in `src/features/ai-agent/planning/design-intent-heuristic.ts`
-- [ ] T009 Implement structured token extractor reading token `.value` entries in `src/features/ai-agent/code-tools/services/design-token-extractor.server.ts`
-- [ ] T010 Implement deterministic token mapping generator with owned regions in `src/features/ai-agent/code-tools/services/design-token-mapping-service.server.ts`
-- [ ] T011 Add unit tests for design validator success and failure cases in `src/features/ai-agent/code-tools/services/__tests__/design-file-validator.test.ts`
-- [ ] T012 Add unit tests for contrast thresholds in `src/features/ai-agent/code-tools/services/__tests__/design-color-contrast.test.ts`
-- [ ] T013 Add unit tests for structured token extraction in `src/features/ai-agent/code-tools/services/__tests__/design-token-extractor.test.ts`
-- [ ] T014 Add unit tests for deterministic token mapping region replacement in `src/features/ai-agent/code-tools/services/__tests__/design-token-mapping-service.test.ts`
+- [X] T005 Add parseable hybrid `DESIGN.md` metadata/token block support to `src/features/ai-agent/code-tools/services/design-file-service.server.ts`
+- [X] T006 Implement lightweight managed design file validator in `src/features/ai-agent/code-tools/services/design-file-validator.server.ts`
+- [X] T007 [P] Implement color parsing and WCAG contrast helpers in `src/features/ai-agent/code-tools/services/design-color-contrast.server.ts`
+- [X] T008 [P] Implement deterministic design seed helper from project identity and normalized prompt in `src/features/ai-agent/planning/design-intent-heuristic.ts`
+- [X] T009 Implement structured token extractor reading token `.value` entries in `src/features/ai-agent/code-tools/services/design-token-extractor.server.ts`
+- [X] T010 Implement deterministic token mapping generator with owned regions in `src/features/ai-agent/code-tools/services/design-token-mapping-service.server.ts`
+- [X] T011 Add unit tests for design validator success and failure cases in `src/features/ai-agent/code-tools/services/__tests__/design-file-validator.test.ts`
+- [X] T012 Add unit tests for contrast thresholds in `src/features/ai-agent/code-tools/services/__tests__/design-color-contrast.test.ts`
+- [X] T013 Add unit tests for structured token extraction in `src/features/ai-agent/code-tools/services/__tests__/design-token-extractor.test.ts`
+- [X] T014 Add unit tests for deterministic token mapping region replacement in `src/features/ai-agent/code-tools/services/__tests__/design-token-mapping-service.test.ts`
 
 **Checkpoint**: Foundation ready - design files can be parsed, validated, indexed, and mapped before story implementation.
 
@@ -53,21 +53,21 @@
 
 ### Tests for User Story 1
 
-- [ ] T015 [P] [US1] Add tests for generated hybrid `DESIGN.md` structure in `src/features/ai-agent/code-tools/services/__tests__/design-generation-service.test.ts`
-- [ ] T016 [P] [US1] Add tests for deterministic variety by project identity in `src/features/ai-agent/planning/__tests__/design-intent-heuristic.test.ts`
-- [ ] T017 [P] [US1] Add tests for init orchestration ordering in `src/features/ai-agent/agent/__tests__/project-design-init-flow.test.ts`
+- [X] T015 [P] [US1] Add tests for generated hybrid `DESIGN.md` structure in `src/features/ai-agent/code-tools/services/__tests__/design-generation-service.test.ts`
+- [X] T016 [P] [US1] Add tests for deterministic variety by project identity in `src/features/ai-agent/planning/__tests__/design-intent-heuristic.test.ts`
+- [X] T017 [P] [US1] Add tests for init orchestration ordering in `src/features/ai-agent/agent/__tests__/project-design-init-flow.test.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T018 [US1] Update design generation prompt to emit managed hybrid design files in `src/features/ai-agent/code-tools/services/design-generation-service.server.ts`
-- [ ] T019 [US1] Update static boilerplate composition to include managed notice and structured metadata in `src/features/ai-agent/code-tools/services/design-static-boilerplate.server.ts`
-- [ ] T020 [US1] Update structural outline to require fixed sections and Section 1 rationale in `src/features/ai-agent/code-tools/services/design-skill-outline.server.ts`
-- [ ] T021 [US1] Update fallback visual design generation to use deterministic project-varied direction in `src/features/ai-agent/code-tools/services/design-generation-service.server.ts`
-- [ ] T022 [US1] Pass project identity into design generation and seed logic in `src/features/ai-agent/code-tools/services/design-file-service.server.ts`
-- [ ] T023 [US1] Validate generated design files before acceptance in `src/features/ai-agent/code-tools/services/design-file-service.server.ts`
-- [ ] T024 [US1] Refresh token mapping immediately after design file generation in `src/features/ai-agent/agent/agent-orchestrator.server.ts`
-- [ ] T025 [US1] Ensure init infrastructure provides token mapping owned regions in generated `tailwind.config.ts` and style files via `src/features/ai-agent/source/init-source.server.ts`
-- [ ] T026 [US1] Update retail init prompt to state project-local design rules and mapped token utilities in `src/features/ai-agent/agent/init-prompt.server.ts`
+- [X] T018 [US1] Update design generation prompt to emit managed hybrid design files in `src/features/ai-agent/code-tools/services/design-generation-service.server.ts`
+- [X] T019 [US1] Update static boilerplate composition to include managed notice and structured metadata in `src/features/ai-agent/code-tools/services/design-static-boilerplate.server.ts`
+- [X] T020 [US1] Update structural outline to require fixed sections and Section 1 rationale in `src/features/ai-agent/code-tools/services/design-skill-outline.server.ts`
+- [X] T021 [US1] Update fallback visual design generation to use deterministic project-varied direction in `src/features/ai-agent/code-tools/services/design-generation-service.server.ts`
+- [X] T022 [US1] Pass project identity into design generation and seed logic in `src/features/ai-agent/code-tools/services/design-file-service.server.ts`
+- [X] T023 [US1] Validate generated design files before acceptance in `src/features/ai-agent/code-tools/services/design-file-service.server.ts`
+- [X] T024 [US1] Refresh token mapping immediately after design file generation in `src/features/ai-agent/agent/agent-orchestrator.server.ts`
+- [X] T025 [US1] Ensure init infrastructure provides token mapping owned regions in generated `tailwind.config.ts` and style files via `src/features/ai-agent/source/init-source.server.ts`
+- [X] T026 [US1] Update retail init prompt to state project-local design rules and mapped token utilities in `src/features/ai-agent/agent/init-prompt.server.ts`
 
 **Checkpoint**: User Story 1 is independently functional and testable as MVP.
 
@@ -81,20 +81,20 @@
 
 ### Tests for User Story 2
 
-- [ ] T027 [P] [US2] Add tests for path-based UI mutation gate in `src/features/ai-agent/code-tools/__tests__/design-rule-gate.test.ts`
-- [ ] T028 [P] [US2] Add tests for disallowed raw visual literals in `src/features/ai-agent/code-tools/services/__tests__/design-patch-content-validator.test.ts`
-- [ ] T029 [P] [US2] Add tests for project validation design-compliance failures in `src/features/ai-agent/code-tools/services/__tests__/project-validation-design-compliance.test.ts`
+- [X] T027 [P] [US2] Add tests for path-based UI mutation gate in `src/features/ai-agent/code-tools/__tests__/design-rule-gate.test.ts`
+- [X] T028 [P] [US2] Add tests for disallowed raw visual literals in `src/features/ai-agent/code-tools/services/__tests__/design-patch-content-validator.test.ts`
+- [X] T029 [P] [US2] Add tests for project validation design-compliance failures in `src/features/ai-agent/code-tools/services/__tests__/project-validation-design-compliance.test.ts`
 
 ### Implementation for User Story 2
 
-- [ ] T030 [US2] Expand UI path detection for storefront customer-facing paths in `src/features/ai-agent/code-tools/services/project-path-guard.server.ts`
-- [ ] T031 [US2] Enforce design rule loaded flag and hash trace for all UI mutation tools in `src/features/ai-agent/code-tools/code-tool-executor.server.ts`
-- [ ] T032 [US2] Extend patch content validator for raw colors, arbitrary visual utilities, palette utilities, inline visual styles, raw fonts, and raw shadows in `src/features/ai-agent/code-tools/services/design-patch-content-validator.server.ts`
-- [ ] T033 [US2] Add approved semantic token utility allowlist from token mapping in `src/features/ai-agent/code-tools/services/design-patch-content-validator.server.ts`
-- [ ] T034 [US2] Add design compliance validation mode to project validation in `src/features/ai-agent/code-tools/services/project-validation-service.server.ts`
-- [ ] T035 [US2] Wire `project_run_validation` to include scoped design compliance results in `src/features/ai-agent/code-tools/tools/project-run-validation.tool.server.ts`
-- [ ] T036 [US2] Update agent prompts to require fresh design-rule reads before possible UI changes in `src/features/ai-agent/agent/agentic-prompts.server.ts`
-- [ ] T037 [US2] Update code-agent prompts to describe allowed token utilities and raw literal bans in `src/features/ai-agent/code-tools/code-agent-prompts.server.ts`
+- [X] T030 [US2] Expand UI path detection for storefront customer-facing paths in `src/features/ai-agent/code-tools/services/project-path-guard.server.ts`
+- [X] T031 [US2] Enforce design rule loaded flag and hash trace for all UI mutation tools in `src/features/ai-agent/code-tools/code-tool-executor.server.ts`
+- [X] T032 [US2] Extend patch content validator for raw colors, arbitrary visual utilities, palette utilities, inline visual styles, raw fonts, and raw shadows in `src/features/ai-agent/code-tools/services/design-patch-content-validator.server.ts`
+- [X] T033 [US2] Add approved semantic token utility allowlist from token mapping in `src/features/ai-agent/code-tools/services/design-patch-content-validator.server.ts`
+- [X] T034 [US2] Add design compliance validation mode to project validation in `src/features/ai-agent/code-tools/services/project-validation-service.server.ts`
+- [X] T035 [US2] Wire `project_run_validation` to include scoped design compliance results in `src/features/ai-agent/code-tools/tools/project-run-validation.tool.server.ts`
+- [X] T036 [US2] Update agent prompts to require fresh design-rule reads before possible UI changes in `src/features/ai-agent/agent/agentic-prompts.server.ts`
+- [X] T037 [US2] Update code-agent prompts to describe allowed token utilities and raw literal bans in `src/features/ai-agent/code-tools/code-agent-prompts.server.ts`
 
 **Checkpoint**: User Story 2 works independently for update prompts on existing projects.
 
@@ -108,19 +108,19 @@
 
 ### Tests for User Story 3
 
-- [ ] T038 [P] [US3] Add tests for design-change classification in `src/features/ai-agent/planning/__tests__/classify-design-change.test.ts`
-- [ ] T039 [P] [US3] Add tests for surgical token patch preserving unrelated intent in `src/features/ai-agent/code-tools/services/__tests__/design-rule-patch-service.test.ts`
-- [ ] T040 [P] [US3] Add tests for redesign preserving user-provenance tokens unless conflicting in `src/features/ai-agent/agent/__tests__/project-design-redesign-flow.test.ts`
+- [X] T038 [P] [US3] Add tests for design-change classification in `src/features/ai-agent/planning/__tests__/classify-design-change.test.ts`
+- [X] T039 [P] [US3] Add tests for surgical token patch preserving unrelated intent in `src/features/ai-agent/code-tools/services/__tests__/design-rule-patch-service.test.ts`
+- [X] T040 [P] [US3] Add tests for redesign preserving user-provenance tokens unless conflicting in `src/features/ai-agent/agent/__tests__/project-design-redesign-flow.test.ts`
 
 ### Implementation for User Story 3
 
-- [ ] T041 [US3] Add design change classification helpers for feature update, token-specific change, and identity-level redesign in `src/features/ai-agent/planning/classify-intent.server.ts`
-- [ ] T042 [US3] Update design rule patch service to patch token `.value`, provenance, and relevant prose only in `src/features/ai-agent/code-tools/services/design-rule-patch-service.server.ts`
-- [ ] T043 [US3] Preserve user-provenance tokens during redesign unless current prompt conflicts in `src/features/ai-agent/code-tools/services/design-generation-service.server.ts`
-- [ ] T044 [US3] Refresh token mapping after token patch and redesign flows in `src/features/ai-agent/agent/agent-orchestrator.server.ts`
-- [ ] T045 [US3] Ensure token-specific prompts validate affected UI scope in `src/features/ai-agent/agent/agent-orchestrator.server.ts`
-- [ ] T046 [US3] Ensure redesign prompts validate full customer-facing storefront scope in `src/features/ai-agent/agent/agent-orchestrator.server.ts`
-- [ ] T047 [US3] Update redesign rewrite prompt to preserve user tokens and use mapped token utilities in `src/features/ai-agent/agent/agent-orchestrator.server.ts`
+- [X] T041 [US3] Add design change classification helpers for feature update, token-specific change, and identity-level redesign in `src/features/ai-agent/planning/classify-intent.server.ts`
+- [X] T042 [US3] Update design rule patch service to patch token `.value`, provenance, and relevant prose only in `src/features/ai-agent/code-tools/services/design-rule-patch-service.server.ts`
+- [X] T043 [US3] Preserve user-provenance tokens during redesign unless current prompt conflicts in `src/features/ai-agent/code-tools/services/design-generation-service.server.ts`
+- [X] T044 [US3] Refresh token mapping after token patch and redesign flows in `src/features/ai-agent/agent/agent-orchestrator.server.ts`
+- [X] T045 [US3] Ensure token-specific prompts validate affected UI scope in `src/features/ai-agent/agent/agent-orchestrator.server.ts`
+- [X] T046 [US3] Ensure redesign prompts validate full customer-facing storefront scope in `src/features/ai-agent/agent/agent-orchestrator.server.ts`
+- [X] T047 [US3] Update redesign rewrite prompt to preserve user tokens and use mapped token utilities in `src/features/ai-agent/agent/agent-orchestrator.server.ts`
 
 **Checkpoint**: User Story 3 enables managed design evolution through prompts.
 
@@ -130,12 +130,12 @@
 
 **Purpose**: Documentation, regression coverage, and final verification.
 
-- [ ] T048 [P] Add quickstart verification notes to `specs/017-project-design-rules/quickstart.md`
-- [ ] T049 [P] Update feature documentation references in `src/features/ai-agent/code-tools/README.md`
-- [ ] T050 Add integration test covering init then UI update compliance in `src/features/ai-agent/agent/__tests__/project-design-rules-integration.test.ts`
-- [ ] T051 Run targeted tests for design-rule services with `pnpm test -- src/features/ai-agent/code-tools/services/__tests__`
-- [ ] T052 Run agent/planning targeted tests with `pnpm test -- src/features/ai-agent/agent/__tests__ src/features/ai-agent/planning/__tests__`
-- [ ] T053 Run repository typecheck with `pnpm lint`
+- [X] T048 [P] Add quickstart verification notes to `specs/017-project-design-rules/quickstart.md`
+- [X] T049 [P] Update feature documentation references in `src/features/ai-agent/code-tools/README.md`
+- [X] T050 Add integration test covering init then UI update compliance in `src/features/ai-agent/agent/__tests__/project-design-rules-integration.test.ts`
+- [X] T051 Run targeted tests for design-rule services with `pnpm test -- src/features/ai-agent/code-tools/services/__tests__`
+- [X] T052 Run agent/planning targeted tests with `pnpm test -- src/features/ai-agent/agent/__tests__ src/features/ai-agent/planning/__tests__`
+- [X] T053 Run repository typecheck with `pnpm lint`
 
 ---
 

@@ -8,11 +8,11 @@ const OUTLINE_VERSION = "1.0.0";
 const OUTLINE_BODY = [
   "## 1. Visual Theme & Atmosphere",
   "- Pick ONE vibe coherent with the store / products / brand tone (e.g. minimalist, luxury, playful, organic, streetwear, tech, premium, friendly, editorial, handcrafted, retro). Do NOT default to a 'warm beige + dark green' coffee/cosmetic vibe unless that vibe genuinely fits the prompt.",
-  "- Document the chosen vibe and 4-6 atmospheric adjectives that describe how the storefront feels.",
+  "- Document inferred retail category, target audience, price tier, chosen archetype, 4-6 atmospheric adjectives, what makes this project distinct, and what visual approaches must not be used.",
   "- State the page rhythm the storefront will follow.",
   "",
   "## 2. Color Palette & Roles",
-  "Declare every role below with a project-specific concrete value. NEVER copy concrete values from any structural reference template; choose values that fit the chosen vibe and any user-supplied hints.",
+  "Declare every role below with a project-specific concrete hex value. NEVER copy concrete values from any structural reference template; choose values that fit the chosen vibe, any user-supplied hints, and readable foreground/background contrast.",
   "Required roles (bullet rows in the form `- **<Role Name>** (\\`<value>\\`): <one-sentence usage>`):",
   "- primary brand",
   "- accent brand (CTA color)",

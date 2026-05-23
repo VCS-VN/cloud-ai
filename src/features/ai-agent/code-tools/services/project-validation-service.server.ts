@@ -81,3 +81,78 @@ async function runCommand(input: { command: string; cwd: string }) {
     };
   }
 }
+
+export type DesignComplianceScope = "changed-files" | "full-storefront";
+
+/**
+ * Resolves the design compliance validation scope based on the execution context.
+ * - "full-storefront": used during initialization, identity-level redesign, and explicit design sync.
+ * - "changed-files": used for normal feature updates, text changes, and local component fit adjustments.
+ */
+export function resolveDesignComplianceScope(context: {
+  isInit?: boolean;
+  isRedesign?: boolean;
+  isExplicitSync?: boolean;
+}): DesignComplianceScope {
+  if (context.isInit || context.isRedesign || context.isExplicitSync) {
+    return "full-storefront";
+  }
+  return "changed-files";
+}
+
+export async function runProjectDesignComplianceValidation(input: {
+  workspaceRoot: string;
+  filePaths?: string[];
+}): Promise<ValidationResult> {
+  const { readFile, readdir } = await import("node:fs/promises");
+  const { resolve, join } = await import("node:path");
+  const { loadProjectDesignRules } = await import("./design-file-service.server");
+  const { buildProjectTokenIndex } = await import("./design-token-extractor.server");
+  const { scanPatchContent, formatViolations } = await import("./design-patch-content-validator.server");
+
+  try {
+    const design = await loadProjectDesignRules({ projectId: "validation", workspaceRoot: input.workspaceRoot });
+    const tokens = buildProjectTokenIndex(design.markdown);
+    const paths = input.filePaths?.length ? input.filePaths : await collectStorefrontFiles(input.workspaceRoot, readdir, join);
+    const changedFiles = [] as Array<{ path: string; content: string }>;
+    for (const path of paths) {
+      try {
+        changedFiles.push({ path, content: await readFile(resolve(input.workspaceRoot, path), "utf-8") });
+      } catch {
+        // Ignore deleted or unreadable files; normal validation commands handle missing required files.
+      }
+    }
+    const verdict = scanPatchContent({ changedFiles, tokens });
+    if (verdict.ok) {
+      return { status: "passed", commands: [{ command: "design-compliance", status: "passed", stdoutSummary: "Design compliance passed.", durationMs: 0 }], canRepair: false };
+    }
+    return { status: "failed", commands: [{ command: "design-compliance", status: "failed", stderrSummary: formatViolations(verdict.violations), durationMs: 0 }], canRepair: true };
+  } catch (error) {
+    return { status: "skipped", commands: [{ command: "design-compliance", status: "skipped", stdoutSummary: error instanceof Error ? error.message : "Design compliance skipped.", durationMs: 0 }], canRepair: false };
+  }
+}
+
+async function collectStorefrontFiles(
+  workspaceRoot: string,
+  readdir: typeof import("node:fs/promises").readdir,
+  join: typeof import("node:path").join,
+): Promise<string[]> {
+  const roots = ["src/components", "src/routes", "src/styles", "src/app"];
+  const out: string[] = [];
+  async function walk(relativeDir: string) {
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await readdir(join(workspaceRoot, relativeDir), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const name = String(entry.name);
+      const child = `${relativeDir}/${name}`;
+      if (entry.isDirectory()) await walk(child);
+      else if (/\.(ts|tsx|css)$/.test(name)) out.push(child);
+    }
+  }
+  for (const root of roots) await walk(root);
+  return out;
+}
