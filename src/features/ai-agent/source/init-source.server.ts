@@ -952,7 +952,7 @@ export function useProductSuggestions(
 function appCssSource() {
   return `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\n@layer base {\n  /* DESIGN_TOKENS_START */
   :root {
-    --background: #F7F9FC; --foreground: #111827; --card: #FFFFFF; --card-foreground: #111827; --popover: #FFFFFF; --popover-foreground: #111827; --primary: #1746A2; --primary-foreground: #FFFFFF; --secondary: #E9EEF6; --secondary-foreground: #111827; --muted: #E9EEF6; --muted-foreground: #4B5563; --accent: #E85D04; --accent-foreground: #FFFFFF; --destructive: #B91C1C; --destructive-foreground: #FFFFFF; --border: #CBD5E1; --input: #CBD5E1; --ring: #1746A2; --highlight: #F4B400; --highlight-foreground: #1F1300; --success: #166534; --warning: #92400E; --error: #B91C1C; --radius: 0.75rem;
+    --background: #F7F9FC; --foreground: #111827; --card: #FFFFFF; --card-foreground: #111827; --popover: #FFFFFF; --popover-foreground: #111827; --primary: #1746A2; --primary-foreground: #FFFFFF; --secondary: #E9EEF6; --secondary-foreground: #111827; --muted: #E9EEF6; --muted-foreground: #4B5563; --accent: #E85D04; --accent-foreground: #FFFFFF; --destructive: #B91C1C; --destructive-foreground: #FFFFFF; --border: #CBD5E1; --input: #CBD5E1; --ring: #1746A2; --highlight: #F4B400; --highlight-foreground: #1F1300; --success: #166534; --warning: #92400E; --error: #B91C1C; --deep: #1746A2; --deep-foreground: #FFFFFF; --radius: 0.75rem;
   }
   /* DESIGN_TOKENS_END */\n  * { @apply border-border; }\n  body { @apply bg-background text-foreground; margin: 0; font-family: Inter, Manrope, system-ui, -apple-system, sans-serif; }\n}\n`;
 }
@@ -1073,34 +1073,7 @@ export function StoreProvider({ children }: PropsWithChildren) {
   }, [query.data, query.error, query.isLoading, query.refetch])
 
   if (hasStoreSlug && query.isLoading) {
-    return (
-      <div className='min-h-screen bg-background px-4 py-10'>
-        <div className='mx-auto max-w-7xl space-y-8'>
-          <div className='flex items-center justify-between gap-4'>
-            <div className='h-8 w-40 animate-pulse rounded bg-muted/60' />
-            <div className='hidden gap-3 md:flex'>
-              <div className='h-5 w-20 animate-pulse rounded bg-muted/50' />
-              <div className='h-5 w-20 animate-pulse rounded bg-muted/50' />
-              <div className='h-5 w-20 animate-pulse rounded bg-muted/50' />
-            </div>
-          </div>
-          <div className='grid gap-8 lg:grid-cols-[1.1fr_0.9fr]'>
-            <div className='space-y-4'>
-              <div className='h-5 w-32 animate-pulse rounded bg-muted/50' />
-              <div className='h-16 w-full max-w-xl animate-pulse rounded bg-muted/60' />
-              <div className='h-5 w-full max-w-lg animate-pulse rounded bg-muted/50' />
-              <div className='h-5 w-2/3 animate-pulse rounded bg-muted/50' />
-            </div>
-            <div className='h-80 animate-pulse rounded-[2rem] bg-muted/50' />
-          </div>
-          <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-4'>
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className='h-72 animate-pulse rounded-lg border bg-muted/40' />
-            ))}
-          </div>
-        </div>
-      </div>
-    )
+    return <StorefrontLoadingScreen />
   }
 
   if (hasStoreSlug && query.isError) {
@@ -1117,6 +1090,67 @@ export function StoreProvider({ children }: PropsWithChildren) {
   }
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+}
+
+
+function StorefrontLoadingScreen() {
+  return (
+    <div className='relative min-h-screen overflow-hidden bg-background px-4 py-10'>
+      <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,var(--primary)_0,transparent_32%),radial-gradient(circle_at_bottom_right,var(--highlight)_0,transparent_28%)] opacity-10' />
+      <div className='pointer-events-none absolute inset-x-0 top-0 h-1 overflow-hidden bg-muted'>
+        <div className='h-full w-1/3 animate-[store-loading-bar_1.25s_ease-in-out_infinite] bg-primary' />
+      </div>
+      <div className='relative mx-auto max-w-7xl space-y-8'>
+        <div className='flex items-center justify-between gap-4'>
+          <div className='h-8 w-40 animate-pulse rounded-full bg-muted/70' />
+          <div className='hidden gap-3 md:flex'>
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className='h-5 w-20 animate-pulse rounded-full bg-muted/60' />
+            ))}
+          </div>
+        </div>
+        <div className='grid items-center gap-8 lg:grid-cols-[1.1fr_0.9fr]'>
+          <div className='space-y-5'>
+            <div className='inline-flex items-center gap-2 rounded-full border bg-card px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary shadow-sm'>
+              <span className='relative flex h-2.5 w-2.5'>
+                <span className='absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60' />
+                <span className='relative inline-flex h-2.5 w-2.5 rounded-full bg-primary' />
+              </span>
+              Loading store
+            </div>
+            <div className='h-16 w-full max-w-xl animate-pulse rounded-3xl bg-muted/70' />
+            <div className='h-5 w-full max-w-lg animate-pulse rounded-full bg-muted/60' />
+            <div className='h-5 w-2/3 animate-pulse rounded-full bg-muted/50' />
+            <div className='flex gap-3 pt-2'>
+              <div className='h-11 w-32 animate-pulse rounded-full bg-primary/30' />
+              <div className='h-11 w-36 animate-pulse rounded-full border bg-card' />
+            </div>
+          </div>
+          <div className='relative h-80 overflow-hidden rounded-[2rem] border bg-card shadow-xl'>
+            <div className='absolute inset-0 animate-pulse bg-gradient-to-br from-primary/20 via-highlight/20 to-deep/20' />
+            <div className='absolute inset-x-8 bottom-8 space-y-3 rounded-2xl border bg-background/80 p-4 backdrop-blur'>
+              <div className='h-4 w-2/3 animate-pulse rounded-full bg-muted' />
+              <div className='h-4 w-full animate-pulse rounded-full bg-muted/70' />
+              <div className='h-9 w-28 animate-pulse rounded-full bg-primary/30' />
+            </div>
+          </div>
+        </div>
+        <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-4'>
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className='overflow-hidden rounded-2xl border bg-card shadow-sm'>
+              <div className='h-40 animate-pulse bg-muted/60' />
+              <div className='space-y-3 p-4'>
+                <div className='h-4 w-3/4 animate-pulse rounded-full bg-muted' />
+                <div className='h-4 w-1/2 animate-pulse rounded-full bg-muted/70' />
+                <div className='h-9 w-full animate-pulse rounded-full bg-primary/20' />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <style>{'@keyframes store-loading-bar { 0% { transform: translateX(-110%); } 50% { transform: translateX(120%); } 100% { transform: translateX(320%); } }'}</style>
+    </div>
+  )
 }
 
 export function useStore() {
@@ -1473,7 +1507,7 @@ function siteFooterSource() {
   return `import { useStore } from '@/app/store-provider'\nexport function SiteFooter() { const { storeDetail } = useStore(); return <footer className='bg-deep text-deep-foreground'><div className='mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4'><div><h3 className='text-xl font-semibold'>{storeDetail?.name}</h3><p className='mt-3 text-sm text-deep-foreground/70'>{storeDetail?.description}</p></div>{['Shop','Support','Company'].map((title) => <div key={title}><h4 className='font-semibold'>{title}</h4><ul className='mt-3 space-y-2 text-sm text-deep-foreground/70'><li>Products</li><li>Orders</li><li>Contact</li></ul></div>)}<div><h4 className='font-semibold'>Connect</h4><p className='mt-3 text-sm text-deep-foreground/70'>Follow new drops and member offers.</p></div></div></footer> }\n`;
 }
 function heroSectionSource() {
-  return `import { Link } from '@tanstack/react-router'\nimport { Button } from '@/components/ui/button'\nimport { websiteConfig } from '@/lib/website-config'\nexport function HeroSection() { return <section className='mx-auto grid max-w-7xl gap-10 px-4 py-16 lg:grid-cols-2 lg:py-24'><div className='flex flex-col justify-center gap-6'><p className='text-sm font-semibold uppercase tracking-[0.25em] text-primary'>{websiteConfig.brand.tone}</p><h1 className='text-5xl font-bold tracking-tight md:text-7xl'>{websiteConfig.content.heroTitle}</h1><p className='max-w-xl text-lg text-muted-foreground'>{websiteConfig.content.heroSubtitle}</p><div className='flex gap-3'><Button asChild size='lg'><Link to='/products'>{websiteConfig.content.primaryCta ?? 'Shop now'}</Link></Button><Button asChild variant='outline' size='lg'><Link to='/checkout'>Checkout demo</Link></Button></div></div><div className='min-h-[420px] rounded-[2rem] bg-gradient-to-br from-[#00754A] via-[#CBA258] to-[#1E3932] p-8 shadow-2xl'><div className='h-full rounded-[1.5rem] border border-white/20 bg-white/20 backdrop-blur' /></div></section> }\n`;
+  return `import { Link } from '@tanstack/react-router'\nimport { Button } from '@/components/ui/button'\nimport { websiteConfig } from '@/lib/website-config'\nexport function HeroSection() { return <section className='mx-auto grid max-w-7xl gap-10 px-4 py-16 lg:grid-cols-2 lg:py-24'><div className='flex flex-col justify-center gap-6'><p className='text-sm font-semibold uppercase tracking-[0.25em] text-primary'>{websiteConfig.brand.tone}</p><h1 className='text-5xl font-bold tracking-tight md:text-7xl'>{websiteConfig.content.heroTitle}</h1><p className='max-w-xl text-lg text-muted-foreground'>{websiteConfig.content.heroSubtitle}</p><div className='flex gap-3'><Button asChild size='lg'><Link to='/products'>{websiteConfig.content.primaryCta ?? 'Shop now'}</Link></Button><Button asChild variant='outline' size='lg'><Link to='/checkout'>Checkout demo</Link></Button></div></div><div className='min-h-[420px] rounded-[2rem] bg-gradient-to-br from-primary via-highlight to-deep p-8 shadow-2xl'><div className='h-full rounded-[1.5rem] border border-deep-foreground/20 bg-deep-foreground/20 backdrop-blur' /></div></section> }\n`;
 }
 function productCardSource() {
   return `import { Link } from '@tanstack/react-router'
@@ -1669,7 +1703,7 @@ function orderCardSource() {
   return `import { Link } from '@tanstack/react-router'\nimport { Badge } from '@/components/ui/badge'\nimport { Button } from '@/components/ui/button'\nimport { Card, CardContent } from '@/components/ui/card'\nimport { formatMoney } from '@/lib/format-money'\ntype OrderSummary = { id: string; date: string; status: string; total: number }\nexport function OrderCard({ order }: { order: OrderSummary }) { return <Card><CardContent className='flex flex-wrap items-center justify-between gap-4 p-5'><div><p className='font-semibold'>Order {order.id}</p><p className='text-sm text-muted-foreground'>{new Date(order.date).toLocaleDateString()}</p></div><Badge>{order.status}</Badge><strong>{formatMoney(order.total)}</strong><Button asChild variant='outline'><Link to='/orders/$orderId' params={{ orderId: order.id }}>View details</Link></Button></CardContent></Card> }\n`;
 }
 function homeRouteSource() {
-  return `import { createFileRoute } from '@tanstack/react-router'\nimport { HeroSection } from '@/components/store/hero-section'\nimport { ProductGrid } from '@/components/store/product-grid'\nimport { TrustSignals } from '@/components/store/trust-signals'\nimport { CategorySection } from '@/components/store/category-section'\nexport const Route = createFileRoute('/')({ component: HomePage })\nfunction HomePage() { return <main><HeroSection /><CategorySection /><ProductGrid /><TrustSignals /><section className='bg-[#1E3932] px-4 py-16 text-center text-white'><h2 className='text-3xl font-bold'>Ready for your next favorite?</h2><p className='mt-3 text-white/70'>Checkout is mocked so you can test the full flow immediately.</p></section></main> }\n`;
+  return `import { createFileRoute } from '@tanstack/react-router'\nimport { HeroSection } from '@/components/store/hero-section'\nimport { ProductGrid } from '@/components/store/product-grid'\nimport { TrustSignals } from '@/components/store/trust-signals'\nimport { CategorySection } from '@/components/store/category-section'\nexport const Route = createFileRoute('/')({ component: HomePage })\nfunction HomePage() { return <main><HeroSection /><CategorySection /><ProductGrid /><TrustSignals /><section className='bg-deep px-4 py-16 text-center text-deep-foreground'><h2 className='text-3xl font-bold'>Ready for your next favorite?</h2><p className='mt-3 text-deep-foreground/80'>Checkout is mocked so you can test the full flow immediately.</p></section></main> }\n`;
 }
 function productsLayoutRouteSource() {
   return `import { Outlet, createFileRoute } from '@tanstack/react-router'\nexport const Route = createFileRoute('/products')({ component: ProductsLayout })\nfunction ProductsLayout() { return <Outlet /> }\n`;

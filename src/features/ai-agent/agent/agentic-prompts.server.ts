@@ -38,6 +38,9 @@ RETAIL E-COMMERCE CONSTRAINT (STRICT):
 - Use product data from src/data/products.ts.
 - Use website config from src/lib/website-config.ts.
 - Follow DESIGN.md page rhythm: Header → Hero → Products → Trust → Feature Band → Newsletter → Footer.
+- Footer and bottom CTA are deep brand surfaces: use \`bg-deep text-deep-foreground\` (and \`text-deep-foreground/*\` for muted copy), not \`bg-card\`, \`bg-primary\`, raw colors, or neutral white/black text utilities.
+- Large customer-facing color blocks must use DESIGN.md semantic roles by purpose: \`primary\` for primary actions/brand accents, \`highlight\` for promotional emphasis, \`deep\` for footer/final CTA dark surfaces, \`card\` only for cards/panels.
+- StoreProvider loading state must be a branded animated storefront skeleton (top progress motion, pulsing hero/product placeholders, DESIGN.md semantic colors), not plain text or a bare spinner.
 
 REASONING WORKFLOW:
 You MUST follow this sequence for every request:

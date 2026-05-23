@@ -18,7 +18,7 @@ export type PatchContentVerdict =
       violations: Array<{
         filePath: string;
         literal: string;
-        kind: "hex" | "rgb" | "hsl" | "oklch" | "tailwindColor" | "fontFamily" | "radius" | "shadow";
+        kind: "hex" | "rgb" | "hsl" | "oklch" | "tailwindColor" | "semanticColor" | "fontFamily" | "radius" | "shadow";
         lineHint?: number;
         suggestedRole?: string;
       }>;
@@ -85,6 +85,11 @@ const INLINE_SHADOW_REGEX = /box-shadow\s*:\s*([^;\n]+)/gi;
 const TAILWIND_COLOR_UTILITY_REGEX = /\b(?:bg|text|border|ring|from|via|to)-([a-z]+(?:-[a-z]+)*)(?:-(?:50|100|200|300|400|500|600|700|800|900|950))?\b/g;
 const APPROVED_COLOR_UTILITIES = new Set<string>(APPROVED_SEMANTIC_COLOR_UTILITIES);
 const STRUCTURAL_COLOR_UTILITY_NAMES = new Set<string>(["transparent", "current", "white", "black"]);
+const FOOTER_DEEP_SURFACE_PATTERN = /<footer[\s\S]*?className=(['"])[^'"]*\bbg-deep\b[^'"]*\btext-deep-foreground\b[^'"]*\1/;
+const FOOTER_WRONG_SURFACE_PATTERN = /<footer[\s\S]*?className=(['"])[^'"]*\b(?:bg-card|bg-primary|bg-background|text-white|text-black)\b[^'"]*\1/;
+const BOTTOM_CTA_PATTERN = /bottomCta|homeBottomCta|Ready for your next favorite|Sẵn sàng/i;
+const BOTTOM_CTA_DEEP_PATTERN = /className=(['"])[^'"]*\bbg-deep\b[^'"]*\btext-deep-foreground\b[^'"]*\1/;
+const BOTTOM_CTA_WRONG_SURFACE_PATTERN = /className=(['"])[^'"]*\b(?:bg-card|bg-primary|bg-background|text-white|text-black)\b[^'"]*\1/;
 
 type PatchContentViolation = Extract<
   PatchContentVerdict,
@@ -188,6 +193,8 @@ export function scanPatchContent(input: PatchContentScanInput): PatchContentVerd
         pushViolation(violations, seen, file.path, value, "shadow", i + 1);
       });
     }
+
+    pushSemanticSurfaceViolations(file, violations, seen);
   }
 
   if (violations.length === 0) return { ok: true };
@@ -195,6 +202,54 @@ export function scanPatchContent(input: PatchContentScanInput): PatchContentVerd
     ok: false,
     violations,
   };
+}
+
+function pushSemanticSurfaceViolations(
+  file: PatchChangedFile,
+  violations: PatchContentViolation[],
+  seen: Set<string>,
+): void {
+  if (isSiteFooterPath(file.path)) {
+    if (!FOOTER_DEEP_SURFACE_PATTERN.test(file.content) || FOOTER_WRONG_SURFACE_PATTERN.test(file.content)) {
+      pushViolation(
+        violations,
+        seen,
+        file.path,
+        "footer must use bg-deep text-deep-foreground",
+        "semanticColor",
+        findLine(file.content, /<footer/),
+      );
+    }
+  }
+
+  if (isHomeRoutePath(file.path) && BOTTOM_CTA_PATTERN.test(file.content)) {
+    if (!BOTTOM_CTA_DEEP_PATTERN.test(file.content) || BOTTOM_CTA_WRONG_SURFACE_PATTERN.test(file.content)) {
+      pushViolation(
+        violations,
+        seen,
+        file.path,
+        "bottom CTA must use bg-deep text-deep-foreground",
+        "semanticColor",
+        findLine(file.content, BOTTOM_CTA_PATTERN),
+      );
+    }
+  }
+}
+
+function isSiteFooterPath(path: string): boolean {
+  return /(^|\/)src\/components\/layout\/site-footer\.tsx$/.test(path);
+}
+
+function isHomeRoutePath(path: string): boolean {
+  return /(^|\/)src\/routes\/index\.tsx$/.test(path);
+}
+
+function findLine(source: string, pattern: RegExp): number {
+  const lines = source.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (pattern.test(lines[i])) return i + 1;
+  }
+  return 1;
 }
 
 export function formatViolations(
