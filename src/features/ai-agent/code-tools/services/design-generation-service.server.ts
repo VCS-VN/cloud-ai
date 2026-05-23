@@ -276,11 +276,14 @@ OUTPUT CONTRACT:
 CONTENT RULES:
 - Tailor the entire visual identity to the project described in the user message: store type, products, brand tone, target customers.
 - Section 1 MUST explain the inferred retail category, target audience, price tier, chosen archetype, mood keywords, what makes this project distinct, and what visual approaches must not be used.
-- Pick ONE coherent vibe that genuinely fits the products and audience (e.g. minimalist, luxury, playful, organic, streetwear, tech / cyber, premium, friendly, editorial, handcrafted, retro). Do NOT default to a warm-beige + dark-green coffee vibe unless the prompt clearly calls for it.
+- Pick ONE coherent vibe that genuinely fits the products, audience, and user prompt. The default quality bar is retail editorial premium: visually confident, commerce-focused, polished, and category-aware. The exact expression can become luxury minimalist, bold playful, organic premium, streetwear editorial, tech premium, handcrafted editorial, or another fitting direction. Do NOT create a generic SaaS landing page and do NOT default to a warm-beige + dark-green coffee vibe unless the prompt clearly calls for it.
 - Section 2 must declare every color role with a concrete hex value chosen FOR THIS PROJECT. NEVER copy concrete values from any structural reference template; choose values that match the chosen vibe and maintain readable foreground/background contrast.
 - Section 3 must declare a public font-family stack with system fallbacks and a typography hierarchy table covering display / hero / h1 / h2 / h3 / body large / body / small / micro with sizes, weights, line heights.
-- Section 6 must specify components for retail commerce: buttons (primary filled, primary outlined, dark-surface variants), product card, header/nav, hero, product grid, feature band, forms, optional floating cart CTA.
-- Section 8 must specify breakpoints and responsive behavior for retail layouts.
+- Section 6 must specify components for retail commerce: buttons (primary filled, primary outlined, dark-surface variants), product card, header/nav, editorial hero, featured product grid, trust/social proof strip, category/benefit band, newsletter/final CTA, forms, optional floating cart CTA.
+- Section 7 must define homepage rhythm as at least: Hero → Featured Products → Trust/Social Proof → Category/Benefit Band → Newsletter/Final CTA. Allow section content and order details to adapt to the retail category, but require a strong hero with large headline, clear CTA, and prominent product/category visual.
+- Section 8 must specify breakpoints and responsive behavior for retail layouts, including how the editorial hero, product/category visual, featured product grid, trust/social proof, and final CTA collapse on mobile.
+- Product/category visuals should prefer real product images when available. If images are missing, specify intentional branded editorial compositions using declared DESIGN.md roles only: token-safe gradients, product/category labels, badges, stats, abstract shapes, and layered surfaces. Never specify empty gray blocks or invented external image URLs.
+- Motion should be tasteful and low-distraction. Avoid excessive animation, overused glassmorphism, and effects that compete with shopping actions.
 - Use lists, tables, and short prose. Aim for 350-650 lines total across sections 1-8.
 ${hintBlock}
 STRUCTURAL OUTLINE (use as shape only; do NOT copy any concrete values; this outline carries no token values to copy):

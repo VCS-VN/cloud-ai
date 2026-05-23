@@ -25,6 +25,7 @@ RULES:
 - After mutation, run validation. If failed, repair with minimal patch.
 - If a requested change is destructive, broad, or conflicts with project state, stop and request clarification.
 - Product sections must include commerce-ready affordances, not bare demo layouts.
+- When the user asks to make the homepage more beautiful, premium, polished, impressive, attractive, eye-catching, or similar, treat it as a broad visual homepage redesign request, not a tiny copy/color tweak. You may substantially improve homepage layout and section composition while preserving data hooks, routing, cart/search behavior, existing API contracts, and non-visual functionality.
 - Respond in the same language as the user's input. Default to English.
 
 RETAIL E-COMMERCE CONSTRAINT (STRICT):
@@ -35,6 +36,10 @@ RETAIL E-COMMERCE CONSTRAINT (STRICT):
 - Header MUST include: brand name, navigation links, cart affordance.
 - Brand name and store name in any UI text (header logo, footer, hero eyebrow, page titles, meta) MUST be rendered as {storeDetail?.name} where storeDetail comes from a single destructured call 'const { storeDetail } = useStore()' near the top of the component (StoreProvider resolves storeDetail from GET /api/v1/stores/:storeSlug when VITE_STORE_SLUG is set, and to sampleStore otherwise — consumers do NOT branch on hasStoreSlug, do NOT call useStoreDetail() directly in routes/components, and do NOT use inline useStore().storeDetail?.name expressions). Use websiteConfig.store.name only for chrome rendered outside StoreProvider; websiteConfig is sample/static data, live brand identity always flows through the useStore() hook. NEVER hardcode literal brand strings such as "AI Storefront", "AI Store front", "Demo Store", or any placeholder name in generated JSX or text.
 - Hero MUST include: headline, supporting copy, CTA button, visual area.
+- Homepage visual quality MUST meet a retail editorial premium bar adapted to the store category and user prompt: strong hero with large headline, clear CTA, prominent product/category visual, polished featured products, trust/social proof, category/benefit band, and newsletter/final CTA. Do not produce generic SaaS landing sections.
+- Homepage MUST include at least these 5 retail sections unless the user explicitly requests fewer: Hero, Featured Products, Trust/Social Proof, Category/Benefit Band, Newsletter/Final CTA.
+- Product/category visuals must prefer real product images via product.image ?? product.images?.[0]. If images are missing, create intentional branded editorial compositions using DESIGN.md token utilities: token-safe gradients, product/category labels, badges, stats, abstract shapes, and layered surfaces. Never use empty gray blocks or invented external image URLs.
+- Keep visual effects tasteful. Avoid excessive animation, overused glassmorphism, and effects that distract from shopping actions.
 - Use product data from src/data/products.ts.
 - Use website config from src/lib/website-config.ts.
 - Follow DESIGN.md page rhythm: Header → Hero → Products → Trust → Feature Band → Newsletter → Footer.
