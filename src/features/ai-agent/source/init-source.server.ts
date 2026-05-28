@@ -490,7 +490,9 @@ export function renderStorefrontBaselineFiles(
 ): GeneratedFile[] {
   return [
     { path: "src/app/store-provider.tsx", content: storeProviderSource() },
+    { path: "src/app/auth-provider.tsx", content: authProviderSource() },
     { path: "src/app/cart-provider.tsx", content: cartProviderSource() },
+    { path: "src/app/cart-selection.ts", content: cartSelectionSource() },
     { path: "src/data/sample-store.ts", content: sampleStoreSource(spec) },
     { path: "src/components/ui/button.tsx", content: buttonSource() },
     { path: "src/components/ui/input.tsx", content: inputSource() },
@@ -1160,17 +1162,395 @@ export function useStore() {
 }
 `;
 }
+function authProviderSource() {
+  return `import type { PropsWithChildren } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { apiClient, clearAuthTokens } from '@/services/http/client'
+
+export type AuthProfile = {
+  id: string
+  phoneNumber?: string
+  email?: string
+  firstName?: string
+  lastName?: string
+}
+
+type AuthContextValue = {
+  profile: AuthProfile | null
+  isLoading: boolean
+  isAuthenticated: boolean
+  logout: () => void
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null)
+
+async function getProfile() {
+  const response = await apiClient.get<AuthProfile>('/api/v1/auth/profile')
+  return response.data
+}
+
+export function AuthProvider({ children }: PropsWithChildren) {
+  const [isLoggedOut, setIsLoggedOut] = useState(false)
+  const query = useQuery({
+    queryKey: ['auth-profile'],
+    queryFn: getProfile,
+    retry: false,
+    enabled: !isLoggedOut,
+  })
+
+  const isUnauthorized = Boolean(query.error && typeof query.error === 'object' && 'status' in query.error && query.error.status === 401)
+
+  useEffect(() => {
+    if (!isUnauthorized) return
+    clearAuthTokens()
+    setIsLoggedOut(true)
+  }, [isUnauthorized])
+
+  const profile = isLoggedOut || isUnauthorized ? null : query.data ?? null
+
+  const value = useMemo<AuthContextValue>(() => ({
+    profile,
+    isLoading: isLoggedOut ? false : query.isLoading,
+    isAuthenticated: Boolean(profile),
+    logout: () => {
+      clearAuthTokens()
+      setIsLoggedOut(true)
+    },
+  }), [isLoggedOut, profile, query.isLoading])
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (!context) throw new Error('useAuth must be used within AuthProvider')
+  return context
+}
+`;
+}
+function cartSelectionSource() {
+  return `import { atom } from 'jotai'
+
+export const selectedCartItemIdsAtom = atom<string[]>([])
+`;
+}
 function cartProviderSource() {
   return `import type { PropsWithChildren } from 'react'
-import { createContext, useContext } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { apiClient } from '@/services/http/client'
+import { useAuth } from '@/app/auth-provider'
+import { useStore } from '@/app/store-provider'
+import type { Product, ProductModel } from '@/services/store/use-products-list'
 
-export type CartContextValue = Record<string, never>
+const GUEST_CART_KEY = 'store_cart'
 
-const EMPTY_CART_VALUE: CartContextValue = Object.freeze({}) as CartContextValue
+export type CartStore = {
+  id: string
+  name: string
+  address: string
+}
+
+export type CartProduct = {
+  id: string
+  name: string
+  image?: string
+}
+
+export type CartItem = {
+  id: string
+  name: string
+  image?: string
+  product: CartProduct
+  store: CartStore
+  quantity: number
+  price: number
+}
+
+export type CartGroup = {
+  store: CartStore
+  items: CartItem[]
+}
+
+export type CartState = {
+  data: CartGroup[]
+  total: number
+  totalItems: number
+}
+
+type AddCartItemInput = {
+  product: Product
+  model: ProductModel
+  quantity: number
+}
+
+export type CartContextValue = {
+  cart: CartState
+  items: CartItem[]
+  totalItems: number
+  isLoading: boolean
+  mode: 'guest' | 'user'
+  addItem: (input: AddCartItemInput) => void
+  updateItemQuantity: (id: string, quantity: number) => void
+  removeItem: (id: string) => void
+  clearCart: () => void
+  getItemQuantity: (id: string) => number
+}
+
+const EMPTY_CART: CartState = { data: [], total: 0, totalItems: 0 }
 const CartContext = createContext<CartContextValue | null>(null)
 
+function getStorage() {
+  return typeof window === 'undefined' ? undefined : window.localStorage
+}
+
+function normalizeCart(cart: CartState): CartState {
+  const data = cart.data
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.quantity > 0),
+    }))
+    .filter((group) => group.items.length > 0)
+  return {
+    data,
+    total: data.length,
+    totalItems: data.reduce((sum, group) => sum + group.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0),
+  }
+}
+
+function readGuestCart(): CartState {
+  const raw = getStorage()?.getItem(GUEST_CART_KEY)
+  if (!raw) return EMPTY_CART
+  try {
+    const parsed = JSON.parse(raw) as CartState
+    return normalizeCart({
+      data: Array.isArray(parsed.data) ? parsed.data : [],
+      total: Number(parsed.total ?? 0),
+      totalItems: Number(parsed.totalItems ?? 0),
+    })
+  } catch {
+    return EMPTY_CART
+  }
+}
+
+function writeGuestCart(cart: CartState) {
+  const normalized = normalizeCart(cart)
+  const storage = getStorage()
+  if (!storage) return
+  if (normalized.totalItems === 0) {
+    storage.removeItem(GUEST_CART_KEY)
+    return
+  }
+  storage.setItem(GUEST_CART_KEY, JSON.stringify(normalized))
+}
+
+function clearGuestCart() {
+  getStorage()?.removeItem(GUEST_CART_KEY)
+}
+
+function getString(value: unknown) {
+  return typeof value === 'string' ? value : undefined
+}
+
+function getNumber(value: unknown) {
+  return typeof value === 'number' ? value : undefined
+}
+
+function buildCartItem(input: AddCartItemInput, store: CartStore): CartItem | null {
+  const id = getString(input.model.id)
+  if (!id) return null
+  const modelName = getString(input.model.name) ?? id
+  const modelImage = getString(input.model.image)
+  const productImage = input.product.image ?? input.product.images?.[0]
+  return {
+    id,
+    name: modelName,
+    image: modelImage ?? productImage,
+    product: {
+      id: input.product.id,
+      name: input.product.name,
+      image: productImage,
+    },
+    store,
+    quantity: Math.max(1, input.quantity),
+    price: getNumber(input.model.price) ?? input.product.price ?? 0,
+  }
+}
+
+function upsertItem(cart: CartState, item: CartItem, mode: 'add' | 'set') {
+  const nextData = [...cart.data]
+  const groupIndex = nextData.findIndex((group) => group.store.id === item.store.id)
+  if (groupIndex === -1) {
+    nextData.push({ store: item.store, items: [item] })
+    return normalizeCart({ data: nextData, total: nextData.length, totalItems: 0 })
+  }
+  const group = nextData[groupIndex]
+  const items = [...group.items]
+  const itemIndex = items.findIndex((entry) => entry.id === item.id)
+  if (itemIndex === -1) {
+    items.push(item)
+  } else {
+    const existing = items[itemIndex]
+    items[itemIndex] = {
+      ...existing,
+      ...item,
+      quantity: mode === 'add' ? existing.quantity + item.quantity : item.quantity,
+    }
+  }
+  nextData[groupIndex] = { ...group, items }
+  return normalizeCart({ data: nextData, total: nextData.length, totalItems: 0 })
+}
+
+function removeItemFromCart(cart: CartState, id: string, storeId?: string) {
+  const data = cart.data.map((group) => ({
+    ...group,
+    items: group.store.id === storeId || !storeId ? group.items.filter((item) => item.id !== id) : group.items,
+  }))
+  return normalizeCart({ data, total: data.length, totalItems: 0 })
+}
+
+function clearStoreCart(cart: CartState, storeId?: string) {
+  if (!storeId) return cart
+  const data = cart.data.filter((group) => group.store.id !== storeId)
+  return normalizeCart({ data, total: data.length, totalItems: 0 })
+}
+
+async function getAccountCart(storeId: string) {
+  const response = await apiClient.get<CartState>('/api/v1/carts', {
+    params: { page: 1, limit: 100, storeId },
+  })
+  return normalizeCart(response.data)
+}
+
+async function bulkAddItems(items: CartItem[]) {
+  if (items.length === 0) return
+  await apiClient.post('/api/v1/carts/items/bulk', {
+    items: items.map((item) => ({ itemId: item.id, quantity: item.quantity })),
+  })
+}
+
 export function CartProvider({ children }: PropsWithChildren) {
-  return <CartContext.Provider value={EMPTY_CART_VALUE}>{children}</CartContext.Provider>
+  const { profile, isLoading: isAuthLoading } = useAuth()
+  const { storeDetail, isLoading: isStoreLoading } = useStore()
+  const [cart, setCart] = useState<CartState>(EMPTY_CART)
+  const [isLoading, setIsLoading] = useState(true)
+
+  const storeId = storeDetail?.id
+  const mode = profile ? 'user' : 'guest'
+  const store: CartStore = useMemo(() => ({
+    id: storeDetail?.id ?? '',
+    name: storeDetail?.name ?? '',
+    address: getString(storeDetail?.address) ?? '',
+  }), [storeDetail])
+
+  useEffect(() => {
+    if (isStoreLoading || isAuthLoading || !storeId) return
+    let cancelled = false
+    const loadCart = async () => {
+      setIsLoading(true)
+      if (!profile) {
+        const guestCart = readGuestCart()
+        if (!cancelled) {
+          setCart(guestCart)
+          setIsLoading(false)
+        }
+        return
+      }
+      const guestCart = readGuestCart()
+      const guestItems = guestCart.data.flatMap((group) => group.items)
+      try {
+        if (guestItems.length > 0) {
+          await bulkAddItems(guestItems)
+          clearGuestCart()
+        }
+        const accountCart = await getAccountCart(storeId)
+        if (!cancelled) setCart(accountCart)
+      } catch {
+        if (!cancelled) setCart(EMPTY_CART)
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    }
+    void loadCart()
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthLoading, isStoreLoading, profile, storeId])
+
+  const persistGuest = useCallback((next: CartState) => {
+    if (mode === 'guest') writeGuestCart(next)
+  }, [mode])
+
+  const addItem = useCallback((input: AddCartItemInput) => {
+    const item = buildCartItem(input, store)
+    if (!item) return
+    setCart((current) => {
+      const next = upsertItem(current, item, 'add')
+      persistGuest(next)
+      return next
+    })
+    if (mode === 'user') {
+      void apiClient.post('/api/v1/carts', { id: item.id, quantity: input.quantity }).catch(() => undefined)
+    }
+  }, [mode, persistGuest, store])
+
+  const updateItemQuantity = useCallback((id: string, quantity: number) => {
+    if (quantity <= 0) {
+      setCart((current) => {
+        const next = removeItemFromCart(current, id, storeId)
+        persistGuest(next)
+        return next
+      })
+      if (mode === 'user') void apiClient.delete('/api/v1/carts/' + id).catch(() => undefined)
+      return
+    }
+    setCart((current) => {
+      const existing = current.data.flatMap((group) => group.items).find((item) => item.id === id)
+      if (!existing) return current
+      const next = upsertItem(current, { ...existing, quantity }, 'set')
+      persistGuest(next)
+      return next
+    })
+    if (mode === 'user') void apiClient.patch('/api/v1/carts/' + id, { quantity }).catch(() => undefined)
+  }, [mode, persistGuest, storeId])
+
+  const removeItem = useCallback((id: string) => {
+    setCart((current) => {
+      const next = removeItemFromCart(current, id, storeId)
+      persistGuest(next)
+      return next
+    })
+    if (mode === 'user') void apiClient.delete('/api/v1/carts/' + id).catch(() => undefined)
+  }, [mode, persistGuest, storeId])
+
+  const clearCart = useCallback(() => {
+    setCart((current) => {
+      const next = clearStoreCart(current, storeId)
+      persistGuest(next)
+      return next
+    })
+    if (mode === 'user' && storeId) {
+      void apiClient.delete('/api/v1/carts/all', { params: { storeId } }).catch(() => undefined)
+    }
+  }, [mode, persistGuest, storeId])
+
+  const items = useMemo(() => cart.data.flatMap((group) => group.items), [cart])
+  const getItemQuantity = useCallback((id: string) => items.find((item) => item.id === id)?.quantity ?? 0, [items])
+
+  const value = useMemo<CartContextValue>(() => ({
+    cart,
+    items,
+    totalItems: cart.totalItems,
+    isLoading,
+    mode,
+    addItem,
+    updateItemQuantity,
+    removeItem,
+    clearCart,
+    getItemQuantity,
+  }), [addItem, cart, clearCart, getItemQuantity, isLoading, items, mode, removeItem, updateItemQuantity])
+
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>
 }
 
 export function useCart() {
@@ -1185,6 +1565,7 @@ export function rootRouteSource() {
 import { Outlet, createRootRoute, HeadContent, Scripts } from '@tanstack/react-router'
 import { Providers } from '@/app/providers'
 import { StoreProvider } from '@/app/store-provider'
+import { AuthProvider } from '@/app/auth-provider'
 import { CartProvider } from '@/app/cart-provider'
 import { RouteLoadingBar } from '@/components/layout/route-loading-bar'
 import { SiteHeader } from '@/components/layout/site-header'
@@ -1201,15 +1582,17 @@ function Root() {
       <body>
         <Providers>
           <StoreProvider>
-            <CartProvider>
-              <RouteLoadingBar />
-              <SiteHeader />
-              <Suspense fallback={<RouteSuspenseFallback />}>
-                <Outlet />
-              </Suspense>
-              <SiteFooter />
-              <Toaster />
-            </CartProvider>
+            <AuthProvider>
+              <CartProvider>
+                <RouteLoadingBar />
+                <SiteHeader />
+                <Suspense fallback={<RouteSuspenseFallback />}>
+                  <Outlet />
+                </Suspense>
+                <SiteFooter />
+                <Toaster />
+              </CartProvider>
+            </AuthProvider>
           </StoreProvider>
         </Providers>
         <Scripts />
@@ -1306,6 +1689,7 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { Search, ShoppingCart } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useStore } from '@/app/store-provider'
+import { useCart } from '@/app/cart-provider'
 import { useProductSuggestions } from '@/services/store/use-product-suggestions'
 
 function escapeRegExp(value: string) {
@@ -1333,6 +1717,7 @@ function highlightMatch(text: string, query: string) {
 export function SiteHeader() {
   const navigate = useNavigate()
   const { storeDetail } = useStore()
+  const { totalItems } = useCart()
   const storeId = storeDetail?.id
   const [inputValue, setInputValue] = useState('')
   const [debouncedValue, setDebouncedValue] = useState('')
@@ -1492,9 +1877,14 @@ export function SiteHeader() {
             </ul>
           )}
         </div>
-        <Button asChild variant='outline' size='icon' aria-label='Cart' className='shrink-0'>
+        <Button asChild variant='outline' size='icon' aria-label='Cart' className='relative shrink-0'>
           <Link to='/cart'>
             <ShoppingCart className='h-4 w-4' />
+            {totalItems > 0 && (
+              <span className='absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold text-primary-foreground'>
+                {totalItems}
+              </span>
+            )}
           </Link>
         </Button>
       </div>
@@ -1514,7 +1904,6 @@ function productCardSource() {
 import { useMemo } from 'react'
 import DOMPurify from 'dompurify'
 import { Heart } from 'lucide-react'
-import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
@@ -1557,7 +1946,9 @@ export function ProductCard({ product }: { product: Product }) {
         </div>
       </CardContent>
       <CardFooter>
-        <Button className='w-full' onClick={() => toast.info('Cart coming soon')}>Add to cart</Button>
+        <Button asChild className='w-full'>
+          <Link to='/products/$productId' params={{ productId: product.id }}>Select option</Link>
+        </Button>
       </CardFooter>
     </Card>
   )
@@ -1668,32 +2059,47 @@ function cartDrawerSource() {
 function cartItemSource() {
   return `import { Minus, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { formatMoney, resolveProductPrice } from '@/lib/format-money'
+import { formatMoney } from '@/lib/format-money'
 import { useStore } from '@/app/store-provider'
-import type { Product } from '@/services/store/use-products-list'
+import type { CartItem as CartLine } from '@/app/cart-provider'
 
-export function CartItem({ product, quantity }: { product: Product; quantity: number }) {
+type CartItemProps = {
+  item: CartLine
+  selected?: boolean
+  onSelectedChange?: (checked: boolean) => void
+  onQuantityChange?: (quantity: number) => void
+  onRemove?: () => void
+}
+
+export function CartItem({ item, selected = false, onSelectedChange, onQuantityChange, onRemove }: CartItemProps) {
   const currency = useStore().storeDetail?.setting?.currency ?? 'AUD'
-  const unitPriceCents = resolveProductPrice(product) ?? 0
-  const thumbnail = product.image ?? product.images?.[0]
+  const thumbnail = item.image ?? item.product.image
   return (
-    <div className='flex items-center gap-4 rounded-lg border bg-card p-4'>
+    <div className={'flex items-center gap-4 rounded-lg border bg-card p-4 ' + (selected ? 'border-primary bg-primary/5' : '')}>
+      <input
+        type='checkbox'
+        checked={selected}
+        onChange={(event) => onSelectedChange?.(event.target.checked)}
+        aria-label={\`Select \${item.product.name}\`}
+        className='h-4 w-4 rounded border-border accent-primary'
+      />
       {thumbnail ? (
-        <img src={thumbnail} alt={product.name} className='h-20 w-20 rounded-md object-cover' />
+        <img src={thumbnail} alt={item.product.name} className='h-20 w-20 rounded-md object-cover' />
       ) : (
         <div className='h-20 w-20 rounded-md bg-secondary' />
       )}
       <div className='flex-1'>
-        <h3 className='font-semibold'>{product.name}</h3>
-        <p className='text-sm text-muted-foreground'>{formatMoney(unitPriceCents, { currency })}</p>
+        <h3 className='font-semibold'>{item.product.name}</h3>
+        <p className='text-sm text-muted-foreground'>{item.name}</p>
+        <p className='text-sm text-muted-foreground'>{formatMoney(item.price, { currency })}</p>
       </div>
       <div className='flex items-center gap-2'>
-        <Button variant='outline' size='icon' disabled><Minus className='h-4 w-4' /></Button>
-        <span className='w-8 text-center'>{quantity}</span>
-        <Button variant='outline' size='icon' disabled><Plus className='h-4 w-4' /></Button>
-        <Button variant='ghost' size='icon' disabled><Trash2 className='h-4 w-4' /></Button>
+        <Button variant='outline' size='icon' type='button' onClick={() => onQuantityChange?.(Math.max(0, item.quantity - 1))} aria-label='Decrease quantity'><Minus className='h-4 w-4' /></Button>
+        <span className='w-8 text-center'>{item.quantity}</span>
+        <Button variant='outline' size='icon' type='button' onClick={() => onQuantityChange?.(item.quantity + 1)} aria-label='Increase quantity'><Plus className='h-4 w-4' /></Button>
+        <Button variant='ghost' size='icon' type='button' onClick={onRemove} aria-label='Remove item'><Trash2 className='h-4 w-4' /></Button>
       </div>
-      <strong>{formatMoney(unitPriceCents * quantity, { currency })}</strong>
+      <strong>{formatMoney(item.price * item.quantity, { currency })}</strong>
     </div>
   )
 }
@@ -1823,14 +2229,14 @@ function ProductsPage() {
 }
 function productDetailRouteSource() {
   return `import { Link, createFileRoute } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import DOMPurify from 'dompurify'
-import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet'
 import { useProductDetail } from '@/services/store/use-product-detail'
 import { formatMoney, resolveProductPrice } from '@/lib/format-money'
 import { useStore } from '@/app/store-provider'
+import { useCart } from '@/app/cart-provider'
 import type { ProductModel } from '@/services/store/use-products-list'
 
 const DESCRIPTION_THRESHOLD = 240
@@ -1841,6 +2247,7 @@ function ProductDetailPage() {
   const { productId } = Route.useParams()
   const { data: product, isLoading, isError, refetch } = useProductDetail(productId)
   const { storeDetail } = useStore()
+  const { addItem, updateItemQuantity, getItemQuantity } = useCart()
   const currency = storeDetail?.setting?.currency ?? 'AUD'
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
@@ -1850,10 +2257,13 @@ function ProductDetailPage() {
   const [isSheetOpen, setIsSheetOpen] = useState(false)
 
   const models = useMemo(() => (product?.models ?? []) as ProductModel[], [product])
-  const initialModel = useMemo(() => product?.defaultModel ?? models[0], [product, models])
-  const activeModel = selectedModel ?? initialModel
-  const selectedPrice = activeModel?.price ?? resolveProductPrice(product) ?? 0
+  const displayModel = selectedModel ?? product?.defaultModel
+  const selectedPrice = displayModel?.price ?? resolveProductPrice(product) ?? 0
   const totalPrice = selectedPrice * quantity
+  const selectedModelId = typeof selectedModel?.id === 'string' ? selectedModel.id : ''
+  const currentCartQuantity = selectedModelId ? getItemQuantity(selectedModelId) : 0
+  const isInCart = currentCartQuantity > 0
+  const canConfirmCart = Boolean(selectedModelId)
 
   const images = product?.images ?? (product?.image ? [product.image] : [])
   const mainImage = images[selectedImageIndex] ?? images[0] ?? product?.image
@@ -1865,6 +2275,14 @@ function ProductDetailPage() {
     () => DOMPurify.sanitize(descriptions),
     [descriptions],
   )
+
+  useEffect(() => {
+    if (!selectedModelId) {
+      setQuantity(1)
+      return
+    }
+    setQuantity(currentCartQuantity > 0 ? currentCartQuantity : 1)
+  }, [currentCartQuantity, selectedModelId])
 
   if (isLoading) {
     return (
@@ -1891,7 +2309,12 @@ function ProductDetailPage() {
   }
 
   const handleConfirm = () => {
-    toast.info('Cart coming soon')
+    if (!selectedModel) return
+    if (isInCart) {
+      updateItemQuantity(selectedModelId, quantity)
+    } else {
+      addItem({ product, model: selectedModel, quantity })
+    }
     setIsSheetOpen(false)
   }
 
@@ -1951,7 +2374,7 @@ function ProductDetailPage() {
               <p className='mb-2 text-sm font-medium'>Select option</p>
               <div className='flex flex-wrap gap-2'>
                 {models.map((model) => {
-                  const isActive = (model.id ?? '') === (activeModel?.id ?? '')
+                  const isActive = (model.id ?? '') === selectedModelId
                   return (
                     <button
                       key={(model.id ?? '') + (model.name ?? '')}
@@ -2029,9 +2452,10 @@ function ProductDetailPage() {
               size='lg'
               type='button'
               className='w-full'
-              onClick={() => toast.info('Cart coming soon')}
+              disabled={!canConfirmCart}
+              onClick={handleConfirm}
             >
-              Add to cart
+              {!canConfirmCart ? 'Select an option' : isInCart ? 'Update cart' : 'Add to cart'}
             </Button>
           </div>
         </div>
@@ -2057,7 +2481,7 @@ function ProductDetailPage() {
           {models.length > 0 ? (
             <div className='mt-4 max-h-[40vh] space-y-2 overflow-y-auto'>
               {models.map((model) => {
-                const isActive = (model.id ?? '') === (activeModel?.id ?? '')
+                const isActive = (model.id ?? '') === selectedModelId
                 return (
                   <button
                     key={(model.id ?? '') + (model.name ?? '')}
@@ -2113,8 +2537,8 @@ function ProductDetailPage() {
                 Cancel
               </Button>
             </SheetClose>
-            <Button type='button' className='flex-1' onClick={handleConfirm}>
-              Add to cart
+            <Button type='button' className='flex-1' disabled={!canConfirmCart} onClick={handleConfirm}>
+              {!canConfirmCart ? 'Select option' : isInCart ? 'Update cart' : 'Add to cart'}
             </Button>
           </div>
         </SheetContent>
@@ -2125,10 +2549,192 @@ function ProductDetailPage() {
 `;
 }
 function cartRouteSource() {
-  return `import { Link, createFileRoute } from '@tanstack/react-router'\nimport { ShoppingCart } from 'lucide-react'\nimport { Button } from '@/components/ui/button'\nexport const Route = createFileRoute('/cart')({ component: CartPage })\nfunction CartPage() { return <main className='mx-auto max-w-7xl px-4 py-12'><h1 className='mb-8 text-4xl font-bold'>Cart</h1><div className='rounded-lg border bg-card p-12 text-center'><ShoppingCart className='mx-auto mb-4 h-10 w-10 text-muted-foreground' /><h2 className='text-2xl font-semibold'>Cart coming soon</h2><p className='mt-2 text-sm text-muted-foreground'>Cart is not yet wired up.</p><Button asChild className='mt-6'><Link to='/products'>Continue shopping</Link></Button></div></main> }\n`;
+  return `import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
+import { ShoppingCart, Trash2 } from 'lucide-react'
+import { useAtom } from 'jotai'
+import { Button } from '@/components/ui/button'
+import { CartItem } from '@/components/store/cart-item'
+import { useCart } from '@/app/cart-provider'
+import { selectedCartItemIdsAtom } from '@/app/cart-selection'
+import { formatMoney } from '@/lib/format-money'
+import { useStore } from '@/app/store-provider'
+
+export const Route = createFileRoute('/cart')({ component: CartPage })
+
+function CartPage() {
+  const navigate = useNavigate()
+  const { items, totalItems, updateItemQuantity, removeItem, clearCart } = useCart()
+  const { storeDetail } = useStore()
+  const currency = storeDetail?.setting?.currency ?? 'AUD'
+  const [selectedIds, setSelectedIds] = useAtom(selectedCartItemIdsAtom)
+  const visibleIds = items.map((item) => item.id)
+  const selectedVisibleIds = selectedIds.filter((id) => visibleIds.includes(id))
+  const isAllSelected = visibleIds.length > 0 && selectedVisibleIds.length === visibleIds.length
+  const selectedItems = items.filter((item) => selectedIds.includes(item.id))
+  const selectedQuantity = selectedItems.reduce((sum, item) => sum + item.quantity, 0)
+  const selectedSubtotal = selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+
+  const setItemSelected = (id: string, checked: boolean) => {
+    setSelectedIds((current) => checked ? Array.from(new Set([...current, id])) : current.filter((itemId) => itemId !== id))
+  }
+
+  const toggleAll = (checked: boolean) => {
+    setSelectedIds(checked ? visibleIds : [])
+  }
+
+  const handleClearCart = () => {
+    clearCart()
+    setSelectedIds([])
+  }
+
+  const handleRemove = (id: string) => {
+    removeItem(id)
+    setSelectedIds((current) => current.filter((itemId) => itemId !== id))
+  }
+
+  const handleCheckout = () => {
+    if (selectedVisibleIds.length === 0) return
+    void navigate({ to: '/checkout', search: { method: 'cart' } })
+  }
+
+  if (totalItems === 0) {
+    return (
+      <main className='mx-auto max-w-7xl px-4 py-12'>
+        <h1 className='mb-8 text-4xl font-bold'>Cart</h1>
+        <div className='rounded-lg border bg-card p-12 text-center'>
+          <ShoppingCart className='mx-auto mb-4 h-10 w-10 text-muted-foreground' />
+          <h2 className='text-2xl font-semibold'>Your cart is empty</h2>
+          <p className='mt-2 text-sm text-muted-foreground'>Select a product option to start your order.</p>
+          <Button asChild className='mt-6'><Link to='/products'>Continue shopping</Link></Button>
+        </div>
+      </main>
+    )
+  }
+
+  return (
+    <main className='mx-auto grid max-w-7xl gap-8 px-4 py-12 lg:grid-cols-[1fr_420px]'>
+      <section className='space-y-5'>
+        <div className='flex items-start justify-between gap-4'>
+          <div>
+            <p className='text-xs font-semibold uppercase tracking-[0.25em] text-primary'>Cart</p>
+            <h1 className='text-4xl font-bold'>Your cart</h1>
+            <p className='mt-2 text-sm text-muted-foreground'>Select items to proceed to checkout.</p>
+          </div>
+          <Button variant='ghost' type='button' onClick={handleClearCart}>
+            <Trash2 className='mr-2 h-4 w-4' />
+            Clear all
+          </Button>
+        </div>
+        <label className='inline-flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-muted-foreground'>
+          <input
+            type='checkbox'
+            checked={isAllSelected}
+            onChange={(event) => toggleAll(event.target.checked)}
+            className='h-4 w-4 rounded border-border accent-primary'
+          />
+          Select all
+        </label>
+        <div className='space-y-3'>
+          {items.map((item) => (
+            <CartItem
+              key={item.id}
+              item={item}
+              selected={selectedIds.includes(item.id)}
+              onSelectedChange={(checked) => setItemSelected(item.id, checked)}
+              onQuantityChange={(quantity) => updateItemQuantity(item.id, quantity)}
+              onRemove={() => handleRemove(item.id)}
+            />
+          ))}
+        </div>
+      </section>
+      <aside className='space-y-5 lg:sticky lg:top-24 lg:self-start'>
+        <div className='rounded-lg border bg-card p-6 shadow-sm'>
+          <div className='flex items-center justify-between'>
+            <p className='text-sm text-muted-foreground'>{selectedQuantity} item{selectedQuantity === 1 ? '' : 's'} selected</p>
+            <strong>{formatMoney(selectedSubtotal, { currency })}</strong>
+          </div>
+          <Button type='button' className='mt-6 w-full' disabled={selectedVisibleIds.length === 0} onClick={handleCheckout}>
+            Checkout
+          </Button>
+        </div>
+      </aside>
+    </main>
+  )
+}
+`;
 }
 function checkoutRouteSource() {
-  return `import { createFileRoute } from '@tanstack/react-router'\nimport { useForm } from 'react-hook-form'\nimport { z } from 'zod'\nimport { toast } from 'sonner'\nimport { Button } from '@/components/ui/button'\nimport { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'\nimport { Input } from '@/components/ui/input'\nimport { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'\nconst checkoutSchema = z.object({ customerName: z.string().min(2), email: z.string().email(), address: z.string().min(6), shippingMethod: z.enum(['standard', 'express']) })\ntype CheckoutValues = z.infer<typeof checkoutSchema>\nexport const Route = createFileRoute('/checkout')({ component: CheckoutPage })\nfunction CheckoutPage() { const { register, handleSubmit, setValue, formState: { errors } } = useForm<CheckoutValues>({ defaultValues: { shippingMethod: 'standard' } }); return <main className='mx-auto grid max-w-7xl gap-8 px-4 py-12 lg:grid-cols-[1fr_380px]'><form className='space-y-5' onSubmit={handleSubmit((values) => { const parsed = checkoutSchema.safeParse(values); if (!parsed.success) return; toast.success('Order placed (demo)', { description: 'Cart is not yet wired up.' }) })}><h1 className='text-4xl font-bold'>Checkout</h1><Input placeholder='Full name' {...register('customerName')} />{errors.customerName && <p className='text-sm text-destructive'>Name is required</p>}<Input placeholder='Email' {...register('email')} /><Input placeholder='Shipping address' {...register('address')} /><RadioGroup defaultValue='standard' onValueChange={(value) => setValue('shippingMethod', value as CheckoutValues['shippingMethod'])}><label className='flex items-center gap-2'><RadioGroupItem value='standard' /> Standard shipping</label><label className='flex items-center gap-2'><RadioGroupItem value='express' /> Express shipping</label></RadioGroup><Button type='submit'>Place order</Button></form><Card><CardHeader><CardTitle>Order summary</CardTitle></CardHeader><CardContent className='space-y-3'><p className='text-sm text-muted-foreground'>Order summary will appear here once the cart is connected.</p></CardContent></Card></main> }\n`;
+  return `import { createFileRoute } from '@tanstack/react-router'
+import { useAtomValue } from 'jotai'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { selectedCartItemIdsAtom } from '@/app/cart-selection'
+import { useCart } from '@/app/cart-provider'
+import { useStore } from '@/app/store-provider'
+import { formatMoney } from '@/lib/format-money'
+
+const checkoutSchema = z.object({ customerName: z.string().min(2), email: z.string().email(), address: z.string().min(6), shippingMethod: z.enum(['standard', 'express']) })
+type CheckoutValues = z.infer<typeof checkoutSchema>
+
+export const Route = createFileRoute('/checkout')({
+  validateSearch: (search) => ({ method: typeof search.method === 'string' ? search.method : '' }),
+  component: CheckoutPage,
+})
+
+function CheckoutPage() {
+  const search = Route.useSearch()
+  const selectedIds = useAtomValue(selectedCartItemIdsAtom)
+  const { items } = useCart()
+  const { storeDetail } = useStore()
+  const currency = storeDetail?.setting?.currency ?? 'AUD'
+  const selectedItems = search.method === 'cart' ? items.filter((item) => selectedIds.includes(item.id)) : []
+  const selectedSubtotal = selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm<CheckoutValues>({ defaultValues: { shippingMethod: 'standard' } })
+
+  return (
+    <main className='mx-auto grid max-w-7xl gap-8 px-4 py-12 lg:grid-cols-[1fr_380px]'>
+      <form className='space-y-5' onSubmit={handleSubmit((values) => { const parsed = checkoutSchema.safeParse(values); if (!parsed.success) return; toast.success('Checkout demo', { description: 'Order creation will be connected in a later phase.' }) })}>
+        <h1 className='text-4xl font-bold'>Checkout</h1>
+        <Input placeholder='Full name' {...register('customerName')} />
+        {errors.customerName && <p className='text-sm text-destructive'>Name is required</p>}
+        <Input placeholder='Email' {...register('email')} />
+        <Input placeholder='Shipping address' {...register('address')} />
+        <RadioGroup defaultValue='standard' onValueChange={(value) => setValue('shippingMethod', value as CheckoutValues['shippingMethod'])}>
+          <label className='flex items-center gap-2'><RadioGroupItem value='standard' /> Standard shipping</label>
+          <label className='flex items-center gap-2'><RadioGroupItem value='express' /> Express shipping</label>
+        </RadioGroup>
+        <Button type='submit'>Place order</Button>
+      </form>
+      <Card>
+        <CardHeader><CardTitle>Order summary</CardTitle></CardHeader>
+        <CardContent className='space-y-3'>
+          {selectedItems.length > 0 ? (
+            <>
+              {selectedItems.map((item) => (
+                <div key={item.id} className='flex justify-between gap-3 text-sm'>
+                  <span>{item.product.name} · {item.name} × {item.quantity}</span>
+                  <strong>{formatMoney(item.price * item.quantity, { currency })}</strong>
+                </div>
+              ))}
+              <div className='flex justify-between border-t pt-3 font-semibold'>
+                <span>Total</span>
+                <span>{formatMoney(selectedSubtotal, { currency })}</span>
+              </div>
+            </>
+          ) : (
+            <p className='text-sm text-muted-foreground'>Select cart items before checkout.</p>
+          )}
+        </CardContent>
+      </Card>
+    </main>
+  )
+}
+`;
 }
 function ordersIndexRouteSource() {
   return `import { Link, createFileRoute } from '@tanstack/react-router'\nimport { Button } from '@/components/ui/button'\nexport const Route = createFileRoute('/orders/')({ component: OrdersPage })\nfunction OrdersPage() { return <main className='mx-auto max-w-7xl px-4 py-12'><h1 className='mb-8 text-4xl font-bold'>Orders</h1><div className='rounded-lg border bg-card p-12 text-center'><h2 className='text-2xl font-semibold'>No orders yet</h2><Button asChild className='mt-6'><Link to='/products'>Shop now</Link></Button></div></main> }\n`;

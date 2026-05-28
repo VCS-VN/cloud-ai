@@ -35,6 +35,13 @@ export function scanGeneratedApiClientPolicy(changedFiles: ReadonlyArray<{ path:
         filePath: file.path,
         message: "Store API hooks must import apiClient from @/services/http/client.",
       });
+      continue;
+    }
+    if (usesCustomerApiEndpoint(file.content) && !file.content.includes("@/services/http/client")) {
+      violations.push({
+        filePath: file.path,
+        message: "Generated auth/cart API code must import apiClient from @/services/http/client.",
+      });
     }
   }
 
@@ -52,6 +59,12 @@ export function formatGeneratedApiClientPolicyViolations(violations: readonly Ge
 function isGeneratedApiCodePath(filePath: string) {
   return filePath.startsWith("src/services/store/")
     || filePath.startsWith("src/services/http/")
+    || filePath.startsWith("src/app/")
     || filePath.startsWith("src/routes/")
     || filePath.startsWith("src/components/");
+}
+
+function usesCustomerApiEndpoint(content: string) {
+  return content.includes("/api/v1/auth/profile")
+    || content.includes("/api/v1/carts");
 }
