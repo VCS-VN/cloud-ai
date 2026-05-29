@@ -1,0 +1,87 @@
+# Contract: Vibe Reference Pool YAML Schema
+
+**Path**: `templates/storefront/vibe-reference-pool.yaml`
+**Loader**: `loadReferencePool()` trong `src/features/ai-agent/design/library-loader.server.ts`
+**Đối tượng**: Anchor list bị bó (~12) + few-shot examples + anti-pattern. AI vibe-author dùng làm in-context example (D9b, D16).
+
+## Top-level shape
+
+```yaml
+version: 1
+anchors:
+  - id: minimalist
+    description: "Generous whitespace, restrained palette, geometric type."
+    legacyLabels: [minimalist, minimal]
+  - id: editorial
+    description: "Magazine-grade typography, strong vertical rhythm."
+    legacyLabels: [editorial]
+  - id: retro
+    description: "Analog warmth — 70s/80s palette, soft grain."
+    legacyLabels: [retro, vintage]
+  - id: playful
+    description: "Bright primaries, rounded shapes, friendly type."
+    legacyLabels: [playful]
+  # ... ~12 anchors total
+
+examples:
+  - id: ex-001
+    anchors: [retro, minimalist]
+    applicableCategories: [home-living, audio-electronics]
+    descriptor: "1970s analog warmth meets digital minimalism."
+    story: "Restrained surfaces with cream tones recall mid-century catalog work; the cart and CTA stay disciplined to keep purchase friction low."
+    antiPatterns:
+      - "Saturated neon accents — clashes with restrained palette."
+      - "Display serif at body size — eats whitespace the descriptor protects."
+  - id: ex-002
+    anchors: [playful]
+    applicableCategories: [kids-toys, snacks-confectionery]
+    descriptor: "Saturday-cartoon palette with sticker-stack composition."
+    story: "Bright primaries and rounded buttons ride a card-grid that mimics activity packets; copy stays exclamatory but never shouts."
+    antiPatterns:
+      - "Monochrome editorial body — undercuts the toy-shop joy."
+```
+
+## Field rules
+
+### `anchors[]`
+
+| Field | Type | Required | Constraint |
+|---|---|---|---|
+| `id` | string (kebab-case) | yes | unique; `/^[a-z][a-z0-9-]*$/` |
+| `description` | string | yes | 1 câu, 30-160 chars |
+| `legacyLabels` | string[] | no | union không trùng giữa anchors (TR-008) |
+
+**Constraints**:
+- `anchors.length` ∈ [10, 14] (target ~12).
+- Mỗi anchor ít nhất 1 entry trong `examples[].anchors[]` (no orphan anchor).
+
+### `examples[]`
+
+| Field | Type | Required | Constraint |
+|---|---|---|---|
+| `id` | string | yes | unique |
+| `anchors` | string[] | yes | size 1-2, mọi phần tử ∈ `anchors[].id` |
+| `applicableCategories` | string[] | yes | mọi phần tử ∈ `categories.yaml` primary.id |
+| `descriptor` | string | yes | 1 câu, 30-200 chars |
+| `story` | string | yes | 1-3 câu, 60-600 chars |
+| `antiPatterns` | string[] \| null | no | mỗi phần tử 1 câu |
+
+**Constraints**:
+- `examples.length` ∈ [30, 80] (D16 sourcing AI-generated + human-reviewed).
+- Coverage: mỗi primary category có ít nhất 1 example.
+
+## Failure modes
+
+| Lỗi | Hành vi |
+|---|---|
+| Anchor mồ côi (không xuất hiện ở example nào) | warn (CI gate) |
+| Primary category không có example | warn |
+| Example reference anchor không tồn tại | throw |
+| YAML parse fail | throw |
+
+## Tests
+
+- Reference pool valid → PASS.
+- Anchor `legacyLabels` trùng giữa hai anchor → FAIL.
+- Example reference anchor không tồn tại → FAIL.
+- Anchor mồ côi → warn nhưng load pass.

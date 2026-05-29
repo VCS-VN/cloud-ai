@@ -1,0 +1,265 @@
+version: 1
+anchors:
+  - id: minimalist
+    description: "Generous whitespace, restrained palette, geometric type, calm pacing on every page."
+    legacyLabels: [minimalist, minimal]
+  - id: editorial
+    description: "Magazine-grade typography, strong vertical rhythm, confident headlines as graphics."
+    legacyLabels: [editorial]
+  - id: retro
+    description: "Analog warmth — 70s/80s palette, soft grain, matte surfaces, nostalgic copy."
+    legacyLabels: [retro, vintage]
+  - id: playful
+    description: "Bright primaries, rounded shapes, friendly type, exclamatory but never shouty copy."
+    legacyLabels: [playful]
+  - id: luxury
+    description: "Restrained dark palette, fine serif display, generous margins, pace of a museum."
+    legacyLabels: [luxury, premium]
+  - id: organic-natural
+    description: "Earth tones, botanical motifs, humanist type, ingredient-forward storytelling."
+    legacyLabels: [organic, natural]
+  - id: streetwear
+    description: "Bold sans, high-contrast colorways, drop-cycle pacing, photo-led product reveals."
+    legacyLabels: [streetwear, bold]
+  - id: tech-cyber
+    description: "Neutral cool palette, mono accents, sharp grids, system-style microcopy."
+    legacyLabels: [tech, cyber]
+  - id: handcrafted
+    description: "Imperfect strokes, paper textures, mixed type weights, maker-led narrative."
+    legacyLabels: [handcrafted, artisan]
+  - id: friendly-approachable
+    description: "Warm pastels, rounded radii, conversational copy, low-friction CTAs."
+    legacyLabels: [friendly, approachable]
+  - id: bold-maximalist
+    description: "Saturated palette overlap, layered patterns, kinetic type, dense visual rhythm."
+    legacyLabels: [bold-maximalist, maximalist]
+  - id: refined-classic
+    description: "Timeless serif headlines, ivory surfaces, conservative motion, heritage cues."
+    legacyLabels: [refined, classic]
+
+examples:
+  - id: ex-001
+    anchors: [retro, minimalist]
+    applicableCategories: [home-living, audio-electronics]
+    descriptor: "1970s analog warmth meets digital minimalism."
+    story: "Restrained surfaces with cream tones recall mid-century catalog work; the cart and CTA stay disciplined to keep purchase friction low while the hero feels like a magazine spread."
+    antiPatterns:
+      - "Saturated neon accents — clashes with restrained palette."
+      - "Display serif at body size — eats whitespace the descriptor protects."
+  - id: ex-002
+    anchors: [playful]
+    applicableCategories: [kids-toys, food-beverage]
+    descriptor: "Saturday-cartoon palette with sticker-stack composition."
+    story: "Bright primaries and rounded buttons ride a card-grid that mimics activity packets; copy stays exclamatory but never shouts and the cart is given a friendly handoff."
+    antiPatterns:
+      - "Monochrome editorial body — undercuts the toy-shop joy."
+  - id: ex-003
+    anchors: [luxury, refined-classic]
+    applicableCategories: [jewelry-watches, fashion-apparel]
+    descriptor: "Museum-pace ivory surfaces with serif display headlines."
+    story: "Wide gutters, slow scroll, single product per fold; copy reads like an auction catalog and the CTA is whisper-quiet but always present."
+    antiPatterns:
+      - "Animated promo strip — breaks the museum pacing."
+  - id: ex-004
+    anchors: [organic-natural]
+    applicableCategories: [beauty-personal-care, food-beverage]
+    descriptor: "Botanical hand-illustrations on raw paper textures."
+    story: "Ingredient call-outs run the page; sage and clay tones repeat across hero, feature band, and trust signals so the brand feels harvested rather than manufactured."
+    antiPatterns:
+      - "Glossy gradient hero — fights the raw-paper feel."
+  - id: ex-005
+    anchors: [streetwear, bold-maximalist]
+    applicableCategories: [fashion-apparel, audio-electronics]
+    descriptor: "Drop-cycle hero with sans serif numerals at scale."
+    story: "Big numerals as countdown, full-bleed product photos, mono labels for SKU and drop date; cart wears a hard chrome edge that says limited."
+    antiPatterns:
+      - "Soft pastel surfaces — undermines the drop urgency."
+  - id: ex-006
+    anchors: [tech-cyber, minimalist]
+    applicableCategories: [audio-electronics, digital-goods]
+    descriptor: "System-prompt hairlines on cool neutral surfaces."
+    story: "Mono eyebrows, dense product specs, hairline dividers; the hero photo is a single product on void and the cart reads like a transaction terminal."
+    antiPatterns:
+      - "Warm beige surfaces — softens the system feel."
+  - id: ex-007
+    anchors: [handcrafted, organic-natural]
+    applicableCategories: [home-living, stationery-craft]
+    descriptor: "Maker-led pages with pencil-stroke divider art."
+    story: "Hand-set headlines, rough-edged photos, ingredient or material cards; trust signals are letters from the maker rather than badges."
+    antiPatterns:
+      - "Stock photography — breaks the maker authenticity."
+  - id: ex-008
+    anchors: [friendly-approachable, playful]
+    applicableCategories: [pets, food-beverage]
+    descriptor: "Soft pastel rounds with chatty conversational copy."
+    story: "Rounded cards, warm pinks and creams, body copy that uses contractions; trust signals lean on customer voicemails and pet photos."
+    antiPatterns:
+      - "Hard chrome buttons — fights the warmth."
+  - id: ex-009
+    anchors: [editorial, refined-classic]
+    applicableCategories: [books-media, fashion-apparel]
+    descriptor: "Magazine layout with serif headlines and confident vertical rhythm."
+    story: "Two-column body, drop caps in feature stories, eyebrow labels in mono; product grids follow editorial cadence with category strips between."
+    antiPatterns:
+      - "Crowded promo bars — break the editorial calm."
+  - id: ex-010
+    anchors: [retro, playful]
+    applicableCategories: [food-beverage, kids-toys]
+    descriptor: "70s sticker-pack palette with kraft paper textures."
+    story: "Mustard, brick, sage, cream — applied in big flat shapes with shadow stickers; copy uses exclamation but pacing stays calm."
+    antiPatterns:
+      - "Glassmorphism panels — wrong era cues."
+  - id: ex-011
+    anchors: [luxury, minimalist]
+    applicableCategories: [jewelry-watches, beauty-personal-care]
+    descriptor: "Single hero, single product, infinite margin."
+    story: "Ivory canvas, one product photo per fold, serif heading and a single CTA; the cart appears only when needed and disappears between."
+    antiPatterns:
+      - "Multiple promotional bands — breaks the slow pace."
+  - id: ex-012
+    anchors: [organic-natural, refined-classic]
+    applicableCategories: [wellness-supplements, gourmet-specialty]
+    descriptor: "Botanical etching headlines on aged ivory."
+    story: "Etched illustrations, serif display, warm sand surfaces; ingredient list is the proof point and trust signals are sourcing notes."
+    antiPatterns:
+      - "Neon CTA — fights the apothecary quiet."
+  - id: ex-013
+    anchors: [streetwear, tech-cyber]
+    applicableCategories: [audio-electronics, fashion-apparel]
+    descriptor: "Mono numerals over saturated red on black."
+    story: "Drop-style hero with countdown, gear-spec eyebrows, dense product cards with hard edges; cart reads like a console interface."
+    antiPatterns:
+      - "Pastel surfaces — wrong heat."
+  - id: ex-014
+    anchors: [playful, friendly-approachable]
+    applicableCategories: [kids-toys, subscription-boxes]
+    descriptor: "Sticker-stack hero with hand-drawn outlines and warm primaries."
+    story: "Cards rotate slightly off-axis, copy uses you/we voice, trust signals are parent quotes; CTA pill is large, friendly, never aggressive."
+    antiPatterns:
+      - "Black surface backgrounds — breaks the warmth."
+  - id: ex-015
+    anchors: [minimalist, editorial]
+    applicableCategories: [home-living, beauty-personal-care]
+    descriptor: "Calm gallery layout with confident serif headlines."
+    story: "Wide whitespace, two-column features, eyebrow labels in mono; product cards behave like museum captions and the cart is a side panel."
+    antiPatterns:
+      - "Animated marquee — breaks the gallery calm."
+  - id: ex-016
+    anchors: [retro]
+    applicableCategories: [food-beverage, gourmet-specialty]
+    descriptor: "Diner-counter color blocks with neon eyebrow labels."
+    story: "Mustard, cream, brick — used as full-width section grounds; eyebrow labels in italic mono and product cards have pinstripe edges."
+    antiPatterns:
+      - "Hairline modern grids — wrong era."
+  - id: ex-017
+    anchors: [organic-natural, friendly-approachable]
+    applicableCategories: [pets, garden-plants]
+    descriptor: "Sage and clay surfaces with approachable rounded type."
+    story: "Plant illustrations frame the product grid, body copy stays conversational, trust signals lead with rescued-animal stories or grower bios."
+    antiPatterns:
+      - "Hard chrome cart — breaks softness."
+  - id: ex-018
+    anchors: [bold-maximalist]
+    applicableCategories: [fashion-apparel, books-media]
+    descriptor: "Layered pattern beds with kinetic type stacks."
+    story: "Two patterns per section, oversized lettering that bleeds across cards, product photos sit on gradient grounds; cart is a confident slab."
+    antiPatterns:
+      - "Restrained whitespace — undercuts the energy."
+  - id: ex-019
+    anchors: [luxury, editorial]
+    applicableCategories: [jewelry-watches, travel-luggage]
+    descriptor: "Heritage serif with full-bleed photography on charcoal."
+    story: "Low-key palette, slow vertical pacing, product cards live inside dark gallery walls; trust signals are press quotes set in italic serif."
+    antiPatterns:
+      - "Bright orange accents — wrong tonality."
+  - id: ex-020
+    anchors: [tech-cyber]
+    applicableCategories: [digital-goods, audio-electronics]
+    descriptor: "Console-grade neutrals with monospaced microcopy."
+    story: "Hairline borders, system labels in mono, product specs lead the card; promo bands look like update logs."
+    antiPatterns:
+      - "Hand-drawn illustrations — wrong vocabulary."
+  - id: ex-021
+    anchors: [handcrafted]
+    applicableCategories: [stationery-craft, home-living]
+    descriptor: "Pencil-stroke headlines on raw canvas backgrounds."
+    story: "Imperfect borders, mixed type weights, ingredient or material cards; CTA buttons feel hand-cut rather than digital."
+    antiPatterns:
+      - "Slick drop shadows — fights the rawness."
+  - id: ex-022
+    anchors: [refined-classic, minimalist]
+    applicableCategories: [wellness-supplements, beauty-personal-care]
+    descriptor: "Apothecary calm with serif eyebrows on ivory."
+    story: "Single primary CTA per fold, ingredient roll-call in italic, hero photo of a single bottle; promo bands stay quiet."
+    antiPatterns:
+      - "Loud rotating banners — breaks the calm."
+  - id: ex-023
+    anchors: [editorial, playful]
+    applicableCategories: [books-media, kids-toys]
+    descriptor: "Magazine grid with playful illustration insets."
+    story: "Two-column body holds long-form copy; whimsical illustration breaks anchor each section so the layout reads like a children's magazine."
+    antiPatterns:
+      - "Mono industrial body — wrong voice."
+  - id: ex-024
+    anchors: [streetwear]
+    applicableCategories: [outdoor-gear, fashion-apparel]
+    descriptor: "Drop-cycle hero with field-tested eyebrow labels."
+    story: "Saturated brand color in big shapes, full-bleed product photos, eyebrows reading as gear-spec; cart wears a hard chrome edge."
+    antiPatterns:
+      - "Pastel feature bands — wrong intensity."
+  - id: ex-025
+    anchors: [retro, friendly-approachable]
+    applicableCategories: [subscription-boxes, food-beverage]
+    descriptor: "Pantry-label palette with hand-set headlines."
+    story: "Cream, mustard, dusty pink in big flat shapes; copy reads like a friendly note from the founder and trust signals are pantry-shelf quotes."
+    antiPatterns:
+      - "Glassmorphism — wrong era."
+  - id: ex-026
+    anchors: [bold-maximalist, playful]
+    applicableCategories: [stationery-craft, kids-toys]
+    descriptor: "Pattern overload with sticker-cut compositions."
+    story: "Two patterns and a sticker stack per section; oversized lettering crashes across cards, product photos sit on gradient grounds."
+    antiPatterns:
+      - "Whitespace galleries — wrong density."
+  - id: ex-027
+    anchors: [organic-natural, handcrafted]
+    applicableCategories: [garden-plants, gourmet-specialty]
+    descriptor: "Field-journal layout with botanical etchings."
+    story: "Etched plant illustrations, hand-set type at headline, sage and clay grounds; trust signals are grower notes, not badges."
+    antiPatterns:
+      - "Glossy product photography — wrong texture."
+  - id: ex-028
+    anchors: [tech-cyber, editorial]
+    applicableCategories: [digital-goods, books-media]
+    descriptor: "Long-form essays in serif body with mono microcopy."
+    story: "Two-column reads, mono captions, hairline-only ornaments; product cards behave like footnotes and the cart appears as a sidebar drawer."
+    antiPatterns:
+      - "Pastel pop graphics — wrong voice."
+  - id: ex-029
+    anchors: [luxury, organic-natural]
+    applicableCategories: [beauty-personal-care, gourmet-specialty]
+    descriptor: "Apothecary heritage with botanical hand-cut labels."
+    story: "Warm sand surfaces, etched plant illustrations, italic serif eyebrows; ingredient list is the conversion mechanism."
+    antiPatterns:
+      - "Cool blue accents — wrong palette warmth."
+  - id: ex-030
+    anchors: [friendly-approachable, refined-classic]
+    applicableCategories: [travel-luggage, fashion-apparel]
+    descriptor: "Soft warm canvas with serif greetings and rounded radii."
+    story: "Ivory and warm grey surfaces, friendly serif headlines, rounded cards; trust signals are concierge-style messages."
+    antiPatterns:
+      - "Hard chrome buttons — wrong warmth."
+  - id: ex-031
+    anchors: [minimalist, tech-cyber]
+    applicableCategories: [outdoor-gear, audio-electronics]
+    descriptor: "Spec-sheet pages with calm cool neutrals."
+    story: "Hairline tables, mono spec labels, single product per fold; trust signals are field test notes."
+    antiPatterns:
+      - "Floral motifs — wrong vocabulary."
+  - id: ex-032
+    anchors: [retro, editorial]
+    applicableCategories: [books-media, home-living]
+    descriptor: "Bookstore window display with ribbon eyebrows."
+    story: "Serif display set tight, mustard and brick eyebrows, two-column body; product cards behave like catalog cards from a 70s mail-order house."
+    antiPatterns:
+      - "Glossy gradient hero — wrong era."

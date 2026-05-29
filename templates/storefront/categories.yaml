@@ -1,0 +1,254 @@
+version: 1
+primary:
+  - id: fashion-apparel
+    label: Fashion & Apparel
+    description: Quần áo, phụ kiện, retail thời trang.
+    subcategories:
+      - id: streetwear
+        label: Streetwear
+      - id: tailored
+        label: Tailored
+      - id: athleisure
+        label: Athleisure
+      - id: kids-apparel
+        label: Kids Apparel
+      - id: accessories
+        label: Accessories
+  - id: home-living
+    label: Home & Living
+    description: Đồ nội thất, decor, gốm sứ, gia dụng.
+    subcategories:
+      - id: furniture
+        label: Furniture
+      - id: ceramics
+        label: Ceramics
+      - id: textiles
+        label: Textiles
+      - id: lighting
+        label: Lighting
+      - id: kitchenware
+        label: Kitchenware
+  - id: beauty-personal-care
+    label: Beauty & Personal Care
+    description: Mỹ phẩm, skincare, body care.
+    subcategories:
+      - id: skincare
+        label: Skincare
+      - id: haircare
+        label: Haircare
+      - id: makeup
+        label: Makeup
+      - id: fragrance
+        label: Fragrance
+      - id: wellness
+        label: Wellness
+  - id: food-beverage
+    label: Food & Beverage
+    description: Thực phẩm đặc sản, đồ uống, snack.
+    subcategories:
+      - id: coffee-tea
+        label: Coffee & Tea
+      - id: snacks-confectionery
+        label: Snacks & Confectionery
+      - id: pantry-staples
+        label: Pantry Staples
+      - id: beverages
+        label: Beverages
+      - id: meal-kits
+        label: Meal Kits
+  - id: audio-electronics
+    label: Audio & Electronics
+    description: Thiết bị âm thanh, gadget, smart home.
+    subcategories:
+      - id: headphones
+        label: Headphones
+      - id: speakers
+        label: Speakers
+      - id: smart-home
+        label: Smart Home
+      - id: cameras
+        label: Cameras
+      - id: accessories-tech
+        label: Tech Accessories
+  - id: sports-outdoors
+    label: Sports & Outdoors
+    description: Đồ thể thao, dụng cụ ngoài trời, gear.
+    subcategories:
+      - id: running
+        label: Running
+      - id: cycling
+        label: Cycling
+      - id: yoga
+        label: Yoga
+      - id: camping
+        label: Camping
+      - id: water-sports
+        label: Water Sports
+  - id: kids-toys
+    label: Kids & Toys
+    description: Đồ chơi, giáo dục, sản phẩm trẻ em.
+    subcategories:
+      - id: educational-toys
+        label: Educational Toys
+      - id: plush
+        label: Plush
+      - id: outdoor-play
+        label: Outdoor Play
+      - id: board-games
+        label: Board Games
+      - id: nursery
+        label: Nursery
+  - id: stationery-craft
+    label: Stationery & Craft
+    description: Văn phòng phẩm, art supplies, handmade.
+    subcategories:
+      - id: paper-goods
+        label: Paper Goods
+      - id: art-supplies
+        label: Art Supplies
+      - id: planners
+        label: Planners
+      - id: gift-wrap
+        label: Gift Wrap
+      - id: handmade-craft
+        label: Handmade Craft
+  - id: pets
+    label: Pets
+    description: Đồ dùng cho thú cưng.
+    subcategories:
+      - id: dog-essentials
+        label: Dog Essentials
+      - id: cat-essentials
+        label: Cat Essentials
+      - id: small-pets
+        label: Small Pets
+      - id: pet-food
+        label: Pet Food
+      - id: pet-accessories
+        label: Pet Accessories
+  - id: jewelry-watches
+    label: Jewelry & Watches
+    description: Trang sức, đồng hồ, phụ kiện cao cấp.
+    subcategories:
+      - id: fine-jewelry
+        label: Fine Jewelry
+      - id: demi-fine
+        label: Demi-fine
+      - id: watches
+        label: Watches
+      - id: bridal
+        label: Bridal
+      - id: mens-accessories
+        label: Men's Accessories
+  - id: books-media
+    label: Books & Media
+    description: Sách, vinyl, art prints, niche publishing.
+    subcategories:
+      - id: indie-books
+        label: Indie Books
+      - id: vinyl
+        label: Vinyl
+      - id: art-prints
+        label: Art Prints
+      - id: zines
+        label: Zines
+      - id: stationery-media
+        label: Stationery Media
+  - id: outdoor-gear
+    label: Outdoor Gear
+    description: Trang bị du lịch, hiking, lifestyle ngoài trời.
+    subcategories:
+      - id: backpacks
+        label: Backpacks
+      - id: travel-gear
+        label: Travel Gear
+      - id: hiking
+        label: Hiking
+      - id: outdoor-apparel
+        label: Outdoor Apparel
+      - id: gadgets-outdoor
+        label: Outdoor Gadgets
+  - id: wellness-supplements
+    label: Wellness & Supplements
+    description: Vitamin, supplement, organic wellness.
+    subcategories:
+      - id: vitamins
+        label: Vitamins
+      - id: protein
+        label: Protein
+      - id: herbal
+        label: Herbal
+      - id: nutrition-bars
+        label: Nutrition Bars
+      - id: hydration
+        label: Hydration
+  - id: gourmet-specialty
+    label: Gourmet & Specialty
+    description: Đồ ăn cao cấp, regional specialty, gourmet gift.
+    subcategories:
+      - id: olive-oil
+        label: Olive Oil
+      - id: chocolate
+        label: Chocolate
+      - id: specialty-spices
+        label: Specialty Spices
+      - id: condiments
+        label: Condiments
+      - id: gift-baskets
+        label: Gift Baskets
+  - id: digital-goods
+    label: Digital Goods
+    description: Sản phẩm số, presets, fonts, templates.
+    subcategories:
+      - id: presets
+        label: Presets
+      - id: fonts
+        label: Fonts
+      - id: templates
+        label: Templates
+      - id: courses
+        label: Courses
+      - id: ebooks
+        label: Ebooks
+  - id: subscription-boxes
+    label: Subscription Boxes
+    description: Subscription commerce, recurring delivery.
+    subcategories:
+      - id: snack-box
+        label: Snack Box
+      - id: beauty-box
+        label: Beauty Box
+      - id: lifestyle-box
+        label: Lifestyle Box
+      - id: kids-box
+        label: Kids Box
+      - id: hobby-box
+        label: Hobby Box
+  - id: garden-plants
+    label: Garden & Plants
+    description: Cây cảnh, dụng cụ làm vườn.
+    subcategories:
+      - id: indoor-plants
+        label: Indoor Plants
+      - id: planters
+        label: Planters
+      - id: seeds
+        label: Seeds
+      - id: gardening-tools
+        label: Gardening Tools
+      - id: outdoor-plants
+        label: Outdoor Plants
+  - id: travel-luggage
+    label: Travel & Luggage
+    description: Vali, balo du lịch, lifestyle travel.
+    subcategories:
+      - id: hard-shell-luggage
+        label: Hard-shell Luggage
+      - id: weekenders
+        label: Weekenders
+      - id: travel-accessories
+        label: Travel Accessories
+      - id: tech-pouches
+        label: Tech Pouches
+      - id: backpacks-travel
+        label: Backpacks

@@ -2,7 +2,8 @@ export type DesignIntentKind =
   | "init"
   | "update_no_design"
   | "update_token"
-  | "redesign";
+  | "redesign"
+  | "shake_design";
 
 export type TokenHintRole =
   | "primaryBrand"
@@ -36,7 +37,10 @@ export type DesignIntentLabel =
   | { kind: "init" }
   | { kind: "update_no_design" }
   | { kind: "update_token"; tokenHints: TokenHint[] }
-  | { kind: "redesign"; tokenHints?: TokenHint[] };
+  | { kind: "redesign"; tokenHints?: TokenHint[] }
+  | { kind: "shake_design" };
+
+const SHAKE_REGEX = /\b(shake|lac lai|lắc lại|tweak variants?|reroll variants?|đổi variant|doi variant|làm mới composition|lam moi composition)\b/i;
 
 export type ProjectStatusLike =
   | "empty"
@@ -130,6 +134,10 @@ export function classifyDesignIntent(input: {
   const prompt = input.prompt.trim();
   const lower = prompt.toLowerCase();
   const folded = stripDiacritics(lower);
+
+  if (SHAKE_REGEX.test(prompt) || SHAKE_REGEX.test(folded)) {
+    return { kind: "shake_design" };
+  }
 
   const vibeHit =
     VIBE_PHRASES_REGEX.test(prompt) ||

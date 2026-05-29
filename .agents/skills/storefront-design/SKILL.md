@@ -1,10 +1,10 @@
 ---
 name: "storefront-design-authoring"
 description: "Author and maintain a project-specific retail storefront design rule set (DESIGN.md) using a structural template and role-based tokens. Generate a unique, project-fit visual identity per project; never copy concrete token values from the structural reference template."
-compatibility: "Cloud-AI builder pipeline (design-generation-service.server.ts)"
+compatibility: "Cloud-AI builder pipeline (design-pipeline.server.ts via design-generation-service.server.ts; manifest at projects/<id>/blocks.json)"
 metadata:
   author: "cloud-ai"
-  version: "1.0.0"
+  version: "2.0.0"
 ---
 
 ## 1. Purpose
@@ -181,3 +181,19 @@ The orchestrator routes incoming prompts to one of four design-intent labels. Th
 - The UI rewrite that follows is performed by other agents using this new DESIGN.md as their single source of truth.
 
 This skill is framework-agnostic. Stack-specific rules (Tailwind, shadcn/ui, TanStack, etc.) live in stack-implementation documents and are intentionally out of scope here.
+
+## 8. Block Library + Manifest (v2)
+
+Version 2 introduces a per-project design manifest persisted at `<projectWorkspace>/blocks.json`. The manifest captures the full project composition (the ordered list of selected blocks with their chosen variant ids, tier classification, and slot position) plus the project vibe metadata (descriptor + 1-2 anchors + story). It is the single source of truth that downstream UI generation reads when it needs to resolve which blocks render where.
+
+DESIGN.md Section 1 ("Visual Theme & Atmosphere") MUST use a strict bullet structure so the manifest extractor can parse it deterministically:
+
+- `**Descriptor:**` one short phrase naming the vibe.
+- `**Anchors:**` 1-2 anchor names drawn from the bounded reference pool.
+- `**Story:**` two to three sentences explaining how the vibe serves the storefront.
+
+Variant selection follows a signal-first + seed tiebreak protocol: high-impact blocks (hero, feature band, primary CTA bands) request an AI rank of the top three eligible variants and a deterministic seed-pick chooses among them; supporting blocks skip the AI rank, apply code-level eligibility filters, and seed-pick from the survivors. The seed is per-project so re-runs are stable.
+
+Anchors MUST come from the bounded list at `templates/storefront/vibe-reference-pool.yaml`. The block library at `templates/storefront/block-library.yaml` defines per-block eligibility signals, composition rules (slot, allowed neighbors, mutual exclusions), and the variant catalog.
+
+Intent semantics governing manifest writes: `init` creates the manifest, `update_token` mutates only design tokens (manifest untouched), `update_no_design` skips both DESIGN.md and the manifest, `redesign` replaces both DESIGN.md and the manifest, and `shake_design` reshuffles variant selections inside the existing block list using a new seed.

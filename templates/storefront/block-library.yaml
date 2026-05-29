@@ -1,0 +1,646 @@
+version: 1
+blocks:
+  - blockId: header
+    tier: supporting
+    requirementLevel: tier-1
+    requirementGroup: null
+    defaultPosition: 0
+    applicableCategories: null
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: discovery
+    compositionRules:
+      mustPrecede: [hero, category-strip, product-grid, feature-band, social-proof-trust, social-proof-press, social-proof-founder, social-proof-material, newsletter, footer]
+      mustFollow: []
+      mutuallyExclusive: []
+      maxOccurrences: 1
+    variants:
+      - variantId: minimal-mono
+        shape: "Slim 56px nav, monochrome wordmark, primary nav links + cart icon."
+        vibeAffinity:
+          minimalist: 0.9
+          editorial: 0.7
+          tech-cyber: 0.7
+        notes: null
+      - variantId: editorial-strip
+        shape: "Two-row nav: top utility row, lower thick brand bar with serif wordmark."
+        vibeAffinity:
+          editorial: 0.95
+          refined-classic: 0.8
+          luxury: 0.7
+        notes: null
+      - variantId: warm-rounded
+        shape: "Pill-shaped CTAs, rounded wordmark, warm canvas surface."
+        vibeAffinity:
+          friendly-approachable: 0.95
+          playful: 0.85
+          retro: 0.6
+        notes: null
+      - variantId: drop-bold
+        shape: "Tall 80px nav with full-bleed brand color band and bold sans wordmark."
+        vibeAffinity:
+          streetwear: 0.95
+          bold-maximalist: 0.85
+          tech-cyber: 0.6
+        notes: null
+      - variantId: botanical-natural
+        shape: "Soft canvas nav with botanical inline motif and serif wordmark."
+        vibeAffinity:
+          organic-natural: 0.9
+          handcrafted: 0.75
+          refined-classic: 0.6
+        notes: null
+      - variantId: gallery-quiet
+        shape: "Whitespace-heavy single-row nav with serif wordmark for slow pacing."
+        vibeAffinity:
+          luxury: 0.9
+          refined-classic: 0.85
+          minimalist: 0.7
+        notes: null
+      - variantId: handcraft-paper
+        shape: "Raw paper texture with hand-set wordmark and ink stroke divider."
+        vibeAffinity:
+          handcrafted: 0.95
+          organic-natural: 0.7
+          retro: 0.55
+        notes: null
+  - blockId: hero
+    tier: high-impact
+    requirementLevel: tier-1
+    requirementGroup: null
+    defaultPosition: 1
+    applicableCategories: null
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: discovery
+    compositionRules:
+      mustPrecede: [category-strip, product-grid, feature-band, social-proof-trust, social-proof-press, social-proof-founder, social-proof-material, newsletter, footer]
+      mustFollow: [header]
+      mutuallyExclusive: []
+      maxOccurrences: 1
+    variants:
+      - variantId: editorial-overlay
+        shape: "Full-bleed photo, oversized serif headline, single primary CTA pinned bottom-left."
+        vibeAffinity:
+          editorial: 0.95
+          refined-classic: 0.8
+          luxury: 0.7
+        notes: null
+      - variantId: split-grid
+        shape: "Two-up: image left, copy + dual CTA right, calm whitespace."
+        vibeAffinity:
+          minimalist: 0.9
+          tech-cyber: 0.6
+          friendly-approachable: 0.55
+        notes: null
+      - variantId: sticker-stack
+        shape: "Layered sticker shapes, hand-drawn outlines, pastel color blocks."
+        vibeAffinity:
+          playful: 0.95
+          friendly-approachable: 0.8
+          handcrafted: 0.7
+        notes: null
+      - variantId: drop-countdown
+        shape: "Big numerals as countdown, full-bleed product photo, mono labels."
+        vibeAffinity:
+          streetwear: 0.95
+          tech-cyber: 0.6
+          bold-maximalist: 0.8
+        notes: null
+      - variantId: gallery-still
+        shape: "Single product on void, ivory canvas, serif heading, whisper CTA."
+        vibeAffinity:
+          luxury: 0.95
+          minimalist: 0.85
+          refined-classic: 0.85
+        notes: null
+      - variantId: botanical-frame
+        shape: "Hand-cut botanical motifs framing the headline on raw paper texture."
+        vibeAffinity:
+          organic-natural: 0.95
+          handcrafted: 0.85
+          refined-classic: 0.5
+        notes: null
+  - blockId: category-strip
+    tier: supporting
+    requirementLevel: optional
+    requirementGroup: null
+    defaultPosition: null
+    applicableCategories: null
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: discovery
+    compositionRules:
+      mustPrecede: [product-grid]
+      mustFollow: [header, hero]
+      mutuallyExclusive: []
+      maxOccurrences: 1
+    variants:
+      - variantId: card-row
+        shape: "Horizontal row of 4-6 category cards with thumbnail and label."
+        vibeAffinity:
+          minimalist: 0.85
+          editorial: 0.7
+          friendly-approachable: 0.65
+        notes: null
+      - variantId: pill-tabs
+        shape: "Pill-shaped category tabs in soft pastel surfaces."
+        vibeAffinity:
+          friendly-approachable: 0.9
+          playful: 0.85
+          retro: 0.55
+        notes: null
+      - variantId: mono-list
+        shape: "Mono-spaced category list with hairline dividers."
+        vibeAffinity:
+          tech-cyber: 0.9
+          minimalist: 0.7
+          editorial: 0.55
+        notes: null
+  - blockId: product-grid
+    tier: supporting
+    requirementLevel: tier-1
+    requirementGroup: null
+    defaultPosition: 3
+    applicableCategories: null
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: conversion
+    compositionRules:
+      mustPrecede: [feature-band, social-proof-trust, social-proof-press, social-proof-founder, social-proof-material, newsletter, footer]
+      mustFollow: [header, hero]
+      mutuallyExclusive: []
+      maxOccurrences: 2
+    variants:
+      - variantId: gallery-3up
+        shape: "Three-column gallery with generous gutters and caption-style copy."
+        vibeAffinity:
+          editorial: 0.85
+          minimalist: 0.85
+          refined-classic: 0.75
+        notes: null
+      - variantId: dense-4up
+        shape: "Four-column dense grid with badge call-outs and price chips."
+        vibeAffinity:
+          streetwear: 0.85
+          bold-maximalist: 0.8
+          tech-cyber: 0.6
+        notes: null
+      - variantId: rounded-card
+        shape: "Two-column rounded cards with warm pastel backgrounds and pill CTAs."
+        vibeAffinity:
+          friendly-approachable: 0.9
+          playful: 0.8
+          retro: 0.55
+        notes: null
+      - variantId: museum-caption
+        shape: "Two-column gallery with caption labels and roman numerals; ivory canvas."
+        vibeAffinity:
+          luxury: 0.9
+          refined-classic: 0.85
+          minimalist: 0.7
+        notes: null
+      - variantId: field-spec
+        shape: "Three-column with mono spec lines, gear-style eyebrow labels."
+        vibeAffinity:
+          tech-cyber: 0.9
+          minimalist: 0.6
+          streetwear: 0.55
+        notes: null
+      - variantId: botanical-grid
+        shape: "Two-column grid on warm sand surface with botanical hairline ornaments."
+        vibeAffinity:
+          organic-natural: 0.9
+          handcrafted: 0.75
+          refined-classic: 0.6
+        notes: null
+      - variantId: marker-grid
+        shape: "Hand-cut card edges with mixed type weights and paper texture."
+        vibeAffinity:
+          handcrafted: 0.95
+          retro: 0.7
+          organic-natural: 0.6
+        notes: null
+      - variantId: drop-grid
+        shape: "Saturated brand color grid with bold sans labels and chrome edges."
+        vibeAffinity:
+          streetwear: 0.95
+          bold-maximalist: 0.85
+          tech-cyber: 0.55
+        notes: null
+      - variantId: editorial-2up
+        shape: "Two-column editorial gallery with serif captions and confident vertical rhythm."
+        vibeAffinity:
+          editorial: 0.95
+          refined-classic: 0.8
+          luxury: 0.7
+        notes: null
+  - blockId: feature-band
+    tier: high-impact
+    requirementLevel: optional
+    requirementGroup: null
+    defaultPosition: null
+    applicableCategories: null
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: conversion
+    compositionRules:
+      mustPrecede: [social-proof-trust, social-proof-press, social-proof-founder, social-proof-material, newsletter, footer]
+      mustFollow: [hero]
+      mutuallyExclusive: []
+      maxOccurrences: 2
+    variants:
+      - variantId: dark-promo
+        shape: "Full-bleed dark band with white serif headline and dual CTA."
+        vibeAffinity:
+          editorial: 0.85
+          luxury: 0.85
+          refined-classic: 0.6
+        notes: null
+      - variantId: pastel-block
+        shape: "Pastel ground band with rounded illustration and pill CTA."
+        vibeAffinity:
+          playful: 0.9
+          friendly-approachable: 0.85
+          retro: 0.55
+        notes: null
+      - variantId: sticker-collage
+        shape: "Sticker-stack collage band with hand-drawn outlines."
+        vibeAffinity:
+          playful: 0.85
+          handcrafted: 0.85
+          bold-maximalist: 0.7
+        notes: null
+      - variantId: spec-strip
+        shape: "Cool neutral band with mono spec table and minimal art."
+        vibeAffinity:
+          tech-cyber: 0.95
+          minimalist: 0.7
+          refined-classic: 0.55
+        notes: null
+      - variantId: ingredient-window
+        shape: "Botanical etched band with ingredient roll-call and apothecary serif."
+        vibeAffinity:
+          organic-natural: 0.95
+          refined-classic: 0.7
+          handcrafted: 0.6
+        notes: null
+  - blockId: social-proof-trust
+    tier: supporting
+    requirementLevel: group
+    requirementGroup: social-proof
+    defaultPosition: null
+    applicableCategories: null
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: trust
+    compositionRules:
+      mustPrecede: [newsletter, footer]
+      mustFollow: [hero, product-grid]
+      mutuallyExclusive: []
+      maxOccurrences: 1
+    variants:
+      - variantId: rating-row
+        shape: "Row of star ratings with short customer quotes underneath."
+        vibeAffinity:
+          friendly-approachable: 0.85
+          minimalist: 0.7
+          editorial: 0.6
+        notes: null
+      - variantId: badge-grid
+        shape: "Grid of trust badges (warranty, returns, satisfaction)."
+        vibeAffinity:
+          minimalist: 0.85
+          tech-cyber: 0.7
+          refined-classic: 0.55
+        notes: null
+      - variantId: quote-card
+        shape: "Single oversized quote card with serif italic and small avatar."
+        vibeAffinity:
+          editorial: 0.9
+          luxury: 0.75
+          refined-classic: 0.7
+        notes: null
+  - blockId: social-proof-press
+    tier: supporting
+    requirementLevel: group
+    requirementGroup: social-proof
+    defaultPosition: null
+    applicableCategories: null
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: trust
+    compositionRules:
+      mustPrecede: [newsletter, footer]
+      mustFollow: [hero]
+      mutuallyExclusive: []
+      maxOccurrences: 1
+    variants:
+      - variantId: press-logo-row
+        shape: "Single row of press logos in monochrome on light surface."
+        vibeAffinity:
+          editorial: 0.9
+          luxury: 0.85
+          refined-classic: 0.75
+        notes: null
+      - variantId: press-quote-stack
+        shape: "Vertical stack of press quotes with publication name in mono."
+        vibeAffinity:
+          editorial: 0.85
+          minimalist: 0.7
+          refined-classic: 0.7
+        notes: null
+  - blockId: social-proof-founder
+    tier: supporting
+    requirementLevel: group
+    requirementGroup: social-proof
+    defaultPosition: null
+    applicableCategories: null
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: trust
+    compositionRules:
+      mustPrecede: [newsletter, footer]
+      mustFollow: [hero]
+      mutuallyExclusive: []
+      maxOccurrences: 1
+    variants:
+      - variantId: founder-letter
+        shape: "Two-column founder letter with signature and portrait."
+        vibeAffinity:
+          handcrafted: 0.95
+          organic-natural: 0.85
+          friendly-approachable: 0.7
+        notes: null
+      - variantId: maker-card
+        shape: "Card with maker portrait, hand-set quote and craft note."
+        vibeAffinity:
+          handcrafted: 0.9
+          organic-natural: 0.75
+          refined-classic: 0.55
+        notes: null
+      - variantId: poster-quote
+        shape: "Poster-style founder quote with bold sans heading and saturated brand band."
+        vibeAffinity:
+          streetwear: 0.9
+          bold-maximalist: 0.85
+          retro: 0.6
+        notes: null
+      - variantId: pantry-card
+        shape: "Pantry-label founder note on warm cream surface with pinstripe edge."
+        vibeAffinity:
+          retro: 0.9
+          playful: 0.7
+          friendly-approachable: 0.6
+        notes: null
+      - variantId: gallery-letter
+        shape: "Calm gallery layout founder letter with serif body and ivory canvas."
+        vibeAffinity:
+          editorial: 0.9
+          minimalist: 0.8
+          refined-classic: 0.7
+        notes: null
+      - variantId: console-note
+        shape: "Mono-spaced founder note framed as a system message on cool neutral surface."
+        vibeAffinity:
+          tech-cyber: 0.9
+          minimalist: 0.7
+          editorial: 0.55
+        notes: null
+      - variantId: rounded-letter
+        shape: "Rounded card founder letter with warm pastel surface and friendly serif."
+        vibeAffinity:
+          friendly-approachable: 0.9
+          playful: 0.8
+          retro: 0.55
+        notes: null
+      - variantId: luxury-letter
+        shape: "Heritage serif founder letter on charcoal canvas with whisper underline."
+        vibeAffinity:
+          luxury: 0.9
+          refined-classic: 0.85
+          editorial: 0.6
+        notes: null
+  - blockId: social-proof-material
+    tier: supporting
+    requirementLevel: group
+    requirementGroup: social-proof
+    defaultPosition: null
+    applicableCategories: null
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: trust
+    compositionRules:
+      mustPrecede: [newsletter, footer]
+      mustFollow: [hero]
+      mutuallyExclusive: []
+      maxOccurrences: 1
+    variants:
+      - variantId: material-callouts
+        shape: "Row of material callouts with macro photo and short copy."
+        vibeAffinity:
+          organic-natural: 0.9
+          handcrafted: 0.85
+          refined-classic: 0.6
+        notes: null
+      - variantId: spec-sheet
+        shape: "Spec sheet of material/sourcing facts in mono."
+        vibeAffinity:
+          tech-cyber: 0.85
+          minimalist: 0.7
+          editorial: 0.6
+        notes: null
+  - blockId: newsletter
+    tier: supporting
+    requirementLevel: optional
+    requirementGroup: null
+    defaultPosition: null
+    applicableCategories: null
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: retention
+    compositionRules:
+      mustPrecede: [footer]
+      mustFollow: [hero]
+      mutuallyExclusive: []
+      maxOccurrences: 1
+    variants:
+      - variantId: friendly-pill
+        shape: "Pill input + pill CTA on warm pastel ground."
+        vibeAffinity:
+          friendly-approachable: 0.9
+          playful: 0.7
+          retro: 0.55
+        notes: null
+      - variantId: editorial-quiet
+        shape: "Single line input with mono caption beneath, ivory canvas."
+        vibeAffinity:
+          editorial: 0.9
+          minimalist: 0.85
+          refined-classic: 0.7
+        notes: null
+      - variantId: drop-alert
+        shape: "Bold sans header reading 'JOIN THE DROP', single dark CTA."
+        vibeAffinity:
+          streetwear: 0.95
+          bold-maximalist: 0.7
+          tech-cyber: 0.55
+        notes: null
+  - blockId: footer
+    tier: supporting
+    requirementLevel: tier-1
+    requirementGroup: null
+    defaultPosition: 7
+    applicableCategories: null
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: retention
+    compositionRules:
+      mustPrecede: []
+      mustFollow: [hero]
+      mutuallyExclusive: []
+      maxOccurrences: 1
+    variants:
+      - variantId: dense-link-grid
+        shape: "Dense five-column link grid with mono captions."
+        vibeAffinity:
+          editorial: 0.85
+          tech-cyber: 0.75
+          minimalist: 0.6
+        notes: null
+      - variantId: warm-roundup
+        shape: "Three-column footer on warm canvas with pill social buttons."
+        vibeAffinity:
+          friendly-approachable: 0.9
+          playful: 0.7
+          retro: 0.6
+        notes: null
+      - variantId: museum-quiet
+        shape: "Single-row quiet footer with serif wordmark and address."
+        vibeAffinity:
+          luxury: 0.9
+          refined-classic: 0.85
+          minimalist: 0.7
+        notes: null
+      - variantId: botanical-footer
+        shape: "Warm sand footer with botanical motif divider and apothecary serif."
+        vibeAffinity:
+          organic-natural: 0.9
+          handcrafted: 0.7
+          refined-classic: 0.6
+        notes: null
+      - variantId: drop-footer
+        shape: "Bold sans footer with saturated brand band and mono captions."
+        vibeAffinity:
+          streetwear: 0.95
+          bold-maximalist: 0.8
+          tech-cyber: 0.55
+        notes: null
+      - variantId: handcraft-footer
+        shape: "Hand-cut paper footer with mixed type weights and ink stroke divider."
+        vibeAffinity:
+          handcrafted: 0.9
+          retro: 0.7
+          organic-natural: 0.6
+        notes: null
+      - variantId: playful-footer
+        shape: "Rounded card footer with pastel surfaces and pill social buttons."
+        vibeAffinity:
+          playful: 0.95
+          friendly-approachable: 0.85
+          retro: 0.55
+        notes: null
+  - blockId: campaign-story
+    tier: high-impact
+    requirementLevel: optional
+    requirementGroup: null
+    defaultPosition: null
+    applicableCategories: [fashion-apparel, beauty-personal-care, books-media, jewelry-watches]
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: discovery
+    compositionRules:
+      mustPrecede: [product-grid, feature-band, social-proof-trust, social-proof-press, social-proof-founder, social-proof-material, newsletter, footer]
+      mustFollow: [hero]
+      mutuallyExclusive: []
+      maxOccurrences: 1
+    variants:
+      - variantId: editorial-spread
+        shape: "Two-page editorial spread with serif drop cap and full-bleed photo."
+        vibeAffinity:
+          editorial: 0.95
+          refined-classic: 0.85
+          luxury: 0.7
+        notes: null
+      - variantId: drop-poster
+        shape: "Poster-style hero with kinetic type and saturated palette."
+        vibeAffinity:
+          streetwear: 0.95
+          bold-maximalist: 0.85
+          tech-cyber: 0.5
+        notes: null
+      - variantId: ingredient-feature
+        shape: "Ingredient deep-dive with botanical etching and apothecary serif."
+        vibeAffinity:
+          organic-natural: 0.95
+          handcrafted: 0.7
+          refined-classic: 0.6
+        notes: null
+  - blockId: routine-builder
+    tier: high-impact
+    requirementLevel: optional
+    requirementGroup: null
+    defaultPosition: null
+    applicableCategories: [beauty-personal-care, wellness-supplements]
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: conversion
+    compositionRules:
+      mustPrecede: [social-proof-trust, social-proof-press, social-proof-founder, social-proof-material, newsletter, footer]
+      mustFollow: [hero, product-grid]
+      mutuallyExclusive: []
+      maxOccurrences: 1
+    variants:
+      - variantId: step-card
+        shape: "Three-step card flow with rounded illustration per step."
+        vibeAffinity:
+          friendly-approachable: 0.9
+          minimalist: 0.7
+          organic-natural: 0.7
+        notes: null
+      - variantId: ritual-spread
+        shape: "Editorial spread describing morning/evening rituals on ivory canvas."
+        vibeAffinity:
+          editorial: 0.85
+          luxury: 0.8
+          refined-classic: 0.7
+        notes: null
+  - blockId: gear-spec
+    tier: high-impact
+    requirementLevel: optional
+    requirementGroup: null
+    defaultPosition: null
+    applicableCategories: [audio-electronics, outdoor-gear, sports-outdoors]
+    applicableSubcategories: null
+    applicableVibes: null
+    commerceGoal: trust
+    compositionRules:
+      mustPrecede: [social-proof-trust, social-proof-press, social-proof-founder, social-proof-material, newsletter, footer]
+      mustFollow: [hero, product-grid]
+      mutuallyExclusive: []
+      maxOccurrences: 1
+    variants:
+      - variantId: spec-table
+        shape: "Tabular spec sheet with mono labels and hairline dividers."
+        vibeAffinity:
+          tech-cyber: 0.95
+          minimalist: 0.75
+          streetwear: 0.6
+        notes: null
+      - variantId: field-test
+        shape: "Field-test diary with rugged photography and journal-style copy."
+        vibeAffinity:
+          streetwear: 0.85
+          tech-cyber: 0.7
+          handcrafted: 0.6
+        notes: null

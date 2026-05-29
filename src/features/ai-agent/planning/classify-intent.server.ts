@@ -28,6 +28,8 @@ export function classifyDesignChange(
       return { kind: "token_specific", label: "Token-specific design change - patch relevant token values" };
     case "redesign":
       return { kind: "identity_redesign", label: "Identity-level redesign - regenerate design direction" };
+    case "shake_design":
+      return { kind: "identity_redesign", label: "Identity-level redesign - regenerate design direction" };
   }
 }
 

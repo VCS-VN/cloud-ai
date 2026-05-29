@@ -1,10 +1,9 @@
 {
-  "ai": "claude",
-  "ai_skills": true,
+  "ai": "kiro-cli",
   "branch_numbering": "sequential",
-  "context_file": "CLAUDE.md",
+  "context_file": "AGENTS.md",
   "here": true,
-  "integration": "claude",
+  "integration": "kiro-cli",
   "script": "sh",
   "speckit_version": "0.8.11"
 }

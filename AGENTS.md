@@ -61,5 +61,7 @@ For multi-step tasks, state a brief plan:
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
 <!-- SPECKIT START -->
-Active feature plan: [specs/018-project-cart-generation/plan.md](specs/018-project-cart-generation/plan.md)
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan:
+specs/019-storefront-lens-system/plan.md
 <!-- SPECKIT END -->
