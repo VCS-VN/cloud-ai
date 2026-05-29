@@ -17,7 +17,17 @@ import type { RuntimeOrchestrator } from "../runtime/runtime-orchestrator.server
 import { sanitizeForUser } from "./user-facing-presenter";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { buildFileManifest } from "../source/code-index-service.server";
-import { ensureRootRouteLoadingBarContract, hasSiteHeaderSearchSuggestionContract, initInfrastructureSource, initSource, notFoundSource, productSuggestionsQuerySource, renderEnvSource, routeLoadingBarSource, siteHeaderSource } from "../source/init-source.server";
+import {
+  ensureRootRouteLoadingBarContract,
+  hasSiteHeaderSearchSuggestionContract,
+  initInfrastructureSource,
+  initSource,
+  notFoundSource,
+  productSuggestionsQuerySource,
+  renderEnvSource,
+  routeLoadingBarSource,
+  siteHeaderSource,
+} from "../source/init-source.server";
 import { REQUIRED_GENERATED_STOREFRONT_FILES } from "../source/generated-project-layout";
 import { applyStoreSlugToEnv } from "../store-runtime/generated-project-env";
 import { buildRetailInitPrompt } from "./init-prompt.server";
@@ -41,7 +51,10 @@ import type { AgenticLoopResult } from "./agentic-loop.types";
 import { AsyncEventQueue } from "./async-event-queue";
 import { isReasoningModel, selectReasoningEffort } from "./reasoning-effort";
 import { executeProjectTool } from "../code-tools/code-tool-executor.server";
-import { createDefaultCodeToolRegistry, createInitCodeToolRegistry } from "../code-tools/code-tool-registry.server";
+import {
+  createDefaultCodeToolRegistry,
+  createInitCodeToolRegistry,
+} from "../code-tools/code-tool-registry.server";
 import type { ToolExecutionContext } from "../code-tools/code-agent-types";
 import {
   generateAndWriteDesignFile,
@@ -51,7 +64,10 @@ import {
   extractUserProvenanceTokens,
   doesPromptConflictWithUserToken,
 } from "../code-tools/services/design-generation-service.server";
-import { buildCssVariableMapping, replaceOwnedDesignTokenRegion } from "../code-tools/services/design-token-mapping-service.server";
+import {
+  buildCssVariableMapping,
+  replaceOwnedDesignTokenRegion,
+} from "../code-tools/services/design-token-mapping-service.server";
 import {
   classifyDesignIntent,
   extractTokenHints,
@@ -84,7 +100,10 @@ export type AgentOrchestratorDeps = {
   agentConfig?: AgentConfig;
   runtimeService?: RuntimeService;
   runtimeOrchestrator?: RuntimeOrchestrator;
-  selectedStoreSlugResolver?: (projectId: string, userId?: string) => Promise<string | null>;
+  selectedStoreSlugResolver?: (
+    projectId: string,
+    userId?: string,
+  ) => Promise<string | null>;
 };
 
 export class AgentOrchestrator {
@@ -227,7 +246,7 @@ export class AgentOrchestrator {
             designIntent.kind === "update_token"
               ? designIntent.tokenHints.length
               : designIntent.kind === "redesign"
-                ? designIntent.tokenHints?.length ?? 0
+                ? (designIntent.tokenHints?.length ?? 0)
                 : 0,
         }),
       );
@@ -287,7 +306,8 @@ export class AgentOrchestrator {
           input.projectId,
           {
             designState: {
-              templateId: projectState.designState?.templateId ?? "ai-generated",
+              templateId:
+                projectState.designState?.templateId ?? "ai-generated",
               designSourcePath: "DESIGN.md",
               designSourceHash: patchResult.hash,
               designCopiedAt: new Date().toISOString(),
@@ -300,7 +320,10 @@ export class AgentOrchestrator {
           input.prompt,
           patchResult.appliedRoles,
         );
-        yield { type: "project_state_updated", projectState: activeProjectState };
+        yield {
+          type: "project_state_updated",
+          projectState: activeProjectState,
+        };
       } else if (
         designIntent.kind === "redesign" &&
         projectState.status === "initialized"
@@ -371,7 +394,10 @@ export class AgentOrchestrator {
           input.prompt,
           designIntent.tokenHints,
         );
-        yield { type: "project_state_updated", projectState: activeProjectState };
+        yield {
+          type: "project_state_updated",
+          projectState: activeProjectState,
+        };
       }
 
       const toolExecutionContext: ToolExecutionContext = {
@@ -381,7 +407,9 @@ export class AgentOrchestrator {
         workspaceRoot: getProjectWorkspaceRoot(input.projectId),
         projectState: activeProjectState,
       };
-      (toolExecutionContext as unknown as { __codeToolSnapshotId: string }).__codeToolSnapshotId = `update-${run.id}`;
+      (
+        toolExecutionContext as unknown as { __codeToolSnapshotId: string }
+      ).__codeToolSnapshotId = `update-${run.id}`;
 
       const registry = createDefaultCodeToolRegistry();
 
@@ -407,7 +435,8 @@ export class AgentOrchestrator {
               maxConsecutiveToolErrors:
                 this.deps.agentConfig?.agenticMaxConsecutiveToolErrors ?? 5,
               callModel: async (modelInput) => {
-                const coderModel = this.deps.agentConfig?.coderModel ?? "gpt-5.4";
+                const coderModel =
+                  this.deps.agentConfig?.coderModel ?? "gpt-5.4";
                 const reasoningEffort = isReasoningModel(coderModel)
                   ? selectReasoningEffort(thinking)
                   : undefined;
@@ -552,7 +581,10 @@ export class AgentOrchestrator {
     const plan = createInitPlan(intent);
     logAgentPhase("finished", "create_plan", phaseContext);
     yield { type: "plan_created", plan };
-    const selectedStoreSlug = await this.resolveSelectedStoreSlug(input.projectId, input.userId);
+    const selectedStoreSlug = await this.resolveSelectedStoreSlug(
+      input.projectId,
+      input.userId,
+    );
 
     const websiteSpec = await runPhase("extract_website_spec", () =>
       extractWebsiteSpec({
@@ -654,7 +686,12 @@ export class AgentOrchestrator {
       }
       logAgentPhase("finished", "write_infrastructure_files", phaseContext);
     } catch (error) {
-      logAgentPhase("failed", "write_infrastructure_files", phaseContext, error);
+      logAgentPhase(
+        "failed",
+        "write_infrastructure_files",
+        phaseContext,
+        error,
+      );
       throw error;
     }
 
@@ -697,7 +734,15 @@ export class AgentOrchestrator {
         fileManifest: projectState.fileManifest.map((f) => ({
           path: f.path,
           purpose: f.purpose,
-          kind: f.kind as "route" | "component" | "data" | "config" | "style" | "server" | "state" | "unknown",
+          kind: f.kind as
+            | "route"
+            | "component"
+            | "data"
+            | "config"
+            | "style"
+            | "server"
+            | "state"
+            | "unknown",
         })),
         recentChanges: projectState.recentChanges.map((c) => ({
           runId: c.runId,
@@ -709,14 +754,16 @@ export class AgentOrchestrator {
       },
     });
 
-    console.info(JSON.stringify({
-      event: "init_agentic_loop_starting",
-      projectId: input.projectId,
-      promptLength: retailInitPrompt.length,
-      toolCount: registry.list().length,
-      toolNames: registry.list().map((t) => t.name),
-      model: this.deps.agentConfig?.coderModel ?? "gpt-5.4",
-    }));
+    console.info(
+      JSON.stringify({
+        event: "init_agentic_loop_starting",
+        projectId: input.projectId,
+        promptLength: retailInitPrompt.length,
+        toolCount: registry.list().length,
+        toolNames: registry.list().map((t) => t.name),
+        model: this.deps.agentConfig?.coderModel ?? "gpt-5.4",
+      }),
+    );
 
     const eventQueue = new AsyncEventQueue<AgentStreamEvent>();
     const loopPromise = (async (): Promise<AgenticLoopResult> => {
@@ -783,34 +830,44 @@ export class AgentOrchestrator {
     }
     let loopResult = await loopPromise;
 
-    console.info(JSON.stringify({
-      event: "init_agentic_loop_completed",
-      projectId: input.projectId,
-      status: loopResult.status,
-      totalToolCalls: loopResult.totalToolCalls,
-      changedFileCount: loopResult.changedFiles.length,
-      iterations: loopResult.iterations,
-      summary: loopResult.summary?.substring(0, 200),
-    }));
-
-    const missingRequiredFiles = REQUIRED_GENERATED_STOREFRONT_FILES.filter(
-      (requiredPath) => !initResult.files.some((file) => file.path === requiredPath)
-        && !loopResult.changedFiles.includes(requiredPath),
+    console.info(
+      JSON.stringify({
+        event: "init_agentic_loop_completed",
+        projectId: input.projectId,
+        status: loopResult.status,
+        totalToolCalls: loopResult.totalToolCalls,
+        changedFileCount: loopResult.changedFiles.length,
+        iterations: loopResult.iterations,
+        summary: loopResult.summary?.substring(0, 200),
+      }),
     );
 
-    if (loopResult.changedFiles.length === 0 || missingRequiredFiles.length > 0) {
-      console.info(JSON.stringify({
-        event: "init_backfill_required_files",
-        projectId: input.projectId,
-        reason: loopResult.changedFiles.length === 0
-          ? "Agentic loop created 0 files, backfilling deterministic storefront baseline"
-          : "Agentic loop missed required storefront files, backfilling deterministic baseline",
-        missingRequiredFiles,
-      }));
+    const missingRequiredFiles = REQUIRED_GENERATED_STOREFRONT_FILES.filter(
+      (requiredPath) =>
+        !initResult.files.some((file) => file.path === requiredPath) &&
+        !loopResult.changedFiles.includes(requiredPath),
+    );
+
+    if (
+      loopResult.changedFiles.length === 0 ||
+      missingRequiredFiles.length > 0
+    ) {
+      console.info(
+        JSON.stringify({
+          event: "init_backfill_required_files",
+          projectId: input.projectId,
+          reason:
+            loopResult.changedFiles.length === 0
+              ? "Agentic loop created 0 files, backfilling deterministic storefront baseline"
+              : "Agentic loop missed required storefront files, backfilling deterministic baseline",
+          missingRequiredFiles,
+        }),
+      );
 
       yield {
         type: "source_generation_started",
-        message: "Ensuring required storefront pages, components, and Store Provider exist...",
+        message:
+          "Ensuring required storefront pages, components, and Store Provider exist...",
       };
 
       const fallbackResult = await runPhase("backfill_init_source", () =>
@@ -833,7 +890,8 @@ export class AgentOrchestrator {
       try {
         for (const file of fallbackResult.files) {
           if (existingChangedFiles.has(file.path)) continue;
-          if (await this.projectFileExists(input.projectId, file.path)) continue;
+          if (await this.projectFileExists(input.projectId, file.path))
+            continue;
           await this.deps.projectFileStore?.writeTextFile(
             input.projectId,
             file.path,
@@ -856,7 +914,9 @@ export class AgentOrchestrator {
       };
     }
 
-    const invariantFixes = await this.ensureGeneratedProjectInvariants(input.projectId);
+    const invariantFixes = await this.ensureGeneratedProjectInvariants(
+      input.projectId,
+    );
     for (const path of invariantFixes) {
       yield { type: "file_changed", path, operation: "modified" };
     }
@@ -871,7 +931,12 @@ export class AgentOrchestrator {
     const uiManifest = buildFileManifest(
       loopResult.changedFiles.map((path) => ({ path, content: "" })),
     );
-    const mergedManifest = [...infraManifest, ...uiManifest.filter((ui) => !infraManifest.some((infra) => infra.path === ui.path))];
+    const mergedManifest = [
+      ...infraManifest,
+      ...uiManifest.filter(
+        (ui) => !infraManifest.some((infra) => infra.path === ui.path),
+      ),
+    ];
 
     yield { type: "validation_started", commands: plan.validationCommands };
     const validation = await runPhase("validate", () =>
@@ -933,14 +998,16 @@ export class AgentOrchestrator {
 
     const workspaceRoot = getProjectWorkspaceRoot(input.projectId);
     if (this.deps.runtimeOrchestrator) {
-      void this.deps.runtimeOrchestrator.scheduleEnsureRunning({
-        projectId: input.projectId,
-        workspaceRoot,
-        userId: input.userId,
-        signal: input.signal,
-      }).catch((error) => {
-        logAgentPhase("failed", "runtime_schedule", phaseContext, error);
-      });
+      void this.deps.runtimeOrchestrator
+        .scheduleEnsureRunning({
+          projectId: input.projectId,
+          workspaceRoot,
+          userId: input.userId,
+          signal: input.signal,
+        })
+        .catch((error) => {
+          logAgentPhase("failed", "runtime_schedule", phaseContext, error);
+        });
     } else if (this.deps.runtimeService) {
       const installYield = this.deps.runtimeService.runPostInitInstall({
         projectId: input.projectId,
@@ -992,34 +1059,51 @@ export class AgentOrchestrator {
     };
   }
 
-
   private async ensureGeneratedProjectInvariants(projectId: string) {
     if (!this.deps.projectFileStore) return [];
     const changedFiles: string[] = [];
     const rootPath = "src/routes/__root.tsx";
 
     try {
-      const rootSource = await this.deps.projectFileStore.readTextFile(projectId, rootPath);
+      const rootSource = await this.deps.projectFileStore.readTextFile(
+        projectId,
+        rootPath,
+      );
       let nextRootSource = rootSource
         .replace(/^import\s+['\"]\.\.\/app\.css['\"];?\s*$/m, "")
         .replace(/^import\s+['\"]\.\/app\.css['\"];?\s*$/m, "")
-        .replace(/^import\s+appCss\s+from\s+['\"]\.\.\/app\.css\?url['\"];?\s*$/m, "")
-        .replace(/^import\s+appCss\s+from\s+['\"]@\/styles\/app\.css\?url['\"];?\s*$/m, "");
+        .replace(
+          /^import\s+appCss\s+from\s+['\"]\.\.\/app\.css\?url['\"];?\s*$/m,
+          "",
+        )
+        .replace(
+          /^import\s+appCss\s+from\s+['\"]@\/styles\/app\.css\?url['\"];?\s*$/m,
+          "",
+        );
 
-      if (!nextRootSource.includes("@vitejs/plugin-react/preamble")) {
-        nextRootSource = `import '@vitejs/plugin-react/preamble'\n${nextRootSource}`;
-      }
+      // if (!nextRootSource.includes("@vitejs/plugin-react/preamble")) {
+      //   nextRootSource = `import '@vitejs/plugin-react/preamble'\n${nextRootSource}`;
+      // }
       if (!nextRootSource.includes("@/styles/app.css")) {
-        const preambleImport = "import '@vitejs/plugin-react/preamble'";
-        nextRootSource = nextRootSource.includes(preambleImport)
-          ? nextRootSource.replace(preambleImport, `${preambleImport}\nimport '@/styles/app.css'`)
-          : `import '@/styles/app.css'\n${nextRootSource}`;
+        // const preambleImport = "import '@vitejs/plugin-react/preamble'";
+        nextRootSource =
+          // nextRootSource.includes(preambleImport)
+          //   ? nextRootSource.replace(
+          //       preambleImport,
+          //       `${preambleImport}\nimport '@/styles/app.css'`,
+          //     )
+          //   :
+          `import '@/styles/app.css'\n${nextRootSource}`;
       }
       if (!nextRootSource.includes("notFoundComponent")) {
         if (!nextRootSource.includes("@/components/store/not-found")) {
-          const footerImport = "import { SiteFooter } from '@/components/layout/site-footer'";
+          const footerImport =
+            "import { SiteFooter } from '@/components/layout/site-footer'";
           nextRootSource = nextRootSource.includes(footerImport)
-            ? nextRootSource.replace(footerImport, `${footerImport}\nimport { NotFound } from '@/components/store/not-found'`)
+            ? nextRootSource.replace(
+                footerImport,
+                `${footerImport}\nimport { NotFound } from '@/components/store/not-found'`,
+              )
             : `import { NotFound } from '@/components/store/not-found'\n${nextRootSource}`;
         }
         nextRootSource = nextRootSource.replace(
@@ -1031,94 +1115,155 @@ export class AgentOrchestrator {
       nextRootSource = nextRootSource.replace(/\n{3,}/g, "\n\n");
 
       if (nextRootSource !== rootSource) {
-        await this.deps.projectFileStore.writeTextFile(projectId, rootPath, nextRootSource);
-        changedFiles.push(rootPath);
-        console.info(JSON.stringify({
-          event: "init_invariant_repaired",
+        await this.deps.projectFileStore.writeTextFile(
           projectId,
-          path: rootPath,
-          invariant: "react_preamble_and_styles_alias",
-        }));
+          rootPath,
+          nextRootSource,
+        );
+        changedFiles.push(rootPath);
+        console.info(
+          JSON.stringify({
+            event: "init_invariant_repaired",
+            projectId,
+            path: rootPath,
+            invariant: "react_preamble_and_styles_alias",
+          }),
+        );
       }
       if (!rootSource.includes("notFoundComponent")) {
         const notFoundPath = "src/components/store/not-found.tsx";
         try {
-          await this.deps.projectFileStore.readTextFile(projectId, notFoundPath);
-        } catch {
-          await this.deps.projectFileStore.writeTextFile(projectId, notFoundPath, notFoundSource());
-          changedFiles.push(notFoundPath);
-          console.info(JSON.stringify({
-            event: "init_invariant_repaired",
+          await this.deps.projectFileStore.readTextFile(
             projectId,
-            path: notFoundPath,
-            invariant: "root_route_not_found_component",
-          }));
+            notFoundPath,
+          );
+        } catch {
+          await this.deps.projectFileStore.writeTextFile(
+            projectId,
+            notFoundPath,
+            notFoundSource(),
+          );
+          changedFiles.push(notFoundPath);
+          console.info(
+            JSON.stringify({
+              event: "init_invariant_repaired",
+              projectId,
+              path: notFoundPath,
+              invariant: "root_route_not_found_component",
+            }),
+          );
         }
       }
       const routeLoadingBarPath = "src/components/layout/route-loading-bar.tsx";
       try {
-        await this.deps.projectFileStore.readTextFile(projectId, routeLoadingBarPath);
-      } catch {
-        await this.deps.projectFileStore.writeTextFile(projectId, routeLoadingBarPath, routeLoadingBarSource());
-        changedFiles.push(routeLoadingBarPath);
-        console.info(JSON.stringify({
-          event: "init_invariant_repaired",
+        await this.deps.projectFileStore.readTextFile(
           projectId,
-          path: routeLoadingBarPath,
-          invariant: "root_route_loading_bar",
-        }));
+          routeLoadingBarPath,
+        );
+      } catch {
+        await this.deps.projectFileStore.writeTextFile(
+          projectId,
+          routeLoadingBarPath,
+          routeLoadingBarSource(),
+        );
+        changedFiles.push(routeLoadingBarPath);
+        console.info(
+          JSON.stringify({
+            event: "init_invariant_repaired",
+            projectId,
+            path: routeLoadingBarPath,
+            invariant: "root_route_loading_bar",
+          }),
+        );
       }
     } catch (error) {
-      console.warn(JSON.stringify({
-        event: "init_invariant_repair_failed",
-        projectId,
-        path: rootPath,
-        error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
-      }));
+      console.warn(
+        JSON.stringify({
+          event: "init_invariant_repair_failed",
+          projectId,
+          path: rootPath,
+          error:
+            error instanceof Error
+              ? error.message.slice(0, 200)
+              : String(error).slice(0, 200),
+        }),
+      );
     }
 
     const suggestionsPath = "src/services/store/use-product-suggestions.ts";
     try {
-      const suggestionsSource = await this.deps.projectFileStore.readTextFile(projectId, suggestionsPath);
-      if (suggestionsSource.includes("fetch(") || !suggestionsSource.includes("@/services/http/client") || !suggestionsSource.includes("apiClient.get<ProductSuggestionsList>")) {
-        await this.deps.projectFileStore.writeTextFile(projectId, suggestionsPath, productSuggestionsQuerySource());
-        changedFiles.push(suggestionsPath);
-        console.info(JSON.stringify({
-          event: "init_invariant_repaired",
+      const suggestionsSource = await this.deps.projectFileStore.readTextFile(
+        projectId,
+        suggestionsPath,
+      );
+      if (
+        suggestionsSource.includes("fetch(") ||
+        !suggestionsSource.includes("@/services/http/client") ||
+        !suggestionsSource.includes("apiClient.get<ProductSuggestionsList>")
+      ) {
+        await this.deps.projectFileStore.writeTextFile(
           projectId,
-          path: suggestionsPath,
-          invariant: "product_suggestions_uses_api_client",
-        }));
+          suggestionsPath,
+          productSuggestionsQuerySource(),
+        );
+        changedFiles.push(suggestionsPath);
+        console.info(
+          JSON.stringify({
+            event: "init_invariant_repaired",
+            projectId,
+            path: suggestionsPath,
+            invariant: "product_suggestions_uses_api_client",
+          }),
+        );
       }
     } catch (error) {
-      console.warn(JSON.stringify({
-        event: "init_invariant_repair_failed",
-        projectId,
-        path: suggestionsPath,
-        error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
-      }));
+      console.warn(
+        JSON.stringify({
+          event: "init_invariant_repair_failed",
+          projectId,
+          path: suggestionsPath,
+          error:
+            error instanceof Error
+              ? error.message.slice(0, 200)
+              : String(error).slice(0, 200),
+        }),
+      );
     }
 
     const siteHeaderPath = "src/components/layout/site-header.tsx";
     try {
-      const siteHeader = await this.deps.projectFileStore.readTextFile(projectId, siteHeaderPath);
+      const siteHeader = await this.deps.projectFileStore.readTextFile(
+        projectId,
+        siteHeaderPath,
+      );
       if (!hasSiteHeaderSearchSuggestionContract(siteHeader)) {
-        await this.deps.projectFileStore.writeTextFile(projectId, siteHeaderPath, siteHeaderSource());
-        changedFiles.push(siteHeaderPath);
-        console.info(JSON.stringify({
-          event: "init_invariant_repaired",
+        await this.deps.projectFileStore.writeTextFile(
           projectId,
-          path: siteHeaderPath,
-          invariant: "site_header_search_suggestions_dropdown",
-        }));
+          siteHeaderPath,
+          siteHeaderSource(),
+        );
+        changedFiles.push(siteHeaderPath);
+        console.info(
+          JSON.stringify({
+            event: "init_invariant_repaired",
+            projectId,
+            path: siteHeaderPath,
+            invariant: "site_header_search_suggestions_dropdown",
+          }),
+        );
       }
     } catch (error) {
-      console.warn(JSON.stringify({
-        event: "init_invariant_repair_failed",
-        projectId,
-        path: siteHeaderPath,
-        error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
-      }));
+      console.warn(
+        JSON.stringify({
+          event: "init_invariant_repair_failed",
+          projectId,
+          path: siteHeaderPath,
+          error:
+            error instanceof Error
+              ? error.message.slice(0, 200)
+              : String(error).slice(0, 200),
+        }),
+      );
     }
 
     return changedFiles;
@@ -1175,10 +1320,15 @@ export class AgentOrchestrator {
         }
       }
     } catch (error) {
-      console.warn(JSON.stringify({
-        event: "stream_user_facing_summary_failed_using_fallback",
-        error: error instanceof Error ? error.message.slice(0, 400) : String(error).slice(0, 400),
-      }));
+      console.warn(
+        JSON.stringify({
+          event: "stream_user_facing_summary_failed_using_fallback",
+          error:
+            error instanceof Error
+              ? error.message.slice(0, 400)
+              : String(error).slice(0, 400),
+        }),
+      );
       const remaining = summary.trim() ? "" : args.fallbackSummary;
       if (remaining) {
         yield { type: "assistant_message_delta", delta: remaining };
@@ -1430,9 +1580,10 @@ function buildStorefrontCompliancePrompt(
   designHash: string,
   scope: "full-storefront" | "changed-files",
 ): string {
-  const scopeNote = scope === "full-storefront"
-    ? "Validate the FULL customer-facing storefront against current DESIGN.md."
-    : "Validate only changed customer-facing UI files against current DESIGN.md.";
+  const scopeNote =
+    scope === "full-storefront"
+      ? "Validate the FULL customer-facing storefront against current DESIGN.md."
+      : "Validate only changed customer-facing UI files against current DESIGN.md.";
 
   return [
     "Storefront Design Compliance Check",

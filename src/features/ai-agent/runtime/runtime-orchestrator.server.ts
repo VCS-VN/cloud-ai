@@ -307,7 +307,8 @@ export class RuntimeOrchestrator {
 
     try {
       const process = await this.deps.pm2Driver.start({ projectId: input.projectId, workspaceRoot: input.workspaceRoot, port, previewHost: previewTarget.previewHost });
-      const healthy = await (this.deps.healthCheck ?? defaultHealthCheck)(previewUrl);
+      const loopbackUrl = `http://127.0.0.1:${port}/`;
+      const healthy = await (this.deps.healthCheck ?? defaultHealthCheck)(loopbackUrl);
       if (!healthy) {
         throw new Error("Preview process started but did not become healthy.");
       }
@@ -340,20 +341,33 @@ export class RuntimeOrchestrator {
   }
 
   private mergeLiveStatus(runtime: DevRuntime, pm2: PreviewPm2Process): DevRuntime {
-    if (runtime.status === "running" && pm2.status !== "online") {
-      return {
-        ...runtime,
-        status: pm2.status === "missing" ? "stopped" : "error",
-        pid: null,
-        lastError: pm2.status === "missing" ? "Preview process is not running." : "Preview process is not healthy.",
-        lastErrorTier: "system",
-      };
-    }
-    if (runtime.status === "running" && pm2.status === "online" && runtime.previewUrl && runtime.port) {
-      return { ...runtime, status: "running", pid: pm2.pid };
-    }
-    return runtime;
+    return mergeLiveStatus(runtime, pm2);
   }
+}
+
+export function mergeLiveStatus(runtime: DevRuntime, pm2: PreviewPm2Process): DevRuntime {
+  if (runtime.status === "running" && pm2.status !== "online") {
+    return {
+      ...runtime,
+      status: pm2.status === "missing" ? "stopped" : "error",
+      pid: null,
+      lastError: pm2.status === "missing" ? "Preview process is not running." : "Preview process is not healthy.",
+      lastErrorTier: "system",
+    };
+  }
+  if (runtime.status === "running" && pm2.status === "online" && runtime.previewUrl && runtime.port) {
+    return { ...runtime, status: "running", pid: pm2.pid };
+  }
+  if (
+    runtime.enabled &&
+    pm2.status === "online" &&
+    runtime.previewUrl &&
+    runtime.port &&
+    runtime.status !== "running"
+  ) {
+    return { ...runtime, status: "running", pid: pm2.pid, lastError: null, lastErrorTier: null };
+  }
+  return runtime;
 }
 
 async function defaultRunInstall(input: { workspaceRoot: string; signal?: AbortSignal }): Promise<InstallRunResult> {
