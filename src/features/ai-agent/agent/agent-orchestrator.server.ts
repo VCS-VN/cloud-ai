@@ -84,7 +84,7 @@ export type HandlePromptInput = {
   projectId: string;
   userId?: string;
   prompt: string;
-  messageId?: string;
+  runId: string;
   parentMessageId?: string;
   clientRequestId?: string;
   signal?: AbortSignal;
@@ -112,14 +112,7 @@ export class AgentOrchestrator {
   async *handlePromptStream(
     input: HandlePromptInput,
   ): AsyncGenerator<AgentStreamEvent> {
-    const run = await this.deps.runStore.create({
-      projectId: input.projectId,
-      userId: input.userId,
-      messageId: input.messageId,
-      parentMessageId: input.parentMessageId,
-      userPrompt: input.prompt,
-      status: "running",
-    });
+    const run = await this.deps.runStore.load(input.runId, input.userId);
 
     try {
       yield {
@@ -293,7 +286,7 @@ export class AgentOrchestrator {
         yield {
           type: "design_file_token_patched",
           projectId: input.projectId,
-          messageId: input.messageId ?? run.id,
+          messageId: run.id,
           data: {
             destinationPath: patchResult.destinationPath,
             appliedRoles: patchResult.appliedRoles,
@@ -369,7 +362,7 @@ export class AgentOrchestrator {
         yield {
           type: "design_file_regenerated",
           projectId: input.projectId,
-          messageId: input.messageId ?? run.id,
+          messageId: run.id,
           data: {
             source: redesignResult.source,
             destinationPath: redesignResult.destinationPath,
@@ -403,7 +396,7 @@ export class AgentOrchestrator {
       const toolExecutionContext: ToolExecutionContext = {
         userId: input.userId ?? "",
         projectId: input.projectId,
-        messageId: input.messageId ?? run.id,
+        messageId: run.id,
         workspaceRoot: getProjectWorkspaceRoot(input.projectId),
         projectState: activeProjectState,
       };
@@ -420,7 +413,7 @@ export class AgentOrchestrator {
             {
               projectId: input.projectId,
               userId: input.userId,
-              messageId: input.messageId,
+              messageId: run.id,
               runId: run.id,
               userPrompt: effectiveUserPrompt,
               projectState: activeProjectState,
@@ -560,7 +553,7 @@ export class AgentOrchestrator {
     const phaseContext = {
       runId: args.runId,
       projectId: input.projectId,
-      messageId: input.messageId,
+      messageId: args.runId,
     };
     const runPhase = async <T>(
       name: string,
@@ -619,7 +612,7 @@ export class AgentOrchestrator {
     yield {
       type: "design_file_generated",
       projectId: input.projectId,
-      messageId: input.messageId ?? args.runId,
+      messageId: args.runId,
       data: {
         source: designResult.source,
         destinationPath: designResult.destinationPath,
@@ -646,7 +639,7 @@ export class AgentOrchestrator {
     yield {
       type: "design_rules_loaded",
       projectId: input.projectId,
-      messageId: input.messageId ?? args.runId,
+      messageId: args.runId,
       data: {
         source: designRules.path,
         summary: designRules.summary,
@@ -703,7 +696,7 @@ export class AgentOrchestrator {
     const toolExecutionContext: ToolExecutionContext = {
       userId: input.userId ?? "",
       projectId: input.projectId,
-      messageId: input.messageId ?? args.runId,
+      messageId: args.runId,
       workspaceRoot: getProjectWorkspaceRoot(input.projectId),
       projectState,
       flags: {
@@ -772,7 +765,7 @@ export class AgentOrchestrator {
           {
             projectId: input.projectId,
             userId: input.userId,
-            messageId: input.messageId,
+            messageId: args.runId,
             runId: args.runId,
             userPrompt: retailInitPrompt,
             projectState,
@@ -1306,7 +1299,7 @@ export class AgentOrchestrator {
     try {
       for await (const event of this.deps.openAIProvider.streamText({
         model: this.deps.agentConfig.summaryModel,
-        system: `Write a 1-2 sentence user-facing confirmation in the SAME LANGUAGE as the user prompt. Refer to the storefront in product terms only ("your shop", "the homepage", "the products page"). NEVER mention: file paths, environment variable names, schema names, tool names, model names, internal status codes, or technical taxonomy. Do not echo this instruction.`,
+        system: `Write a 1-2 sentence user-facing confirmation in the SAME LANGUAGE as the user prompt. Refer to the storefront in product terms only ("your shop", "the homepage", "the products page"). Describe the OUTCOME and behavior change, NOT which files changed — the list of changed files is shown separately, so do not enumerate or name files. NEVER mention: file paths, environment variable names, schema names, tool names, model names, internal status codes, or technical taxonomy. Do not echo this instruction.`,
         input: {
           prompt: args.input.prompt,
           ok: args.validation.ok,

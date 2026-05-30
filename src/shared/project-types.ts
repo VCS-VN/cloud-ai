@@ -1,4 +1,5 @@
 import type { DevRuntime } from "@/features/ai-agent/project/project-state.schema";
+import type { DevRuntimeEvent } from "@/features/ai-agent/runtime/runtime-events";
 
 export type RecordStatus = 0 | 1
 export type ProjectStatus = 0 | 'draft' | 'generating' | 'ready' | 'failed'
@@ -6,16 +7,21 @@ export type MessageRole = 'user' | 'agent'
 export type MessageStatus = 0 | 'pending' | 'completed' | 'failed'
 export type ProjectProcessingStatus = 'idle' | 'processing'
 export type MessageProcessingStatus = 'pending' | 'streaming' | 'completed' | 'failed' | 'stopped'
+export type AgentMessageKind = 'plan' | 'answer' | 'clarification' | 'error' | 'review_required'
+export type AgentRunStatus = 'streaming' | 'completed' | 'failed' | 'stopped'
+export type SkeletonPhase =
+  | 'starting'
+  | 'understanding'
+  | 'planning'
+  | 'editing'
+  | 'installing'
+  | 'starting_preview'
+  | 'validating'
+  | 'repairing'
+  | 'responding'
 export type ProjectFileNodeType = 'file' | 'folder'
 export type PwaDisplayMode = 'standalone' | 'fullscreen' | 'minimal-ui' | 'browser'
 export type PwaIconPurpose = 'any' | 'maskable' | 'monochrome'
-export type StreamEventType =
-  | 'message.started'
-  | 'message.delta'
-  | 'message.completed'
-  | 'message.failed'
-  | 'message.stopped'
-  | 'heartbeat'
 export type StreamErrorCode =
   | 'UNAUTHENTICATED'
   | 'PROJECT_NOT_FOUND'
@@ -24,6 +30,9 @@ export type StreamErrorCode =
   | 'PROVIDER_NOT_CONFIGURED'
   | 'PROVIDER_STREAM_FAILED'
   | 'MESSAGE_NOT_FOUND'
+  | 'RUN_NOT_FOUND'
+  | 'RUN_INTERRUPTED'
+  | 'RETRY_NOT_ALLOWED'
   | 'STOP_NOT_ALLOWED'
 
 export type PwaIcon = {
@@ -55,7 +64,7 @@ export type Project = {
   initialPrompt: string
   status: ProjectStatus
   processingStatus: ProjectProcessingStatus
-  activeAgentMessageId?: string
+  activeRunId?: string
   processingStartedAt?: string
   updatedAt: string
   createdAt: string
@@ -72,23 +81,14 @@ export type Message = {
   status: MessageStatus
   processingStatus: MessageProcessingStatus
   parentMessageId?: string
+  runId?: string
+  kind?: AgentMessageKind
   provider?: string
   providerResponseId?: string
   errorMessage?: string
   startedAt?: string
   completedAt?: string
   updatedAt?: string
-  createdAt: string
-}
-
-export type AgentMessageChunk = {
-  id: string
-  projectId: string
-  messageId: string
-  userId?: string
-  sequence: number
-  content: string
-  providerEventType?: string
   createdAt: string
 }
 
@@ -111,50 +111,97 @@ export type StreamError = {
 
 export type ComposerReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
 
-export type MessageStreamState = {
-  project: Pick<Project, 'id' | 'processingStatus' | 'activeAgentMessageId'>
+export type RunCreatedState = {
+  runId: string
   userMessage: Message
-  agentMessage: Message
+  project: Pick<Project, 'id' | 'processingStatus' | 'activeRunId'>
   stream: {
     url: string
   }
 }
 
-export type MessageStartedEvent = {
-  type: 'message.started'
-  projectId: string
-  messageId: string
-  processingStatus: Extract<MessageProcessingStatus, 'streaming'>
-  providerResponseId?: string
+export type SkeletonState = {
+  phase: SkeletonPhase
+  label: string
+  detail?: string
 }
 
-export type MessageDeltaEvent = {
-  type: 'message.delta'
-  messageId: string
-  sequence: number
-  delta: string
-}
-
-export type MessageTerminalEvent = {
-  type: 'message.completed' | 'message.failed' | 'message.stopped'
-  messageId: string
-  content: string
-  processingStatus: Extract<MessageProcessingStatus, 'completed' | 'failed' | 'stopped'>
-  projectProcessingStatus: ProjectProcessingStatus
-  providerResponseId?: string
+export type RunUIState = {
+  runId: string
+  status: AgentRunStatus
+  skeleton: SkeletonState | null
   error?: StreamError
 }
 
-export type MessageHeartbeatEvent = {
-  type: 'heartbeat'
-  messageId: string
+export type RunStartedEvent = {
+  type: 'run.started'
+  runId: string
+  projectId: string
 }
 
-export type MessageStreamEvent =
-  | MessageStartedEvent
-  | MessageDeltaEvent
-  | MessageTerminalEvent
-  | MessageHeartbeatEvent
+export type RunMessageCreatedEvent = {
+  type: 'message.created'
+  runId: string
+  messageId: string
+  kind: AgentMessageKind
+  content: string
+  processingStatus: MessageProcessingStatus
+  createdAt: string
+}
+
+export type RunMessageDeltaEvent = {
+  type: 'message.delta'
+  runId: string
+  messageId: string
+  delta: string
+}
+
+export type RunMessageCompletedEvent = {
+  type: 'message.completed'
+  runId: string
+  messageId: string
+  content: string
+}
+
+export type SkeletonUpdateEvent = {
+  type: 'skeleton.update'
+  runId: string
+  phase: Exclude<SkeletonPhase, 'starting'>
+  label: string
+  detail?: string
+}
+
+export type RunTerminalEvent = {
+  type: 'run.completed' | 'run.stopped'
+  runId: string
+  projectProcessingStatus: Extract<ProjectProcessingStatus, 'idle'>
+}
+
+export type RunFailedEvent = {
+  type: 'run.failed'
+  runId: string
+  projectProcessingStatus: Extract<ProjectProcessingStatus, 'idle'>
+  error: StreamError
+}
+
+export type RunHeartbeatEvent = {
+  type: 'heartbeat'
+  runId: string
+}
+
+export type RunStreamEvent =
+  | RunStartedEvent
+  | RunMessageCreatedEvent
+  | RunMessageDeltaEvent
+  | RunMessageCompletedEvent
+  | SkeletonUpdateEvent
+  | RunTerminalEvent
+  | RunFailedEvent
+  | RunHeartbeatEvent
+
+export type RuntimeStreamEvent =
+  | DevRuntimeEvent
+  | { type: 'heartbeat' }
 
 export type ProjectFileNode = {
   id: string
@@ -216,7 +263,7 @@ export interface ProjectRepository {
     id: string,
     processingStatus: ProjectProcessingStatus,
     userId?: string,
-    activeAgentMessageId?: string,
+    activeRunId?: string,
     processingStartedAt?: string
   ): Promise<Project | undefined>
 }
@@ -233,6 +280,8 @@ export interface ProjectMessageRepository {
         | 'content'
         | 'processingStatus'
         | 'parentMessageId'
+        | 'runId'
+        | 'kind'
         | 'provider'
         | 'providerResponseId'
         | 'errorMessage'
@@ -245,8 +294,7 @@ export interface ProjectMessageRepository {
   bulkUpdateMessageStatusByProject(projectId: string, status: Message['status'], userId?: string): Promise<number>
   getMessage(projectId: string, messageId: string, userId?: string): Promise<Message | undefined>
   listMessages(projectId: string, userId?: string, cursor?: MessageCursor): Promise<MessagePage>
-  saveAgentMessageChunk(chunk: AgentMessageChunk, userId?: string): Promise<AgentMessageChunk>
-  listAgentMessageChunks(messageId: string, userId?: string): Promise<AgentMessageChunk[]>
+  listMessagesByRunId(runId: string, userId?: string): Promise<Message[]>
 }
 
 export interface ProjectFileNodeRepository {

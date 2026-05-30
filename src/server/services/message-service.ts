@@ -1,57 +1,44 @@
 import {
   AIProviderConfigurationError,
 } from "@/ai/ai-provider";
-import type { AgentRuntime } from "@/agent/agent-runtime";
 import type { AgentOrchestrator } from "@/features/ai-agent/agent/agent-orchestrator.server";
 import type { AgentStreamEvent } from "@/features/ai-agent/agent/agent-events";
-import {
-  type PresenterContext,
-  formatUserFacingStatus,
-  sanitizeForUser,
-} from "@/features/ai-agent/agent/user-facing-presenter";
+import type { ProjectRunStore } from "@/features/ai-agent/project/project-run-store.server";
+import type { DevRuntimeEvent } from "@/features/ai-agent/runtime/runtime-events";
+import { sanitizeForUser } from "@/features/ai-agent/agent/user-facing-presenter";
+import { createSkeletonMapper } from "@/features/ai-agent/agent/agent-event-to-skeleton";
+import { decideMilestone } from "@/features/ai-agent/agent/agent-event-to-milestone";
 import type {
+  AgentMessageKind,
   ComposerReasoningEffort,
   Message,
   MessageCursor,
   MessagePage,
-  MessageStreamEvent,
-  MessageStreamState,
+  RunCreatedState,
+  RunStreamEvent,
 } from "@/shared/project-types";
 import type {
   ProjectMessageRepository,
   ProjectRepository,
 } from "@/shared/project-types";
 import {
-  abortProjectMessageStream,
-  getProjectMessageStreamUrl,
+  abortRun,
+  claimRunProducer,
+  consumeRunReservation,
+  getProjectRunStreamUrl,
+  getRunAbortSignal,
+  publishRunEvent,
+  publishRuntimeEvent,
+  reserveRunProducer,
 } from "@/server/functions/project-message-stream";
 
 const COMPLETED_FALLBACK_CONTENT = "Done. Your storefront is ready.";
 const FAILED_FALLBACK_CONTENT = "Something went wrong. You can retry safely.";
-const STOPPED_FALLBACK_CONTENT = "Processing stopped. You can continue with a new prompt.";
 
-type SendMessageOptions = {
+type CreateRunOptions = {
   reasoningEffort?: ComposerReasoningEffort;
   planMode?: boolean;
 };
-
-function normalizeSendMessageArgs(
-  optionsOrUserId?: SendMessageOptions | string,
-  userId?: string,
-) {
-  return typeof optionsOrUserId === "string"
-    ? { options: undefined, userId: optionsOrUserId }
-    : { options: optionsOrUserId, userId };
-}
-
-function normalizeStreamMessageArgs(
-  optionsOrUserId?: SendMessageOptions | string,
-  userId?: string,
-) {
-  return typeof optionsOrUserId === "string"
-    ? { options: undefined, userId: optionsOrUserId }
-    : { options: optionsOrUserId, userId };
-}
 
 function assertMessageContent(content: string) {
   const trimmed = content.trim();
@@ -59,29 +46,16 @@ function assertMessageContent(content: string) {
   return trimmed;
 }
 
-function isStaleAgentContent(content: string) {
-  const trimmed = content.trim();
-  if (!trimmed) return true;
-  return (
-    trimmed === "Analyzing your request" ||
-    trimmed === "Understanding your request" ||
-    trimmed === "Preparing to process your request..." ||
-    trimmed === "### Status\n- Preparing to process your request..." ||
-    /^### Status\s*- Preparing to process your request\.\.\.$/m.test(trimmed)
-  );
-}
-
-function ensureFinalAgentContent(content: string, fallback: string) {
-  if (isStaleAgentContent(content)) return `${fallback}\n`;
-  return content;
+function isDevRuntimeEvent(event: AgentStreamEvent): event is DevRuntimeEvent {
+  return event.type.startsWith("dev_");
 }
 
 export class MessageService {
   constructor(
     private readonly projectRepository: ProjectRepository,
     private readonly messageRepository: ProjectMessageRepository,
-    private readonly agentRuntime?: AgentRuntime,
-    private readonly agentOrchestrator?: AgentOrchestrator,
+    private readonly agentOrchestrator: AgentOrchestrator,
+    private readonly runStore: ProjectRunStore,
   ) {}
 
   async getProjectMessages(
@@ -98,17 +72,19 @@ export class MessageService {
     );
   }
 
-  async sendProjectMessage(
+  /**
+   * Creates a run synchronously: persists the user message, creates the
+   * agent_runs row (status=streaming), flips the project to processing, and
+   * reserves the producer slot. The orchestrator loop is NOT started here — it
+   * begins when a client connects to the run stream (connect-time kick-off).
+   */
+  async createRun(
     projectId: string,
     content: string,
-    optionsOrUserId?: SendMessageOptions | string,
+    options: CreateRunOptions = {},
     userId?: string,
-  ): Promise<MessageStreamState> {
-    const { options, userId: resolvedUserId } = normalizeSendMessageArgs(
-      optionsOrUserId,
-      userId,
-    );
-    const project = await this.projectRepository.getProject(projectId, resolvedUserId);
+  ): Promise<RunCreatedState> {
+    const project = await this.projectRepository.getProject(projectId, userId);
     if (!project) throw new Error("Project not found.");
     if (project.processingStatus === "processing") {
       throw new Error("This project is already generating a response.");
@@ -118,7 +94,7 @@ export class MessageService {
     const userMessage = await this.messageRepository.saveMessage(
       {
         id: crypto.randomUUID(),
-        userId: resolvedUserId,
+        userId,
         projectId,
         role: "user",
         content: assertMessageContent(content),
@@ -127,594 +103,417 @@ export class MessageService {
         createdAt: now,
         updatedAt: now,
       },
-      resolvedUserId,
+      userId,
     );
 
-    const agentMessage = await this.messageRepository.saveMessage(
-      {
-        id: crypto.randomUUID(),
-        userId: resolvedUserId,
-        projectId,
-        role: "agent",
-        content: "",
-        status: "pending",
-        processingStatus: "pending",
-        parentMessageId: userMessage.id,
-        provider: "agent-orchestrator",
-        createdAt: new Date(Date.parse(now) + 1).toISOString(),
-        updatedAt: new Date(Date.parse(now) + 1).toISOString(),
-      },
-      resolvedUserId,
-    );
+    const run = await this.runStore.create({
+      projectId,
+      userId,
+      parentMessageId: userMessage.id,
+      userPrompt: userMessage.content,
+      reasoningEffort: options.reasoningEffort,
+      planMode: options.planMode ?? false,
+      status: "streaming",
+    });
 
-    const nextProject =
-      await this.projectRepository.updateProjectProcessingState(
-        projectId,
-        "processing",
-        resolvedUserId,
-        agentMessage.id,
-        now,
-      );
+    const nextProject = await this.projectRepository.updateProjectProcessingState(
+      projectId,
+      "processing",
+      userId,
+      run.id,
+      now,
+    );
     if (!nextProject) throw new Error("Project not found.");
 
+    reserveRunProducer(projectId, run.id);
+
     return {
+      runId: run.id,
+      userMessage,
       project: {
         id: nextProject.id,
         processingStatus: nextProject.processingStatus,
-        activeAgentMessageId: nextProject.activeAgentMessageId,
+        activeRunId: nextProject.activeRunId,
       },
-      userMessage,
-      agentMessage,
-      stream: {
-        url: getProjectMessageStreamUrl(projectId, agentMessage.id, options),
-      },
+      stream: { url: getProjectRunStreamUrl(projectId, run.id) },
     };
   }
 
-  async streamProjectMessage(
-    projectId: string,
-    agentMessageId: string,
-    emit: (event: MessageStreamEvent) => Promise<void> | void,
-    signal?: AbortSignal,
-    optionsOrUserId?: SendMessageOptions | string,
-    userId?: string,
-  ) {
-    const { options, userId: resolvedUserId } = normalizeStreamMessageArgs(
-      optionsOrUserId,
-      userId,
-    );
-    const project = await this.projectRepository.getProject(projectId, resolvedUserId);
-    if (!project) throw new Error("Project not found.");
+  /**
+   * Producer loop for a run. Only the first caller claims the producer and
+   * drives the orchestrator; later callers (extra tabs) return immediately and
+   * receive events via the hub fan-out. Handles three cases:
+   *  - fresh run (reserved in this process)  → drive orchestrator
+   *  - stale run (streaming in DB, no reservation — process restarted) → cleanup
+   *  - terminal run (already finished)       → republish state for late joiners
+   */
+  async driveRun(projectId: string, runId: string, userId?: string): Promise<void> {
+    if (!claimRunProducer(projectId, runId)) return;
 
-    const agentMessage = await this.messageRepository.getMessage(
-      projectId,
-      agentMessageId,
-      resolvedUserId,
-    );
-    if (!agentMessage || agentMessage.role !== "agent") {
-      throw new Error("Message not found.");
-    }
-
-    if (
-      agentMessage.processingStatus === "completed" ||
-      agentMessage.processingStatus === "failed" ||
-      agentMessage.processingStatus === "stopped"
-    ) {
-      await emit({
-        type: `message.${agentMessage.processingStatus}` as const,
-        messageId: agentMessage.id,
-        content: agentMessage.content,
-        processingStatus: agentMessage.processingStatus,
-        projectProcessingStatus: project.processingStatus,
-        providerResponseId: agentMessage.providerResponseId,
-        ...(agentMessage.processingStatus === "failed" &&
-        agentMessage.errorMessage
-          ? {
-              error: {
-                code: "PROVIDER_STREAM_FAILED" as const,
-                message: agentMessage.errorMessage,
-              },
-            }
-          : {}),
+    const run = await this.runStore.load(runId, userId).catch(() => undefined);
+    if (!run) {
+      publishRunEvent(projectId, runId, {
+        type: "run.failed",
+        runId,
+        projectProcessingStatus: "idle",
+        error: { code: "RUN_NOT_FOUND", message: "This run no longer exists." },
       });
       return;
     }
 
-    const page = await this.messageRepository.listMessages(projectId, resolvedUserId, {
-      limit: 100,
-    });
-    const promptMessage =
-      (agentMessage.parentMessageId
-        ? page.messages.find(
-            (message) => message.id === agentMessage.parentMessageId,
-          )
-        : undefined) ??
-      [...page.messages].reverse().find((message) => message.role === "user");
-
-    if (!promptMessage) throw new Error("Message not found.");
-
-    if (this.agentOrchestrator) {
-      await this.streamAgentOrchestratorMessage({
-        projectId,
-        agentMessageId,
-        agentMessage,
-        parentMessageId: promptMessage.id,
-        prompt: promptMessage.content,
-        emit,
-        signal,
-        userId: resolvedUserId,
-      });
+    if (run.status !== "streaming") {
+      await this.republishTerminalRun(projectId, runId, userId);
       return;
     }
 
-    if (agentMessage.provider === "workspace-agent") {
-      await this.streamWorkspaceAgentMessage({
-        projectId,
-        agentMessageId,
-        agentMessage,
-        prompt: promptMessage.content,
-        emit,
-        signal,
-        userId: resolvedUserId,
-      });
+    const fresh = consumeRunReservation(projectId, runId);
+    if (!fresh) {
+      await this.cleanupStaleRun(projectId, runId, userId);
       return;
     }
 
-    throw new AIProviderConfigurationError(
-      "PROVIDER_NOT_CONFIGURED",
-      "Agent orchestrator is not available.",
-    );
+    await this.runOrchestrator(projectId, runId, run.parentMessageId, run.userPrompt, userId);
   }
 
-  private async streamAgentOrchestratorMessage(args: {
-    projectId: string;
-    agentMessageId: string;
-    agentMessage: Message;
-    parentMessageId?: string;
-    prompt: string;
-    emit: (event: MessageStreamEvent) => Promise<void> | void;
-    signal?: AbortSignal;
-    userId?: string;
-  }) {
-    if (!this.agentOrchestrator) {
-      throw new AIProviderConfigurationError(
-        "PROVIDER_NOT_CONFIGURED",
-        "Agent orchestrator is not available.",
+  private async runOrchestrator(
+    projectId: string,
+    runId: string,
+    parentMessageId: string | undefined,
+    prompt: string,
+    userId?: string,
+  ): Promise<void> {
+    const signal = getRunAbortSignal(projectId, runId);
+    const skeletonMapper = createSkeletonMapper(runId);
+
+    publishRunEvent(projectId, runId, { type: "run.started", runId, projectId });
+
+    let answerMessageId: string | null = null;
+    let answerContent = "";
+    let errored = false;
+
+    const createAnswerIfNeeded = async () => {
+      if (answerMessageId) return;
+      const createdAt = new Date().toISOString();
+      const message = await this.persistMilestone(
+        projectId,
+        runId,
+        parentMessageId,
+        "answer",
+        "",
+        "streaming",
+        userId,
+        createdAt,
       );
-    }
-
-    const existingChunks = await this.messageRepository.listAgentMessageChunks(args.agentMessageId, args.userId);
-    let aggregatedContent = args.agentMessage.content || existingChunks.map((chunk) => chunk.content).join("");
-    let sequence = existingChunks.reduce((max, chunk) => Math.max(max, chunk.sequence), 0);
-    const startedAt = args.agentMessage.startedAt ?? new Date().toISOString();
-    const streamStartedAt = Date.now();
-
-    console.info(
-      JSON.stringify({
-        event: "agent_message_stream_started",
-        projectId: args.projectId,
-        messageId: args.agentMessageId,
-        userId: args.userId,
-      }),
-    );
-
-    await this.messageRepository.updateMessage(args.agentMessageId, {
-      processingStatus: "streaming",
-      provider: "agent-orchestrator",
-      startedAt,
-      updatedAt: new Date().toISOString(),
-    });
-    await args.emit({
-      type: "message.started",
-      projectId: args.projectId,
-      messageId: args.agentMessageId,
-      processingStatus: "streaming",
-    });
-
-    const toUserFacingDelta = createAgentMessageDeltaPresenter({ userPrompt: args.prompt });
-    let hasTerminalUserFacingDelta = false;
-
-    const emitDelta = async (delta: string, providerEventType: string) => {
-      sequence += 1;
-      aggregatedContent += delta;
-      await this.messageRepository.saveAgentMessageChunk(
-        {
-          id: crypto.randomUUID(),
-          projectId: args.projectId,
-          messageId: args.agentMessageId,
-          userId: args.userId,
-          sequence,
-          content: delta,
-          providerEventType,
-          createdAt: new Date().toISOString(),
-        },
-        args.userId,
-      );
-      await this.messageRepository.updateMessage(args.agentMessageId, {
-        content: aggregatedContent,
-        processingStatus: "streaming",
-        startedAt,
-        updatedAt: new Date().toISOString(),
-      });
-      await args.emit({
-        type: "message.delta",
-        messageId: args.agentMessageId,
-        sequence,
-        delta,
-      });
+      answerMessageId = message.id;
     };
 
     try {
       for await (const event of this.agentOrchestrator.handlePromptStream({
-        projectId: args.projectId,
-        userId: args.userId,
-        prompt: args.prompt,
-        messageId: args.agentMessageId,
-        parentMessageId: args.parentMessageId,
-        signal: args.signal,
+        projectId,
+        userId,
+        prompt,
+        runId,
+        parentMessageId,
+        signal,
       })) {
-        console.info(
-          JSON.stringify({
-            event: "agent_orchestrator_event",
-            projectId: args.projectId,
-            messageId: args.agentMessageId,
-            agentEventType: event.type,
-            elapsedMs: Date.now() - streamStartedAt,
-          }),
-        );
-        const delta = toUserFacingDelta(event);
-        if (delta) {
-          if (event.type === "done" || event.type === "error") hasTerminalUserFacingDelta = true;
-          await emitDelta(delta, event.type);
+        if (isDevRuntimeEvent(event)) {
+          publishRuntimeEvent(projectId, event);
+          continue;
         }
-        if (event.type === "error") {
-          throw new Error(event.message);
+
+        const skeleton = skeletonMapper(event);
+        if (skeleton) publishRunEvent(projectId, runId, skeleton);
+
+        if (event.type === "assistant_message_delta") {
+          const delta = sanitizeForUser(event.delta);
+          if (!delta) continue;
+          await createAnswerIfNeeded();
+          answerContent += delta;
+          await this.messageRepository.updateMessage(answerMessageId!, {
+            content: answerContent,
+            processingStatus: "streaming",
+            updatedAt: new Date().toISOString(),
+          });
+          publishRunEvent(projectId, runId, {
+            type: "message.delta",
+            runId,
+            messageId: answerMessageId!,
+            delta,
+          });
+          continue;
+        }
+
+        if (event.type === "error") errored = true;
+
+        const milestone = decideMilestone(event);
+        if (milestone) {
+          await this.persistMilestone(
+            projectId,
+            runId,
+            parentMessageId,
+            milestone.kind,
+            milestone.content,
+            "completed",
+            userId,
+          );
         }
       }
 
-      aggregatedContent = ensureFinalAgentContent(
-        aggregatedContent,
-        COMPLETED_FALLBACK_CONTENT,
-      );
-      await this.messageRepository.updateMessage(args.agentMessageId, {
-        content: aggregatedContent,
-        processingStatus: "completed",
-        startedAt,
-        completedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        errorMessage: undefined,
-      });
-      await this.projectRepository.updateProjectProcessingState(
-        args.projectId,
-        "idle",
-        args.userId,
-      );
-      await args.emit({
-        type: "message.completed",
-        messageId: args.agentMessageId,
-        content: aggregatedContent,
-        processingStatus: "completed",
-        projectProcessingStatus: "idle",
-      });
-      console.info(
-        JSON.stringify({
-          event: "agent_message_stream_completed",
-          projectId: args.projectId,
-          messageId: args.agentMessageId,
-          chunks: sequence,
-          totalChars: aggregatedContent.length,
-          elapsedMs: Date.now() - streamStartedAt,
-        }),
-      );
-    } catch (error) {
-      const aborted = args.signal?.aborted || (error instanceof DOMException && error.name === "AbortError");
-      const processingStatus = aborted ? "stopped" : "failed";
-      const message = error instanceof Error ? error.message : "Agent orchestrator failed.";
-      if (aborted && !hasTerminalUserFacingDelta) {
-        aggregatedContent = appendUserFacingLine(aggregatedContent, STOPPED_FALLBACK_CONTENT);
+      if (answerMessageId) {
+        answerContent = answerContent.trim() || COMPLETED_FALLBACK_CONTENT;
+        await this.messageRepository.updateMessage(answerMessageId, {
+          content: answerContent,
+          processingStatus: "completed",
+          completedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        publishRunEvent(projectId, runId, {
+          type: "message.completed",
+          runId,
+          messageId: answerMessageId,
+          content: answerContent,
+        });
       }
-      if (!aborted && !hasTerminalUserFacingDelta) {
-        aggregatedContent = appendUserFacingLine(aggregatedContent, FAILED_FALLBACK_CONTENT);
+
+      await this.projectRepository.updateProjectProcessingState(projectId, "idle", userId);
+
+      if (errored) {
+        publishRunEvent(projectId, runId, {
+          type: "run.failed",
+          runId,
+          projectProcessingStatus: "idle",
+          error: { code: "PROVIDER_STREAM_FAILED", message: FAILED_FALLBACK_CONTENT },
+        });
+      } else {
+        publishRunEvent(projectId, runId, {
+          type: "run.completed",
+          runId,
+          projectProcessingStatus: "idle",
+        });
       }
-      aggregatedContent = ensureFinalAgentContent(
-        aggregatedContent,
-        aborted ? STOPPED_FALLBACK_CONTENT : FAILED_FALLBACK_CONTENT,
-      );
-      await this.messageRepository.updateMessage(args.agentMessageId, {
-        content: aggregatedContent,
-        processingStatus,
-        startedAt,
-        completedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        errorMessage: aborted ? undefined : message,
-      });
-      await this.projectRepository.updateProjectProcessingState(args.projectId, "idle", args.userId);
-      await args.emit({
-        type: aborted ? "message.stopped" : "message.failed",
-        messageId: args.agentMessageId,
-        content: aggregatedContent,
-        processingStatus,
-        projectProcessingStatus: "idle",
-        ...(aborted
-          ? {}
-          : {
-              error: {
-                code: "PROVIDER_STREAM_FAILED" as const,
-                message: "Could not complete the request. Please try again or adjust your prompt.",
-              },
-            }),
-      });
-      console.error(
-        JSON.stringify({
-          event: aborted ? "agent_message_stream_stopped" : "agent_message_stream_failed",
-          projectId: args.projectId,
-          messageId: args.agentMessageId,
-          chunks: sequence,
-          error: aborted ? undefined : message,
-          elapsedMs: Date.now() - streamStartedAt,
-        }),
-      );
-    }
-  }
-
-  private async streamWorkspaceAgentMessage(args: {
-    projectId: string;
-    agentMessageId: string;
-    agentMessage: Message;
-    prompt: string;
-    emit: (event: MessageStreamEvent) => Promise<void> | void;
-    signal?: AbortSignal;
-    userId?: string;
-  }) {
-    if (!this.agentRuntime) {
-      throw new AIProviderConfigurationError(
-        "PROVIDER_NOT_CONFIGURED",
-        "Workspace agent runtime is not available.",
-      );
-    }
-
-    const existingChunks = await this.messageRepository.listAgentMessageChunks(args.agentMessageId, args.userId);
-    let aggregatedContent = args.agentMessage.content || existingChunks.map((chunk) => chunk.content).join("");
-    let sequence = existingChunks.reduce((max, chunk) => Math.max(max, chunk.sequence), 0);
-    const startedAt = args.agentMessage.startedAt ?? new Date().toISOString();
-
-    await this.messageRepository.updateMessage(args.agentMessageId, {
-      processingStatus: "streaming",
-      provider: "workspace-agent",
-      startedAt,
-      updatedAt: new Date().toISOString(),
-    });
-    await args.emit({
-      type: "message.started",
-      projectId: args.projectId,
-      messageId: args.agentMessageId,
-      processingStatus: "streaming",
-    });
-
-    const emitDelta = async (delta: string) => {
-      sequence += 1;
-      aggregatedContent += delta;
-      await this.messageRepository.saveAgentMessageChunk(
-        {
-          id: crypto.randomUUID(),
-          projectId: args.projectId,
-          messageId: args.agentMessageId,
-          userId: args.userId,
-          sequence,
-          content: delta,
-          providerEventType: "workspace-agent.delta",
-          createdAt: new Date().toISOString(),
-        },
-        args.userId,
-      );
-      await this.messageRepository.updateMessage(args.agentMessageId, {
-        content: aggregatedContent,
-        processingStatus: "streaming",
-        startedAt,
-        updatedAt: new Date().toISOString(),
-      });
-      await args.emit({
-        type: "message.delta",
-        messageId: args.agentMessageId,
-        sequence,
-        delta,
-      });
-    };
-
-    try {
-      const result = await this.agentRuntime.run({
-        projectId: args.projectId,
-        userId: args.userId,
-        prompt: args.prompt,
-        mode: "init",
-        signal: args.signal,
-        emit: emitDelta,
-      });
-
-      const summary = sanitizeForUser(result.summary);
-      const finalDelta = summary
-        ? `${aggregatedContent ? "\n" : ""}${summary}`
-        : "";
-      if (finalDelta) await emitDelta(finalDelta);
-
-      aggregatedContent = ensureFinalAgentContent(
-        aggregatedContent,
-        COMPLETED_FALLBACK_CONTENT,
-      );
-      await this.messageRepository.updateMessage(args.agentMessageId, {
-        content: aggregatedContent,
-        processingStatus: "completed",
-        startedAt,
-        completedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        errorMessage: undefined,
-      });
-      await this.projectRepository.updateProjectProcessingState(
-        args.projectId,
-        "idle",
-        args.userId,
-      );
-      await args.emit({
-        type: "message.completed",
-        messageId: args.agentMessageId,
-        content: aggregatedContent,
-        processingStatus: "completed",
-        projectProcessingStatus: "idle",
-      });
     } catch (error) {
       const aborted =
-        args.signal?.aborted ||
+        signal.aborted ||
         (error instanceof DOMException && error.name === "AbortError");
-      const processingStatus = aborted ? "stopped" : "failed";
-      aggregatedContent = ensureFinalAgentContent(
-        aggregatedContent,
-        aborted ? STOPPED_FALLBACK_CONTENT : FAILED_FALLBACK_CONTENT,
-      );
-      await this.messageRepository.updateMessage(args.agentMessageId, {
-        content: aggregatedContent,
-        processingStatus,
-        startedAt,
-        completedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        errorMessage: aborted
-          ? undefined
-          : error instanceof Error
-            ? error.message
-            : "Workspace agent failed.",
-      });
-      await this.projectRepository.updateProjectProcessingState(
-        args.projectId,
-        "idle",
-        args.userId,
-      );
-      await args.emit({
-        type: aborted ? "message.stopped" : "message.failed",
-        messageId: args.agentMessageId,
-        content: aggregatedContent,
-        processingStatus,
+
+      const run = await this.runStore.load(runId, userId).catch(() => undefined);
+
+      if (aborted) {
+        if (answerMessageId) {
+          await this.messageRepository.updateMessage(answerMessageId, {
+            processingStatus: "stopped",
+            completedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        }
+        if (run && run.status === "streaming") {
+          await this.runStore.stop(run);
+        }
+        await this.projectRepository.updateProjectProcessingState(projectId, "idle", userId);
+        publishRunEvent(projectId, runId, {
+          type: "run.stopped",
+          runId,
+          projectProcessingStatus: "idle",
+        });
+        return;
+      }
+
+      const message = error instanceof Error ? error.message : "Agent run failed.";
+      if (run && run.status === "streaming") {
+        await this.runStore.fail(run, {
+          code: "PROVIDER_STREAM_FAILED",
+          message,
+          recoverable: true,
+        });
+      }
+      if (answerMessageId) {
+        await this.messageRepository.updateMessage(answerMessageId, {
+          processingStatus: "failed",
+          completedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      await this.projectRepository.updateProjectProcessingState(projectId, "idle", userId);
+      publishRunEvent(projectId, runId, {
+        type: "run.failed",
+        runId,
         projectProcessingStatus: "idle",
-        ...(aborted
-          ? {}
-          : {
-              error: {
-                code: "PROVIDER_STREAM_FAILED" as const,
-                message:
-                  error instanceof Error ? error.message : "Workspace agent failed.",
-              },
-            }),
+        error: {
+          code: "PROVIDER_STREAM_FAILED",
+          message: "Could not complete the request. Please try again or adjust your prompt.",
+        },
       });
     }
   }
 
-  async stopProjectGeneration(
+  private async persistMilestone(
     projectId: string,
-    messageId: string,
+    runId: string,
+    parentMessageId: string | undefined,
+    kind: AgentMessageKind,
+    content: string,
+    processingStatus: Message["processingStatus"],
     userId?: string,
-  ) {
-    const project = await this.projectRepository.getProject(projectId, userId);
-    if (!project) throw new Error("Project not found.");
-
-    const message = await this.messageRepository.getMessage(
-      projectId,
-      messageId,
+    createdAt?: string,
+  ): Promise<Message> {
+    const now = createdAt ?? new Date().toISOString();
+    const message = await this.messageRepository.saveMessage(
+      {
+        id: crypto.randomUUID(),
+        userId,
+        projectId,
+        role: "agent",
+        content,
+        status: "completed",
+        processingStatus,
+        parentMessageId,
+        runId,
+        kind,
+        provider: "agent-orchestrator",
+        createdAt: now,
+        updatedAt: now,
+      },
       userId,
     );
-    if (!message) throw new Error("Message not found.");
-
-    if (
-      message.processingStatus === "completed" ||
-      message.processingStatus === "failed" ||
-      message.processingStatus === "stopped"
-    ) {
-      return { project, agentMessage: message };
-    }
-
-    abortProjectMessageStream(projectId, messageId);
-
-    const stoppedMessage = await this.messageRepository.updateMessage(
-      messageId,
-      {
-        processingStatus: "stopped",
-        completedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    );
-    const nextProject =
-      await this.projectRepository.updateProjectProcessingState(
-        projectId,
-        "idle",
-        userId,
-      );
-    if (!stoppedMessage || !nextProject) throw new Error("Message not found.");
-
-    return {
-      project: nextProject,
-      agentMessage: stoppedMessage,
-    };
+    publishRunEvent(projectId, runId, {
+      type: "message.created",
+      runId,
+      messageId: message.id,
+      kind,
+      content,
+      processingStatus,
+      createdAt: now,
+    });
+    return message;
   }
 
-  async retryProjectMessage(
-    projectId: string,
-    messageId: string,
-    userId?: string,
-  ): Promise<Message> {
+  /** Re-emit a finished run's state for a client that connects after completion. */
+  private async republishTerminalRun(projectId: string, runId: string, userId?: string) {
+    const run = await this.runStore.load(runId, userId).catch(() => undefined);
+    if (!run) return;
+    publishRunEvent(projectId, runId, { type: "run.started", runId, projectId });
+    const messages = await this.messageRepository.listMessagesByRunId(runId, userId);
+    for (const message of messages) {
+      if (!message.kind) continue;
+      publishRunEvent(projectId, runId, {
+        type: "message.created",
+        runId,
+        messageId: message.id,
+        kind: message.kind,
+        content: message.content,
+        processingStatus: message.processingStatus,
+        createdAt: message.createdAt,
+      });
+    }
+    const terminal: RunStreamEvent =
+      run.status === "failed"
+        ? {
+            type: "run.failed",
+            runId,
+            projectProcessingStatus: "idle",
+            error: {
+              code: "PROVIDER_STREAM_FAILED",
+              message: run.error?.message ?? FAILED_FALLBACK_CONTENT,
+            },
+          }
+        : run.status === "stopped"
+          ? { type: "run.stopped", runId, projectProcessingStatus: "idle" }
+          : { type: "run.completed", runId, projectProcessingStatus: "idle" };
+    publishRunEvent(projectId, runId, terminal);
+  }
+
+  /** A run left "streaming" by a since-restarted process: fail it and free the project. */
+  private async cleanupStaleRun(projectId: string, runId: string, userId?: string) {
+    const run = await this.runStore.load(runId, userId).catch(() => undefined);
+    if (run && run.status === "streaming") {
+      await this.runStore.fail(run, {
+        code: "RUN_INTERRUPTED",
+        message: "The run was interrupted and could not be resumed.",
+        recoverable: true,
+      });
+    }
+    const messages = await this.messageRepository.listMessagesByRunId(runId, userId);
+    for (const message of messages) {
+      if (message.processingStatus === "streaming") {
+        await this.messageRepository.updateMessage(message.id, {
+          processingStatus: "failed",
+          completedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    }
+    await this.projectRepository.updateProjectProcessingState(projectId, "idle", userId);
+    publishRunEvent(projectId, runId, { type: "run.started", runId, projectId });
+    publishRunEvent(projectId, runId, {
+      type: "run.failed",
+      runId,
+      projectProcessingStatus: "idle",
+      error: {
+        code: "RUN_INTERRUPTED",
+        message: "This run was interrupted. You can retry safely.",
+      },
+    });
+  }
+
+  /** Idempotent stop. Aborts the producer loop; no-op if the run is already terminal. */
+  async stopRun(projectId: string, runId: string, userId?: string) {
     const project = await this.projectRepository.getProject(projectId, userId);
     if (!project) throw new Error("Project not found.");
-    const page = await this.messageRepository.listMessages(projectId, userId, {
-      limit: 100,
+    const run = await this.runStore.load(runId, userId).catch(() => undefined);
+    if (!run) throw new Error("Run not found.");
+
+    if (run.status !== "streaming") {
+      return { runId, status: run.status, projectProcessingStatus: project.processingStatus };
+    }
+
+    abortRun(projectId, runId);
+
+    return { runId, status: "stopped" as const, projectProcessingStatus: "idle" as const };
+  }
+
+  /** Retry a failed run: create a fresh run reusing the original user prompt. */
+  async retryRun(
+    projectId: string,
+    runId: string,
+    options: CreateRunOptions = {},
+    userId?: string,
+  ): Promise<{ newRunId: string; streamUrl: string }> {
+    const project = await this.projectRepository.getProject(projectId, userId);
+    if (!project) throw new Error("Project not found.");
+    if (project.processingStatus === "processing") {
+      throw new Error("This project is already generating a response.");
+    }
+
+    const oldRun = await this.runStore.load(runId, userId).catch(() => undefined);
+    if (!oldRun) throw new Error("Run not found.");
+    if (oldRun.status !== "failed") {
+      throw new Error("Only failed runs can be retried.");
+    }
+
+    const newRun = await this.runStore.create({
+      projectId,
+      userId,
+      parentMessageId: oldRun.parentMessageId,
+      retryOfRunId: oldRun.id,
+      userPrompt: oldRun.userPrompt,
+      reasoningEffort: options.reasoningEffort ?? oldRun.reasoningEffort,
+      planMode: options.planMode ?? oldRun.planMode,
+      status: "streaming",
     });
-    const message = page.messages.find((item) => item.id === messageId);
-    if (!message) throw new Error("Message not found.");
-    if (message.processingStatus !== "failed")
-      throw new Error("Only failed messages can be retried.");
-    const updated = await this.messageRepository.updateMessageProcessingStatus(
-      messageId,
-      "completed",
+
+    await this.projectRepository.updateProjectProcessingState(
+      projectId,
+      "processing",
+      userId,
+      newRun.id,
+      new Date().toISOString(),
     );
-    if (!updated) throw new Error("Message not found.");
-    return {
-      ...updated,
-      content:
-        updated.content || "Retry completed with safe placeholder response.",
-    };
+
+    reserveRunProducer(projectId, newRun.id);
+
+    return { newRunId: newRun.id, streamUrl: getProjectRunStreamUrl(projectId, newRun.id) };
   }
 }
-
-function createAgentMessageDeltaPresenter(initialCtx: PresenterContext) {
-  const emitted = new Set<string>();
-  const ctx: PresenterContext = { ...initialCtx };
-
-  return (event: AgentStreamEvent) => {
-    if (event.type === "user_wish_extracted") {
-      ctx.userFacingUnderstanding = event.understanding;
-    }
-    if (event.type === "assistant_message_delta") {
-      const sanitized = sanitizeForUser(event.delta);
-      if (!sanitized) return undefined;
-      return sanitized;
-    }
-    const message = agentEventToUserFacingMessage(event, ctx);
-    if (!message) return undefined;
-    if (emitted.has(message)) return undefined;
-    emitted.add(message);
-    return `${message}\n`;
-  };
-}
-
-export function agentEventToUserFacingMessage(
-  event: AgentStreamEvent,
-  ctx: PresenterContext,
-) {
-  const formatted = formatUserFacingStatus(event, ctx);
-  if (!formatted || formatted.kind === "technical" || !formatted.label) return undefined;
-  return formatted.detail ? `${formatted.label}: ${formatted.detail}` : formatted.label;
-}
-
-function appendUserFacingLine(content: string, line: string) {
-  const separator = content && !content.endsWith("\n") ? "\n" : "";
-  return `${content}${separator}${line}\n`;
-}
-
 
 function normalizeCursor(cursor?: MessageCursor): MessageCursor {
   const limit = Math.min(Math.max(cursor?.limit ?? 50, 1), 100);

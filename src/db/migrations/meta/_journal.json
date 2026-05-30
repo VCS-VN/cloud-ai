@@ -5,50 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1777928226637,
-      "tag": "0000_cynical_madame_hydra",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1777928759157,
-      "tag": "0001_salty_deathbird",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1777996471017,
-      "tag": "0002_chatgpt_project_setup",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1778067841593,
-      "tag": "0003_faulty_vindicator",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1778070000000,
-      "tag": "0004_rename_projects_table",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1778271017993,
-      "tag": "0005_ai_agent_orchestrator",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1779046800000,
-      "tag": "0012_project_selected_store_slug",
+      "when": 1780114734177,
+      "tag": "0000_productive_the_captain",
       "breakpoints": true
     }
   ]

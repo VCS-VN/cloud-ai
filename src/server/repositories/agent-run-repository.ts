@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { agentRuns, projectToolExecutionLogs } from "@/db/schema";
 import type * as schema from "@/db/schema";
@@ -12,9 +12,11 @@ function toRun(row: AgentRunRow): AgentRun {
     id: row.id,
     projectId: row.projectId,
     userId: row.userId ?? undefined,
-    messageId: row.messageId ?? undefined,
     parentMessageId: row.parentMessageId ?? undefined,
+    retryOfRunId: row.retryOfRunId ?? undefined,
     userPrompt: row.userPrompt,
+    reasoningEffort: (row.reasoningEffort as AgentRun["reasoningEffort"]) ?? undefined,
+    planMode: row.planMode,
     intent: row.intent as BuilderIntent | undefined,
     plan: row.plan as ChangePlan | undefined,
     status: row.status as AgentRunStatus,
@@ -36,9 +38,11 @@ function toValues(run: AgentRun) {
     id: run.id,
     projectId: run.projectId,
     userId: run.userId,
-    messageId: run.messageId,
     parentMessageId: run.parentMessageId,
+    retryOfRunId: run.retryOfRunId,
     userPrompt: run.userPrompt,
+    reasoningEffort: run.reasoningEffort,
+    planMode: run.planMode,
     intent: run.intent,
     plan: run.plan,
     status: run.status,
@@ -82,6 +86,35 @@ export class PgAgentRunRepository {
       : eq(agentRuns.id, id);
     const [row] = await this.db.select().from(agentRuns).where(filter);
     return row ? toRun(row) : undefined;
+  }
+
+  async getActiveRun(projectId: string, userId?: string): Promise<AgentRun | undefined> {
+    const filter = userId
+      ? and(
+          eq(agentRuns.projectId, projectId),
+          eq(agentRuns.userId, userId),
+          eq(agentRuns.status, "streaming"),
+        )
+      : and(eq(agentRuns.projectId, projectId), eq(agentRuns.status, "streaming"));
+    const [row] = await this.db
+      .select()
+      .from(agentRuns)
+      .where(filter)
+      .orderBy(desc(agentRuns.createdAt))
+      .limit(1);
+    return row ? toRun(row) : undefined;
+  }
+
+  async listByRetryChain(runId: string, userId?: string): Promise<AgentRun[]> {
+    const filter = userId
+      ? and(eq(agentRuns.retryOfRunId, runId), eq(agentRuns.userId, userId))
+      : eq(agentRuns.retryOfRunId, runId);
+    const rows = await this.db
+      .select()
+      .from(agentRuns)
+      .where(filter)
+      .orderBy(asc(agentRuns.createdAt));
+    return rows.map(toRun);
   }
 
   async saveToolExecutionLog(log: ProjectToolExecutionLog): Promise<ProjectToolExecutionLog> {

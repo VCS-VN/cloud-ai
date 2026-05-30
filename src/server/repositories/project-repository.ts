@@ -20,8 +20,8 @@ function toProject(row: ProjectRow): Project {
     initialPrompt: row.initialPrompt ?? data.initialPrompt ?? "",
     status: row.status === 0 ? 0 : (data.status ?? "ready"),
     processingStatus: (row.processingStatus as Project["processingStatus"]) ?? data.processingStatus ?? "idle",
-    activeAgentMessageId:
-      row.activeAgentMessageId ?? data.activeAgentMessageId ?? undefined,
+    activeRunId:
+      row.activeRunId ?? data.activeRunId ?? undefined,
     processingStartedAt:
       row.processingStartedAt?.toISOString() ??
       data.processingStartedAt ??
@@ -65,7 +65,7 @@ export class PgProjectRepository implements ProjectRepository {
         initialPrompt: project.initialPrompt,
         status: project.status === 0 ? 0 : 1,
         processingStatus: project.processingStatus,
-        activeAgentMessageId: project.activeAgentMessageId ?? null,
+        activeRunId: project.activeRunId ?? null,
         processingStartedAt: project.processingStartedAt
           ? new Date(project.processingStartedAt)
           : null,
@@ -83,7 +83,7 @@ export class PgProjectRepository implements ProjectRepository {
           initialPrompt: project.initialPrompt,
           status: project.status === 0 ? 0 : 1,
           processingStatus: project.processingStatus,
-          activeAgentMessageId: project.activeAgentMessageId ?? null,
+          activeRunId: project.activeRunId ?? null,
           processingStartedAt: project.processingStartedAt
             ? new Date(project.processingStartedAt)
             : null,
@@ -167,7 +167,7 @@ export class PgProjectRepository implements ProjectRepository {
     id: string,
     processingStatus: Project["processingStatus"],
     userId?: string,
-    activeAgentMessageId?: string,
+    activeRunId?: string,
     processingStartedAt?: string,
   ): Promise<Project | undefined> {
     let filter = and(
@@ -180,7 +180,7 @@ export class PgProjectRepository implements ProjectRepository {
       .update(projects)
       .set({
         processingStatus,
-        activeAgentMessageId: activeAgentMessageId ?? null,
+        activeRunId: activeRunId ?? null,
         processingStartedAt: processingStartedAt
           ? new Date(processingStartedAt)
           : null,

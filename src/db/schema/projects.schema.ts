@@ -8,7 +8,7 @@ export const projects = pgTable("projects", {
   initialPrompt: text("initial_prompt"),
   status: integer("status").notNull().default(1),
   processingStatus: text("processing_status").notNull().default("idle"),
-  activeAgentMessageId: text("active_agent_message_id"),
+  activeRunId: text("active_run_id"),
   processingStartedAt: timestamp("processing_started_at"),
   currentRevisionId: text("current_revision_id"),
   selectedStoreSlug: text("selected_store_slug"),

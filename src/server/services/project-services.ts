@@ -1,5 +1,3 @@
-import { AgentRuntime } from "@/agent/agent-runtime";
-import { ProjectWorkspaceService } from "@/agent/project-workspace-service";
 import { AgentOrchestrator } from "@/features/ai-agent/agent/agent-orchestrator.server";
 import { loadAgentConfig } from "@/features/ai-agent/agent/agent-config";
 import { createOpenAIClient } from "@/features/ai-agent/openai/openai-client.server";
@@ -65,8 +63,6 @@ export async function getProjectServices() {
   const projectStateRepo = new PgProjectStateRepository(db);
   const agentRunRepo = new PgAgentRunRepository(db);
   const projectSnapshotRepo = new PgProjectSnapshotRepository(db);
-  const workspaceService = new ProjectWorkspaceService(fileNodeRepo);
-  const agentRuntime = new AgentRuntime(workspaceService);
   const projectStateStore = new ProjectStateStore(projectStateRepo);
   const runStore = new ProjectRunStore(agentRunRepo);
   const projectFileStore = new ProjectFileStore();
@@ -114,7 +110,7 @@ export async function getProjectServices() {
     startPreviewRouterOnce({ runtimeOrchestrator, tokenService: previewTokenService, publicHost: previewRuntimeConfig.publicHost! });
   }
   presenceService.setRuntimeStore(projectStateStore);
-  const projectService = new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore, runtimeService, envWriter, runtimeOrchestrator);
+  const projectService = new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore, runtimeService, envWriter, runtimeOrchestrator, runStore);
   const agentOrchestrator = new AgentOrchestrator({
     projectStateStore,
     runStore,
@@ -135,8 +131,8 @@ export async function getProjectServices() {
     messageService: new MessageService(
       projectRepo,
       messageRepo,
-      agentRuntime,
       agentOrchestrator,
+      runStore,
     ),
 
     fileTreeService: new ProjectFileTreeService(projectRepo, fileNodeRepo),

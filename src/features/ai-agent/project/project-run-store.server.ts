@@ -2,11 +2,14 @@ import type { ListProjectRunsOptions, PgAgentRunRepository } from "@/server/repo
 import type { AgentRun, AgentRunStatus, ProjectMessageRunState, ProjectToolExecutionLog } from "./project-state.schema";
 
 export type CreateAgentRunInput = {
+  id?: string;
   projectId: string;
   userId?: string;
-  messageId?: string;
   parentMessageId?: string;
+  retryOfRunId?: string;
   userPrompt: string;
+  reasoningEffort?: AgentRun["reasoningEffort"];
+  planMode?: boolean;
   status?: AgentRunStatus;
 };
 
@@ -16,18 +19,34 @@ export class ProjectRunStore {
   async create(input: CreateAgentRunInput): Promise<AgentRun> {
     const now = new Date().toISOString();
     return this.repository.save({
-      id: crypto.randomUUID(),
+      id: input.id ?? crypto.randomUUID(),
       projectId: input.projectId,
       userId: input.userId,
-      messageId: input.messageId,
       parentMessageId: input.parentMessageId,
+      retryOfRunId: input.retryOfRunId,
       userPrompt: input.userPrompt,
-      status: input.status ?? "running",
+      reasoningEffort: input.reasoningEffort,
+      planMode: input.planMode ?? false,
+      status: input.status ?? "streaming",
       affectedFiles: [],
       startedAt: now,
       createdAt: now,
       updatedAt: now,
     });
+  }
+
+  async load(runId: string, userId?: string): Promise<AgentRun> {
+    const run = await this.repository.get(runId, userId);
+    if (!run) throw new Error("Agent run not found.");
+    return run;
+  }
+
+  async getActiveRun(projectId: string, userId?: string): Promise<AgentRun | undefined> {
+    return this.repository.getActiveRun(projectId, userId);
+  }
+
+  async listByRetryChain(runId: string, userId?: string): Promise<AgentRun[]> {
+    return this.repository.listByRetryChain(runId, userId);
   }
 
   async update(run: AgentRun, updates: Partial<AgentRun>): Promise<AgentRun> {
@@ -51,12 +70,14 @@ export class ProjectRunStore {
   }
 
   async waitForClarification(run: AgentRun, updates: Partial<AgentRun> = {}): Promise<AgentRun> {
+    const now = new Date().toISOString();
     return this.repository.save({
       ...run,
       ...updates,
       thinking: updates.thinking ?? run.thinking,
-      status: "waiting_for_clarification",
-      updatedAt: new Date().toISOString(),
+      status: "completed",
+      completedAt: now,
+      updatedAt: now,
     });
   }
 
@@ -79,16 +100,18 @@ export class ProjectRunStore {
   }
 
   async waitForHumanReview(run: AgentRun, input: { reason: string; affectedFiles?: string[] }): Promise<AgentRun> {
+    const now = new Date().toISOString();
     return this.repository.save({
       ...run,
       affectedFiles: input.affectedFiles ?? run.affectedFiles,
-      status: "waiting_for_clarification",
+      status: "completed",
+      completedAt: now,
       error: {
         code: "HUMAN_REVIEW_REQUIRED",
         message: input.reason,
         recoverable: true,
       },
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
     });
   }
 
@@ -102,6 +125,17 @@ export class ProjectRunStore {
 
   async listByProject(projectId: string, userId?: string, options: ListProjectRunsOptions = {}) {
     return this.repository.listByProject(projectId, userId, options);
+  }
+
+  async stop(run: AgentRun, updates: Partial<AgentRun> = {}): Promise<AgentRun> {
+    const now = new Date().toISOString();
+    return this.repository.save({
+      ...run,
+      ...updates,
+      status: "stopped",
+      completedAt: now,
+      updatedAt: now,
+    });
   }
 
   async fail(run: AgentRun, error: NonNullable<AgentRun["error"]>, updates: Partial<AgentRun> = {}): Promise<AgentRun> {

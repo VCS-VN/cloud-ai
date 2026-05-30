@@ -9,6 +9,7 @@ import {
 } from "@/features/ai-agent/project/project-state.schema";
 import type { RuntimeService } from "@/features/ai-agent/runtime/runtime-service.server";
 import type { RuntimeOrchestrator } from "@/features/ai-agent/runtime/runtime-orchestrator.server";
+import type { ProjectRunStore } from "@/features/ai-agent/project/project-run-store.server";
 import type {
   Project,
   ProjectFileNode,
@@ -89,6 +90,7 @@ export class ProjectService {
     private readonly runtimeService?: RuntimeService,
     private readonly envWriter?: GeneratedProjectEnvWriter,
     private readonly runtimeOrchestrator?: RuntimeOrchestrator,
+    private readonly runStore?: ProjectRunStore,
   ) {
     this.workspaceService = workspaceService ?? new ProjectWorkspaceService(fileNodeRepository);
   }
@@ -138,28 +140,21 @@ export class ProjectService {
       userId,
     );
 
-    const agentMessage = await this.messageRepository.saveMessage(
-      {
-        id: crypto.randomUUID(),
-        userId,
-        projectId: project.id,
-        role: "agent",
-        content: "",
-        status: "pending",
-        processingStatus: "pending",
-        parentMessageId: userMessage.id,
-        provider: "agent-orchestrator",
-        createdAt: new Date(Date.parse(now) + 1).toISOString(),
-        updatedAt: new Date(Date.parse(now) + 1).toISOString(),
-      },
-      userId,
-    );
+    const agentRun = this.runStore
+      ? await this.runStore.create({
+          projectId: project.id,
+          userId,
+          parentMessageId: userMessage.id,
+          userPrompt: initialPrompt,
+          status: "streaming",
+        })
+      : undefined;
 
     const nextProject = await this.projectRepository.updateProjectProcessingState(
       project.id,
       "processing",
       userId,
-      agentMessage.id,
+      agentRun?.id,
       now,
     );
 
@@ -167,10 +162,10 @@ export class ProjectService {
       project:
         nextProject ?? {
           ...project,
-          activeAgentMessageId: agentMessage.id,
+          activeRunId: agentRun?.id,
           processingStartedAt: now,
         },
-      messages: [userMessage, agentMessage],
+      messages: [userMessage],
       fileTree: [],
     };
   }

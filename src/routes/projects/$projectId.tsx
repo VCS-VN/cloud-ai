@@ -7,7 +7,6 @@ import {
   type PointerEvent,
 } from "react";
 import {
-  InfiniteData,
   useInfiniteQuery,
   useQuery,
   useQueryClient,
@@ -40,15 +39,12 @@ import {
 import { EmptyState } from "@/components/common/EmptyState";
 import { PreviewInitPanel } from "@/components/projects/PreviewInitPanel";
 import {
-  agentEventReducer,
-  createInitialAgentEventState,
+  createInitialChatState,
+  type DevRuntimeUIState,
 } from "@/features/ai-agent/ui/agent-event-reducer";
-import type { RuntimeUIState } from "@/features/ai-agent/ui/agent-event-reducer";
-import { AgentEventTimeline } from "@/features/ai-agent/ui/agent-event-timeline";
-import { synthesizeAgentProgressContent, shouldReplaceStaleAgentContent } from "@/features/ai-agent/ui/agent-progress";
+import { useAgentStream } from "@/features/ai-agent/ui/use-agent-stream";
 import { isProjectPreviewStartAvailable, isProjectPreviewTemporarilyUnavailable } from "@/features/ai-agent/ui/preview-availability";
 import { buildPreviewUrl, normalizePreviewPath } from "@/features/ai-agent/ui/preview-path";
-import { StreamingTextPanel } from "@/features/ai-agent/ui/streaming-text-panel";
 import { useUserPresence } from "@/hooks/useUserPresence";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { MessageComposer } from "@/components/projects/MessageComposer";
@@ -57,26 +53,22 @@ import { ProjectMessagesPanel } from "@/components/projects/ProjectMessagesPanel
 import { ProjectDeleteConfirmDialog } from "@/components/projects/ProjectDeleteConfirmDialog";
 import { ProjectSettingsDrawer } from "@/components/projects/ProjectSettingsDrawer";
 import { getCurrentUser } from "@/server/functions/auth";
+import { listProjectMessages } from "@/server/functions/project-messages";
 import {
-  listProjectMessages,
-  retryProjectMessage,
-  sendProjectMessage,
-  stopProjectGeneration,
-} from "@/server/functions/project-messages";
+  createProjectRun,
+  retryProjectRun,
+  stopProjectRun,
+} from "@/server/functions/project-runs";
 import {
   deleteProject,
   getProjectWorkspace,
   updateProjectSettings,
 } from "@/server/functions/projects";
 import { getDevRuntimeState, startPreview } from "@/server/functions/preview";
-import type { AgentStreamEvent } from "@/features/ai-agent/agent/agent-events";
 import type {
   ComposerReasoningEffort,
   Message,
-  MessageDeltaEvent,
   MessagePage,
-  MessageStartedEvent,
-  MessageTerminalEvent,
   Project,
   ProjectFileNode,
   ProjectWorkspace,
@@ -98,7 +90,7 @@ const statusLabel: Record<Project["status"], string> = {
   failed: "Failed",
 };
 
-function mapDevRuntimeStatus(s: string): RuntimeUIState["status"] {
+function mapDevRuntimeStatus(s: string): DevRuntimeUIState["status"] {
   if (s === "installing") return "installing";
   if (s === "installed") return "installed";
   if (s === "starting") return "starting";
@@ -109,159 +101,10 @@ function mapDevRuntimeStatus(s: string): RuntimeUIState["status"] {
   return "idle";
 }
 
-type ActiveStream = {
-  agentMessageId: string;
-  url: string;
-  source: EventSource;
-  hasTerminalEvent: boolean;
-};
-
 const MESSAGE_PAGE_SIZE = 20;
 
 function getProjectMessagesQueryKey(projectId?: string) {
   return ["project-messages", projectId] as const;
-}
-
-function mergeMessages(pages: MessagePage[]) {
-  const deduped = new Map<string, Message>();
-  for (const page of pages) {
-    for (const message of page.messages) deduped.set(message.id, message);
-  }
-  return [...deduped.values()].sort((left, right) =>
-    left.createdAt.localeCompare(right.createdAt),
-  );
-}
-
-function updateMessagePages(
-  data: InfiniteData<MessagePage> | undefined,
-  updater: (pages: MessagePage[]) => MessagePage[],
-): InfiniteData<MessagePage> | undefined {
-  if (!data) return data;
-  return {
-    ...data,
-    pages: updater(data.pages),
-  };
-}
-
-function appendTerminalAgentEvent(
-  events: AgentStreamEvent[],
-  event: MessageTerminalEvent,
-): AgentStreamEvent[] {
-  const last = events.at(-1);
-  if (last?.type === "done" || last?.type === "error") return events;
-  if (event.type === "message.completed") {
-    return [
-      ...events,
-      {
-        type: "done",
-        runId: event.messageId,
-        summary: shouldReplaceStaleAgentContent(event.content)
-          ? "Done. Your storefront is ready."
-          : event.content,
-        changedFiles: [],
-      },
-    ];
-  }
-  return [
-    ...events,
-    {
-      type: "error",
-      code: event.error?.code ?? event.type,
-      message:
-        event.type === "message.stopped"
-          ? "Processing stopped. You can continue with a new prompt."
-          : "Something went wrong. You can retry safely.",
-      recoverable: event.type !== "message.stopped",
-    },
-  ];
-}
-
-function chooseTerminalMessageContent(
-  eventContent: string,
-  synthesizedContent: string,
-  eventType: MessageTerminalEvent["type"],
-) {
-  if (shouldReplaceStaleAgentContent(eventContent)) return synthesizedContent;
-  const trimmed = eventContent.trim();
-  if (
-    eventType === "message.completed" &&
-    /\b(?:Done|Preview ready|storefront is ready)\b/i.test(trimmed)
-  ) {
-    return eventContent;
-  }
-  if (
-    eventType !== "message.completed" &&
-    /\b(?:Something went wrong|interrupted|retry safely|Processing stopped)\b/i.test(
-      trimmed,
-    )
-  ) {
-    return eventContent;
-  }
-  return `${trimmed}\n${synthesizedContent}`;
-}
-
-function appendMessagesToNewestPage(
-  data: InfiniteData<MessagePage> | undefined,
-  messages: Message[],
-): InfiniteData<MessagePage> | undefined {
-  if (!data) {
-    return {
-      pages: [{ messages, total: messages.length }],
-      pageParams: [undefined],
-    };
-  }
-  const pages = [...data.pages];
-  if (pages.length === 0) {
-    return { ...data, pages: [{ messages, total: messages.length }] };
-  }
-
-  const newestPageIndex = 0;
-  const newestPage = pages[newestPageIndex];
-  const existingIds = new Set(
-    pages.flatMap((page) => page.messages.map((message) => message.id)),
-  );
-  const nextMessages = messages.filter(
-    (message) => !existingIds.has(message.id),
-  );
-  const nextTotal =
-    Math.max(...pages.map((page) => page.total), newestPage.total) +
-    nextMessages.length;
-  pages[newestPageIndex] = {
-    ...newestPage,
-    messages: [...newestPage.messages, ...nextMessages],
-    total: nextTotal,
-  };
-  return { ...data, pages };
-}
-
-function replaceMessageInPages(
-  data: InfiniteData<MessagePage> | undefined,
-  matcher: (message: Message) => boolean,
-  replacement: Message,
-): InfiniteData<MessagePage> | undefined {
-  if (!data) return data;
-  const pages = data.pages.map((page) => ({
-    ...page,
-    messages: page.messages.map((message) =>
-      matcher(message) ? replacement : message,
-    ),
-  }));
-  return { ...data, pages };
-}
-
-function updateSingleMessageInPages(
-  data: InfiniteData<MessagePage> | undefined,
-  messageId: string,
-  updater: (message: Message) => Message,
-): InfiniteData<MessagePage> | undefined {
-  if (!data) return data;
-  const pages = data.pages.map((page) => ({
-    ...page,
-    messages: page.messages.map((message) =>
-      message.id === messageId ? updater(message) : message,
-    ),
-  }));
-  return { ...data, pages };
 }
 
 export const Route = createFileRoute("/projects/$projectId")({
@@ -278,10 +121,10 @@ export const Route = createFileRoute("/projects/$projectId")({
 function ProjectDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const sendMessage = useServerFn(sendProjectMessage);
   const listMessages = useServerFn(listProjectMessages);
-  const retryMessage = useServerFn(retryProjectMessage);
-  const stopGeneration = useServerFn(stopProjectGeneration);
+  const createRun = useServerFn(createProjectRun);
+  const retryRun = useServerFn(retryProjectRun);
+  const stopRun = useServerFn(stopProjectRun);
   const removeProject = useServerFn(deleteProject);
   const saveProjectSettings = useServerFn(updateProjectSettings);
   const getRuntimeState = useServerFn(getDevRuntimeState);
@@ -312,7 +155,7 @@ function ProjectDetailPage() {
     null,
   );
   const [previewTokenState, setPreviewTokenState] = useState<PreviewTokenState>({ status: "idle", error: null, refreshedAt: null });
-  const [manualRuntime, setManualRuntime] = useState<RuntimeUIState | null>(
+  const [manualRuntime, setManualRuntime] = useState<DevRuntimeUIState | null>(
     null,
   );
 
@@ -342,9 +185,13 @@ function ProjectDetailPage() {
     }
   }, [project?.name, project?.selectedStoreSlug, settingsOpen]);
 
-  const activeStreamRef = useRef<ActiveStream | null>(null);
-  const [agentEvents, setAgentEvents] = useState<AgentStreamEvent[]>([]);
-  const [agentReasoning, setAgentReasoning] = useState("");
+  const agentStream = useAgentStream({
+    projectId: project?.id ?? "",
+    initialMessages: workspace?.messages ?? [],
+    activeRunId: project?.activeRunId ?? null,
+  });
+  const { state: chatState } = agentStream;
+  const messages = chatState.messages;
 
   const messagesQuery = useInfiniteQuery({
     queryKey: getProjectMessagesQueryKey(project?.id),
@@ -362,41 +209,9 @@ function ProjectDetailPage() {
         },
       });
     },
-    getNextPageParam: (lastPage, allPages) => {
-      const loadedCount = mergeMessages(allPages).length;
-      if (loadedCount >= lastPage.total) return undefined;
-      return lastPage.nextCursor;
-    },
-    initialData:
-      workspace?.project.id === project?.id
-        ? {
-            pages: [
-              {
-                messages: workspace?.messages ?? [],
-                nextCursor:
-                  (workspace?.messages?.length ?? 0) >= MESSAGE_PAGE_SIZE
-                    ? {
-                        beforeCreatedAt: workspace?.messages?.[0]?.createdAt,
-                        beforeId: workspace?.messages?.[0]?.id,
-                      }
-                    : undefined,
-                total:
-                  (workspace?.messages?.length ?? 0) >= MESSAGE_PAGE_SIZE
-                    ? (workspace?.messages?.length ?? 0) + 1
-                    : (workspace?.messages?.length ?? 0),
-              },
-            ],
-            pageParams: [undefined],
-          }
-        : undefined,
-    enabled: !!project?.id,
-    refetchOnMount: true,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    enabled: false,
   });
-
-  const messages = useMemo(
-    () => mergeMessages(messagesQuery.data?.pages ?? []),
-    [messagesQuery.data?.pages],
-  );
 
   const runtimeQuery = useQuery({
     queryKey: ["project-runtime", project?.id],
@@ -410,16 +225,16 @@ function ProjectDetailPage() {
     refetchOnWindowFocus: true,
   });
 
-  const runtimeState = useMemo<RuntimeUIState>(() => {
-    const base = createInitialAgentEventState();
-    const runtime = runtimeQuery.data ?? workspace?.devRuntime;
-    if (runtime) base.runtime = toRuntimeUIState(runtime);
-    if (manualRuntime) base.runtime = manualRuntime;
-    return agentEvents.reduce(
-      (state, event) => agentEventReducer(state, event),
-      base,
-    ).runtime;
-  }, [agentEvents, manualRuntime, runtimeQuery.data, workspace?.devRuntime]);
+  // Runtime state: workspace/query snapshot as the base, overlaid by manual
+  // preview actions, then by live dev events from the runtime SSE channel.
+  const runtimeState = useMemo<DevRuntimeUIState>(() => {
+    let runtime = createInitialChatState().runtime;
+    const snapshot = runtimeQuery.data ?? workspace?.devRuntime;
+    if (snapshot) runtime = toRuntimeUIState(snapshot);
+    if (manualRuntime) runtime = manualRuntime;
+    if (chatState.runtime.status !== "idle") runtime = chatState.runtime;
+    return runtime;
+  }, [chatState.runtime, manualRuntime, runtimeQuery.data, workspace?.devRuntime]);
   const refreshPreviewToken = useCallback(async (projectId: string, signal?: AbortSignal) => {
     setPreviewTokenState({ status: "refreshing", error: null, refreshedAt: null });
     const timeout = new AbortController();
@@ -462,288 +277,8 @@ function ProjectDetailPage() {
     }
   }, [isActive, project?.id]);
 
-  const loadedMessageCount = messages.length;
-  const totalMessages = messagesQuery.data
-    ? Math.max(...messagesQuery.data.pages.map((page) => page.total))
-    : messages.length;
-  const hasMoreMessages =
-    !!messagesQuery.hasNextPage && loadedMessageCount < totalMessages;
+  const hasMoreMessages = !!messagesQuery.hasNextPage;
   const loadingOlder = messagesQuery.isFetchingNextPage;
-
-  const closeActiveStream = useCallback((agentMessageId?: string) => {
-    const activeStream = activeStreamRef.current;
-    if (!activeStream) return;
-    if (agentMessageId && activeStream.agentMessageId !== agentMessageId)
-      return;
-    activeStream.source.close();
-    activeStreamRef.current = null;
-  }, []);
-
-  const connectMessageStream = useCallback(
-    (url: string, agentMessageId: string) => {
-      const existingStream = activeStreamRef.current;
-      if (
-        existingStream &&
-        existingStream.agentMessageId === agentMessageId &&
-        existingStream.url === url
-      ) {
-        return;
-      }
-
-      closeActiveStream();
-
-      const source = new EventSource(url);
-      activeStreamRef.current = {
-        agentMessageId,
-        url,
-        source,
-        hasTerminalEvent: false,
-      };
-
-      const updateMessage = (updater: (message: Message) => Message) => {
-        queryClient.setQueryData<InfiniteData<MessagePage>>(
-          getProjectMessagesQueryKey(project?.id),
-          (current) =>
-            updateSingleMessageInPages(current, agentMessageId, updater),
-        );
-      };
-
-      const handleStarted = (rawEvent: Event) => {
-        const event = JSON.parse(
-          (rawEvent as MessageEvent<string>).data,
-        ) as MessageStartedEvent;
-        updateMessage((message) => ({
-          ...message,
-          processingStatus: event.processingStatus,
-          providerResponseId: event.providerResponseId,
-          startedAt: message.startedAt ?? new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }));
-        setProject((currentProject) =>
-          currentProject
-            ? {
-                ...currentProject,
-                processingStatus: "processing",
-                activeAgentMessageId: event.messageId,
-              }
-            : currentProject,
-        );
-      };
-
-      const handleDelta = (rawEvent: Event) => {
-        const event = JSON.parse(
-          (rawEvent as MessageEvent<string>).data,
-        ) as MessageDeltaEvent;
-        updateMessage((message) => ({
-          ...message,
-          content: `${message.content}${event.delta}`,
-          processingStatus: "streaming",
-          updatedAt: new Date().toISOString(),
-        }));
-      };
-
-      const handleAgentEvent = (rawEvent: Event) => {
-        const event = JSON.parse(
-          (rawEvent as MessageEvent<string>).data,
-        ) as AgentStreamEvent;
-        setAgentEvents((current) => {
-          const next = [...current, event];
-          if (event.type !== "assistant_message_delta") {
-            const synthesized = synthesizeAgentProgressContent(next, [...messages].reverse().find((message) => message.role === "user")?.content);
-            updateMessage((message) => shouldReplaceStaleAgentContent(message.content) || message.processingStatus === "streaming"
-              ? { ...message, content: synthesized, processingStatus: "streaming", updatedAt: new Date().toISOString() }
-              : message,
-            );
-          }
-          return next;
-        });
-        if (event.type === "assistant_message_delta") {
-          setAgentReasoning((prev) => prev + event.delta);
-        }
-        if (event.type === "clarification_required") {
-          setProject((currentProject) =>
-            currentProject
-              ? {
-                  ...currentProject,
-                  processingStatus: "idle",
-                  activeAgentMessageId:
-                    currentProject.activeAgentMessageId === agentMessageId
-                      ? undefined
-                      : currentProject.activeAgentMessageId,
-                  updatedAt: new Date().toISOString(),
-                }
-              : currentProject,
-          );
-          void queryClient.invalidateQueries({
-            queryKey: ["project-runs", project?.id],
-          });
-        }
-        if (event.type === "dev_ready") {
-          setManualRuntime((current) => ({
-            ...(current ?? createInitialAgentEventState().runtime),
-            status: "running",
-            previewUrl: event.previewUrl,
-            previewPort: event.port,
-            error: null,
-            errorTier: null,
-          }));
-        }
-        if (event.type === "done") {
-          if (detailMode === "preview" && project?.id && runtimeState.status === "running" && runtimeState.previewUrl) {
-            void refreshPreviewToken(project.id);
-          }
-          void queryClient.invalidateQueries({
-            queryKey: ["project", project?.id],
-          });
-          void queryClient.invalidateQueries({
-            queryKey: ["project-files", project?.id],
-          });
-          void queryClient.invalidateQueries({
-            queryKey: ["project-runs", project?.id],
-          });
-          void queryClient.invalidateQueries({
-            queryKey: ["project-preview", project?.id],
-          });
-        }
-      };
-
-      const handleTerminal = (rawEvent: Event) => {
-        const event = JSON.parse(
-          (rawEvent as MessageEvent<string>).data,
-        ) as MessageTerminalEvent;
-        if (activeStreamRef.current?.agentMessageId === event.messageId) {
-          activeStreamRef.current.hasTerminalEvent = true;
-        }
-        const userPrompt = [...messages].reverse().find((item) => item.role === "user")?.content;
-        setAgentEvents((current) => {
-          const combinedEvents = appendTerminalAgentEvent(current, event);
-          updateMessage((message) => {
-            const synthesized = synthesizeAgentProgressContent(
-              combinedEvents,
-              userPrompt,
-              event.type === "message.completed"
-                ? "Done. Your storefront is ready."
-                : "Something went wrong. You can retry safely.",
-            );
-            return {
-              ...message,
-              content: chooseTerminalMessageContent(
-                event.content,
-                synthesized,
-                event.type,
-              ),
-              processingStatus: event.processingStatus,
-              providerResponseId: event.providerResponseId,
-              errorMessage: event.error?.message,
-              completedAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
-          });
-          return combinedEvents;
-        });
-        setProject((currentProject) =>
-          currentProject
-            ? {
-                ...currentProject,
-                processingStatus: event.projectProcessingStatus,
-                activeAgentMessageId:
-                  currentProject.activeAgentMessageId === event.messageId
-                    ? undefined
-                    : currentProject.activeAgentMessageId,
-                processingStartedAt:
-                  event.projectProcessingStatus === "processing"
-                    ? currentProject.processingStartedAt
-                    : undefined,
-                updatedAt: new Date().toISOString(),
-              }
-            : currentProject,
-        );
-        void queryClient.invalidateQueries({
-          queryKey: ["project-runs", project?.id],
-        });
-        if (event.type === "message.failed" && event.error?.message) {
-          setSendError(event.error.message);
-        }
-        closeActiveStream(agentMessageId);
-        void router.invalidate();
-      };
-
-      source.addEventListener("agent_event", handleAgentEvent);
-      source.addEventListener("message.started", handleStarted);
-      source.addEventListener("message.delta", handleDelta);
-      source.addEventListener("message.completed", handleTerminal);
-      source.addEventListener("message.failed", handleTerminal);
-      source.addEventListener("message.stopped", handleTerminal);
-      source.onerror = () => {
-        const activeStream = activeStreamRef.current;
-        if (activeStream?.agentMessageId !== agentMessageId) return;
-
-        const hasTerminalEvent = activeStream.hasTerminalEvent;
-        closeActiveStream(agentMessageId);
-
-        if (hasTerminalEvent) return;
-
-        const userPrompt = [...messages].reverse().find((item) => item.role === "user")?.content;
-        setAgentEvents((current) => {
-          const last = current.at(-1);
-          const disconnectEvent: AgentStreamEvent = {
-            type: "error",
-            code: "STREAM_DISCONNECTED",
-            message: "Something interrupted the response. You can retry safely.",
-            recoverable: true,
-          };
-          const combinedEvents =
-            last?.type === "done" || last?.type === "error"
-              ? current
-              : [...current, disconnectEvent];
-          const synthesized = `${synthesizeAgentProgressContent(
-            combinedEvents,
-            userPrompt,
-            "Something went wrong. You can retry safely.",
-          )}
-- ✕ Something interrupted the response. You can retry safely.`;
-          updateMessage((message) => ({
-            ...message,
-            content: synthesized,
-            processingStatus: "failed",
-            errorMessage: "Something interrupted the response. You can retry safely.",
-            updatedAt: new Date().toISOString(),
-          }));
-          return combinedEvents;
-        });
-        setSendError("Something interrupted the response. You can retry safely.");
-
-        setProject((currentProject) =>
-          currentProject
-            ? {
-                ...currentProject,
-                processingStatus: "idle",
-                activeAgentMessageId:
-                  currentProject.activeAgentMessageId === agentMessageId
-                    ? undefined
-                    : currentProject.activeAgentMessageId,
-                processingStartedAt: undefined,
-                updatedAt: new Date().toISOString(),
-              }
-            : currentProject,
-        );
-        void queryClient.invalidateQueries({
-          queryKey: ["project", project?.id],
-        });
-        void queryClient.invalidateQueries({
-          queryKey: getProjectMessagesQueryKey(project?.id),
-        });
-        void queryClient.invalidateQueries({
-          queryKey: ["project-runs", project?.id],
-        });
-        void queryClient.invalidateQueries({
-          queryKey: ["project-preview", project?.id],
-        });
-        void router.invalidate();
-      };
-    },
-    [closeActiveStream, detailMode, project?.id, queryClient, refreshPreviewToken, router, runtimeState.previewUrl, runtimeState.status],
-  );
 
   useEffect(() => {
     const savedWidth = Number(window.localStorage.getItem(CHAT_WIDTH_KEY));
@@ -756,15 +291,13 @@ function ProjectDetailPage() {
   }, []);
 
   useEffect(() => {
-    closeActiveStream();
+    agentStream.reset(workspace?.messages ?? []);
     setProject(workspace?.project);
     setSendError(undefined);
     setPreviewStarting(false);
     setPreviewStartError(null);
     setPreviewTokenState({ status: "idle", error: null, refreshedAt: null });
     setManualRuntime(null);
-    setAgentEvents([]);
-    setAgentReasoning("");
     setSelectedNodeId(firstFileNode(workspace?.fileTree ?? [])?.id);
     setDetailMode("preview");
     setPreviewDraftPath("/");
@@ -779,9 +312,7 @@ function ProjectDetailPage() {
           .map((node) => node.id),
       ),
     );
-  }, [closeActiveStream, workspace?.project.id, workspace?.fileTree]);
-
-  useEffect(() => () => closeActiveStream(), [closeActiveStream]);
+  }, [workspace?.project.id, workspace?.fileTree]);
 
   useEffect(() => {
     if (!project?.id || detailMode !== "preview" || runtimeState.status !== "running" || !runtimeState.previewUrl) {
@@ -800,15 +331,6 @@ function ProjectDetailPage() {
   const selectedNode = useMemo(
     () => findNode(workspace?.fileTree ?? [], selectedNodeId),
     [workspace?.fileTree, selectedNodeId],
-  );
-  const activeAgentMessage = useMemo(
-    () =>
-      project?.activeAgentMessageId
-        ? messages.find(
-            (message) => message.id === project.activeAgentMessageId,
-          )
-        : undefined,
-    [messages, project?.activeAgentMessageId],
   );
   const previewReady =
     runtimeState.status === "running" &&
@@ -845,30 +367,13 @@ function ProjectDetailPage() {
 
   useEffect(() => {
     if (
-      !project?.activeAgentMessageId ||
+      !project?.activeRunId ||
       project.processingStatus !== "processing"
     ) {
       return;
     }
-    if (
-      activeAgentMessage &&
-      ["completed", "failed", "stopped"].includes(
-        activeAgentMessage.processingStatus,
-      )
-    ) {
-      return;
-    }
-    connectMessageStream(
-      buildProjectMessageStreamUrl(project.id, project.activeAgentMessageId),
-      project.activeAgentMessageId,
-    );
-  }, [
-    activeAgentMessage,
-    connectMessageStream,
-    project?.activeAgentMessageId,
-    project?.id,
-    project?.processingStatus,
-  ]);
+    // Resume is handled by useAgentStream's activeRunId effect.
+  }, [project?.activeRunId, project?.id, project?.processingStatus]);
 
 
   const handleSaveProjectSettings = useCallback(async (settings: { name?: string; selectedStoreSlug?: string | null }) => {
@@ -1001,7 +506,9 @@ function ProjectDetailPage() {
     const previousScrollTop = container?.scrollTop ?? 0;
     const oldScrollHeight = container?.scrollHeight ?? 0;
 
-    await messagesQuery.fetchNextPage();
+    const result = await messagesQuery.fetchNextPage();
+    const olderPage = result.data?.pages.at(-1);
+    if (olderPage) agentStream.prependMessages(olderPage.messages);
 
     if (container) {
       requestAnimationFrame(() => {
@@ -1010,51 +517,59 @@ function ProjectDetailPage() {
           previousScrollTop + (newScrollHeight - oldScrollHeight);
       });
     }
-  }, [hasMoreMessages, loadingOlder, messagesQuery]);
+  }, [agentStream, hasMoreMessages, loadingOlder, messagesQuery]);
 
-  async function handleRetryMessage(messageId: string) {
-    if (!project) return;
-    const retriedMessage = await retryMessage({
-      data: { projectId: project.id, messageId },
-    });
-    queryClient.setQueryData<InfiniteData<MessagePage>>(
-      getProjectMessagesQueryKey(project.id),
-      (current) =>
-        replaceMessageInPages(
-          current,
-          (message) => message.id === retriedMessage.id,
-          retriedMessage,
-        ),
-    );
+  async function handleRetryMessage(message: Message) {
+    if (!project || !message.runId) return;
+    setSendError(undefined);
+    try {
+      const result = await retryRun({
+        data: {
+          projectId: project.id,
+          runId: message.runId,
+          reasoningEffort,
+          planMode: planModeEnabled,
+        },
+      });
+      setProject((currentProject) =>
+        currentProject
+          ? {
+              ...currentProject,
+              processingStatus: "processing",
+              activeRunId: result.newRunId,
+              processingStartedAt: new Date().toISOString(),
+            }
+          : currentProject,
+      );
+      agentStream.beginRun(result.newRunId);
+    } catch (cause) {
+      setSendError(
+        cause instanceof Error ? cause.message : "Unable to retry. Please try again.",
+      );
+    }
   }
 
   async function handleSendMessage(content: string) {
     if (!project) return;
     setSending(true);
     setSendError(undefined);
-    setAgentEvents([]);
-    setAgentReasoning("");
     setDraft("");
 
-    const clientId = `client-${crypto.randomUUID()}`;
-    const optimisticMessage: Message = {
-      id: clientId,
+    const tempId = `temp_${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+    agentStream.startOptimistic({
+      id: tempId,
       projectId: project.id,
       role: "user",
       content,
-      status: "pending",
-      processingStatus: "pending",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    queryClient.setQueryData<InfiniteData<MessagePage>>(
-      getProjectMessagesQueryKey(project.id),
-      (current) => appendMessagesToNewestPage(current, [optimisticMessage]),
-    );
+      status: "completed",
+      processingStatus: "completed",
+      createdAt: now,
+      updatedAt: now,
+    });
 
     try {
-      const streamState = await sendMessage({
+      const created = await createRun({
         data: {
           projectId: project.id,
           content,
@@ -1066,37 +581,16 @@ function ProjectDetailPage() {
         currentProject
           ? {
               ...currentProject,
-              processingStatus: streamState.project.processingStatus,
-              activeAgentMessageId: streamState.project.activeAgentMessageId,
+              processingStatus: created.project.processingStatus,
+              activeRunId: created.project.activeRunId,
               processingStartedAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
             }
           : currentProject,
       );
-      queryClient.setQueryData<InfiniteData<MessagePage>>(
-        getProjectMessagesQueryKey(project.id),
-        (current) => {
-          const replacedUser = replaceMessageInPages(
-            current,
-            (message) => message.id === clientId,
-            streamState.userMessage,
-          );
-          return appendMessagesToNewestPage(replacedUser, [
-            streamState.agentMessage,
-          ]);
-        },
-      );
-      connectMessageStream(streamState.stream.url, streamState.agentMessage.id);
+      agentStream.beginRun(created.runId, created.userMessage, tempId);
     } catch (cause) {
-      queryClient.setQueryData<InfiniteData<MessagePage>>(
-        getProjectMessagesQueryKey(project.id),
-        (current) =>
-          updateSingleMessageInPages(current, clientId, (message) => ({
-            ...message,
-            status: "failed",
-            processingStatus: "failed",
-          })),
-      );
+      agentStream.rollbackOptimistic(tempId);
+      setDraft(content);
       setSendError(
         cause instanceof Error
           ? cause.message
@@ -1107,33 +601,20 @@ function ProjectDetailPage() {
     }
   }
 
-  async function handleStopGeneration() {
-    if (!project?.activeAgentMessageId) return;
-    try {
-      const result = await stopGeneration({
-        data: {
-          projectId: project.id,
-          agentMessageId: project.activeAgentMessageId,
-        },
-      });
-      setProject(result.project);
-      queryClient.setQueryData<InfiniteData<MessagePage>>(
-        getProjectMessagesQueryKey(project.id),
-        (current) =>
-          replaceMessageInPages(
-            current,
-            (message) => message.id === result.agentMessage.id,
-            result.agentMessage,
-          ),
-      );
-      closeActiveStream(result.agentMessage.id);
-    } catch (cause) {
-      setSendError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to stop the current response.",
-      );
-    }
+  function handleStopGeneration() {
+    if (!project?.activeRunId) return;
+    const runId = project.activeRunId;
+    // Optimistic: flip the UI to "Stopping…" and free the composer immediately.
+    agentStream.markStopping();
+    setProject((currentProject) =>
+      currentProject
+        ? { ...currentProject, processingStatus: "idle", activeRunId: undefined }
+        : currentProject,
+    );
+    // Fire-and-forget; the run.stopped event will clear the skeleton.
+    void stopRun({ data: { projectId: project.id, runId } }).catch(() => {
+      // ignore — the SSE terminal event reconciles UI state
+    });
   }
 
   const handleStartPreview = useCallback(async () => {
@@ -1151,7 +632,7 @@ function ProjectDetailPage() {
     setPreviewPathError(null);
     setPreviewReloadKey(0);
     setManualRuntime((current) => ({
-      ...(current ?? createInitialAgentEventState().runtime),
+      ...(current ?? createInitialChatState().runtime),
       status: "starting",
       error: null,
       errorTier: null,
@@ -1164,7 +645,7 @@ function ProjectDetailPage() {
       if (!result.success) {
         setPreviewStartError(result.error);
         setManualRuntime((current) => ({
-          ...(current ?? createInitialAgentEventState().runtime),
+          ...(current ?? createInitialChatState().runtime),
           status: "error",
           error: result.error,
           errorTier: result.errorTier,
@@ -1174,7 +655,7 @@ function ProjectDetailPage() {
         return;
       }
       setManualRuntime((current) => ({
-        ...(current ?? createInitialAgentEventState().runtime),
+        ...(current ?? createInitialChatState().runtime),
         status: "running",
         previewUrl: result.previewUrl,
         previewPort: result.port,
@@ -1188,7 +669,7 @@ function ProjectDetailPage() {
         cause instanceof Error ? cause.message : "Unable to start preview.";
       setPreviewStartError(message);
       setManualRuntime((current) => ({
-        ...(current ?? createInitialAgentEventState().runtime),
+        ...(current ?? createInitialChatState().runtime),
         status: "error",
         error: message,
         errorTier: "system",
@@ -1220,16 +701,10 @@ function ProjectDetailPage() {
 
             <div className="min-h-0 flex-1 overflow-hidden px-sm">
               <div className="flex h-full min-h-0 flex-col gap-sm">
-                {/* <StreamingTextPanel text={agentReasoning} isStreaming={project.processingStatus === "processing"} /> */}
-                <div className="builder-scrollbar-hidden max-h-[40vh] shrink-0 overflow-y-auto">
-                  <AgentEventTimeline
-                    events={agentEvents}
-                    userPrompt={[...messages].reverse().find((message) => message.role === "user")?.content}
-                  />
-                </div>
                 <div className="min-h-0 flex-1 overflow-hidden">
                   <ProjectMessagesPanel
                     messages={messages}
+                    skeleton={chatState.activeRun?.skeleton ?? null}
                     loadingOlder={loadingOlder}
                     hasMore={hasMoreMessages}
                     onLoadOlder={loadOlderMessages}
@@ -1247,7 +722,7 @@ function ProjectDetailPage() {
                 sending={sending}
                 processing={project.processingStatus === "processing"}
                 error={sendError}
-                disabled={project.processingStatus === "processing"}
+                disabled={false}
                 onChange={setDraft}
                 onReasoningEffortChange={setReasoningEffort}
                 onPlanModeChange={setPlanModeEnabled}
@@ -1377,7 +852,7 @@ function ProjectDetailPage() {
 }
 
 function runtimeStatusBadge(
-  state: RuntimeUIState,
+  state: DevRuntimeUIState,
   previewStarting = false,
 ): { label: string; tone: string; icon: React.ReactNode } | null {
   switch (state.status) {
@@ -1536,7 +1011,7 @@ function PreviewToolbar({
   previewReady: boolean;
   previewControlsLoading: boolean;
   activePreviewUrl: string | null;
-  runtimeState: RuntimeUIState;
+  runtimeState: DevRuntimeUIState;
   previewStarting: boolean;
   projectStatus: Project["status"];
   projectProcessingStatus: Project["processingStatus"];
@@ -1704,7 +1179,7 @@ function PreviewWorkspace({
 }: {
   previewUrl: string | null;
   previewReloadKey: number;
-  runtimeState: RuntimeUIState;
+  runtimeState: DevRuntimeUIState;
   projectId: string;
   previewStarting: boolean;
   projectStatus: Project["status"];
@@ -1801,7 +1276,7 @@ function PreviewWorkspace({
 
 function toRuntimeUIState(
   runtime: NonNullable<ProjectWorkspace["devRuntime"]>,
-): RuntimeUIState {
+): DevRuntimeUIState {
   return {
     status: mapDevRuntimeStatus(runtime.status),
     previewUrl: runtime.previewUrl,

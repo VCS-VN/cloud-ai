@@ -1,1 +1,0 @@
-ALTER TABLE users ADD COLUMN IF NOT EXISTS api_key text;

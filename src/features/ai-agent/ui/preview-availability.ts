@@ -1,10 +1,10 @@
 import type { Project } from "@/shared/project-types";
-import type { RuntimeUIState } from "./agent-event-reducer";
+import type { DevRuntimeUIState } from "./agent-event-reducer";
 
 export type PreviewAvailabilityInput = {
   projectStatus: Project["status"];
   projectProcessingStatus: Project["processingStatus"];
-  runtimeStatus: RuntimeUIState["status"];
+  runtimeStatus: DevRuntimeUIState["status"];
   previewUrl?: string | null;
 };
 

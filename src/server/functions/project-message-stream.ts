@@ -1,65 +1,204 @@
-import type { MessageStreamEvent } from "@/shared/project-types";
-import type { ProjectProcessingStatus, StreamErrorCode } from "@/shared/project-types";
-import { redactJson, redactSecrets } from "@/features/ai-agent/security/secret-redactor";
+import type { RunStreamEvent, RuntimeStreamEvent } from "@/shared/project-types";
+import { redactJson } from "@/features/ai-agent/security/secret-redactor";
 
-const activeProjectMessageStreams = new Map<string, AbortController>();
 const textEncoder = new TextEncoder();
 
-export function getProjectMessageStreamKey(
-  projectId: string,
-  agentMessageId: string,
-) {
-  return `${projectId}:${agentMessageId}`;
+export const RUN_HEARTBEAT_MS = 15000;
+
+/**
+ * A run hub fans a single run's event stream out to multiple SSE subscribers
+ * (multi-tab, reload). Events are buffered for the full run lifetime so a
+ * subscriber joining mid-run replays everything from the start.
+ *
+ * The orchestrator loop is driven by exactly one producer; `claimProducer`
+ * returns true only to the first caller. Subsequent subscribers attach as
+ * read-only listeners. Subscriber disconnect does NOT abort the run — only an
+ * explicit stop does (see abortRun).
+ */
+type RunHub = {
+  runId: string;
+  subscribers: Set<(event: RunStreamEvent) => void>;
+  buffer: RunStreamEvent[];
+  abortController: AbortController;
+  producerClaimed: boolean;
+  terminal: boolean;
+};
+
+const runHubs = new Map<string, RunHub>();
+
+/**
+ * Runs whose producer is expected to start in THIS process (created by
+ * createRun/retryRun). Used to distinguish a fresh run (drive it) from a run
+ * left "streaming" in the DB by a since-restarted process (stale → cleanup).
+ */
+const reservedRuns = new Set<string>();
+
+function runKey(projectId: string, runId: string) {
+  return `${projectId}:${runId}`;
 }
 
-export function getProjectMessageStreamUrl(
-  projectId: string,
-  agentMessageId: string,
-  options?: {
-    reasoningEffort?: string;
-    planMode?: boolean;
-  },
-) {
-  const params = new URLSearchParams();
-  if (options?.reasoningEffort) params.set("reasoningEffort", options.reasoningEffort);
-  if (options?.planMode) params.set("planMode", "true");
-  const query = params.toString();
-  return `/api/projects/${encodeURIComponent(projectId)}/messages/${encodeURIComponent(agentMessageId)}/stream${query ? `?${query}` : ""}`;
+export function reserveRunProducer(projectId: string, runId: string) {
+  reservedRuns.add(runKey(projectId, runId));
 }
 
-export function registerProjectMessageStream(
-  projectId: string,
-  agentMessageId: string,
-  controller: AbortController,
-) {
-  const key = getProjectMessageStreamKey(projectId, agentMessageId);
-  const existing = activeProjectMessageStreams.get(key);
-  existing?.abort();
-  activeProjectMessageStreams.set(key, controller);
-  return key;
+export function consumeRunReservation(projectId: string, runId: string): boolean {
+  const key = runKey(projectId, runId);
+  const had = reservedRuns.has(key);
+  reservedRuns.delete(key);
+  return had;
 }
 
-export function releaseProjectMessageStream(
-  projectId: string,
-  agentMessageId: string,
-  controller?: AbortController,
-) {
-  const key = getProjectMessageStreamKey(projectId, agentMessageId);
-  if (!controller || activeProjectMessageStreams.get(key) === controller) {
-    activeProjectMessageStreams.delete(key);
+export function getOrCreateRunHub(projectId: string, runId: string): RunHub {
+  const key = runKey(projectId, runId);
+  let hub = runHubs.get(key);
+  if (!hub) {
+    hub = {
+      runId,
+      subscribers: new Set(),
+      buffer: [],
+      abortController: new AbortController(),
+      producerClaimed: false,
+      terminal: false,
+    };
+    runHubs.set(key, hub);
+  }
+  return hub;
+}
+
+export function getRunHub(projectId: string, runId: string): RunHub | undefined {
+  return runHubs.get(runKey(projectId, runId));
+}
+
+/**
+ * Returns true only for the first caller — that caller owns the orchestrator loop.
+ */
+export function claimRunProducer(projectId: string, runId: string): boolean {
+  const hub = getOrCreateRunHub(projectId, runId);
+  if (hub.producerClaimed) return false;
+  hub.producerClaimed = true;
+  return true;
+}
+
+export function getRunAbortSignal(projectId: string, runId: string): AbortSignal {
+  return getOrCreateRunHub(projectId, runId).abortController.signal;
+}
+
+export function publishRunEvent(projectId: string, runId: string, event: RunStreamEvent) {
+  const hub = getOrCreateRunHub(projectId, runId);
+  hub.buffer.push(event);
+  for (const subscriber of hub.subscribers) {
+    try {
+      subscriber(event);
+    } catch {
+      // a broken subscriber must not break fan-out to the others
+    }
+  }
+  if (event.type === "run.completed" || event.type === "run.failed" || event.type === "run.stopped") {
+    hub.terminal = true;
   }
 }
 
-export function abortProjectMessageStream(
+/**
+ * Subscribe to a run. Immediately replays the buffered events (so late joiners
+ * see the whole run), then receives live events. Returns an unsubscribe fn.
+ */
+export function subscribeRun(
   projectId: string,
-  agentMessageId: string,
-) {
-  const key = getProjectMessageStreamKey(projectId, agentMessageId);
-  const controller = activeProjectMessageStreams.get(key);
-  if (!controller) return false;
-  controller.abort();
-  activeProjectMessageStreams.delete(key);
+  runId: string,
+  enqueue: (event: RunStreamEvent) => void,
+): () => void {
+  const hub = getOrCreateRunHub(projectId, runId);
+  for (const event of hub.buffer) {
+    enqueue(event);
+  }
+  hub.subscribers.add(enqueue);
+  return () => {
+    hub.subscribers.delete(enqueue);
+  };
+}
+
+/**
+ * Explicit stop. Aborts the orchestrator loop for this run. Idempotent — calling
+ * on an already-terminal/absent run is a no-op.
+ */
+export function abortRun(projectId: string, runId: string): boolean {
+  const hub = runHubs.get(runKey(projectId, runId));
+  if (!hub) return false;
+  hub.abortController.abort();
   return true;
+}
+
+export function isRunActive(projectId: string, runId: string): boolean {
+  const hub = runHubs.get(runKey(projectId, runId));
+  return Boolean(hub) && !hub!.terminal;
+}
+
+/**
+ * Drop the hub once the run is terminal and all subscribers have left. Called
+ * after a subscriber disconnects so memory is reclaimed for finished runs.
+ */
+export function disposeRunHubIfDone(projectId: string, runId: string) {
+  const key = runKey(projectId, runId);
+  const hub = runHubs.get(key);
+  if (hub && hub.terminal && hub.subscribers.size === 0) {
+    runHubs.delete(key);
+  }
+}
+
+// --- Runtime channel (project-level, multi-subscriber) -------------------
+
+type RuntimeHub = {
+  projectId: string;
+  subscribers: Set<(event: RuntimeStreamEvent) => void>;
+  snapshot: RuntimeStreamEvent | null;
+};
+
+const runtimeHubs = new Map<string, RuntimeHub>();
+
+function getOrCreateRuntimeHub(projectId: string): RuntimeHub {
+  let hub = runtimeHubs.get(projectId);
+  if (!hub) {
+    hub = { projectId, subscribers: new Set(), snapshot: null };
+    runtimeHubs.set(projectId, hub);
+  }
+  return hub;
+}
+
+export function publishRuntimeEvent(projectId: string, event: RuntimeStreamEvent) {
+  const hub = getOrCreateRuntimeHub(projectId);
+  if (event.type !== "heartbeat") hub.snapshot = event;
+  for (const subscriber of hub.subscribers) {
+    try {
+      subscriber(event);
+    } catch {
+      // ignore broken subscriber
+    }
+  }
+}
+
+export function subscribeRuntime(
+  projectId: string,
+  enqueue: (event: RuntimeStreamEvent) => void,
+): () => void {
+  const hub = getOrCreateRuntimeHub(projectId);
+  if (hub.snapshot) enqueue(hub.snapshot);
+  hub.subscribers.add(enqueue);
+  return () => {
+    hub.subscribers.delete(enqueue);
+    if (hub.subscribers.size === 0 && !hub.snapshot) {
+      runtimeHubs.delete(projectId);
+    }
+  };
+}
+
+// --- SSE serialization helpers -------------------------------------------
+
+export function getProjectRunStreamUrl(projectId: string, runId: string) {
+  return `/api/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/stream`;
+}
+
+export function getProjectRuntimeStreamUrl(projectId: string) {
+  return `/api/projects/${encodeURIComponent(projectId)}/runtime/stream`;
 }
 
 export function createMessageStreamHeaders() {
@@ -71,59 +210,11 @@ export function createMessageStreamHeaders() {
   };
 }
 
-export function serializeMessageStreamEvent(event: MessageStreamEvent) {
+export function serializeRunStreamEvent(event: RunStreamEvent | RuntimeStreamEvent) {
   const safeEvent = redactJson(event);
   return `event: ${safeEvent.type}\ndata: ${JSON.stringify(safeEvent)}\n\n`;
 }
 
-export function encodeMessageStreamEvent(event: MessageStreamEvent) {
-  return textEncoder.encode(serializeMessageStreamEvent(event));
-}
-
-export function toStreamFailureEvent(args: {
-  messageId: string;
-  code: StreamErrorCode;
-  message: string;
-  providerResponseId?: string;
-  projectProcessingStatus?: ProjectProcessingStatus;
-}): MessageStreamEvent {
-  return {
-    type: "message.failed",
-    messageId: args.messageId,
-    content: "",
-    processingStatus: "failed",
-    projectProcessingStatus: args.projectProcessingStatus ?? "idle",
-    providerResponseId: args.providerResponseId,
-    error: {
-      code: args.code,
-      message: redactSecrets(args.message),
-    },
-  };
-}
-
-export function buildSampleDataClarificationMessage(reason: string) {
-  return [
-    "I need clarification before changing store/product sample data.",
-    reason,
-    "Please provide the target product id or exact value to update. Store, Product, and ProductsList structures must stay unchanged.",
-  ].join(" ");
-}
-
-export function toSampleDataClarificationEvent(args: {
-  messageId: string;
-  reason: string;
-  providerResponseId?: string;
-}): MessageStreamEvent {
-  return {
-    type: "message.completed",
-    messageId: args.messageId,
-    content: buildSampleDataClarificationMessage(args.reason),
-    processingStatus: "completed",
-    projectProcessingStatus: "idle",
-    providerResponseId: args.providerResponseId,
-  };
-}
-
-export function shouldPreserveProjectMessageStream(error: { recoverable?: boolean; code?: string }) {
-  return error.recoverable === true || error.code === "HUMAN_REVIEW_REQUIRED";
+export function encodeRunStreamEvent(event: RunStreamEvent | RuntimeStreamEvent) {
+  return textEncoder.encode(serializeRunStreamEvent(event));
 }

@@ -1,6 +1,14 @@
-import type { AgentStreamEvent, ValidationResult } from "../agent/agent-events";
+import type {
+  Message,
+  RunStreamEvent,
+  RuntimeStreamEvent,
+  RunUIState,
+  SkeletonPhase,
+  StreamError,
+} from "@/shared/project-types";
+import type { DevRuntimeEvent } from "../runtime/runtime-events";
 
-export type RuntimeUIState = {
+export type DevRuntimeUIState = {
   status: "idle" | "installing" | "installed" | "starting" | "running" | "stopped" | "error" | "fixing";
   previewUrl: string | null;
   previewPort: number | null;
@@ -11,35 +19,13 @@ export type RuntimeUIState = {
   durationMs: number | null;
 };
 
-export type AgentEventState = {
-  events: AgentStreamEvent[];
-  assistantMessage: string;
-  thinking?: {
-    started: boolean;
-    message?: string;
-    projectStatus?: string;
-    hasInitializedSource?: boolean;
-    completed?: Extract<AgentStreamEvent, { type: "thinking_completed" }>;
-  };
-  clarification?: Extract<AgentStreamEvent, { type: "clarification_required" }>;
-  changedFiles: string[];
-  validation?: Pick<ValidationResult, "ok" | "summary" | "errors">;
-  codeTool?: {
-    active: boolean;
-    taskTitle?: string;
-    lastTool?: string;
-    repairAttempt?: number;
-    humanReviewReason?: string;
-    validationStatus?: "passed" | "failed" | "skipped";
-  };
-  done: boolean;
-  doneSummary?: string;
-  previewUrl?: string;
-  error?: Extract<AgentStreamEvent, { type: "error" }>;
-  runtime: RuntimeUIState;
+export type ChatUIState = {
+  messages: Message[];
+  activeRun: RunUIState | null;
+  runtime: DevRuntimeUIState;
 };
 
-const INITIAL_RUNTIME: RuntimeUIState = {
+const INITIAL_RUNTIME: DevRuntimeUIState = {
   status: "idle",
   previewUrl: null,
   previewPort: null,
@@ -50,76 +36,151 @@ const INITIAL_RUNTIME: RuntimeUIState = {
   durationMs: null,
 };
 
-export function createInitialAgentEventState(): AgentEventState {
-  return { events: [], assistantMessage: "", changedFiles: [], done: false, runtime: { ...INITIAL_RUNTIME } };
+export function createInitialChatState(messages: Message[] = []): ChatUIState {
+  return { messages, activeRun: null, runtime: { ...INITIAL_RUNTIME } };
 }
 
-export function agentEventReducer(state: AgentEventState, event: AgentStreamEvent): AgentEventState {
-  const next: AgentEventState = { ...state, events: [...state.events, event] };
-  if (event.type === "assistant_message_delta") next.assistantMessage += event.delta;
-  if (event.type === "thinking_started") next.thinking = { ...next.thinking, started: true, message: event.message };
-  if (event.type === "thinking_context_loaded") {
-    next.thinking = {
-      ...next.thinking,
-      started: next.thinking?.started ?? false,
-      projectStatus: event.projectStatus,
-      hasInitializedSource: event.hasInitializedSource,
-    };
+export const CLIENT_SKELETON_LABELS: Record<SkeletonPhase, string> = {
+  starting: "Processing your request",
+  understanding: "Understanding your request",
+  planning: "Planning your storefront",
+  editing: "Updating your storefront",
+  installing: "Installing packages",
+  starting_preview: "Starting your preview",
+  validating: "Checking your storefront",
+  repairing: "Fixing an issue",
+  responding: "Writing a response",
+};
+
+function upsertMessage(messages: Message[], message: Message): Message[] {
+  const idx = messages.findIndex((m) => m.id === message.id);
+  if (idx >= 0) {
+    const next = [...messages];
+    next[idx] = message;
+    return next;
   }
-  if (event.type === "thinking_completed") {
-    next.thinking = { ...next.thinking, started: next.thinking?.started ?? false, completed: event };
-  }
-  if (event.type === "clarification_required") next.clarification = event;
-  if (event.type === "file_changed") next.changedFiles = [...new Set([...next.changedFiles, event.path])];
-  if (event.type === "validation_finished") next.validation = { ok: event.ok ?? event.status === "passed", summary: event.summary, errors: event.errors ?? [] };
-  if (event.type === "code_tool_loop_started") next.codeTool = { ...next.codeTool, active: true, taskTitle: event.taskTitle };
-  if (event.type === "tool_call_requested") next.codeTool = { ...next.codeTool, active: true, lastTool: event.toolName };
-  if (event.type === "patch_applied") next.changedFiles = [...new Set([...next.changedFiles, ...event.changedFiles])];
-  if (event.type === "repair_started") next.codeTool = { ...next.codeTool, active: true, repairAttempt: event.attempt };
-  if (event.type === "human_review_required") {
-    next.done = true;
-    next.codeTool = { ...next.codeTool, active: false, humanReviewReason: event.reason };
-    next.changedFiles = [...new Set([...next.changedFiles, ...event.changedFiles])];
-  }
-  if (event.type === "code_tool_loop_completed") {
-    next.done = true;
-    next.doneSummary = event.summary;
-    next.codeTool = { ...next.codeTool, active: false, validationStatus: event.validationStatus };
-    next.changedFiles = [...new Set([...next.changedFiles, ...event.changedFiles])];
-  }
-  if (event.type === "done") {
-    next.done = true;
-    next.doneSummary = event.summary;
-    next.previewUrl = event.previewUrl;
-    next.changedFiles = [...new Set([...next.changedFiles, ...event.changedFiles])];
-  }
-  if (event.type === "error") next.error = event;
-  if (event.type === "dev_install_started") {
-    next.runtime = { ...next.runtime, status: "installing", error: null };
-  }
-  if (event.type === "dev_install_completed") {
-    next.runtime = { ...next.runtime, status: "installed", durationMs: event.durationMs };
-  }
-  if (event.type === "dev_install_failed") {
-    next.runtime = { ...next.runtime, status: "error", error: event.error };
-  }
-  if (event.type === "dev_starting") {
-    next.runtime = { ...next.runtime, status: "starting" };
-  }
-  if (event.type === "dev_ready") {
-    next.runtime = { ...next.runtime, status: "running", previewUrl: event.previewUrl, previewPort: event.port };
-  }
-  if (event.type === "dev_error") {
-    next.runtime = { ...next.runtime, status: "error", error: event.error, errorTier: event.tier };
-  }
-  if (event.type === "dev_fix_attempt") {
-    next.runtime = { ...next.runtime, status: "fixing", fixAttempt: event.attempt, error: event.error };
-  }
-  if (event.type === "dev_fix_applied") {
-    next.runtime = { ...next.runtime, fixChangedFiles: event.changedFiles };
-  }
-  if (event.type === "dev_fix_failed") {
-    next.runtime = { ...next.runtime, status: "error", error: event.reason };
-  }
+  return [...messages, message];
+}
+
+function patchMessage(
+  messages: Message[],
+  messageId: string,
+  patch: Partial<Message>,
+): Message[] {
+  const idx = messages.findIndex((m) => m.id === messageId);
+  if (idx < 0) return messages;
+  const next = [...messages];
+  next[idx] = { ...next[idx], ...patch };
   return next;
+}
+
+/** Reducer for the run stream channel. Terminal events clear activeRun immediately. */
+export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): ChatUIState {
+  switch (event.type) {
+    case "run.started":
+      return {
+        ...state,
+        activeRun: { runId: event.runId, status: "streaming", skeleton: null },
+      };
+
+    case "message.created": {
+      const message: Message = {
+        id: event.messageId,
+        projectId: "",
+        role: "agent",
+        kind: event.kind,
+        runId: event.runId,
+        content: event.content,
+        status: "completed",
+        processingStatus: event.processingStatus,
+        createdAt: event.createdAt,
+      };
+      return { ...state, messages: upsertMessage(state.messages, message) };
+    }
+
+    case "message.delta": {
+      const existing = state.messages.find((m) => m.id === event.messageId);
+      const content = (existing?.content ?? "") + event.delta;
+      return {
+        ...state,
+        messages: patchMessage(state.messages, event.messageId, {
+          content,
+          processingStatus: "streaming",
+        }),
+      };
+    }
+
+    case "message.completed":
+      return {
+        ...state,
+        messages: patchMessage(state.messages, event.messageId, {
+          content: event.content,
+          processingStatus: "completed",
+        }),
+      };
+
+    case "skeleton.update":
+      if (!state.activeRun) return state;
+      return {
+        ...state,
+        activeRun: {
+          ...state.activeRun,
+          skeleton: { phase: event.phase, label: event.label, detail: event.detail },
+        },
+      };
+
+    case "run.completed":
+    case "run.stopped":
+      return { ...state, activeRun: null };
+
+    case "run.failed":
+      return finalizeFailure(state, event.error);
+
+    case "heartbeat":
+      return state;
+
+    default:
+      return state;
+  }
+}
+
+function finalizeFailure(state: ChatUIState, error: StreamError): ChatUIState {
+  // Surface the error on any still-streaming agent message, then clear the run.
+  const messages = state.messages.map((m) =>
+    m.processingStatus === "streaming"
+      ? { ...m, processingStatus: "failed" as const }
+      : m,
+  );
+  return { ...state, messages, activeRun: null };
+}
+
+/** Reducer for the project-level runtime channel (dev preview lifecycle). */
+export function runtimeStateReducer(
+  runtime: DevRuntimeUIState,
+  event: RuntimeStreamEvent,
+): DevRuntimeUIState {
+  if (event.type === "heartbeat") return runtime;
+  const dev = event as DevRuntimeEvent;
+  switch (dev.type) {
+    case "dev_install_started":
+      return { ...runtime, status: "installing", error: null };
+    case "dev_install_completed":
+      return { ...runtime, status: "installed", durationMs: dev.durationMs };
+    case "dev_install_failed":
+      return { ...runtime, status: "error", error: dev.error };
+    case "dev_starting":
+      return { ...runtime, status: "starting" };
+    case "dev_ready":
+      return { ...runtime, status: "running", previewUrl: dev.previewUrl, previewPort: dev.port };
+    case "dev_error":
+      return { ...runtime, status: "error", error: dev.error, errorTier: dev.tier };
+    case "dev_fix_attempt":
+      return { ...runtime, status: "fixing", fixAttempt: dev.attempt, error: dev.error };
+    case "dev_fix_applied":
+      return { ...runtime, fixChangedFiles: dev.changedFiles };
+    case "dev_fix_failed":
+      return { ...runtime, status: "error", error: dev.reason };
+    default:
+      return runtime;
+  }
 }

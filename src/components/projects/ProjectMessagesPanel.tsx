@@ -3,25 +3,54 @@ import { ArrowDown } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import { ErrorState } from "../common/ErrorState";
 import { LoadingState } from "../common/LoadingState";
-import type { Message } from "@/shared/project-types";
+import type { Message, SkeletonState } from "@/shared/project-types";
 import { MessageBubble } from "./MessageBubble";
+import { SkeletonMessageBubble } from "./SkeletonMessageBubble";
 
 type ProjectMessagesPanelProps = {
   messages: Message[];
+  skeleton?: SkeletonState | null;
   loading?: boolean;
   loadingOlder?: boolean;
   hasMore?: boolean;
   error?: string;
   onLoadOlder?: () => void;
-  onRetryMessage?: (messageId: string) => void;
+  onRetryMessage?: (message: Message) => void;
 };
 
 const STICK_TO_BOTTOM_THRESHOLD = 72;
 const MIN_MESSAGE_HEIGHT_FALLBACK = 56;
 const JUMP_TO_LATEST_MESSAGE_COUNT = 10;
 
+type RenderItem =
+  | { type: "single"; message: Message }
+  | { type: "run-group"; runId: string; messages: Message[] };
+
+/**
+ * Groups consecutive agent messages that share a runId into a single
+ * border-left wrapper. User messages always render standalone. Order is
+ * preserved by createdAt (already sorted by caller).
+ */
+export function buildRenderItems(messages: Message[]): RenderItem[] {
+  const items: RenderItem[] = [];
+  for (const message of messages) {
+    if (message.role !== "agent" || !message.runId) {
+      items.push({ type: "single", message });
+      continue;
+    }
+    const last = items[items.length - 1];
+    if (last && last.type === "run-group" && last.runId === message.runId) {
+      last.messages.push(message);
+    } else {
+      items.push({ type: "run-group", runId: message.runId, messages: [message] });
+    }
+  }
+  return items;
+}
+
 export function ProjectMessagesPanel({
   messages,
+  skeleton,
   loading = false,
   loadingOlder = false,
   hasMore = false,
@@ -39,6 +68,7 @@ export function ProjectMessagesPanel({
       ),
     [messages],
   );
+  const renderItems = useMemo(() => buildRenderItems(orderedMessages), [orderedMessages]);
   const stickToBottomRef = useRef(true);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
@@ -120,7 +150,7 @@ export function ProjectMessagesPanel({
 
   if (loading) return <LoadingState label="Loading chat..." />;
   if (error) return <ErrorState title="Unable to load chat" message={error} />;
-  if (messages.length === 0) {
+  if (messages.length === 0 && !skeleton) {
     return (
       <EmptyState
         title="No messages yet"
@@ -153,11 +183,30 @@ export function ProjectMessagesPanel({
           </button>
         ) : null}
         <div ref={messageListRef} className="flex flex-col gap-sm">
-          {orderedMessages.map((message) => (
-            <div key={message.id} data-message-bubble="true">
-              <MessageBubble message={message} onRetry={onRetryMessage} />
+          {renderItems.map((item) =>
+            item.type === "single" ? (
+              <div key={item.message.id} data-message-bubble="true">
+                <MessageBubble message={item.message} onRetry={onRetryMessage} />
+              </div>
+            ) : (
+              <div
+                key={item.runId}
+                data-run-group={item.runId}
+                className="flex flex-col gap-sm border-l border-[var(--app-border-soft)] pl-sm"
+              >
+                {item.messages.map((message) => (
+                  <div key={message.id} data-message-bubble="true">
+                    <MessageBubble message={message} onRetry={onRetryMessage} />
+                  </div>
+                ))}
+              </div>
+            ),
+          )}
+          {skeleton ? (
+            <div data-skeleton-bubble="true">
+              <SkeletonMessageBubble skeleton={skeleton} />
             </div>
-          ))}
+          ) : null}
         </div>
       </section>
 

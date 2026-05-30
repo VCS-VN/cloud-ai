@@ -1,15 +1,14 @@
-import { count, desc, and, eq, lt, or } from "drizzle-orm";
+import { count, desc, asc, and, eq, lt, or } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@/db/schema";
-import { agentMessageChunks, projectMessages } from "@/db/schema";
+import { projectMessages } from "@/db/schema";
 import type {
-  AgentMessageChunk,
+  AgentMessageKind,
   Message,
 } from "@/shared/project-types";
 import type { ProjectMessageRepository } from "@/shared/project-types";
 
 type ProjectMessageRow = typeof projectMessages.$inferSelect;
-type AgentMessageChunkRow = typeof agentMessageChunks.$inferSelect;
 
 type ProjectMessageDatabase = PostgresJsDatabase<typeof schema>;
 
@@ -24,6 +23,8 @@ function toMessage(row: ProjectMessageRow): Message {
     processingStatus:
       (row.processingStatus as Message["processingStatus"]) ?? "completed",
     parentMessageId: row.parentMessageId ?? undefined,
+    runId: row.runId ?? undefined,
+    kind: (row.kind as AgentMessageKind | null) ?? undefined,
     provider: row.provider ?? undefined,
     providerResponseId: row.providerResponseId ?? undefined,
     errorMessage: row.errorMessage ?? undefined,
@@ -31,19 +32,6 @@ function toMessage(row: ProjectMessageRow): Message {
     completedAt: row.completedAt?.toISOString(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt?.toISOString(),
-  };
-}
-
-function toAgentMessageChunk(row: AgentMessageChunkRow): AgentMessageChunk {
-  return {
-    id: row.id,
-    projectId: row.projectId,
-    messageId: row.messageId,
-    userId: row.userId ?? undefined,
-    sequence: row.sequence,
-    content: row.content,
-    providerEventType: row.providerEventType ?? undefined,
-    createdAt: row.createdAt.toISOString(),
   };
 }
 
@@ -66,6 +54,8 @@ export class PgProjectMessageRepository implements ProjectMessageRepository {
         status: message.status === 0 ? 0 : 1,
         processingStatus: message.processingStatus,
         parentMessageId: message.parentMessageId,
+        runId: message.runId,
+        kind: message.kind,
         provider: message.provider,
         providerResponseId: message.providerResponseId,
         errorMessage: message.errorMessage,
@@ -111,6 +101,8 @@ export class PgProjectMessageRepository implements ProjectMessageRepository {
         | "content"
         | "processingStatus"
         | "parentMessageId"
+        | "runId"
+        | "kind"
         | "provider"
         | "providerResponseId"
         | "errorMessage"
@@ -125,6 +117,8 @@ export class PgProjectMessageRepository implements ProjectMessageRepository {
       processingStatus: updates.processingStatus,
       parentMessageId:
         "parentMessageId" in updates ? updates.parentMessageId ?? null : undefined,
+      runId: "runId" in updates ? updates.runId ?? null : undefined,
+      kind: "kind" in updates ? updates.kind ?? null : undefined,
       provider: "provider" in updates ? updates.provider ?? null : undefined,
       providerResponseId:
         "providerResponseId" in updates
@@ -250,60 +244,27 @@ export class PgProjectMessageRepository implements ProjectMessageRepository {
     return row ? toMessage(row) : undefined;
   }
 
-  async saveAgentMessageChunk(
-    chunk: AgentMessageChunk,
+  async listMessagesByRunId(
+    runId: string,
     userId?: string,
-  ): Promise<AgentMessageChunk> {
-    const [row] = await this.db
-      .insert(agentMessageChunks)
-      .values({
-        id: chunk.id,
-        projectId: chunk.projectId,
-        messageId: chunk.messageId,
-        userId: userId ?? chunk.userId,
-        sequence: chunk.sequence,
-        content: chunk.content,
-        providerEventType: chunk.providerEventType,
-        createdAt: new Date(chunk.createdAt),
-      })
-      .onConflictDoNothing({
-        target: [agentMessageChunks.messageId, agentMessageChunks.sequence],
-      })
-      .returning();
-
-    if (row) return toAgentMessageChunk(row);
-
-    const [existingRow] = await this.db
-      .select()
-      .from(agentMessageChunks)
-      .where(
-        and(
-          eq(agentMessageChunks.messageId, chunk.messageId),
-          eq(agentMessageChunks.sequence, chunk.sequence),
-        ),
-      );
-
-    if (!existingRow) throw new Error("Agent message chunk conflict could not be resolved.");
-    return toAgentMessageChunk(existingRow);
-  }
-
-  async listAgentMessageChunks(
-    messageId: string,
-    userId?: string,
-  ): Promise<AgentMessageChunk[]> {
+  ): Promise<Message[]> {
     const filter = userId
       ? and(
-          eq(agentMessageChunks.messageId, messageId),
-          eq(agentMessageChunks.userId, userId),
+          eq(projectMessages.runId, runId),
+          eq(projectMessages.userId, userId),
+          eq(projectMessages.status, 1),
         )
-      : eq(agentMessageChunks.messageId, messageId);
+      : and(
+          eq(projectMessages.runId, runId),
+          eq(projectMessages.status, 1),
+        );
 
     const rows = await this.db
       .select()
-      .from(agentMessageChunks)
+      .from(projectMessages)
       .where(filter)
-      .orderBy(agentMessageChunks.sequence);
+      .orderBy(asc(projectMessages.createdAt), asc(projectMessages.id));
 
-    return rows.map(toAgentMessageChunk);
+    return rows.map(toMessage);
   }
 }

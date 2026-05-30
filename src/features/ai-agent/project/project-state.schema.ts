@@ -192,20 +192,20 @@ export type ProjectToolExecutionLog = {
 };
 
 export type AgentRunStatus =
-  | "queued"
-  | "running"
-  | "waiting_for_clarification"
+  | "streaming"
   | "completed"
   | "failed"
-  | "cancelled";
+  | "stopped";
 
 export type AgentRun = {
   id: string;
   projectId: string;
   userId?: string;
-  messageId?: string;
   parentMessageId?: string;
+  retryOfRunId?: string;
   userPrompt: string;
+  reasoningEffort?: "low" | "medium" | "high" | "xhigh";
+  planMode: boolean;
   intent?: BuilderIntent;
   plan?: ChangePlan;
   status: AgentRunStatus;

@@ -16,7 +16,7 @@ export class ProjectRunService {
       id: run.id,
       projectId: run.projectId,
       userId: run.userId,
-      messageId: run.messageId,
+      retryOfRunId: run.retryOfRunId,
       userPrompt: run.userPrompt,
       intent: run.intent,
       plan: run.plan,

@@ -2,188 +2,116 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock3,
+  HelpCircle,
   Loader2,
   RefreshCw,
-  Square,
+  ShieldAlert,
 } from "lucide-react";
 import { dumprify } from "@/lib/dumprify";
-import type { Message } from "@/shared/project-types";
+import type { AgentMessageKind, Message } from "@/shared/project-types";
+import { PlanMessageContent } from "./PlanMessageContent";
 
 type MessageBubbleProps = {
   message: Message;
-  onRetry?: (messageId: string) => void;
+  onRetry?: (message: Message) => void;
 };
 
-function AgentMessageContent({ content }: { content: string }) {
+const MARKDOWN_CLASS =
+  "min-w-0 max-w-full break-words text-[12px] leading-4 text-current [overflow-wrap:anywhere] [&_code]:rounded-sm [&_code]:bg-black/10 [&_code]:px-xxs [&_code]:py-[1px] [&_code]:text-[11px] [&_h1]:my-xxs [&_h1]:text-[13px] [&_h1]:font-semibold [&_h2]:my-xxs [&_h2]:text-[12px] [&_h2]:font-semibold [&_h3]:my-xxs [&_h3]:text-[12px] [&_h3]:font-semibold [&_li]:my-xxs [&_p]:my-xxs [&_pre]:my-xs [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_pre]:rounded-md [&_pre]:bg-black/10 [&_pre]:p-xs [&_ul]:my-xs [&_ul]:pl-md";
+
+function MarkdownContent({ content }: { content: string }) {
   return (
-    <div
-      className="min-w-0 max-w-full break-words text-[12px] leading-4 text-current [overflow-wrap:anywhere] [&_code]:rounded-sm [&_code]:bg-black/10 [&_code]:px-xxs [&_code]:py-[1px] [&_code]:text-[11px] [&_h1]:my-xxs [&_h1]:text-[13px] [&_h1]:font-semibold [&_h2]:my-xxs [&_h2]:text-[12px] [&_h2]:font-semibold [&_h3]:my-xxs [&_h3]:text-[12px] [&_h3]:font-semibold [&_li]:my-xxs [&_p]:my-xxs [&_pre]:my-xs [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_pre]:rounded-md [&_pre]:bg-black/10 [&_pre]:p-xs [&_ul]:my-xs [&_ul]:pl-md"
-      dangerouslySetInnerHTML={{ __html: dumprify(content) }}
-    />
+    <div className={MARKDOWN_CLASS} dangerouslySetInnerHTML={{ __html: dumprify(content) }} />
   );
 }
 
-export function getAgentDisplayContent(
-  content: string,
-  status: Message["processingStatus"],
-) {
-  const fallback = getAgentFallbackContent(status);
+type KindMeta = {
+  badge: string;
+  icon: typeof HelpCircle;
+  tone: string;
+};
 
-  if (!content.trim()) return fallback;
+const KIND_META: Partial<Record<AgentMessageKind, KindMeta>> = {
+  clarification: {
+    badge: "Needs your input",
+    icon: HelpCircle,
+    tone: "border-[var(--app-border-strong)] bg-[var(--app-control)] text-[var(--app-panel-text)]",
+  },
+  error: {
+    badge: "Something went wrong",
+    icon: AlertCircle,
+    tone: "border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] text-[var(--app-danger-text)]",
+  },
+  review_required: {
+    badge: "Needs your review",
+    icon: ShieldAlert,
+    tone: "border-[var(--app-border-strong)] bg-[var(--color-block-cream)] text-[var(--app-text)]",
+  },
+};
 
-  const userFacingLines = content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(isUserFacingAgentLine);
-
-  if (userFacingLines.length === 0) return fallback;
-  return [...new Set(userFacingLines)].join("\n");
+function AgentBody({ message }: { message: Message }) {
+  if (message.kind === "plan") return <PlanMessageContent content={message.content} />;
+  return <MarkdownContent content={message.content} />;
 }
-
-function getAgentFallbackContent(status: Message["processingStatus"]) {
-  if (status === "pending" || status === "streaming") {
-    return "Understanding your request...";
-  }
-  if (status === "failed") return "Something went wrong. You can retry safely.";
-  if (status === "stopped") {
-    return "Processing stopped. You can continue with a new prompt.";
-  }
-  return "Done. Your storefront is ready.";
-}
-
-export function isUserFacingAgentLine(line: string) {
-  if (!line) return false;
-  if (isTechnicalAgentLine(line)) return false;
-  if (line === "### Progress") return true;
-
-  const progressMatch = line.match(/^- (✓|…|✕) (.+)$/);
-  if (progressMatch) return isFriendlyAgentLabel(progressMatch[2]);
-
-  return /^(Analyzing|Understood:|Task identified|Clarification needed:|Initializing project|Creating page|Updating page|Inspecting project|Done\.|Could not complete|Processing stopped)/.test(
-    line,
-  );
-}
-
-function isFriendlyAgentLabel(value: string) {
-  const label = value.split(" — ")[0]?.trim();
-  return FRIENDLY_AGENT_LABELS.has(label);
-}
-
-function isTechnicalAgentLine(line: string) {
-  return (
-    /\b\d+\s+file\b/i.test(line) ||
-    /(?:^|[\s`'"])(?:\/[\w.-]+|\.{0,2}\/[\w.-]+|[\w.-]+\/[\w./-]+)(?:[`\s'"]|$)/.test(line) ||
-    /\b[A-Z][A-Z0-9_]{2,}\b/.test(line) ||
-    /\b(?:tool|model|gpt-|claude|gemini|openai|anthropic|llm|api key)\b/i.test(line)
-  );
-}
-
-const FRIENDLY_AGENT_LABELS = new Set([
-  "Understanding your request",
-  "Planning storefront",
-  "Preparing design",
-  "Creating storefront files",
-  "Checking setup",
-  "Saving progress",
-  "Installing packages",
-  "Starting preview",
-  "Preview ready",
-  "Done",
-  "Something went wrong",
-]);
 
 export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
   const isUser = message.role === "user";
-  const label = isUser ? "You" : "Agent";
-  const isFailed = message.processingStatus === "failed";
-  const isPending = message.processingStatus === "pending";
+
+  if (isUser) {
+    return (
+      <article className="flex min-h-0 justify-end">
+        <div className="builder-truncate-safe min-w-0 max-w-[min(420px,92%)] overflow-hidden rounded-md border border-[var(--app-border-strong)] bg-[var(--app-selected-bg)] px-sm py-xs text-[var(--app-selected-text)]">
+          <div className="mb-xs flex items-center gap-xxs text-[11px] uppercase tracking-[0.08em] opacity-[0.62]">
+            <Clock3 aria-hidden="true" size={12} />
+            You
+          </div>
+          <p className="m-0 whitespace-pre-wrap break-words text-[12px] leading-4 [overflow-wrap:anywhere]">
+            {message.content}
+          </p>
+        </div>
+      </article>
+    );
+  }
+
+  const meta = message.kind ? KIND_META[message.kind] : undefined;
   const isStreaming = message.processingStatus === "streaming";
-  const isStopped = message.processingStatus === "stopped";
-  const canRetry = isFailed && !message.id.startsWith("client-") && !!onRetry;
-  const statusLabel = isPending
-    ? "Queued"
-    : isStreaming
-      ? "Streaming"
-      : isStopped
-        ? "Stopped"
-        : isFailed
-          ? "Failed"
-          : "Ready";
-  const content = isUser
-    ? message.content
-    : getAgentDisplayContent(message.content, message.processingStatus);
+  const isFailed = message.processingStatus === "failed" || message.kind === "error";
+  const canRetry = message.kind === "error" && !!onRetry;
+
+  const tone =
+    meta?.tone ??
+    "border-[var(--app-border)] bg-[var(--app-panel-bg)] text-[var(--app-panel-text)]";
+  const HeaderIcon = meta?.icon ?? (isStreaming ? Loader2 : CheckCircle2);
+  const headerLabel = meta?.badge ?? "Agent";
 
   return (
-    <article
-      className={`flex min-h-0 ${isUser ? "justify-end" : "justify-start"}`}
-    >
+    <article className="flex min-h-0 justify-start">
       <div
-        className={`builder-truncate-safe min-w-0 max-w-[min(420px,92%)] overflow-hidden rounded-md border px-sm py-xs transition-all duration-200 ${
-          isUser
-            ? "border-[var(--app-border-strong)] bg-[var(--app-selected-bg)] text-[var(--app-selected-text)]"
-            : isFailed
-              ? "border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] text-[var(--app-danger-text)]"
-              : isStopped
-                ? "border-[var(--app-border-strong)] bg-[var(--color-block-cream)] text-[var(--app-text)]"
-                : "border-[var(--app-border)] bg-[var(--app-panel-bg)] text-[var(--app-panel-text)]"
-        } ${isPending ? "opacity-70" : "opacity-100"} ${isStreaming ? "shadow-[0_0_0_1px_var(--app-border-strong)]" : ""}`}
+        className={`builder-truncate-safe min-w-0 max-w-[min(420px,92%)] overflow-hidden rounded-md border px-sm py-xs transition-all duration-200 ${tone} ${
+          isStreaming ? "shadow-[0_0_0_1px_var(--app-border-strong)]" : ""
+        }`}
       >
-        <div className="mb-xs flex items-center justify-between gap-sm text-[11px] uppercase tracking-[0.08em] text-current opacity-[0.62] [&_svg]:text-current">
-          <span className="inline-flex items-center gap-xxs">
-            {isUser ? (
-              <Clock3 aria-hidden="true" size={12} />
-            ) : isFailed ? (
-              <AlertCircle aria-hidden="true" size={12} />
-            ) : isStreaming ? (
-              <Loader2
-                aria-hidden="true"
-                size={12}
-                className="animate-spin text-[var(--app-icon-selected)]"
-              />
-            ) : isPending ? (
-              <Clock3 aria-hidden="true" size={12} />
-            ) : isStopped ? (
-              <Square aria-hidden="true" size={11} />
-            ) : (
-              <CheckCircle2 aria-hidden="true" size={12} />
-            )}
-            {label}
-          </span>
-          <span className="flex items-center gap-xxs">
-            {isPending ? (
-              <RefreshCw
-                aria-hidden="true"
-                size={12}
-                className="animate-spin"
-              />
-            ) : null}
-            {statusLabel}
-          </span>
+        <div className="mb-xs flex items-center gap-xxs text-[11px] uppercase tracking-[0.08em] opacity-[0.62] [&_svg]:text-current">
+          <HeaderIcon
+            aria-hidden="true"
+            size={12}
+            className={isStreaming && !meta ? "animate-spin text-[var(--app-icon-selected)]" : ""}
+          />
+          {headerLabel}
         </div>
-        {isUser ? (
-          <p className="m-0 whitespace-pre-wrap break-words text-[12px] leading-4 [overflow-wrap:anywhere]">
-            {content}
-          </p>
-        ) : (
-          <AgentMessageContent content={content} />
-        )}
+
+        <AgentBody message={message} />
 
         {canRetry ? (
           <div className="mt-sm flex justify-end">
             <button
               type="button"
-              onClick={() => onRetry(message.id)}
+              onClick={() => onRetry?.(message)}
               className="inline-flex items-center gap-xxs rounded-pill border border-[var(--app-border)] bg-[var(--app-panel-bg)] px-sm py-xxs text-[11px] font-[520] text-current outline-none transition-colors hover:border-[var(--app-border-strong)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
             >
               <RefreshCw aria-hidden="true" size={12} />
               Retry
             </button>
-          </div>
-        ) : null}
-
-        {!isUser && !isFailed && !isPending && !isStreaming && isStopped ? (
-          <div className="mt-sm rounded-md border border-[var(--app-border)] bg-[var(--app-panel-bg)] p-xs text-[12px] leading-4 text-[var(--app-muted-text)]">
-            Processing stopped. You can continue with a new prompt.
           </div>
         ) : null}
       </div>
