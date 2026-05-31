@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Clock3,
   HelpCircle,
@@ -75,14 +76,25 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
 
   const meta = message.kind ? KIND_META[message.kind] : undefined;
   const isStreaming = message.processingStatus === "streaming";
-  const isFailed = message.processingStatus === "failed" || message.kind === "error";
-  const canRetry = message.kind === "error" && !!onRetry;
+  const isFailed = message.processingStatus === "failed";
+  // An answer that failed mid-stream keeps its partial text — show it as
+  // "interrupted" (softer than a hard error, since the agent did produce work).
+  const isInterruptedAnswer = message.kind === "answer" && isFailed;
+  // Any failed agent message can be retried (error milestone or interrupted answer).
+  const canRetry = (message.kind === "error" || isFailed) && !!onRetry;
+
+  const interruptedMeta: KindMeta = {
+    badge: "Bị gián đoạn",
+    icon: AlertTriangle,
+    tone: "border-[var(--app-border-strong)] bg-[var(--color-block-cream)] text-[var(--app-text)]",
+  };
+  const activeMeta = isInterruptedAnswer ? interruptedMeta : meta;
 
   const tone =
-    meta?.tone ??
+    activeMeta?.tone ??
     "border-[var(--app-border)] bg-[var(--app-panel-bg)] text-[var(--app-panel-text)]";
-  const HeaderIcon = meta?.icon ?? (isStreaming ? Loader2 : CheckCircle2);
-  const headerLabel = meta?.badge ?? "Agent";
+  const HeaderIcon = activeMeta?.icon ?? (isStreaming ? Loader2 : CheckCircle2);
+  const headerLabel = activeMeta?.badge ?? "Agent";
 
   return (
     <article className="flex min-h-0 justify-start">
@@ -95,7 +107,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
           <HeaderIcon
             aria-hidden="true"
             size={12}
-            className={isStreaming && !meta ? "animate-spin text-[var(--app-icon-selected)]" : ""}
+            className={isStreaming && !activeMeta ? "animate-spin text-[var(--app-icon-selected)]" : ""}
           />
           {headerLabel}
         </div>

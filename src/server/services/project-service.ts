@@ -10,6 +10,7 @@ import {
 import type { RuntimeService } from "@/features/ai-agent/runtime/runtime-service.server";
 import type { RuntimeOrchestrator } from "@/features/ai-agent/runtime/runtime-orchestrator.server";
 import type { ProjectRunStore } from "@/features/ai-agent/project/project-run-store.server";
+import { reserveRunProducer } from "@/server/functions/project-message-stream";
 import type {
   Project,
   ProjectFileNode,
@@ -149,6 +150,8 @@ export class ProjectService {
           status: "streaming",
         })
       : undefined;
+
+    if (agentRun) reserveRunProducer(project.id, agentRun.id);
 
     const nextProject = await this.projectRepository.updateProjectProcessingState(
       project.id,

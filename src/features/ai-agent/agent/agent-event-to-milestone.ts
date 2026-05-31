@@ -1,7 +1,7 @@
 import type { AgentStreamEvent } from "./agent-events";
 import type { ChangePlan } from "../project/project-state.schema";
 import type { AgentMessageKind } from "@/shared/project-types";
-import { sanitizeForUser, mapErrorCodeToFriendly } from "./user-facing-presenter";
+import { sanitizeForUser } from "./user-facing-presenter";
 
 const FILE_LIST_LIMIT = 10;
 
@@ -49,6 +49,8 @@ function buildPlanContent(plan: ChangePlan): string {
  *
  * Note: the `answer` milestone is NOT produced here — it is created lazily by
  * MessageService when the first `assistant_message_delta` arrives, then streamed.
+ * The `error` outcome is also handled in MessageService (persistErrorOutcome),
+ * which builds a friendly, language-aware message and never leaks raw details.
  */
 export function decideMilestone(event: AgentStreamEvent): MilestoneDecision | undefined {
   switch (event.type) {
@@ -71,15 +73,6 @@ export function decideMilestone(event: AgentStreamEvent): MilestoneDecision | un
         content: reason
           ? `I'd like your review before continuing: ${reason}`
           : "I'd like your review before continuing.",
-      };
-    }
-    case "error": {
-      const reason = sanitizeForUser(event.message);
-      const friendly = mapErrorCodeToFriendly(event.code);
-      const hint = "You can retry, or describe what you want differently.";
-      return {
-        kind: "error",
-        content: reason ? `${friendly}\n\nReason: ${reason}\n\n${hint}` : `${friendly}\n\n${hint}`,
       };
     }
     default:

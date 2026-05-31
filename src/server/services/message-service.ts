@@ -1,11 +1,15 @@
-import {
-  AIProviderConfigurationError,
-} from "@/ai/ai-provider";
 import type { AgentOrchestrator } from "@/features/ai-agent/agent/agent-orchestrator.server";
 import type { AgentStreamEvent } from "@/features/ai-agent/agent/agent-events";
 import type { ProjectRunStore } from "@/features/ai-agent/project/project-run-store.server";
 import type { DevRuntimeEvent } from "@/features/ai-agent/runtime/runtime-events";
-import { sanitizeForUser } from "@/features/ai-agent/agent/user-facing-presenter";
+import {
+  sanitizeForUser,
+  detectUserLanguage,
+  buildFriendlyErrorContent,
+  interruptedAnswerSuffix,
+  stillWorkingLabel,
+  type UserLanguage,
+} from "@/features/ai-agent/agent/user-facing-presenter";
 import { createSkeletonMapper } from "@/features/ai-agent/agent/agent-event-to-skeleton";
 import { decideMilestone } from "@/features/ai-agent/agent/agent-event-to-milestone";
 import type {
@@ -34,6 +38,7 @@ import {
 
 const COMPLETED_FALLBACK_CONTENT = "Done. Your storefront is ready.";
 const FAILED_FALLBACK_CONTENT = "Something went wrong. You can retry safely.";
+const STILL_WORKING_MS = 20_000;
 
 type CreateRunOptions = {
   reasoningEffort?: ComposerReasoningEffort;
@@ -184,12 +189,38 @@ export class MessageService {
   ): Promise<void> {
     const signal = getRunAbortSignal(projectId, runId);
     const skeletonMapper = createSkeletonMapper(runId);
+    const language = detectUserLanguage({ userPrompt: prompt });
 
     publishRunEvent(projectId, runId, { type: "run.started", runId, projectId });
 
     let answerMessageId: string | null = null;
     let answerContent = "";
-    let errored = false;
+    let lastPhase: Exclude<import("@/shared/project-types").SkeletonPhase, "starting"> = "understanding";
+    let runError: { code?: string; rawMessage?: string } | null = null;
+
+    // "Still working" nudge: if a phase goes quiet (no event) for STILL_WORKING_MS
+    // before the answer starts streaming, reassure the user once until the next
+    // event arrives. Keeps a long model call from feeling like a dead UI.
+    let stillWorkingTimer: ReturnType<typeof setTimeout> | null = null;
+    let stillWorkingEmitted = false;
+    const clearStillWorking = () => {
+      if (stillWorkingTimer) clearTimeout(stillWorkingTimer);
+      stillWorkingTimer = null;
+    };
+    const armStillWorking = () => {
+      clearStillWorking();
+      stillWorkingEmitted = false;
+      stillWorkingTimer = setTimeout(() => {
+        if (answerMessageId || stillWorkingEmitted) return; // only before answer streams (B); once per quiet window
+        stillWorkingEmitted = true;
+        publishRunEvent(projectId, runId, {
+          type: "skeleton.update",
+          runId,
+          phase: lastPhase,
+          label: stillWorkingLabel(language),
+        });
+      }, STILL_WORKING_MS);
+    };
 
     const createAnswerIfNeeded = async () => {
       if (answerMessageId) return;
@@ -207,7 +238,46 @@ export class MessageService {
       answerMessageId = message.id;
     };
 
+    // Persists a user-facing error outcome. Before any answer text -> a friendly
+    // `error` milestone. Mid-answer -> keep the partial, append an interrupted
+    // hint, and mark it failed (the run.failed reducer flips streaming -> failed).
+    // Raw provider error is logged for debugging but never shown to the user.
+    const persistErrorOutcome = async (code?: string, rawMessage?: string) => {
+      if (rawMessage) {
+        console.error(
+          JSON.stringify({ event: "agent_run_error", projectId, runId, code, rawMessage }),
+        );
+      }
+      if (answerMessageId && answerContent.trim()) {
+        const suffix = interruptedAnswerSuffix(language);
+        answerContent += suffix;
+        await this.messageRepository.updateMessage(answerMessageId, {
+          content: answerContent,
+          processingStatus: "failed",
+          completedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        publishRunEvent(projectId, runId, {
+          type: "message.delta",
+          runId,
+          messageId: answerMessageId,
+          delta: suffix,
+        });
+      } else {
+        await this.persistMilestone(
+          projectId,
+          runId,
+          parentMessageId,
+          "error",
+          buildFriendlyErrorContent({ code, rawMessage, language }),
+          "completed",
+          userId,
+        );
+      }
+    };
+
     try {
+      armStillWorking();
       for await (const event of this.agentOrchestrator.handlePromptStream({
         projectId,
         userId,
@@ -216,17 +286,23 @@ export class MessageService {
         parentMessageId,
         signal,
       })) {
+        armStillWorking();
+
         if (isDevRuntimeEvent(event)) {
           publishRuntimeEvent(projectId, event);
           continue;
         }
 
         const skeleton = skeletonMapper(event);
-        if (skeleton) publishRunEvent(projectId, runId, skeleton);
+        if (skeleton) {
+          lastPhase = skeleton.phase;
+          publishRunEvent(projectId, runId, skeleton);
+        }
 
         if (event.type === "assistant_message_delta") {
           const delta = sanitizeForUser(event.delta);
           if (!delta) continue;
+          clearStillWorking(); // answer is streaming; user sees output now
           await createAnswerIfNeeded();
           answerContent += delta;
           await this.messageRepository.updateMessage(answerMessageId!, {
@@ -243,7 +319,10 @@ export class MessageService {
           continue;
         }
 
-        if (event.type === "error") errored = true;
+        if (event.type === "error") {
+          runError = { code: event.code, rawMessage: event.message };
+          continue;
+        }
 
         const milestone = decideMilestone(event);
         if (milestone) {
@@ -257,6 +336,23 @@ export class MessageService {
             userId,
           );
         }
+      }
+
+      clearStillWorking();
+
+      if (runError) {
+        await persistErrorOutcome(runError.code, runError.rawMessage);
+        await this.projectRepository.updateProjectProcessingState(projectId, "idle", userId);
+        publishRunEvent(projectId, runId, {
+          type: "run.failed",
+          runId,
+          projectProcessingStatus: "idle",
+          error: {
+            code: "PROVIDER_STREAM_FAILED",
+            message: buildFriendlyErrorContent({ code: runError.code, rawMessage: runError.rawMessage, language }),
+          },
+        });
+        return;
       }
 
       if (answerMessageId) {
@@ -273,25 +369,33 @@ export class MessageService {
           messageId: answerMessageId,
           content: answerContent,
         });
+      } else {
+        // Guard: a successful run must leave at least one agent message. If the
+        // orchestrator produced no answer and no milestone, synthesize a default
+        // answer so the user never sees an empty result.
+        const existing = await this.messageRepository.listMessagesByRunId(runId, userId);
+        const hasAgentMessage = existing.some((m) => m.role === "agent");
+        if (!hasAgentMessage) {
+          await this.persistMilestone(
+            projectId,
+            runId,
+            parentMessageId,
+            "answer",
+            COMPLETED_FALLBACK_CONTENT,
+            "completed",
+            userId,
+          );
+        }
       }
 
       await this.projectRepository.updateProjectProcessingState(projectId, "idle", userId);
-
-      if (errored) {
-        publishRunEvent(projectId, runId, {
-          type: "run.failed",
-          runId,
-          projectProcessingStatus: "idle",
-          error: { code: "PROVIDER_STREAM_FAILED", message: FAILED_FALLBACK_CONTENT },
-        });
-      } else {
-        publishRunEvent(projectId, runId, {
-          type: "run.completed",
-          runId,
-          projectProcessingStatus: "idle",
-        });
-      }
+      publishRunEvent(projectId, runId, {
+        type: "run.completed",
+        runId,
+        projectProcessingStatus: "idle",
+      });
     } catch (error) {
+      clearStillWorking();
       const aborted =
         signal.aborted ||
         (error instanceof DOMException && error.name === "AbortError");
@@ -318,21 +422,17 @@ export class MessageService {
         return;
       }
 
-      const message = error instanceof Error ? error.message : "Agent run failed.";
+      const rawMessage = error instanceof Error ? error.message : "Agent run failed.";
       if (run && run.status === "streaming") {
         await this.runStore.fail(run, {
           code: "PROVIDER_STREAM_FAILED",
-          message,
+          message: rawMessage,
           recoverable: true,
         });
       }
-      if (answerMessageId) {
-        await this.messageRepository.updateMessage(answerMessageId, {
-          processingStatus: "failed",
-          completedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      }
+      // Always leave a user-facing message (error milestone, or partial answer
+      // marked interrupted) — never a silent failure.
+      await persistErrorOutcome(undefined, rawMessage);
       await this.projectRepository.updateProjectProcessingState(projectId, "idle", userId);
       publishRunEvent(projectId, runId, {
         type: "run.failed",
@@ -340,7 +440,7 @@ export class MessageService {
         projectProcessingStatus: "idle",
         error: {
           code: "PROVIDER_STREAM_FAILED",
-          message: "Could not complete the request. Please try again or adjust your prompt.",
+          message: buildFriendlyErrorContent({ rawMessage, language }),
         },
       });
     }

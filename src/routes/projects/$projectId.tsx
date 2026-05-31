@@ -192,6 +192,13 @@ function ProjectDetailPage() {
   });
   const { state: chatState } = agentStream;
   const messages = chatState.messages;
+  // The live run is the source of truth for "agent is working right now".
+  // On first load before the stream connects, fall back to project state so the
+  // UI shows processing for a run that's already in flight.
+  const streamConnected = chatState.activeRun !== null;
+  const isProcessing = streamConnected
+    ? chatState.activeRun!.status === "streaming"
+    : project?.processingStatus === "processing";
 
   const messagesQuery = useInfiniteQuery({
     queryKey: getProjectMessagesQueryKey(project?.id),
@@ -365,15 +372,29 @@ function ProjectDetailPage() {
     setPreviewReloadKey((current) => current + 1);
   }, [previewDraftPath, previewReady]);
 
+  // Sync local project state when a run ends via the stream. The stream owns
+  // run lifecycle, so when activeRun clears we flip the project back to idle and
+  // refresh derived data (files/preview/runs) that the run may have changed.
+  const prevActiveRunRef = useRef<string | null>(null);
   useEffect(() => {
-    if (
-      !project?.activeRunId ||
-      project.processingStatus !== "processing"
-    ) {
-      return;
+    const current = chatState.activeRun?.runId ?? null;
+    const previous = prevActiveRunRef.current;
+    prevActiveRunRef.current = current;
+    if (previous && !current) {
+      setProject((currentProject) =>
+        currentProject && currentProject.processingStatus === "processing"
+          ? { ...currentProject, processingStatus: "idle", activeRunId: undefined }
+          : currentProject,
+      );
+      if (project?.id) {
+        void queryClient.invalidateQueries({ queryKey: ["project", project.id] });
+        void queryClient.invalidateQueries({ queryKey: ["project-files", project.id] });
+        void queryClient.invalidateQueries({ queryKey: ["project-preview", project.id] });
+        void queryClient.invalidateQueries({ queryKey: ["project-runs", project.id] });
+        void router.invalidate();
+      }
     }
-    // Resume is handled by useAgentStream's activeRunId effect.
-  }, [project?.activeRunId, project?.id, project?.processingStatus]);
+  }, [chatState.activeRun?.runId, project?.id, queryClient, router]);
 
 
   const handleSaveProjectSettings = useCallback(async (settings: { name?: string; selectedStoreSlug?: string | null }) => {
@@ -693,7 +714,7 @@ function ProjectDetailPage() {
           >
             <ChatHeader
               project={project}
-              processing={project.processingStatus === "processing"}
+              processing={isProcessing}
               onBack={() => void navigate({ to: "/projects" as never })}
               onOpenSettings={() => setSettingsOpen(true)}
               onToggleChat={toggleChat}
@@ -720,7 +741,7 @@ function ProjectDetailPage() {
                 reasoningEffort={reasoningEffort}
                 planMode={planModeEnabled}
                 sending={sending}
-                processing={project.processingStatus === "processing"}
+                processing={isProcessing}
                 error={sendError}
                 disabled={false}
                 onChange={setDraft}
