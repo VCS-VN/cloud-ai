@@ -42,7 +42,7 @@ export function HomePromptForm({
 
   return (
     <form className="mx-auto w-full max-w-[1040px]" onSubmit={handleSubmit}>
-      <div className="rounded-lg border border-[var(--app-composer-border)] bg-[var(--app-composer-bg)] p-md text-[var(--app-composer-text)] transition-all duration-300 ease-out focus-within:-translate-y-0.5 focus-within:border-[var(--app-composer-border-focus)] focus-within:ring-2 focus-within:ring-[var(--app-focus-ring)] sm:p-lg">
+      <div className="motion-lift rounded-lg border border-[var(--app-composer-border)] bg-[var(--app-composer-bg)] p-md text-[var(--app-composer-text)] focus-within:border-[var(--app-composer-border-focus)] focus-within:ring-2 focus-within:ring-[var(--app-focus-ring)] sm:p-lg">
         <label className="sr-only" htmlFor="project-prompt">
           Describe what you want to build
         </label>
@@ -72,7 +72,7 @@ export function HomePromptForm({
 
         <div className="mt-md flex items-end justify-between gap-sm">
           <button
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] outline-none transition-all duration-200 ease-out hover:-translate-y-0.5 hover:text-[var(--app-icon)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+            className="motion-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] outline-none hover:border-[var(--app-border-strong)] hover:text-[var(--app-icon)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
             type="button"
             aria-label="Add attachment"
             disabled={loading}
@@ -82,7 +82,7 @@ export function HomePromptForm({
 
           <div className="flex items-center gap-sm text-[var(--app-icon-muted)]">
             <button
-              className="inline-flex h-10 items-center gap-xxs rounded-pill border border-transparent px-sm text-button font-[480] outline-none transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[var(--app-border)] hover:bg-[var(--app-control)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+              className="motion-press inline-flex h-10 items-center gap-xxs rounded-pill border border-transparent px-sm text-button font-[480] outline-none hover:border-[var(--app-border)] hover:bg-[var(--app-control)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
               disabled={loading}
             >
@@ -90,7 +90,7 @@ export function HomePromptForm({
               <ChevronDown aria-hidden="true" size={16} />
             </button>
             <button
-              className="hidden h-10 w-10 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] outline-none transition-all duration-200 ease-out hover:-translate-y-0.5 hover:text-[var(--app-icon)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 sm:inline-flex"
+              className="motion-press hidden h-10 w-10 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] outline-none hover:border-[var(--app-border-strong)] hover:text-[var(--app-icon)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 sm:inline-flex"
               type="button"
               aria-label="Use microphone"
               disabled={loading}
@@ -98,7 +98,7 @@ export function HomePromptForm({
               <Mic aria-hidden="true" size={20} strokeWidth={1.8} />
             </button>
             <button
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[var(--app-pill-bg)] text-[var(--app-pill-text)] outline-none transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-[var(--app-pill-hover)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 [&_svg]:text-[var(--app-icon-selected)]"
+              className="motion-press inline-flex h-11 w-11 items-center justify-center rounded-full bg-[var(--app-pill-bg)] text-[var(--app-pill-text)] outline-none hover:bg-[var(--app-pill-hover)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45 [&_svg]:text-[var(--app-icon-selected)]"
               type="submit"
               disabled={!canSubmit}
               aria-label={loading ? "Building project..." : "Build project"}

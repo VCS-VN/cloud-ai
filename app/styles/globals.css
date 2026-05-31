@@ -108,6 +108,22 @@
   --space-xxl: 48px;
   --space-section: 96px;
 
+  --shadow-panel: 0 12px 40px rgb(0 0 0 / 0.06);
+  --shadow-editorial: 0 24px 80px rgb(0 0 0 / 0.08);
+
+  --motion-instant: 120ms;
+  --motion-fast: 200ms;
+  --motion-base: 280ms;
+  --motion-slow: 420ms;
+  --motion-cinematic: 720ms;
+  --ease-standard: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --motion-stagger: 70ms;
+  --motion-reveal-distance: 24px;
+  --motion-press-scale: 0.97;
+  --motion-hover-lift: -2px;
+
   font-feature-settings: 'kern';
 }
 
@@ -217,6 +233,7 @@ html {
   color: var(--app-text);
   background: var(--app-control);
   font-family: figmaSans, Inter, system-ui, sans-serif;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -376,3 +393,172 @@ input {
 .builder-scrollbar-hidden::-webkit-scrollbar {
   display: none;
 }
+
+/* ------------------------------------------------------------------ */
+/* Motion system — see DESIGN.md "Motion & Interaction"               */
+/* ------------------------------------------------------------------ */
+
+/* Scroll-reveal: elements mount hidden, then rise+fade once in view.
+   Driven by the useReveal hook toggling [data-reveal-ready]. */
+[data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, var(--motion-reveal-distance), 0);
+  transition:
+    opacity var(--motion-slow) var(--ease-standard),
+    transform var(--motion-slow) var(--ease-standard);
+  transition-delay: calc(var(--reveal-index, 0) * var(--motion-stagger));
+  will-change: transform, opacity;
+}
+
+[data-reveal-ready='true'] {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+/* Group reveal: a container the hook marks ready cascades to its [data-reveal]
+   children, each delayed by its own --reveal-index. */
+[data-reveal-ready='true'] [data-reveal] {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+/* Cinematic variant for hero / large color-block entrances. */
+[data-reveal='cinematic'] {
+  transform: translate3d(0, var(--motion-reveal-distance), 0) scale(0.985);
+  transition:
+    opacity var(--motion-cinematic) var(--ease-standard),
+    transform var(--motion-cinematic) var(--ease-standard);
+}
+
+[data-reveal='cinematic'][data-reveal-ready='true'] {
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+/* Spring press — apply to any interactive control for the physical-click feel. */
+.motion-press {
+  transition:
+    transform var(--motion-fast) var(--ease-spring),
+    background-color var(--motion-instant) var(--ease-standard),
+    border-color var(--motion-instant) var(--ease-standard),
+    opacity var(--motion-instant) var(--ease-standard);
+}
+
+.motion-press:active {
+  transform: scale(var(--motion-press-scale));
+}
+
+/* Hover lift — cards and pills rise slightly on hover. */
+.motion-lift {
+  transition:
+    transform var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+
+@media (hover: hover) {
+  .motion-lift:hover {
+    transform: translateY(var(--motion-hover-lift));
+  }
+}
+
+.motion-lift:active {
+  transform: scale(var(--motion-press-scale));
+}
+
+/* Decorative parallax drift — moved by JS via --parallax-y. Decorative only. */
+.motion-parallax {
+  transform: translate3d(0, var(--parallax-y, 0px), 0);
+  will-change: transform;
+}
+
+/* Fluid display type — DESIGN.md "Responsive Display Type". */
+.type-display-xl {
+  font-size: clamp(40px, 7vw, 86px);
+  font-weight: 340;
+  line-height: 1;
+  letter-spacing: -1.72px;
+}
+
+.type-display-lg {
+  font-size: clamp(34px, 5.5vw, 64px);
+  font-weight: 340;
+  line-height: 1.1;
+  letter-spacing: -0.96px;
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.motion-overlay-in {
+  animation: overlay-in var(--motion-base) var(--ease-standard) both;
+}
+
+.motion-dialog-in {
+  animation: dialog-in var(--motion-slow) var(--ease-spring) both;
+}
+
+/* Skeleton shimmer — DESIGN.md prefers shape-matched skeletons over spinners. */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton {
+  border-radius: var(--radius-md);
+  background-image: linear-gradient(
+    90deg,
+    var(--app-control) 25%,
+    var(--app-panel-strong) 37%,
+    var(--app-control) 63%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Accessibility: collapse all motion to instant final states. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+
+  .motion-parallax {
+    transform: none;
+  }
+}
+

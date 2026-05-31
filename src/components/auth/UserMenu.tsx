@@ -112,8 +112,8 @@ export function UserMenu({
       <button
         className={
           compact
-            ? "inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--app-sidebar-border)] bg-[var(--app-sidebar-control)] text-[var(--app-sidebar-text)] shadow-none transition-all duration-200 ease-out hover:bg-[var(--app-sidebar-control-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
-            : "inline-flex h-10 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-xs pr-sm text-[13px] text-[var(--app-icon-muted)] transition-all duration-200 ease-out hover:bg-[var(--app-panel)] hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+            ? "motion-press inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--app-sidebar-border)] bg-[var(--app-sidebar-control)] text-[var(--app-sidebar-text)] outline-none hover:bg-[var(--app-sidebar-control-hover)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+            : "motion-press inline-flex h-10 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-xs pr-sm text-body-sm text-[var(--app-icon-muted)] outline-none hover:border-[var(--app-border-strong)] hover:text-[var(--app-icon)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
         }
         type="button"
         onClick={() => setOpen((current) => !current)}
@@ -123,13 +123,7 @@ export function UserMenu({
         aria-label={open ? "Close account menu" : "Open account menu"}
         title={user?.email ?? userLabel}
       >
-        <div className="flex gap-2 items-center">
-          <UserAvatar user={user} size={compact ? "sm" : "xs"} />
-
-          {!compact ? (
-            <span className="max-w-[160px] truncate">{userLabel}</span>
-          ) : null}
-        </div>
+        <UserAvatar user={user} size={compact ? "sm" : "xs"} />
         {!compact ? (
           <span className="max-w-[160px] truncate">{userLabel}</span>
         ) : null}
@@ -137,7 +131,7 @@ export function UserMenu({
 
       {open ? (
         <div
-          className={`absolute ${menuPosition} z-50 w-[min(320px,calc(100vw-32px))] overflow-hidden rounded-lg border border-[var(--app-dropdown-border)] bg-[var(--app-dropdown-bg)] text-[var(--app-dropdown-text)] shadow-none ring-1 ring-[var(--app-dropdown-border)] animate-in fade-in zoom-in-95 duration-150`}
+          className={`motion-dialog-in absolute ${menuPosition} z-50 w-[min(320px,calc(100vw-32px))] overflow-hidden rounded-lg border border-[var(--app-dropdown-border)] bg-[var(--app-dropdown-bg)] text-[var(--app-dropdown-text)] shadow-[var(--shadow-panel)] ring-1 ring-[var(--app-dropdown-border)]`}
           role="menu"
           aria-label="Account menu"
         >

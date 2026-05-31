@@ -5,6 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { WorkspaceShell } from "@/components/layout/WorkspaceShell";
 import { HomePromptForm } from "@/components/home/HomePromptForm";
+import { useReveal } from "@/hooks/useReveal";
 import { getCurrentUser } from "@/server/functions/auth";
 import {
   createProjectFromPrompt,
@@ -30,6 +31,7 @@ function DashboardPage() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const heroRef = useReveal<HTMLDivElement>();
 
   async function handleCreateProject(nextPrompt: string) {
     setLoading(true);
@@ -77,15 +79,16 @@ function DashboardPage() {
       }
     >
       <div className="flex min-h-full flex-col items-center justify-center px-md py-xl text-center sm:px-xl lg:px-xxl">
+            <div ref={heroRef} data-reveal="cinematic" className="w-full">
             <p className="mb-md font-mono text-eyebrow uppercase tracking-[0.54px] text-[var(--color-ink)] opacity-70">
               CLOUD AI
             </p>
 
-            <h1 className="m-0 max-w-4xl text-display-lg font-[340] leading-[1.1] tracking-[-0.96px] text-[var(--color-ink)]">
+            <h1 className="type-display-lg m-0 mx-auto max-w-4xl text-[var(--color-ink)]">
               What should we build, {firstName}?
             </h1>
 
-            <p className="mt-md max-w-2xl text-body-lg font-[330] leading-[1.4] tracking-[-0.14px] text-[var(--color-ink)] opacity-70">
+            <p className="mt-md mx-auto max-w-2xl text-body-lg font-[330] leading-[1.4] tracking-[-0.14px] text-[var(--color-ink)] opacity-70">
               Describe your idea and Cloud AI will build it for you.
             </p>
 
@@ -97,11 +100,13 @@ function DashboardPage() {
                 "Checkout upsell flow",
                 "New arrival campaign",
                 "Retail loyalty page",
-              ].map((text) => (
+              ].map((text, index) => (
                 <button
                   key={text}
                   type="button"
-                  className="rounded-pill border border-[var(--color-hairline)] bg-[var(--color-canvas)] px-md py-xs text-body-sm font-[480] text-[var(--color-ink)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[var(--color-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+                  data-reveal
+                  style={{ "--reveal-index": index } as React.CSSProperties}
+                  className="motion-press rounded-pill border border-[var(--color-hairline)] bg-[var(--color-canvas)] px-md py-xs text-body-sm font-[480] text-[var(--color-ink)] hover:border-[var(--color-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => handleSuggestionClick(text)}
                   disabled={loading}
                   aria-label={text}
@@ -111,7 +116,7 @@ function DashboardPage() {
               ))}
             </div>
 
-            <div className="mt-xl w-full max-w-[1040px]">
+            <div className="mt-xl mx-auto w-full max-w-[1040px]">
               <HomePromptForm
                 prompt={prompt}
                 loading={loading}
@@ -119,6 +124,7 @@ function DashboardPage() {
                 onPromptChange={setPrompt}
                 onSubmit={handleCreateProject}
               />
+            </div>
             </div>
           </div>
     </WorkspaceShell>

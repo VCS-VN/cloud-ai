@@ -25,10 +25,39 @@ colors:
   semantic-success: "#1ea64a"
   overlay-scrim: "#000000"
 
+# Application surfaces — the product UI layer (sidebar, composer, dashboard, dropdowns).
+# These are role tokens that resolve differently per theme; see "Application Surfaces" and
+# "Theme System" sections. The marketing color tokens above stay theme-invariant.
+app-surface-roles:
+  page: "{colors.canvas} (light) / {colors.inverse-canvas} (dark)"
+  panel: "{colors.canvas} (light) / #000000 (dark)"
+  control: "{colors.canvas} (light) / #080808 (dark)"
+  text: "{colors.ink} (light) / {colors.inverse-ink} (dark)"
+  muted: "ink @ 62% (light) / white @ 66% (dark)"
+  subtle: "ink @ 42% (light) / white @ 46% (dark)"
+  border: "{colors.hairline} (light) / white @ 18% (dark)"
+  selected-bg: "{colors.primary} (light) / {colors.on-inverse-soft} (dark)"
+  focus-ring: "ink @ 28% (light) / white @ 38% (dark)"
+
+motion:
+  duration-instant: 120ms
+  duration-fast: 200ms
+  duration-base: 280ms
+  duration-slow: 420ms
+  duration-cinematic: 720ms
+  ease-standard: cubic-bezier(0.22, 0.61, 0.36, 1)
+  ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1)
+  ease-exit: cubic-bezier(0.4, 0.0, 1, 1)
+  stagger-step: 70ms
+  reveal-distance: 24px
+  press-scale: 0.97
+  hover-lift: -2px
+
 typography:
   display-xl:
     fontFamily: figmaSans
     fontSize: 86px
+    fontSizeFluid: clamp(40px, 7vw, 86px)
     fontWeight: 340
     lineHeight: 1.00
     letterSpacing: -1.72px
@@ -36,6 +65,7 @@ typography:
   display-lg:
     fontFamily: figmaSans
     fontSize: 64px
+    fontSizeFluid: clamp(34px, 5.5vw, 64px)
     fontWeight: 340
     lineHeight: 1.10
     letterSpacing: -0.96px
@@ -560,6 +590,99 @@ The defining surface of Figma's marketing. Each is a full-content-width panel wi
 - Template thumbnails in the home grid use lazy loading and animate in on scroll.
 - Sticky-note style FigJam thumbnails maintain their slight off-axis rotation across breakpoints — the rotation is a brand signal, not a desktop-only flourish.
 
+## Application Surfaces
+
+> The sections above document Figma's **marketing canvas**. Cloud AI is a *product* — an AI website builder with a sidebar, a prompt composer, a dashboard, dropdowns, modals, and settings. Those surfaces reuse the marketing system's type, radius, spacing, and pill language, but they need an additional role layer because they ship in **both light and dark** (marketing is light-only). This section documents that layer.
+
+### The two token layers
+
+1. **Brand tokens** (`colors.*`, `rounded.*`, `spacing.*`, `typography.*`) — theme-invariant. A pill is always `{rounded.pill}`; lime is always `#dceeb1`. These never change between light and dark.
+2. **Application role tokens** (`--app-*` in `globals.css`) — theme-aware. They resolve to different brand values per theme. `--app-page-bg` is `{colors.canvas}` in light and `{colors.inverse-canvas}` in dark. **Always style product chrome with role tokens, never with raw `colors.*`**, so a surface follows the active theme automatically.
+
+### Role token reference
+
+| Role token | Light | Dark | Use |
+|---|---|---|---|
+| `--app-page-bg` | `{colors.canvas}` | `{colors.inverse-canvas}` | Outermost page background |
+| `--app-panel` | `{colors.canvas}` | `#000000` | Cards, modals, sidebar, dropdowns |
+| `--app-control` | `{colors.canvas}` | `#080808` | Inputs, buttons-as-surfaces, tiles |
+| `--app-panel-strong` | `{colors.surface-soft}` | `{colors.block-navy}` | Raised / emphasised panel |
+| `--app-text` | `{colors.ink}` | `{colors.inverse-ink}` | Primary body + heading text |
+| `--app-muted` | ink @ 62% | white @ 66% | Secondary text, captions |
+| `--app-subtle` | ink @ 42% | white @ 46% | Placeholders, disabled labels |
+| `--app-border` | `{colors.hairline}` | white @ 18% | Hairline dividers, input borders |
+| `--app-border-strong` | `{colors.primary}` | `{colors.inverse-ink}` | Focused / hovered border |
+| `--app-selected-bg` / `--app-selected-text` | black / white | white / black | Active nav item, selected tab, selected option |
+| `--app-focus-ring` | ink @ 28% | white @ 38% | Keyboard focus ring |
+| `--app-danger-bg` / `--app-danger-text` | `{colors.block-coral}` / ink | `#3d1915` / white | Inline error surfaces |
+| `--app-pill-*` | black pill | white pill | The composer's primary send action |
+| `--app-composer-*` | — | — | Prompt-composer specific bg/border/placeholder |
+| `--app-sidebar-*` | — | — | Sidebar specific bg/control/border |
+| `--app-dropdown-*` | — | — | Menu/popover specific bg/control/border |
+
+### Principles for product surfaces
+
+- **Hierarchy by weight and role, not opacity-on-raw-color.** Use `--app-muted` / `--app-subtle` for secondary text — never `text-black/60` or hand-mixed alphas. This keeps both themes legible.
+- **Borders, not shadows, by default.** Product cards use a 1px `--app-border`. The brand is shadow-light (Elevation table above). Reserve `{boxShadow.panel}` for genuinely floating layers (dropdowns, modals).
+- **Selected = primary surface.** Mirror the marketing `pricing-tab-selected` rule: an active sidebar item, theme option, or tab uses `--app-selected-bg` (the inverse of the page), exactly as the marketing system flips a selected tab to black.
+- **Pills and circles only.** Product CTAs stay `{rounded.pill}`; icon buttons stay `{rounded.full}`. Containers use `{rounded.lg}`, inputs `{rounded.md}`. No square interactive elements — same rule as marketing.
+- **Color blocks still carry narrative.** The dashboard hero sits on a `{colors.block-lilac}` panel; the home prompt sits on lilac; suggestion-idea groups use lime / cream / navy. Product surfaces are allowed the full `{colors.block-*}` palette, but obey the marketing pacing rule: one block per visual zone, canvas between zones.
+
+## Motion & Interaction
+
+> This section fills the "Known Gap" noted earlier — the live site's animations were not documented. Cloud AI is an interactive builder, so motion is part of the system, not an afterthought. Motion is **cinematic but disciplined**: it directs attention and confirms action; it never blocks input or runs longer than needed.
+
+### Motion tokens (front matter `motion:`)
+
+| Token | Value | Use |
+|---|---|---|
+| `{motion.duration-instant}` | 120ms | Color/opacity hover feedback |
+| `{motion.duration-fast}` | 200ms | Hover lift, press, small state changes |
+| `{motion.duration-base}` | 280ms | Default transition; panel + composer focus |
+| `{motion.duration-slow}` | 420ms | Reveal-on-scroll entrance, modal open |
+| `{motion.duration-cinematic}` | 720ms | Hero headline / large color-block entrance |
+| `{motion.ease-standard}` | `cubic-bezier(0.22,0.61,0.36,1)` | Default easing — decelerating, editorial |
+| `{motion.ease-spring}` | `cubic-bezier(0.34,1.56,0.64,1)` | Press release, icon pops, playful overshoot |
+| `{motion.ease-exit}` | `cubic-bezier(0.4,0,1,1)` | Elements leaving (modal close, dismiss) |
+| `{motion.stagger-step}` | 70ms | Delay between siblings in a cascade |
+| `{motion.reveal-distance}` | 24px | Y-translation an element travels on entrance |
+| `{motion.press-scale}` | 0.97 | `transform: scale()` on `:active` |
+| `{motion.hover-lift}` | -2px | `translateY()` on hover for cards/buttons |
+
+### Patterns
+
+- **Scroll-reveal (the signature product motion).** Elements enter as the viewport reaches them: `opacity 0→1` + `translateY({motion.reveal-distance})→0`, over `{motion.duration-slow}` with `{motion.ease-standard}`. Driven by `IntersectionObserver` via the `useReveal` hook → `[data-reveal]` / `[data-reveal-ready]` attributes in `globals.css`. Reveal **once**, then stay (no re-trigger on scroll-up).
+- **Staggered cascade.** Sibling groups (suggestion chips, color-block cards, sidebar items, dashboard tiles) reveal in sequence using `--reveal-index` × `{motion.stagger-step}` as `transition-delay`. Never mount a group all at once.
+- **Spring press.** Every button/pill/icon-button compresses to `{motion.press-scale}` on `:active` and releases with `{motion.ease-spring}`. This is the "physical click" feel.
+- **Hover lift.** Cards and pills translate `{motion.hover-lift}` on hover over `{motion.duration-fast}`. Pair with a border or background shift, never a hover-only shadow.
+- **Parallax accents (subtle).** Large color-block panels may drift their decorative layer a few px against scroll. Keep displacement small (≤ 12px) — this is texture, not a theme-park ride. Decorative-only; never move text or interactive targets.
+- **Focus-within rise.** The prompt composer lifts `{motion.hover-lift}` and grows its focus ring when focused, signalling "this is where you type."
+
+### Performance & accessibility (mandatory)
+
+- **Animate only `transform` and `opacity`.** Never animate `top`/`left`/`width`/`height`/`box-shadow` for entrance or movement — they thrash layout. GPU-friendly properties only.
+- **Honour `prefers-reduced-motion: reduce`.** A global guard in `globals.css` collapses all reveal/parallax/stagger to an instant final state and near-zero transition. Motion is an enhancement; the UI must be fully usable and immediately visible without it.
+- **Never block interaction.** Entrances run on mount/scroll but inputs are live immediately. No motion gates a click.
+- **Respect `scroll-behavior: smooth`** for in-page anchors, but keep route changes instant.
+
+## Responsive Display Type
+
+Display sizes are fixed px in the type scale for fidelity, but **must render fluid** so an 86px hero doesn't overflow a 360px phone. Use the `fontSizeFluid` clamp values:
+
+| Token | Fixed | Fluid (clamp) |
+|---|---|---|
+| `{typography.display-xl}` | 86px | `clamp(40px, 7vw, 86px)` |
+| `{typography.display-lg}` | 64px | `clamp(34px, 5.5vw, 64px)` |
+
+Letter-spacing is authored for the **max** size; at clamped-down sizes the negative tracking stays proportionally fine because it scales with the cap. Headline/body tokens (≤ 26px) do not need clamping — they're already mobile-safe.
+
+## Theme System
+
+- **Default: `system`.** First load follows `prefers-color-scheme`; the choice persists to `localStorage` (`cloud-ai-theme`) and is exposed through the settings appearance picker and the user menu. Three options: Light, Dark, System.
+- **Light is the canonical brand surface** — it is the editorial black-on-white frame the marketing sections document. Dark is a faithful inverse built from `{colors.inverse-canvas}` / `{colors.inverse-ink}` and the role-token table above, not a separate palette.
+- **`theme-color` meta** should track the active page background (`{colors.canvas}` light, `{colors.inverse-canvas}` dark) so the mobile browser chrome matches — not an arbitrary slate.
+- Selected states in both themes use the **inverse of the page** (`--app-selected-bg`), preserving the "selected = primary surface" brand rule across themes.
+
 ## Iteration Guide
 
 1. Focus on ONE component at a time and reference it by its `components:` token name (e.g., `{components.button-primary}`, `{components.color-block-section}`).
@@ -573,6 +696,6 @@ The defining surface of Figma's marketing. Each is a full-content-width panel wi
 ## Known Gaps
 
 - The exact pastel hex values of `{colors.block-*}` are derived from screenshot pixels; the production source likely uses named tokens that aren't exposed via CSS variables. Treat the documented hex values as faithful approximations rather than exact brand specs.
-- Dark mode is not documented because the marketing site does not ship a dark theme — the closest analog is the navy color-block (`color-block-section-navy`) and the inverse-canvas footer.
-- Form-field error and validation styling is not visible on `/contact/` because no error states render in the static screenshot. Inputs have hairline borders and rounded `{rounded.md}` corners; error treatment is not documented.
-- The animated marquee-strip and color-block reveal animations are not documented (per the no-interaction policy).
+- Form-field error and validation styling on the marketing `/contact/` page is not documented (no error states render in the static screenshot). For **product** surfaces, inline errors use `--app-danger-bg` / `--app-danger-text` with `{rounded.md}` corners — see Application Surfaces.
+
+> **Resolved gaps:** Dark mode and animation, previously listed as gaps, are now documented — see the **Theme System**, **Application Surfaces**, and **Motion & Interaction** sections, which cover the product UI layer the marketing screenshots did not expose.

@@ -22,13 +22,13 @@ function resolveTheme(theme: AppTheme): EffectiveAppTheme {
 }
 
 function readSavedTheme(): AppTheme {
-  if (typeof window === 'undefined') return 'dark'
+  if (typeof window === 'undefined') return 'system'
   const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
-  return savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system' ? savedTheme : 'dark'
+  return savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system' ? savedTheme : 'system'
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<AppTheme>('dark')
+  const [theme, setThemeState] = useState<AppTheme>('system')
   const [effectiveTheme, setEffectiveTheme] = useState<EffectiveAppTheme>('dark')
 
   useEffect(() => {

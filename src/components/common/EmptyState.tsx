@@ -20,8 +20,8 @@ export function EmptyState({ title, description, action, tone = 'plain' }: Empty
   return (
     <section className={`${toneClassName[tone]} builder-truncate-safe rounded-md border border-[var(--color-hairline)] p-md transition-colors duration-300`}>
       <p className="builder-kicker text-current opacity-65">Empty state</p>
-      <h2 className="mb-xs mt-sm text-[16px] font-[520] leading-tight tracking-[-0.015em]">{title}</h2>
-      {description ? <p className="m-0 max-w-2xl text-[12px] leading-4 tracking-[-0.01em] text-current opacity-70">{description}</p> : null}
+      <h2 className="mb-xs mt-sm text-body font-[540] leading-tight tracking-[-0.26px]">{title}</h2>
+      {description ? <p className="m-0 max-w-2xl text-body-sm leading-[1.45] tracking-[-0.14px] text-current opacity-70">{description}</p> : null}
       {action ? <div className="mt-md">{action}</div> : null}
     </section>
   )

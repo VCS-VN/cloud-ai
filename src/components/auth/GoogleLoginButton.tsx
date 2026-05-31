@@ -9,7 +9,7 @@ type GoogleLoginButtonProps = {
 export function GoogleLoginButton({ loading = false, disabled = false, onClick }: GoogleLoginButtonProps) {
   return (
     <button
-      className="inline-flex h-10 w-full items-center justify-center gap-xs rounded-pill border border-[var(--app-border-strong)] bg-[var(--app-text)] px-md text-[14px] font-[650] text-[var(--app-bg)] shadow-none outline-none transition-all duration-200 ease-out hover:opacity-86 focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--app-panel)] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
+      className="motion-press inline-flex h-11 w-full items-center justify-center gap-xs rounded-pill border border-[var(--app-border-strong)] bg-[var(--app-text)] px-md text-body-sm font-[650] text-[var(--app-bg)] outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--app-panel)] disabled:cursor-not-allowed disabled:opacity-60"
       type="button"
       disabled={disabled || loading}
       onClick={onClick}

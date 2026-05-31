@@ -3,6 +3,7 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { LoginModal } from "@/components/auth/LoginModal";
 import { HomePromptForm } from "@/components/home/HomePromptForm";
+import { useReveal } from "@/hooks/useReveal";
 import { createProjectFromPrompt } from "@/server/functions/projects";
 import { getCurrentUser } from "@/server/functions/auth";
 
@@ -26,6 +27,8 @@ function HomePage() {
   const [createdProjectName, setCreatedProjectName] = useState<
     string | undefined
   >();
+  const heroRef = useReveal<HTMLDivElement>();
+  const cardsRef = useReveal<HTMLDivElement>({ threshold: 0.1 });
 
   async function handleCreateProject(nextPrompt: string) {
     if (!user) {
@@ -74,7 +77,7 @@ function HomePage() {
           </a>
           <div className="flex items-center gap-xs">
             <button
-              className="rounded-pill bg-[var(--color-primary)] px-md py-xs text-button font-[480] text-[var(--color-on-primary)] transition-opacity duration-200 hover:opacity-86 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+              className="motion-press rounded-pill bg-[var(--color-primary)] px-md py-xs text-button font-[480] text-[var(--color-on-primary)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
               type="button"
               onClick={() => setLoginOpen(true)}
             >
@@ -84,34 +87,23 @@ function HomePage() {
         </nav>
 
         <section className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col justify-center pb-xl pt-xl text-center sm:pt-xxl">
-          {/* <a
-            className="mb-xl inline-flex self-center items-center gap-sm rounded-pill bg-[var(--color-primary)] p-xxs pr-md text-button font-[480] text-[var(--color-on-primary)] transition-opacity duration-200 hover:opacity-86"
-            href="/"
-            aria-label="Try Cloud AI for web projects"
-          >
-            <span className="rounded-pill bg-[var(--color-block-lime)] px-sm py-xs text-[var(--app-on-color-block)]">New</span>
-            <span className="hidden sm:inline">
-              Try Cloud AI for web projects
-            </span>
-            <span className="sm:hidden">Try Cloud AI</span>
-            <ArrowRight aria-hidden="true" size={22} />
-          </a> */}
+          <div ref={heroRef} data-reveal="cinematic">
+            <h1 className="type-display-xl m-0 mx-auto max-w-5xl text-[var(--app-page-text)]">
+              Build more with Cloud AI
+            </h1>
+            <p className="m-0 mx-auto mt-md max-w-3xl text-subhead font-[340] leading-[1.35] tracking-[-0.26px] text-[var(--app-muted)]">
+              Create websites by chatting with AI
+            </p>
 
-          <h1 className="m-0 mx-auto max-w-5xl text-display-xl font-[340] leading-none tracking-[-1.72px] text-[var(--app-page-text)]">
-            Build more with Cloud AI
-          </h1>
-          <p className="m-0 mx-auto mt-md max-w-3xl text-subhead font-[340] leading-[1.35] tracking-[-0.26px] text-[var(--app-muted)]">
-            Create websites by chatting with AI
-          </p>
-
-          <div className="mt-xl w-full rounded-lg bg-[var(--color-block-lilac)] p-lg text-left text-[var(--app-on-color-block)] sm:p-xxl">
-            <HomePromptForm
-              prompt={prompt}
-              loading={loading}
-              error={error}
-              onPromptChange={setPrompt}
-              onSubmit={handleCreateProject}
-            />
+            <div className="mt-xl w-full rounded-lg bg-[var(--color-block-lilac)] p-lg text-left text-[var(--app-on-color-block)] sm:p-xxl">
+              <HomePromptForm
+                prompt={prompt}
+                loading={loading}
+                error={error}
+                onPromptChange={setPrompt}
+                onSubmit={handleCreateProject}
+              />
+            </div>
           </div>
 
           {createdProjectName ? (
@@ -123,8 +115,15 @@ function HomePage() {
             </p>
           ) : null}
 
-          <div className="mt-xl grid gap-sm text-left md:grid-cols-[1.05fr_0.95fr]">
-            <article className="rounded-lg bg-[var(--color-block-lime)] p-lg text-[var(--color-ink)] transition-transform duration-300 ease-out hover:-translate-y-1 sm:p-xl">
+          <div
+            ref={cardsRef}
+            className="mt-xl grid gap-sm text-left md:grid-cols-[1.05fr_0.95fr]"
+          >
+            <article
+              data-reveal
+              style={{ "--reveal-index": 0 } as React.CSSProperties}
+              className="motion-lift rounded-lg bg-[var(--color-block-lime)] p-lg text-[var(--color-ink)] sm:p-xl"
+            >
               <p className="m-0 font-mono text-caption uppercase tracking-[0.6px] opacity-70">
                 FAST START
               </p>
@@ -139,7 +138,7 @@ function HomePage() {
                 ].map(([step, label]) => (
                   <div
                     key={step}
-                    className="rounded-md border border-[rgb(0_0_0_/_0.12)] bg-[var(--color-canvas)] p-md transition-transform duration-200 ease-out hover:-translate-y-0.5"
+                    className="motion-lift rounded-md border border-[rgb(0_0_0_/_0.12)] bg-[var(--color-canvas)] p-md"
                   >
                     <span className="font-mono text-caption uppercase tracking-[0.6px] opacity-60">
                       {step}
@@ -153,7 +152,11 @@ function HomePage() {
             </article>
 
             <aside className="grid gap-sm sm:grid-cols-2 md:grid-cols-1">
-              <div className="rounded-lg bg-[var(--color-block-cream)] p-lg text-[var(--color-ink)] transition-transform duration-300 ease-out hover:-translate-y-1">
+              <div
+                data-reveal
+                style={{ "--reveal-index": 1 } as React.CSSProperties}
+                className="motion-lift rounded-lg bg-[var(--color-block-cream)] p-lg text-[var(--color-ink)]"
+              >
                 <p className="m-0 font-mono text-caption uppercase tracking-[0.6px] opacity-70">
                   PROMPT IDEAS
                 </p>
@@ -168,7 +171,7 @@ function HomePage() {
                   ].map((label) => (
                     <button
                       key={label}
-                      className="rounded-pill border border-[rgb(0_0_0_/_0.12)] bg-[var(--color-canvas)] px-sm py-xs text-body-sm font-[480] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[var(--color-primary)]"
+                      className="motion-press rounded-pill border border-[rgb(0_0_0_/_0.12)] bg-[var(--color-canvas)] px-sm py-xs text-body-sm font-[480] hover:border-[var(--color-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
                       type="button"
                       onClick={() => setPrompt(label)}
                     >
@@ -178,7 +181,11 @@ function HomePage() {
                 </div>
               </div>
 
-              <div className="rounded-lg bg-[var(--color-block-navy)] p-lg text-[var(--color-inverse-ink)] transition-transform duration-300 ease-out hover:-translate-y-1">
+              <div
+                data-reveal
+                style={{ "--reveal-index": 2 } as React.CSSProperties}
+                className="motion-lift rounded-lg bg-[var(--color-block-navy)] p-lg text-[var(--color-inverse-ink)]"
+              >
                 <p className="m-0 font-mono text-caption uppercase tracking-[0.6px] opacity-70">
                   WORKFLOW
                 </p>
