@@ -14,7 +14,7 @@ import type { AgentConfig } from "./agent-config";
 import type { OpenAIProvider } from "../openai/openai-provider.server";
 import type { RuntimeService } from "../runtime/runtime-service.server";
 import type { RuntimeOrchestrator } from "../runtime/runtime-orchestrator.server";
-import { sanitizeForUser } from "./user-facing-presenter";
+import { sanitizeForUser, redactTechnicalText } from "./user-facing-presenter";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { buildFileManifest } from "../source/code-index-service.server";
 import {
@@ -1471,10 +1471,11 @@ export class AgentOrchestrator {
         },
       })) {
         if (event.type === "delta" && event.text) {
-          const sanitized = sanitizeForUser(event.text);
-          if (!sanitized) continue;
-          summary += sanitized;
-          yield { type: "assistant_message_delta", delta: sanitized };
+          // Redact-only per delta (keep boundary spaces); whitespace normalized once below.
+          const delta = redactTechnicalText(event.text);
+          if (!delta) continue;
+          summary += delta;
+          yield { type: "assistant_message_delta", delta };
         }
       }
     } catch (error) {
@@ -1487,15 +1488,16 @@ export class AgentOrchestrator {
               : String(error).slice(0, 400),
         }),
       );
-      const remaining = summary.trim() ? "" : args.fallbackSummary;
+      const sanitizedSoFar = sanitizeForUser(summary);
+      const remaining = sanitizedSoFar ? "" : args.fallbackSummary;
       if (remaining) {
         yield { type: "assistant_message_delta", delta: remaining };
         return remaining;
       }
-      return summary.trim() || args.fallbackSummary;
+      return sanitizedSoFar || args.fallbackSummary;
     }
 
-    const finalSummary = summary.trim() || args.fallbackSummary;
+    const finalSummary = sanitizeForUser(summary) || args.fallbackSummary;
     if (!summary.trim())
       yield { type: "assistant_message_delta", delta: finalSummary };
     return finalSummary;

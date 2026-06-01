@@ -16,11 +16,30 @@ export const TECHNICAL_PATTERNS: { pattern: RegExp; replace: string }[] = [
   { pattern: /\bcode_tool_\w+|\bapply_patch\b|\bread_file\b|\bwrite_file\b|\bproject_(?:read|get|write)_\w+/g, replace: "" },
 ];
 
-export function sanitizeForUser(text: string): string {
+/**
+ * Redact technical tokens (file paths, env vars, tool/model names, etc.) WITHOUT
+ * trimming or collapsing whitespace. Safe to apply per streamed delta: it never
+ * eats the spaces at chunk boundaries, so accumulated text keeps word spacing.
+ */
+export function redactTechnicalText(text: string): string {
   if (!text) return "";
   let out = text;
   for (const { pattern, replace } of TECHNICAL_PATTERNS) out = out.replace(pattern, replace);
-  return out.replace(/\s{2,}/g, " ").replace(/\s+([,.!?;:])/g, "$1").trim();
+  return out;
+}
+
+/**
+ * Full sanitize for a COMPLETE string: redacts technical tokens, then collapses
+ * runs of whitespace and trims. MUST NOT be applied per-delta during streaming —
+ * the trailing trim would strip boundary spaces and stick words together.
+ * Use redactTechnicalText for incremental/streamed chunks instead.
+ */
+export function sanitizeForUser(text: string): string {
+  if (!text) return "";
+  return redactTechnicalText(text)
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .trim();
 }
 
 export type UserLanguage = "vi" | "en";
