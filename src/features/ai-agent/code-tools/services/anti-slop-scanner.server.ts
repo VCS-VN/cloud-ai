@@ -13,11 +13,12 @@ export type AntiSlopScanResult = {
   violations: AntiSlopViolation[];
 };
 
-// Raw Tailwind color families that signal off-palette / slop when used directly in
-// customer-facing storefront code. The approved path is semantic role utilities
+// Chromatic Tailwind color families that signal off-palette / slop when used directly in
+// customer-facing storefront code. Neutral grayscale families (slate/gray/zinc/neutral/stone)
+// are intentionally EXCLUDED: they are legitimate for text/borders across design systems and
+// are not the slop signal. The approved path for brand color is semantic role utilities
 // (bg-primary, text-accent, bg-deep, etc.) driven by DESIGN.md tokens.
 const RAW_TAILWIND_COLOR_FAMILIES = [
-  "slate", "gray", "zinc", "neutral", "stone",
   "red", "orange", "amber", "yellow", "lime", "green", "emerald", "teal",
   "cyan", "sky", "blue", "indigo", "violet", "purple", "fuchsia", "pink", "rose",
 ];

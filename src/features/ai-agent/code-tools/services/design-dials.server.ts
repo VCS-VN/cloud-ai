@@ -7,6 +7,10 @@ import {
   THEME_LOCK_VALUES,
   type DesignDials,
 } from "./design-token-schema.server";
+import {
+  loadTasteSkill,
+  extractDialInferenceSection,
+} from "./taste-skill-loader.server";
 
 export type GenerateDialsInput = {
   websiteSpec: WebsiteSpec;
@@ -81,18 +85,18 @@ export function fallbackDials(spec: WebsiteSpec): DesignDials {
   };
 }
 
-function buildSystemPrompt(): string {
+function buildSystemPrompt(dialReference: string): string {
   return `You set the design "dials" and "locks" for a RETAIL E-COMMERCE STOREFRONT, distilled from an anti-slop frontend taste system.
 
 First, read the room and output a one-line Design Read: "Reading this as: <retail category> storefront for <audience>, with a <vibe> retail language."
 
-Then choose three dials on a 1-10 scale using this inference table, biased for commerce:
-- minimalist / clean / calm / editorial: variance 5-6, motion 3-4, density 2-3
-- premium consumer / luxury / brand: variance 7-8, motion 4-5, density 3-4
-- playful / bold / streetwear / experimental: variance 8, motion 4-5, density 4
-- trust-first / regulated / accessibility-critical: variance 3-4, motion 2-3, density 4-5
+Then choose three dials on a 1-10 scale. Use the DIAL INFERENCE REFERENCE below (from the design-taste-frontend skill) to map the brief to variance/motion/density:
 
-This is a storefront that SELLS PRODUCTS, never an agency showcase. Keep motion restrained so it never competes with shopping actions. Prefer shopping clarity over spectacle.
+<dial-reference>
+${dialReference}
+</dial-reference>
+
+This is a storefront that SELLS PRODUCTS, never an agency showcase. Keep motion restrained so it never competes with shopping actions — for commerce, keep MOTION at 5 or below regardless of what the reference suggests for agency/experimental briefs. Prefer shopping clarity over spectacle.
 
 Also choose three locks:
 - colorLock: always "${COLOR_LOCK_RULE}".
@@ -111,6 +115,12 @@ export async function generateDesignDials(input: GenerateDialsInput): Promise<De
     return fallbackDials(input.websiteSpec);
   }
 
+  // Load the dial-inference reference from the live skill. This is OUTSIDE the LLM
+  // try/catch on purpose: a missing/unreadable skill is a hard dependency failure and
+  // must fail the turn, whereas an LLM error below falls back to tone heuristics.
+  const skill = await loadTasteSkill();
+  const dialReference = extractDialInferenceSection(skill.content);
+
   try {
     const raw = await input.provider.parseStructured<
       { prompt: string; store: unknown; brand: unknown },
@@ -125,7 +135,7 @@ export async function generateDesignDials(input: GenerateDialsInput): Promise<De
       }
     >({
       model: input.model,
-      system: buildSystemPrompt(),
+      system: buildSystemPrompt(dialReference),
       user: {
         prompt: input.userPrompt,
         store: {

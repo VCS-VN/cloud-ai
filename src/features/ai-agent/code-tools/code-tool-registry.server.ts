@@ -14,6 +14,7 @@ import { projectSearchCodeTool } from "./tools/project-search-code.tool.server";
 import { projectPreviewStatusTool } from "./tools/project-preview-status.tool.server";
 import { projectPreviewRestartTool } from "./tools/project-preview-restart.tool.server";
 import { projectReadDesignRulesTool } from "./tools/project-read-design-rules.tool.server";
+import { projectReadTasteSkillTool } from "./tools/project-read-taste-skill.tool.server";
 
 export const CODE_TOOL_LIMITS = {
   maxToolLoopIterations: 40,
@@ -30,12 +31,14 @@ const PHASE_TOOL_NAMES: Record<CodeToolPhase, string[]> = {
     "project_get_context",
     "project_get_file_tree",
     "project_read_design_rules",
+    "project_read_taste_skill",
   ],
   inspection: [
     "project_search_code",
     "project_read_file",
     "project_read_file_range",
     "project_read_design_rules",
+    "project_read_taste_skill",
   ],
   planning: [
     "project_get_context",
@@ -43,6 +46,7 @@ const PHASE_TOOL_NAMES: Record<CodeToolPhase, string[]> = {
     "project_read_file",
     "project_read_file_range",
     "project_read_design_rules",
+    "project_read_taste_skill",
   ],
   mutation: [
     "project_create_snapshot",
@@ -50,6 +54,7 @@ const PHASE_TOOL_NAMES: Record<CodeToolPhase, string[]> = {
     "project_apply_patch",
     "project_create_file",
     "project_read_design_rules",
+    "project_read_taste_skill",
   ],
   validation: [
     "project_run_validation",
@@ -57,6 +62,7 @@ const PHASE_TOOL_NAMES: Record<CodeToolPhase, string[]> = {
     "project_preview_status",
     "project_preview_restart",
     "project_read_design_rules",
+    "project_read_taste_skill",
   ],
   repair: [
     "project_search_code",
@@ -66,11 +72,13 @@ const PHASE_TOOL_NAMES: Record<CodeToolPhase, string[]> = {
     "project_run_validation",
     "project_get_diff",
     "project_read_design_rules",
+    "project_read_taste_skill",
   ],
   finalize: [
     "project_get_diff",
     "project_preview_status",
     "project_read_design_rules",
+    "project_read_taste_skill",
   ],
 };
 
@@ -115,13 +123,15 @@ export function createDefaultCodeToolRegistry() {
     .register(projectReadFileRangeTool)
     .register(projectPreviewStatusTool)
     .register(projectPreviewRestartTool)
-    .register(projectReadDesignRulesTool));
+    .register(projectReadDesignRulesTool)
+    .register(projectReadTasteSkillTool));
 }
 
 export function createInitCodeToolRegistry() {
   return new CodeToolRegistry()
     .register(projectGetFileTreeTool)
     .register(projectReadDesignRulesTool)
+    .register(projectReadTasteSkillTool)
     .register(createProjectCreateFileTool())
     .register(createProjectRunValidationTool());
 }

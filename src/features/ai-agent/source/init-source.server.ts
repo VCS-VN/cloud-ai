@@ -972,7 +972,7 @@ function inputSource() {
   return `import * as React from 'react'\nimport { cn } from '@/lib/utils'\n\nexport const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(({ className, type, ...props }, ref) => (\n  <input type={type} className={cn('flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50', className)} ref={ref} {...props} />\n))\nInput.displayName = 'Input'\n`;
 }
 function badgeSource() {
-  return `import { cva, type VariantProps } from 'class-variance-authority'\nimport { cn } from '@/lib/utils'\n\nconst badgeVariants = cva('inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors', { variants: { variant: { default: 'border-transparent bg-primary text-primary-foreground', secondary: 'border-transparent bg-secondary text-secondary-foreground', destructive: 'border-transparent bg-destructive text-destructive-foreground', outline: 'text-foreground', sale: 'border-transparent bg-amber-600 text-white' } }, defaultVariants: { variant: 'default' } })\nexport function Badge({ className, variant, ...props }: React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof badgeVariants>) { return <div className={cn(badgeVariants({ variant }), className)} {...props} /> }\n`;
+  return `import { cva, type VariantProps } from 'class-variance-authority'\nimport { cn } from '@/lib/utils'\n\nconst badgeVariants = cva('inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors', { variants: { variant: { default: 'border-transparent bg-primary text-primary-foreground', secondary: 'border-transparent bg-secondary text-secondary-foreground', destructive: 'border-transparent bg-destructive text-destructive-foreground', outline: 'text-foreground', sale: 'border-transparent bg-highlight text-highlight-foreground' } }, defaultVariants: { variant: 'default' } })\nexport function Badge({ className, variant, ...props }: React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof badgeVariants>) { return <div className={cn(badgeVariants({ variant }), className)} {...props} /> }\n`;
 }
 function cardSource() {
   return `import * as React from 'react'\nimport { cn } from '@/lib/utils'\nexport const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => <div ref={ref} className={cn('rounded-lg border bg-card text-card-foreground shadow-sm', className)} {...props} />)\nexport const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => <div ref={ref} className={cn('flex flex-col space-y-1.5 p-6', className)} {...props} />)\nexport const CardTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLHeadingElement>>(({ className, ...props }, ref) => <h3 ref={ref} className={cn('text-2xl font-semibold leading-none tracking-tight', className)} {...props} />)\nexport const CardDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(({ className, ...props }, ref) => <p ref={ref} className={cn('text-sm text-muted-foreground', className)} {...props} />)\nexport const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => <div ref={ref} className={cn('p-6 pt-0', className)} {...props} />)\nexport const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => <div ref={ref} className={cn('flex items-center p-6 pt-0', className)} {...props} />)\nCard.displayName = 'Card'; CardHeader.displayName = 'CardHeader'; CardTitle.displayName = 'CardTitle'; CardDescription.displayName = 'CardDescription'; CardContent.displayName = 'CardContent'; CardFooter.displayName = 'CardFooter'\n`;
@@ -1955,7 +1955,30 @@ function siteFooterSource() {
   return `import { useStore } from '@/app/store-provider'\nexport function SiteFooter() { const { storeDetail } = useStore(); return <footer className='bg-deep text-deep-foreground'><div className='mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4'><div><h3 className='text-xl font-semibold'>{storeDetail?.name}</h3><p className='mt-3 text-sm text-deep-foreground/70'>{storeDetail?.description}</p></div>{['Shop','Support','Company'].map((title) => <div key={title}><h4 className='font-semibold'>{title}</h4><ul className='mt-3 space-y-2 text-sm text-deep-foreground/70'><li>Products</li><li>Orders</li><li>Contact</li></ul></div>)}<div><h4 className='font-semibold'>Connect</h4><p className='mt-3 text-sm text-deep-foreground/70'>Follow new drops and member offers.</p></div></div></footer> }\n`;
 }
 function heroSectionSource() {
-  return `import { Link } from '@tanstack/react-router'\nimport { Button } from '@/components/ui/button'\nimport { websiteConfig } from '@/lib/website-config'\nexport function HeroSection() { return <section className='mx-auto grid max-w-7xl gap-10 px-4 py-16 lg:grid-cols-2 lg:py-24'><div className='flex flex-col justify-center gap-6'><p className='text-sm font-semibold uppercase tracking-[0.25em] text-primary'>{websiteConfig.brand.tone}</p><h1 className='text-5xl font-bold tracking-tight md:text-7xl'>{websiteConfig.content.heroTitle}</h1><p className='max-w-xl text-lg text-muted-foreground'>{websiteConfig.content.heroSubtitle}</p><div className='flex gap-3'><Button asChild size='lg'><Link to='/products'>{websiteConfig.content.primaryCta ?? 'Shop now'}</Link></Button><Button asChild variant='outline' size='lg'><Link to='/checkout'>Checkout demo</Link></Button></div></div><div className='min-h-[420px] rounded-[2rem] bg-gradient-to-br from-primary via-highlight to-deep p-8 shadow-2xl'><div className='h-full rounded-[1.5rem] border border-deep-foreground/20 bg-deep-foreground/20 backdrop-blur' /></div></section> }\n`;
+  return `import { Link } from '@tanstack/react-router'
+import { Button } from '@/components/ui/button'
+import { websiteConfig } from '@/lib/website-config'
+
+const heroImageUrl = \`https://picsum.photos/seed/\${encodeURIComponent((websiteConfig.store.name || 'storefront') + '-hero')}/1200/900\`
+
+export function HeroSection() {
+  return (
+    <section className='mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 lg:grid-cols-2 lg:py-24'>
+      <div className='flex flex-col justify-center gap-6'>
+        <h1 className='text-5xl font-bold leading-[1.05] tracking-tight md:text-6xl'>{websiteConfig.content.heroTitle}</h1>
+        <p className='max-w-md text-lg text-muted-foreground'>{websiteConfig.content.heroSubtitle}</p>
+        <div className='flex gap-3'>
+          <Button asChild size='lg'><Link to='/products'>{websiteConfig.content.primaryCta ?? 'Shop now'}</Link></Button>
+          <Button asChild variant='outline' size='lg'><Link to='/products'>Browse shop</Link></Button>
+        </div>
+      </div>
+      <div className='relative overflow-hidden rounded-2xl'>
+        <img src={heroImageUrl} alt={websiteConfig.content.heroTitle} className='h-full max-h-[520px] w-full object-cover' />
+      </div>
+    </section>
+  )
+}
+`;
 }
 function productCardSource() {
   return `import { Link } from '@tanstack/react-router'
@@ -1971,18 +1994,17 @@ import type { Product } from '@/services/store/use-products-list'
 
 export function ProductCard({ product }: { product: Product }) {
   const currency = useStore().storeDetail?.setting?.currency ?? 'AUD'
-  const heroImage = product.image ?? product.images?.[0]
+  const heroImage =
+    product.image ??
+    product.images?.[0] ??
+    \`https://picsum.photos/seed/\${encodeURIComponent(product.id)}/600/600\`
   const sanitizedDescriptions = useMemo(
     () => DOMPurify.sanitize(product.descriptions ?? ''),
     [product.descriptions],
   )
   return (
     <Card className='overflow-hidden'>
-      {heroImage ? (
-        <img src={heroImage} alt={product.name} className='h-56 w-full object-cover' />
-      ) : (
-        <div className='h-56 bg-gradient-to-br from-secondary to-primary/20' />
-      )}
+      <img src={heroImage} alt={product.name} className='h-56 w-full object-cover' />
       <CardContent className='space-y-3 p-5'>
         <div className='flex items-center justify-between gap-3'>
           <Link
@@ -2324,7 +2346,8 @@ function ProductDetailPage() {
   const canConfirmCart = Boolean(selectedModelId)
 
   const images = product?.images ?? (product?.image ? [product.image] : [])
-  const mainImage = images[selectedImageIndex] ?? images[0] ?? product?.image
+  const fallbackImage = \`https://picsum.photos/seed/\${encodeURIComponent(product?.id ?? productId)}/1000/1000\`
+  const mainImage = images[selectedImageIndex] ?? images[0] ?? product?.image ?? fallbackImage
   const showThumbnails = images.length > 1
 
   const descriptions = product?.descriptions ?? ''
@@ -2381,15 +2404,11 @@ function ProductDetailPage() {
       <Link to='/products' className='text-sm text-muted-foreground'>← Products</Link>
       <div className='mt-6 grid gap-10 lg:grid-cols-2'>
         <div className='space-y-4'>
-          {mainImage ? (
-            <img
-              src={mainImage}
-              alt={product.name}
-              className='min-h-[520px] w-full rounded-[2rem] object-cover'
-            />
-          ) : (
-            <div className='min-h-[520px] rounded-[2rem] bg-gradient-to-br from-secondary to-primary/30' />
-          )}
+          <img
+            src={mainImage}
+            alt={product.name}
+            className='min-h-[520px] w-full rounded-[2rem] object-cover'
+          />
           {showThumbnails && (
             <div className='flex gap-3 overflow-x-auto py-2'>
               {images.map((src, index) => (

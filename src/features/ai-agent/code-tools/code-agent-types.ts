@@ -15,8 +15,10 @@ export type ToolExecutionContext = {
   flags?: {
     designRulesLoaded?: boolean;
     isUiRelatedChange?: boolean;
+    tasteSkillLoaded?: boolean;
   };
   designRuleHash?: string;
+  tasteSkillHash?: string;
 };
 
 export type CodeToolDefinition<TArgs = unknown, TData = unknown> = {

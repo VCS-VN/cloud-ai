@@ -895,6 +895,21 @@ export class AgentOrchestrator {
       yield { type: "file_changed", path, operation: "modified" };
     }
 
+    // Anti-slop enforcement on init output (LLM-generated + backfilled UI files):
+    // scan, run bounded repair passes, then surface any remaining violations.
+    loopResult = yield* this.enforceAntiSlop({
+      loopResult,
+      projectId: input.projectId,
+      userId: input.userId,
+      runId: args.runId,
+      projectState,
+      selectedStoreSlug,
+      thinking,
+      toolExecutionContext,
+      registry,
+      signal: input.signal,
+    });
+
     const allChangedFiles = [
       ...initResult.files.map((f) => f.path),
       ...loopResult.changedFiles,
@@ -1797,7 +1812,7 @@ function buildRedesignRewritePrompt(
     "User-provenance tokens have been preserved unless the redesign prompt explicitly conflicted.",
     "Token mapping must be refreshed to match the new DESIGN.md hash.",
     "",
-    "1. FIRST call project_read_design_rules to load the new DESIGN.md.",
+    "1. FIRST call project_read_taste_skill (the anti-slop design skill), THEN project_read_design_rules to load the new DESIGN.md. Apply both to every UI file you rewrite.",
     "2. Refresh token mapping: verify CSS variables / tailwind config match new token values.",
     "3. Inspect existing UI files with project_get_file_tree and project_read_file before patching.",
     "4. Update these files so they match sections 1-8 of DESIGN.md (palette, typography, spacing, radii, components, layout):",

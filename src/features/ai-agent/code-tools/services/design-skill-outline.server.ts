@@ -7,9 +7,7 @@ const OUTLINE_VERSION = "1.0.0";
 
 const OUTLINE_BODY = [
   "## 1. Visual Theme & Atmosphere",
-  "- Open with a one-line Design Read: \"Reading this as: <retail category> storefront for <audience>, with a <vibe> retail language.\"",
   "- Pick ONE vibe coherent with the store / products / brand tone (e.g. minimalist, luxury, playful, organic, streetwear, tech, premium, friendly, editorial, handcrafted, retro). Do NOT default to a 'warm beige + dark green' coffee/cosmetic vibe unless that vibe genuinely fits the prompt.",
-  "- Anti-default discipline: avoid AI-purple/violet gradients, centered hero over dark mesh/aurora gradient, three equal feature cards, glassmorphism-on-everything, and reflexive Inter + slate-900.",
   "- Document inferred retail category, target audience, price tier, chosen archetype, 4-6 atmospheric adjectives, what makes this project distinct, and what visual approaches must not be used.",
   "- State the page rhythm the storefront will follow.",
   "",
