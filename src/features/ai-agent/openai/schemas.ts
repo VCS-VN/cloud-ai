@@ -281,18 +281,3 @@ function strictObjectSchema(properties: Record<string, unknown>, required: reado
 function nullableSchema(schema: Record<string, unknown>) {
   return { anyOf: [schema, { type: "null" }] };
 }
-
-// Distilled taste-skill "dials" (Section 1) + design read + locks.
-// Raw JSON Schema to match the parseStructured path used by extract-website-spec.
-export const designDialsSchema = strictObjectSchema(
-  {
-    designRead: { type: "string" },
-    variance: { type: "integer", minimum: 1, maximum: 10 },
-    motion: { type: "integer", minimum: 1, maximum: 10 },
-    density: { type: "integer", minimum: 1, maximum: 10 },
-    colorLock: { type: "string" },
-    radiusLock: { type: "string", enum: ["all-sharp", "all-soft", "all-pill"] },
-    themeLock: { type: "string", enum: ["light", "dark", "dual"] },
-  },
-  ["designRead", "variance", "motion", "density", "colorLock", "radiusLock", "themeLock"],
-);

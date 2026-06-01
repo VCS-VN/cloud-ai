@@ -31,6 +31,7 @@ import {
 import { REQUIRED_GENERATED_STOREFRONT_FILES } from "../source/generated-project-layout";
 import { applyStoreSlugToEnv } from "../store-runtime/generated-project-env";
 import { buildRetailInitPrompt } from "./init-prompt.server";
+import { PromptLayerStore } from "./init-prompt-store.server";
 import {
   selectTemplate,
   slugifyProjectName,
@@ -57,25 +58,11 @@ import {
 } from "../code-tools/code-tool-registry.server";
 import type { ToolExecutionContext } from "../code-tools/code-agent-types";
 import {
-  generateAndWriteDesignFile,
-  loadProjectDesignRules,
-} from "../code-tools/services/design-file-service.server";
-import { generateDesignDials } from "../code-tools/services/design-dials.server";
-import {
   scanForAntiSlop,
   type AntiSlopViolation,
 } from "../code-tools/services/anti-slop-scanner.server";
 import {
-  extractUserProvenanceTokens,
-  doesPromptConflictWithUserToken,
-} from "../code-tools/services/design-generation-service.server";
-import {
-  buildCssVariableMapping,
-  replaceOwnedDesignTokenRegion,
-} from "../code-tools/services/design-token-mapping-service.server";
-import {
   classifyDesignIntent,
-  extractTokenHints,
   type DesignIntentLabel,
 } from "../planning/design-intent-heuristic";
 import { applyTokenPatches } from "../code-tools/services/design-rule-patch-service.server";
@@ -105,6 +92,7 @@ export type AgentOrchestratorDeps = {
   agentConfig?: AgentConfig;
   runtimeService?: RuntimeService;
   runtimeOrchestrator?: RuntimeOrchestrator;
+  promptLayerStore?: PromptLayerStore;
   selectedStoreSlugResolver?: (
     projectId: string,
     userId?: string,
@@ -326,75 +314,23 @@ export class AgentOrchestrator {
         designIntent.kind === "redesign" &&
         projectState.status === "initialized"
       ) {
-        // Extract existing user-provenance tokens that should be preserved
-        // unless the current redesign prompt explicitly conflicts with them.
-        const existingDesign = await loadProjectDesignRules({
-          projectId: input.projectId,
-          workspaceRoot: getProjectWorkspaceRoot(input.projectId),
-        }).catch(() => null);
-        const userTokens = existingDesign
-          ? extractUserProvenanceTokens(existingDesign.markdown)
-          : [];
-        const preservedTokens = userTokens.filter(
-          (t) => !doesPromptConflictWithUserToken(input.prompt, t),
-        );
-        if (preservedTokens.length > 0) {
-          console.info(
-            JSON.stringify({
-              event: "redesign_preserving_user_tokens",
-              count: preservedTokens.length,
-              roles: preservedTokens.map((t) => t.role),
-            }),
-          );
-        }
-
+        // The agent re-authors DESIGN.md inside the loop (no server-side design
+        // generation). We still refresh brand/spec from the prompt so project
+        // state stays accurate; the project_create_file hook re-patches app.css
+        // tokens when the agent rewrites DESIGN.md.
         const redesignWebsiteSpec = await extractWebsiteSpec({
           prompt: input.prompt,
           projectState,
           provider: this.deps.openAIProvider,
           model: this.deps.agentConfig?.plannerModel,
         });
-        const redesignDials = await generateDesignDials({
-          websiteSpec: redesignWebsiteSpec,
-          userPrompt: input.prompt,
-          provider: this.deps.openAIProvider,
-          model: this.deps.agentConfig?.plannerModel,
-        });
-        const redesignResult = await generateAndWriteDesignFile({
-          projectId: input.projectId,
-          workspaceRoot: getProjectWorkspaceRoot(input.projectId),
-          websiteSpec: redesignWebsiteSpec,
-          userPrompt: input.prompt,
-          provider: this.deps.openAIProvider,
-          model: this.deps.agentConfig?.plannerModel,
-          signal: input.signal,
-          tokenHints: designIntent.tokenHints,
-          dials: redesignDials,
-        });
-        yield {
-          type: "design_file_regenerated",
-          projectId: input.projectId,
-          messageId: run.id,
-          data: {
-            source: redesignResult.source,
-            destinationPath: redesignResult.destinationPath,
-            byteSize: redesignResult.byteSize,
-          },
-        };
         activeProjectState = await this.deps.projectStateStore.patch(
           input.projectId,
           {
             brand: redesignWebsiteSpec.brand,
-            designState: {
-              templateId: "ai-generated",
-              designSourcePath: "DESIGN.md",
-              designSourceHash: redesignResult.hash,
-              designCopiedAt: new Date().toISOString(),
-            },
           },
           input.userId,
         );
-        redesignedHash = redesignResult.hash;
         effectiveUserPrompt = buildRedesignRewritePrompt(
           input.prompt,
           designIntent.tokenHints,
@@ -567,42 +503,13 @@ export class AgentOrchestrator {
 
     yield {
       type: "source_generation_started",
-      message: "Copying design rules and generating infrastructure...",
+      message: "Generating infrastructure...",
     };
 
-    const initTokenHints = extractTokenHints(input.prompt);
-    const initDials = await generateDesignDials({
-      websiteSpec,
-      userPrompt: input.prompt,
-      provider: this.deps.openAIProvider,
-      model: this.deps.agentConfig?.plannerModel,
-    });
-    const designResult = await runPhase("generate_design_file", () =>
-      generateAndWriteDesignFile({
-        projectId: input.projectId,
-        workspaceRoot: getProjectWorkspaceRoot(input.projectId),
-        websiteSpec,
-        userPrompt: input.prompt,
-        provider: this.deps.openAIProvider,
-        model: this.deps.agentConfig?.plannerModel,
-        signal: input.signal,
-        tokenHints: initTokenHints,
-        dials: initDials,
-      }),
-    );
-    yield {
-      type: "design_file_generated",
-      projectId: input.projectId,
-      messageId: args.runId,
-      data: {
-        source: designResult.source,
-        destinationPath: designResult.destinationPath,
-        byteSize: designResult.byteSize,
-      },
-    };
-
-    // Write .env with VITE_API_BASE_URL after DESIGN.md is created.
-    // The AI Agent is NOT allowed to read or write .env; the app process owns it.
+    // Write .env with VITE_API_BASE_URL. The AI Agent is NOT allowed to read or
+    // write .env; the app process owns it. DESIGN.md is now authored by the agent
+    // inside the agentic loop (no server-side design generation); the
+    // project_create_file hook patches app.css tokens when the agent writes it.
     await runPhase("write_project_env", () =>
       this.deps.projectFileStore?.writeManagedEnvFile(
         input.projectId,
@@ -610,23 +517,6 @@ export class AgentOrchestrator {
       ),
     );
     yield { type: "file_changed", path: ".env", operation: "created" };
-
-    const designRules = await runPhase("load_design_rules", () =>
-      loadProjectDesignRules({
-        projectId: input.projectId,
-        workspaceRoot: getProjectWorkspaceRoot(input.projectId),
-      }),
-    );
-    yield {
-      type: "design_rules_loaded",
-      projectId: input.projectId,
-      messageId: args.runId,
-      data: {
-        source: designRules.path,
-        summary: designRules.summary,
-        hash: designRules.hash,
-      },
-    };
 
     const initResult = await runPhase("init_infrastructure", () =>
       initInfrastructureSource({
@@ -637,16 +527,6 @@ export class AgentOrchestrator {
         websiteSpec,
       }),
     );
-
-    const tokenMapping = buildCssVariableMapping(designRules.markdown);
-    for (const file of initResult.files) {
-      if (file.path !== "src/styles/app.css") continue;
-      const mapped = replaceOwnedDesignTokenRegion(file.content, tokenMapping);
-      if (!mapped.ok) {
-        throw new Error(mapped.message);
-      }
-      file.content = mapped.content;
-    }
 
     logAgentPhase("started", "write_infrastructure_files", phaseContext);
     try {
@@ -671,7 +551,7 @@ export class AgentOrchestrator {
 
     yield {
       type: "source_generation_started",
-      message: "Generating retail storefront UI with design rules...",
+      message: "Generating retail storefront UI...",
     };
 
     const toolExecutionContext: ToolExecutionContext = {
@@ -681,17 +561,18 @@ export class AgentOrchestrator {
       workspaceRoot: getProjectWorkspaceRoot(input.projectId),
       projectState,
       flags: {
-        designRulesLoaded: true,
+        // The agent authors DESIGN.md inside the loop, then must call
+        // project_read_design_rules before any UI mutation. Start false so
+        // Gate 1 (code-tool-executor) enforces that ordering.
+        designRulesLoaded: false,
       },
     };
     (toolExecutionContext as any).__codeToolSnapshotId = "init-snapshot";
 
     const registry = createInitCodeToolRegistry();
-    const retailInitPrompt = buildRetailInitPrompt({
-      userPrompt: input.prompt,
-      websiteSpec,
-      designRules,
-    });
+    const retailInitPrompt = this.deps.promptLayerStore
+      ? this.deps.promptLayerStore.assembleInitPrompt({ websiteSpec })
+      : buildRetailInitPrompt({ userPrompt: input.prompt, websiteSpec });
 
     const thinking = createHeuristicThinkingResult({
       projectId: input.projectId,
@@ -964,7 +845,9 @@ export class AgentOrchestrator {
           designState: {
             templateId: "ai-generated",
             designSourcePath: "DESIGN.md",
-            designSourceHash: designResult.hash,
+            designSourceHash:
+              (toolExecutionContext as any).__designSourceHash ??
+              "agent-authored",
             designCopiedAt: new Date().toISOString(),
           },
         },
@@ -1806,38 +1689,17 @@ function buildRedesignRewritePrompt(
     originalPrompt,
     ...hintLines,
     "",
-    "DESIGN.md has just been regenerated for this project with a new visual identity (palette, typography, components, layout). It is the source of truth.",
+    "Task: redesign the storefront. You author DESIGN.md yourself, then rewrite the UI to match it.",
     "",
-    "Task: rewrite the storefront UI to match the new DESIGN.md.",
+    "Validation scope: full-storefront (all customer-facing UI must comply with the new DESIGN.md).",
     "",
-    "Validation scope: full-storefront (all customer-facing UI must comply with new DESIGN.md).",
-    "User-provenance tokens have been preserved unless the redesign prompt explicitly conflicted.",
-    "Token mapping must be refreshed to match the new DESIGN.md hash.",
-    "",
-    "1. FIRST call project_read_taste_skill (the anti-slop design skill), THEN project_read_design_rules to load the new DESIGN.md. Apply both to every UI file you rewrite.",
-    "2. Refresh token mapping: verify CSS variables / tailwind config match new token values.",
-    "3. Inspect existing UI files with project_get_file_tree and project_read_file before patching.",
-    "4. Update these files so they match sections 1-8 of DESIGN.md (palette, typography, spacing, radii, components, layout):",
-    "   - tailwind.config.ts (theme colors, fonts, radii)",
-    "   - src/styles/* (CSS variables / tokens, if present)",
-    "   - src/components/layout/site-header.tsx",
-    "   - src/components/layout/site-footer.tsx",
-    "   - src/components/store/hero-section.tsx",
-    "   - src/components/store/product-card.tsx",
-    "   - src/components/store/product-grid.tsx (only className/styling)",
-    "   - src/components/store/feature-band.tsx",
-    "   - src/components/store/trust-signals.tsx",
-    "   - src/components/store/newsletter-section.tsx",
-    "   - src/components/ui/button.tsx, badge.tsx (variants/colors only)",
-    "5. Out of scope (do NOT modify):",
-    "   - src/routes/** route structure (only update className when strictly needed)",
-    "   - src/data/** product/category data",
-    "   - src/data/sample-store.ts",
-    "   - src/app/cart-provider.tsx and any state management",
-    "   - src/app/store-provider.tsx",
-    "   - package.json dependencies",
-    "6. Use minimal patches per file. Run project_run_validation after mutations. Repair on failure.",
-    "7. Validate full storefront compliance with new DESIGN.md before completion.",
+    "1. FIRST call project_read_taste_skill (the anti-slop design skill) to load the authoritative UI taste guide.",
+    "2. REWRITE DESIGN.md via project_create_file: a new visual identity (palette as 15 hex color tokens in the YAML front-matter, typography, components, layout) driven by the skill and the request above. Honor any user-specified token values listed above. This file is the source of truth.",
+    "3. Call project_read_design_rules to load the DESIGN.md you just wrote (this is required before any UI mutation). The app.css token region is refreshed automatically when you write DESIGN.md.",
+    "4. Inspect existing UI files with project_get_file_tree and project_read_file before patching.",
+    "5. Update the storefront UI so it matches DESIGN.md (palette, typography, spacing, radii, components, layout): tailwind.config.ts, src/styles/* (if present), and the storefront components/routes. Use minimal patches per file.",
+    "6. Do NOT modify: src/data/** (product/category/sample-store data), src/app/cart-provider.tsx and state management, src/app/store-provider.tsx, package.json dependencies, route structure (only update className when strictly needed).",
+    "7. Run project_run_validation after mutations; repair on failure. Validate full storefront compliance with the new DESIGN.md before completion.",
   ].join("\n");
 }
 

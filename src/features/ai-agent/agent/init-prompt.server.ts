@@ -1,10 +1,8 @@
 import type { WebsiteSpec } from "../project/project-state.schema";
-import type { ProjectDesignRuleContext } from "../code-tools/services/design-file-service.server";
 
 export function buildRetailInitPrompt(input: {
   userPrompt: string;
   websiteSpec: WebsiteSpec;
-  designRules: ProjectDesignRuleContext;
 }): string {
   const { websiteSpec: spec } = input;
   const productList = spec.products

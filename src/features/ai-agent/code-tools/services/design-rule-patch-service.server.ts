@@ -2,8 +2,35 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import type { TokenHint, TokenHintRole } from "../../planning/design-intent-heuristic";
-import { validateVisualMarkdown } from "./design-generation-service.server";
 import { DESIGN_ERROR_CODES, type DesignErrorCode } from "./design-error-codes";
+
+const REQUIRED_SECTION_HEADINGS: ReadonlyArray<{ index: number; heading: string }> = [
+  { index: 1, heading: "Visual Theme & Atmosphere" },
+  { index: 2, heading: "Color Palette & Roles" },
+  { index: 3, heading: "Typography Rules" },
+  { index: 4, heading: "Spacing System" },
+  { index: 5, heading: "Radius, Shadow & Motion" },
+  { index: 6, heading: "Component Styling" },
+  { index: 7, heading: "Layout Principles" },
+  { index: 8, heading: "Responsive Behavior" },
+];
+
+function validateVisualMarkdown(markdown: string): {
+  ok: boolean;
+  missingSections: string[];
+} {
+  const missing = REQUIRED_SECTION_HEADINGS.filter(({ index, heading }) => {
+    const headingPattern = new RegExp(
+      `##\\s+${index}\\.\\s+${escapeRegex(heading)}`,
+      "i",
+    );
+    return !headingPattern.test(markdown);
+  });
+  return {
+    ok: missing.length === 0,
+    missingSections: missing.map(({ index, heading }) => `${index}. ${heading}`),
+  };
+}
 
 export type TokenPatchInput = {
   projectId: string;

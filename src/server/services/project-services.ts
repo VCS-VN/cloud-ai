@@ -1,4 +1,5 @@
 import { AgentOrchestrator } from "@/features/ai-agent/agent/agent-orchestrator.server";
+import { PromptLayerStore } from "@/features/ai-agent/agent/init-prompt-store.server";
 import { loadAgentConfig } from "@/features/ai-agent/agent/agent-config";
 import { createOpenAIClient } from "@/features/ai-agent/openai/openai-client.server";
 import { OpenAIProvider } from "@/features/ai-agent/openai/openai-provider.server";
@@ -111,6 +112,7 @@ export async function getProjectServices() {
   }
   presenceService.setRuntimeStore(projectStateStore);
   const projectService = new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore, runtimeService, envWriter, runtimeOrchestrator, runStore);
+  const promptLayerStore = await PromptLayerStore.loadFromDisk();
   const agentOrchestrator = new AgentOrchestrator({
     projectStateStore,
     runStore,
@@ -120,6 +122,7 @@ export async function getProjectServices() {
     agentConfig,
     runtimeService,
     runtimeOrchestrator,
+    promptLayerStore,
     selectedStoreSlugResolver: (projectId, userId) => projectService.getSelectedStoreSlug(projectId, userId),
   });
 

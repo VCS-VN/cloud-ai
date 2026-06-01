@@ -293,22 +293,3 @@ function stripDiacritics(input: string): string {
   return input.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
-export function buildDeterministicDesignSeed(input: {
-  projectId: string;
-  prompt: string;
-}): string {
-  return hashString(`${input.projectId}:${normalizePromptForDesignSeed(input.prompt)}`).slice(0, 12);
-}
-
-export function normalizePromptForDesignSeed(prompt: string): string {
-  return stripDiacritics(prompt).toLowerCase().replace(/\s+/g, " ").trim();
-}
-
-function hashString(value: string): string {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < value.length; i += 1) {
-    hash ^= value.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
-}

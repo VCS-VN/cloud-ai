@@ -250,6 +250,21 @@ export function resolveProductPrice(product: Product | null | undefined): number
     { path: "src/vite-env.d.ts", content: `/// <reference types="vite/client" />
 ` },
     { path: "src/services/http/client.ts", content: renderHttpClientSource() },
+    // shadcn primitives — deterministic boilerplate, identical across every
+    // project. Written before the agentic loop so the agent never re-creates
+    // them (project_create_file would throw "File already exists"). The agent
+    // is told NOT to create these in the init prompt.
+    { path: "src/components/ui/button.tsx", content: buttonSource() },
+    { path: "src/components/ui/input.tsx", content: inputSource() },
+    { path: "src/components/ui/select.tsx", content: selectSource() },
+    { path: "src/components/ui/radio-group.tsx", content: radioGroupSource() },
+    { path: "src/components/ui/dialog.tsx", content: dialogSource() },
+    { path: "src/components/ui/sheet.tsx", content: sheetSource() },
+    { path: "src/components/ui/sonner.tsx", content: sonnerSource() },
+    { path: "src/components/ui/badge.tsx", content: badgeSource() },
+    { path: "src/components/ui/card.tsx", content: cardSource() },
+    { path: "src/components/ui/separator.tsx", content: separatorSource() },
+    { path: "src/components/ui/label.tsx", content: labelSource() },
   ];
 }
 
@@ -494,15 +509,6 @@ export function renderStorefrontBaselineFiles(
     { path: "src/app/cart-provider.tsx", content: cartProviderSource() },
     { path: "src/app/cart-selection.ts", content: cartSelectionSource() },
     { path: "src/data/sample-store.ts", content: sampleStoreSource(spec) },
-    { path: "src/components/ui/button.tsx", content: buttonSource() },
-    { path: "src/components/ui/input.tsx", content: inputSource() },
-    { path: "src/components/ui/select.tsx", content: selectSource() },
-    { path: "src/components/ui/radio-group.tsx", content: radioGroupSource() },
-    { path: "src/components/ui/dialog.tsx", content: dialogSource() },
-    { path: "src/components/ui/sheet.tsx", content: sheetSource() },
-    { path: "src/components/ui/sonner.tsx", content: sonnerSource() },
-    { path: "src/components/ui/badge.tsx", content: badgeSource() },
-    { path: "src/components/ui/card.tsx", content: cardSource() },
     {
       path: "src/components/layout/theme-toggle.tsx",
       content: themeToggleSource(),
@@ -1029,6 +1035,12 @@ export const SheetDescription = ({ className, ...props }: React.ComponentPropsWi
 }
 function sonnerSource() {
   return `import { Toaster as Sonner } from 'sonner'\nexport function Toaster() { return <Sonner richColors position='top-right' /> }\n`;
+}
+function separatorSource() {
+  return `import * as SeparatorPrimitive from '@radix-ui/react-separator'\nimport { cn } from '@/lib/utils'\nexport const Separator = ({ className, orientation = 'horizontal', decorative = true, ...props }: React.ComponentPropsWithoutRef<typeof SeparatorPrimitive.Root>) => <SeparatorPrimitive.Root decorative={decorative} orientation={orientation} className={cn('shrink-0 bg-border', orientation === 'horizontal' ? 'h-px w-full' : 'h-full w-px', className)} {...props} />\n`;
+}
+function labelSource() {
+  return `import * as LabelPrimitive from '@radix-ui/react-label'\nimport { cn } from '@/lib/utils'\nexport const Label = ({ className, ...props }: React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>) => <LabelPrimitive.Root className={cn('text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70', className)} {...props} />\n`;
 }
 function themeToggleSource() {
   return `import { useEffect, useState } from 'react'

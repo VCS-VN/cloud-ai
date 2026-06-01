@@ -1,0 +1,30 @@
+---
+layer: PROVIDER
+warning: >
+  Hợp đồng runtime cho auth/cart/store provider + thứ tự provider trong __root.
+  Đây là phần dễ vỡ app nhất (401 fallback, bulk merge, provider order). Gửi
+  nguyên văn tới model. KHÔNG sửa nếu không nắm rõ luồng cart guest/user.
+---
+AUTH + CART RUNTIME RULES:
+- src/app/auth-provider.tsx MUST use useQuery to call GET /api/v1/auth/profile through apiClient. Profile shape is { id, phoneNumber?, email?, firstName?, lastName? }. If profile exists, cart mode is user. If profile request is 401, clearAuthTokens(), set profile null, expose no error, and continue in guest mode. AuthProvider MUST expose { profile, isLoading, isAuthenticated, logout }, and logout MUST clear auth tokens and profile state.
+- src/routes/__root.tsx provider order MUST be exactly <Providers><StoreProvider><AuthProvider><CartProvider>...app chrome...</CartProvider></AuthProvider></StoreProvider></Providers>. CartProvider MUST load only after StoreProvider and AuthProvider have settled.
+- src/app/cart-provider.tsx MUST expose { cart, items, totalItems, isLoading, mode, addItem, updateItemQuantity, removeItem, clearCart, getItemQuantity }. Guest mode uses localStorage key `store_cart` and stores the exact cart response shape { data: [{ store, items }], total, totalItems }. User mode loads GET /api/v1/carts with params { page: 1, limit: 100, storeId }.
+- User cart API contracts: add POST /api/v1/carts body { id: selectedModel.id, quantity }; update PATCH /api/v1/carts/${id} body { quantity }; remove DELETE /api/v1/carts/${id}; clear DELETE /api/v1/carts/all params { storeId }; bulk merge POST /api/v1/carts/items/bulk body { items: [{ itemId: selectedModel.id, quantity }] }. For user mode, update UI before calling API, ignore mutation responses, do not rollback, and do not show error toast on persistence failure.
+- On auth transition to user mode, CartProvider MUST check guest localStorage. If guest items exist, bulk merge them, then load account cart and clear guest cart. If no guest items exist, skip bulk merge and only load account cart.
+- Cart item id is always selected model id. Adding same model id combines quantity. Updating existing item sets quantity, not add-more. Quantity 0 removes the item and user mode calls DELETE /api/v1/carts/${id}. total = cart.data.length; totalItems = sum of item quantities.
+- Product detail is the only generated product surface allowed to mutate cart. Product cards MUST link to product detail for option selection and MUST NOT add to cart directly.
+- Cart page selection MUST use Jotai selectedCartItemIdsAtom storing ids only, default empty. Cart page MUST provide per-item checkbox, select all toggle, selected subtotal/count summary, disabled checkout when none selected, and checkout navigation to /checkout with search { method: 'cart' }. Checkout resolves selected item details from selected ids plus current cart state.
+
+CREATE THESE PROVIDER + ROOT FILES:
+
+src/app/store-provider.tsx - StoreProvider focuses ONLY on store detail. When VITE_STORE_SLUG is set, fetch store detail via useStoreDetail, block app rendering with a full-page loading skeleton while loading, show a store load error UI with retry on error, and expose { storeDetail, isLoading, error, refetch, isUsingSampleData=false }. When VITE_STORE_SLUG is missing, return sampleStore from @/data/sample-store with isUsingSampleData=true. Do NOT include cart, order, or checkout state.
+
+src/app/auth-provider.tsx - AuthProvider wraps children with AuthContext, calls GET /api/v1/auth/profile through apiClient using useQuery, exposes { profile, isLoading, isAuthenticated, logout }, clears auth tokens and profile on logout, clears auth tokens and falls back to guest profile null on 401, and exposes no profile error UI state.
+
+src/app/cart-provider.tsx - Active CartProvider that wraps children with a CartContext. It waits for StoreProvider and AuthProvider readiness, chooses mode 'guest' when profile is null and 'user' when profile exists, exposes cart/items/totalItems/isLoading/mode/addItem/updateItemQuantity/removeItem/clearCart/getItemQuantity, uses localStorage key store_cart for guest, uses apiClient cart APIs for user, updates UI before user API calls, ignores user API responses/failures, and never shows persistence failure toast.
+
+src/app/cart-selection.ts - Jotai atom `selectedCartItemIdsAtom` storing string[] selected cart item ids only. Do NOT store full item snapshots.
+
+src/data/sample-store.ts - sampleStore constant matching StoreDetail shape ({ id, slug, name, description }) used as fallback when VITE_STORE_SLUG is missing.
+
+src/routes/__root.tsx - createRootRoute with component Root and notFoundComponent wired to NotFound, html/head(HeadContent)/body(Providers wrapping StoreProvider wrapping AuthProvider wrapping CartProvider wrapping RouteLoadingBar/SiteHeader/Suspense(Outlet)/SiteFooter/Toaster, then Scripts), import '@vitejs/plugin-react/preamble' first, then import '@/styles/app.css'. Wrap <Outlet /> in <Suspense fallback={<RouteSuspenseFallback />}> with a DESIGN.md-aligned skeleton fallback to prevent blank/broken client UI during route/component suspension. Keep SiteFooter and Toaster outside the Suspense-wrapped Outlet. NEVER import '../app.css', './app.css', or any relative CSS path. NEVER remove Providers, notFoundComponent, RouteLoadingBar, AuthProvider, CartProvider, or place StoreProvider outside Providers; StoreProvider uses React Query and MUST always be inside QueryClientProvider via Providers.

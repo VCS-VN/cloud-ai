@@ -1,21 +1,19 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 
 export const TASTE_SKILL_RELATIVE_PATH =
   ".agents/skills/design-taste-frontend/SKILL.md";
 
+const TASTE_SKILL_REMOTE_URL =
+  "https://raw.githubusercontent.com/Leonxlnx/taste-skill/main/skills/taste-skill/SKILL.md";
+
 export type TasteSkill = {
   content: string;
   hash: string;
 };
 
-type CacheEntry = {
-  mtimeMs: number;
-  skill: TasteSkill;
-};
-
-let cache: CacheEntry | null = null;
+let remoteCache: TasteSkill | null = null;
 
 function resolveTasteSkillPath(): string {
   // The skill lives in the Builder repo, NOT in a generated project workspace.
@@ -23,33 +21,51 @@ function resolveTasteSkillPath(): string {
   return path.resolve(process.cwd(), TASTE_SKILL_RELATIVE_PATH);
 }
 
+function hashContent(content: string): TasteSkill {
+  return {
+    content,
+    hash: createHash("sha256").update(content).digest("hex"),
+  };
+}
+
 /**
- * Load the design-taste-frontend SKILL.md from disk. The skill is the live source of
- * truth for storefront UI taste — editing the file changes agent behavior with no code
- * change. Cached by mtime so repeated reads in one process are cheap.
+ * Load the design-taste-frontend SKILL.md. The skill is the live source of truth for
+ * storefront UI taste — editing the file changes agent behavior with no code change.
  *
- * Throws if the file cannot be read: the skill is a required runtime dependency
- * (it is git-tracked and shipped), so a missing/unreadable skill must fail the turn
- * rather than silently degrade to slop.
+ * Fetches the skill from the canonical remote (TASTE_SKILL_REMOTE_URL) once at boot and
+ * caches it for the whole process. If the remote is unreachable (network error, timeout,
+ * non-200, empty body), falls back to the git-tracked local copy on disk.
+ *
+ * Throws if BOTH remote and local fail: the skill is a required runtime dependency, so a
+ * totally broken setup must fail the turn rather than silently degrade to slop.
  */
 export async function loadTasteSkill(): Promise<TasteSkill> {
-  const skillPath = resolveTasteSkillPath();
+  if (remoteCache) {
+    return remoteCache;
+  }
 
-  let mtimeMs: number;
   try {
-    const stats = await stat(skillPath);
-    mtimeMs = stats.mtimeMs;
+    const res = await fetch(TASTE_SKILL_REMOTE_URL, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    }
+    const content = await res.text();
+    if (!content.trim()) {
+      throw new Error("remote body was empty");
+    }
+    remoteCache = hashContent(content);
+    return remoteCache;
   } catch (error) {
-    throw new Error(
-      `Taste skill not found at ${skillPath}. The design-taste-frontend SKILL.md is a required runtime dependency. Original error: ${
+    console.warn(
+      `Failed to fetch taste skill from ${TASTE_SKILL_REMOTE_URL}, falling back to local file: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
   }
 
-  if (cache && cache.mtimeMs === mtimeMs) {
-    return cache.skill;
-  }
+  const skillPath = resolveTasteSkillPath();
 
   let content: string;
   try {
@@ -66,29 +82,6 @@ export async function loadTasteSkill(): Promise<TasteSkill> {
     throw new Error(`Taste skill at ${skillPath} is empty.`);
   }
 
-  const skill: TasteSkill = {
-    content,
-    hash: createHash("sha256").update(content).digest("hex"),
-  };
-  cache = { mtimeMs, skill };
-  return skill;
-}
-
-/**
- * Extract the sections relevant to dial inference (Design Read + dials) so the
- * server-side dials step can embed just those instead of the full 85KB skill.
- * Pulls sections 0 (BRIEF INFERENCE), 1 (THE THREE DIALS), and 7 (DIAL DEFINITIONS).
- * Falls back to the whole document if the expected headers are not found.
- */
-export function extractDialInferenceSection(content: string): string {
-  const wanted = [
-    /^##\s+0\.\s+BRIEF INFERENCE/im,
-    /^##\s+1\.\s+THE THREE DIALS/im,
-    /^##\s+7\.\s+DIAL DEFINITIONS/im,
-  ];
-  // Split on level-2 headers, keeping each section with its heading.
-  const parts = content.split(/(?=^##\s+)/m);
-  const matched = parts.filter((part) => wanted.some((re) => re.test(part)));
-  if (matched.length === 0) return content;
-  return matched.join("\n").trim();
+  remoteCache = hashContent(content);
+  return remoteCache;
 }
