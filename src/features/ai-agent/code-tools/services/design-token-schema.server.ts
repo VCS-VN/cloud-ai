@@ -107,6 +107,7 @@ export const APPROVED_SEMANTIC_COLOR_UTILITIES = [
 
 export type DesignTokenEntry = {
   value: string;
+  valueDark?: string;
   provenance?: DesignTokenProvenance;
   role?: string;
 };
@@ -121,3 +122,40 @@ export function readTokenValue(entry: DesignTokenEntry | string | undefined): st
   if (!entry || typeof entry !== "object") return undefined;
   return typeof entry.value === "string" ? entry.value : undefined;
 }
+
+export function readTokenValueDark(
+  entry: DesignTokenEntry | string | undefined,
+): string | undefined {
+  if (!entry || typeof entry !== "object") return undefined;
+  return typeof entry.valueDark === "string" && entry.valueDark ? entry.valueDark : undefined;
+}
+
+/**
+ * Distilled taste-skill "dials" (Section 1) persisted into DESIGN.md designIntent.
+ * Bounds are the commerce ceiling applied by clampDials; see design-dials.server.ts.
+ */
+export const DESIGN_DIAL_KEYS = ["variance", "motion", "density"] as const;
+export type DesignDialKey = (typeof DESIGN_DIAL_KEYS)[number];
+
+export const DESIGN_DIAL_BOUNDS: Record<DesignDialKey, { min: number; max: number }> = {
+  variance: { min: 1, max: 8 },
+  motion: { min: 1, max: 5 },
+  density: { min: 3, max: 6 },
+};
+
+/** Distilled taste-skill "locks" (Section 1) persisted into DESIGN.md designIntent. */
+export const DESIGN_LOCK_KEYS = ["colorLock", "radiusLock", "themeLock"] as const;
+export type DesignLockKey = (typeof DESIGN_LOCK_KEYS)[number];
+
+export const RADIUS_LOCK_VALUES = ["all-sharp", "all-soft", "all-pill"] as const;
+export const THEME_LOCK_VALUES = ["light", "dark", "dual"] as const;
+
+export type DesignDials = {
+  variance: number;
+  motion: number;
+  density: number;
+  designRead: string;
+  colorLock: string;
+  radiusLock: (typeof RADIUS_LOCK_VALUES)[number];
+  themeLock: (typeof THEME_LOCK_VALUES)[number];
+};

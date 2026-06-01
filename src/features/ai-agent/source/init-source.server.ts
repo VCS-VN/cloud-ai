@@ -504,6 +504,10 @@ export function renderStorefrontBaselineFiles(
     { path: "src/components/ui/badge.tsx", content: badgeSource() },
     { path: "src/components/ui/card.tsx", content: cardSource() },
     {
+      path: "src/components/layout/theme-toggle.tsx",
+      content: themeToggleSource(),
+    },
+    {
       path: "src/components/layout/route-loading-bar.tsx",
       content: routeLoadingBarSource(),
     },
@@ -956,6 +960,9 @@ function appCssSource() {
   :root {
     --background: #F7F9FC; --foreground: #111827; --card: #FFFFFF; --card-foreground: #111827; --popover: #FFFFFF; --popover-foreground: #111827; --primary: #1746A2; --primary-foreground: #FFFFFF; --secondary: #E9EEF6; --secondary-foreground: #111827; --muted: #E9EEF6; --muted-foreground: #4B5563; --accent: #E85D04; --accent-foreground: #FFFFFF; --destructive: #B91C1C; --destructive-foreground: #FFFFFF; --border: #CBD5E1; --input: #CBD5E1; --ring: #1746A2; --highlight: #F4B400; --highlight-foreground: #1F1300; --success: #166534; --warning: #92400E; --error: #B91C1C; --deep: #1746A2; --deep-foreground: #FFFFFF; --radius: 0.75rem;
   }
+  .dark {
+    --background: #0B0F19; --foreground: #F3F4F6; --card: #151B27; --card-foreground: #F3F4F6; --popover: #151B27; --popover-foreground: #F3F4F6; --primary: #1746A2; --primary-foreground: #FFFFFF; --secondary: #1F2837; --secondary-foreground: #F3F4F6; --muted: #1F2837; --muted-foreground: #9CA3AF; --accent: #E85D04; --accent-foreground: #FFFFFF; --destructive: #F87171; --destructive-foreground: #1B0A0A; --border: #2A3340; --input: #2A3340; --ring: #3B6FD4; --highlight: #F4B400; --highlight-foreground: #1F1300; --success: #22C55E; --warning: #F59E0B; --error: #F87171; --deep: #0B0F19; --deep-foreground: #FFFFFF; --radius: 0.75rem;
+  }
   /* DESIGN_TOKENS_END */\n  * { @apply border-border; }\n  body { @apply bg-background text-foreground; margin: 0; font-family: Inter, Manrope, system-ui, -apple-system, sans-serif; }\n}\n`;
 }
 function buttonSource() {
@@ -1022,6 +1029,49 @@ export const SheetDescription = ({ className, ...props }: React.ComponentPropsWi
 }
 function sonnerSource() {
   return `import { Toaster as Sonner } from 'sonner'\nexport function Toaster() { return <Sonner richColors position='top-right' /> }\n`;
+}
+function themeToggleSource() {
+  return `import { useEffect, useState } from 'react'
+import { Moon, Sun } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+
+function getInitialTheme(): 'light' | 'dark' {
+  if (typeof document !== 'undefined' && document.documentElement.classList.contains('dark')) return 'dark'
+  return 'light'
+}
+
+export function ThemeToggle() {
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setTheme(getInitialTheme())
+    setMounted(true)
+  }, [])
+
+  function toggle() {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    try {
+      localStorage.setItem('theme', next)
+    } catch {}
+    document.documentElement.classList.toggle('dark', next === 'dark')
+  }
+
+  return (
+    <Button
+      type='button'
+      variant='outline'
+      size='icon'
+      aria-label='Toggle color theme'
+      className='shrink-0'
+      onClick={toggle}
+    >
+      {mounted && theme === 'dark' ? <Sun className='h-4 w-4' /> : <Moon className='h-4 w-4' />}
+    </Button>
+  )
+}
+`;
 }
 function sampleStoreSource(spec: WebsiteSpec) {
   const sample = JSON.stringify(
@@ -1575,10 +1625,16 @@ import { Toaster } from '@/components/ui/sonner'
 import '@/styles/app.css'
 
 export const Route = createRootRoute({ component: Root, notFoundComponent: NotFound })
+
+const THEME_INIT_SCRIPT = \`(function(){try{var t=localStorage.getItem('theme');if(!t){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}if(t==='dark'){document.documentElement.classList.add('dark');}else{document.documentElement.classList.remove('dark');}}catch(e){}})();\`
+
 function Root() {
   return (
     <html lang='en'>
-      <head><HeadContent /></head>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <HeadContent />
+      </head>
       <body>
         <Providers>
           <StoreProvider>
@@ -1688,6 +1744,7 @@ export function siteHeaderSource() {
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Search, ShoppingCart } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { useStore } from '@/app/store-provider'
 import { useCart } from '@/app/cart-provider'
 import { useProductSuggestions } from '@/services/store/use-product-suggestions'
@@ -1877,6 +1934,7 @@ export function SiteHeader() {
             </ul>
           )}
         </div>
+        <ThemeToggle />
         <Button asChild variant='outline' size='icon' aria-label='Cart' className='relative shrink-0'>
           <Link to='/cart'>
             <ShoppingCart className='h-4 w-4' />

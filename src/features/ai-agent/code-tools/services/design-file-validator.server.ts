@@ -7,6 +7,9 @@ import {
   PHASE1_COLOR_TOKEN_KEYS,
   PHASE1_TOKEN_GROUP_KEYS,
   readTokenValue,
+  readTokenValueDark,
+  DESIGN_DIAL_BOUNDS,
+  DESIGN_DIAL_KEYS,
   type DesignTokenBlock,
 } from "./design-token-schema.server";
 
@@ -70,6 +73,7 @@ export function validateManagedDesignFile(markdown: string): DesignFileValidatio
   }
 
   validateIntent(tokenBlock, violations);
+  validateDials(tokenBlock, violations);
   validateTokenGroups(tokenBlock, violations);
   validateColorTokens(tokenBlock, violations, warnings);
 
@@ -96,6 +100,25 @@ function validateIntent(block: DesignTokenBlock, violations: DesignFileViolation
         code: "DESIGN_INTENT_FIELD_MISSING",
         message: `designIntent.${field} is required.`,
         path: `designIntent.${field}`,
+      });
+    }
+  }
+}
+
+function validateDials(block: DesignTokenBlock, violations: DesignFileViolation[]): void {
+  const intent = block.designIntent;
+  if (!intent || typeof intent !== "object") return;
+  // Dials are optional (legacy DESIGN.md predates them). Only validate when present.
+  for (const key of DESIGN_DIAL_KEYS) {
+    if (!(key in intent)) continue;
+    const raw = (intent as Record<string, unknown>)[key];
+    const num = typeof raw === "number" ? raw : Number(raw);
+    const { min, max } = DESIGN_DIAL_BOUNDS[key];
+    if (!Number.isFinite(num) || num < min || num > max) {
+      violations.push({
+        code: "DESIGN_DIAL_OUT_OF_RANGE",
+        message: `designIntent.${key} must be an integer in [${min}, ${max}] (commerce ceiling); got ${String(raw)}.`,
+        path: `designIntent.${key}`,
       });
     }
   }
@@ -161,6 +184,14 @@ function validateColorTokens(
         path: `tokens.colors.${key}.value`,
       });
     }
+    const dark = readTokenValueDark(colors[key]);
+    if (dark && !parseHexColor(dark)) {
+      violations.push({
+        code: "DESIGN_COLOR_VALUE_DARK_INVALID",
+        message: `tokens.colors.${key}.valueDark must be a valid hex color when present.`,
+        path: `tokens.colors.${key}.valueDark`,
+      });
+    }
   }
   for (const [foregroundKey, backgroundKey] of REQUIRED_CONTRAST_PAIRS) {
     const foreground = readTokenValue(colors[foregroundKey]);
@@ -172,6 +203,20 @@ function validateColorTokens(
       violations.push({
         code: "DESIGN_CONTRAST_FAILED",
         message: `${foregroundKey} on ${backgroundKey} must meet 4.5:1 contrast; got ${ratio.toFixed(2)}:1.`,
+      });
+    }
+  }
+  // Dark-mode contrast: only enforced when both tokens declare valueDark (dual-mode projects).
+  for (const [foregroundKey, backgroundKey] of REQUIRED_CONTRAST_PAIRS) {
+    const foreground = readTokenValueDark(colors[foregroundKey]);
+    const background = readTokenValueDark(colors[backgroundKey]);
+    if (!foreground || !background) continue;
+    const ratio = contrastRatioForHex(foreground, background);
+    if (ratio === null) continue;
+    if (ratio < 4.5) {
+      violations.push({
+        code: "DESIGN_CONTRAST_DARK_FAILED",
+        message: `${foregroundKey} on ${backgroundKey} (dark) must meet 4.5:1 contrast; got ${ratio.toFixed(2)}:1.`,
       });
     }
   }

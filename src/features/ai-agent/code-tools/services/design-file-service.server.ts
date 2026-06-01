@@ -13,6 +13,7 @@ import {
 import { buildDeterministicDesignSeed, type TokenHint } from "../../planning/design-intent-heuristic";
 import { validateManagedDesignFile } from "./design-file-validator.server";
 import { contrastRatioForHex } from "./design-color-contrast.server";
+import type { DesignDials } from "./design-token-schema.server";
 
 export type ProjectDesignRuleContext = {
   source: "project-design-md";
@@ -34,6 +35,7 @@ export type GenerateDesignFileInput = {
   signal?: AbortSignal;
   tokenHints?: ReadonlyArray<TokenHint>;
   skipLeakValidation?: boolean;
+  dials?: DesignDials;
 };
 
 export type GenerateDesignFileResult = {
@@ -133,6 +135,7 @@ function prependManagedTokenBlock(
 ): string {
   if (markdown.trimStart().startsWith("---")) return markdown;
   const palette = pickManagedPalette(`${input.projectId}:${input.userPrompt}`);
+  const dials = input.dials;
   const intent = {
     category: normalizeDesignFact(input.websiteSpec.store.type, "retail"),
     audience: normalizeDesignFact(input.websiteSpec.store.targetCustomers, "retail shoppers"),
@@ -142,6 +145,7 @@ function prependManagedTokenBlock(
     seed: buildDeterministicDesignSeed({ projectId: input.projectId, prompt: input.userPrompt }),
     source: source === "fallback" ? "fallback" : "init_prompt",
   };
+  const provenance = source === "fallback" ? "fallback-agent" : "agent";
   const yaml = [
     "---",
     "designIntent:",
@@ -152,12 +156,26 @@ function prependManagedTokenBlock(
     `  mood: [${intent.mood.map(quoteYaml).join(", ")}]`,
     `  seed: ${quoteYaml(intent.seed)}`,
     `  source: ${quoteYaml(intent.source)}`,
+    ...(dials
+      ? [
+          `  variance: ${dials.variance}`,
+          `  motion: ${dials.motion}`,
+          `  density: ${dials.density}`,
+          `  designRead: ${quoteYaml(dials.designRead)}`,
+          `  colorLock: ${quoteYaml(dials.colorLock)}`,
+          `  radiusLock: ${quoteYaml(dials.radiusLock)}`,
+          `  themeLock: ${quoteYaml(dials.themeLock)}`,
+        ]
+      : []),
     "tokens:",
     "  colors:",
     ...Object.entries(palette.colors).flatMap(([key, value]) => [
       `    ${key}:`,
       `      value: ${quoteYaml(value)}`,
-      `      provenance: ${source === "fallback" ? "fallback-agent" : "agent"}`,
+      ...(palette.colorsDark[key]
+        ? [`      valueDark: ${quoteYaml(palette.colorsDark[key])}`]
+        : []),
+      `      provenance: ${provenance}`,
       `      role: ${quoteYaml(colorRole(key))}`,
     ]),
     "---",
@@ -170,6 +188,7 @@ type ManagedPalette = {
   archetype: string;
   mood: string[];
   colors: Record<string, string>;
+  colorsDark: Record<string, string>;
 };
 
 
@@ -183,28 +202,35 @@ const MANAGED_PALETTE_CONTRAST_PAIRS: Array<[string, string]> = [
 ];
 
 /**
- * Validates that all required contrast pairs in a managed palette meet 4.5:1.
- * Returns the palette unchanged if valid, or logs a warning and returns null if invalid.
+ * Validates that all required contrast pairs in a managed palette meet 4.5:1,
+ * for BOTH the light (colors) and dark (colorsDark) maps. Returns the palette
+ * unchanged if valid, or logs a warning and returns null if invalid.
  */
 function validateManagedPalette(palette: ManagedPalette): ManagedPalette | null {
-  for (const [fgKey, bgKey] of MANAGED_PALETTE_CONTRAST_PAIRS) {
-    const fg = palette.colors[fgKey];
-    const bg = palette.colors[bgKey];
-    if (!fg || !bg) continue;
-    const ratio = contrastRatioForHex(fg, bg);
-    if (ratio === null) continue;
-    if (ratio < 4.5) {
-      console.warn(
-        JSON.stringify({
-          event: "managed_palette_contrast_failed",
-          archetype: palette.archetype,
-          pair: `${fgKey}/${bgKey}`,
-          ratio: Number(ratio.toFixed(2)),
-          fg,
-          bg,
-        }),
-      );
-      return null;
+  for (const [mode, map] of [
+    ["light", palette.colors],
+    ["dark", palette.colorsDark],
+  ] as const) {
+    for (const [fgKey, bgKey] of MANAGED_PALETTE_CONTRAST_PAIRS) {
+      const fg = map[fgKey];
+      const bg = map[bgKey];
+      if (!fg || !bg) continue;
+      const ratio = contrastRatioForHex(fg, bg);
+      if (ratio === null) continue;
+      if (ratio < 4.5) {
+        console.warn(
+          JSON.stringify({
+            event: "managed_palette_contrast_failed",
+            archetype: palette.archetype,
+            mode,
+            pair: `${fgKey}/${bgKey}`,
+            ratio: Number(ratio.toFixed(2)),
+            fg,
+            bg,
+          }),
+        );
+        return null;
+      }
     }
   }
   return palette;
@@ -232,6 +258,23 @@ function pickManagedPalette(seed: string): ManagedPalette {
         warning: "#92400E",
         error: "#B91C1C",
       },
+      colorsDark: {
+        primary: "#1746A2",
+        "primary-foreground": "#FFFFFF",
+        accent: "#B45309",
+        "accent-foreground": "#FFFFFF",
+        highlight: "#F4B400",
+        "highlight-foreground": "#1F1300",
+        background: "#0B0F19",
+        surface: "#151B27",
+        "surface-muted": "#1F2837",
+        foreground: "#F3F4F6",
+        "muted-foreground": "#9CA3AF",
+        border: "#2A3340",
+        success: "#22C55E",
+        warning: "#F59E0B",
+        error: "#F87171",
+      },
     },
     {
       archetype: "soft premium editorial",
@@ -253,6 +296,23 @@ function pickManagedPalette(seed: string): ManagedPalette {
         warning: "#8A5A00",
         error: "#A62821",
       },
+      colorsDark: {
+        primary: "#5B2333",
+        "primary-foreground": "#FFFFFF",
+        accent: "#A65F3D",
+        "accent-foreground": "#FFFFFF",
+        highlight: "#D6A85A",
+        "highlight-foreground": "#221400",
+        background: "#161109",
+        surface: "#211A12",
+        "surface-muted": "#2B2218",
+        foreground: "#F4ECE0",
+        "muted-foreground": "#B7A998",
+        border: "#3A2E20",
+        success: "#4ADE80",
+        warning: "#FBBF24",
+        error: "#F87171",
+      },
     },
     {
       archetype: "playful bright market",
@@ -273,6 +333,23 @@ function pickManagedPalette(seed: string): ManagedPalette {
         success: "#15803D",
         warning: "#A16207",
         error: "#BE123C",
+      },
+      colorsDark: {
+        primary: "#0F766E",
+        "primary-foreground": "#FFFFFF",
+        accent: "#C026D3",
+        "accent-foreground": "#FFFFFF",
+        highlight: "#FACC15",
+        "highlight-foreground": "#1A1600",
+        background: "#0A1018",
+        surface: "#121A24",
+        "surface-muted": "#1B2533",
+        foreground: "#F1F5F9",
+        "muted-foreground": "#94A3B8",
+        border: "#27323F",
+        success: "#22C55E",
+        warning: "#FBBF24",
+        error: "#FB7185",
       },
     },
   ];

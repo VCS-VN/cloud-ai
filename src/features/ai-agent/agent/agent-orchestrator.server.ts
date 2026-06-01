@@ -60,6 +60,11 @@ import {
   generateAndWriteDesignFile,
   loadProjectDesignRules,
 } from "../code-tools/services/design-file-service.server";
+import { generateDesignDials } from "../code-tools/services/design-dials.server";
+import {
+  scanForAntiSlop,
+  type AntiSlopViolation,
+} from "../code-tools/services/anti-slop-scanner.server";
 import {
   extractUserProvenanceTokens,
   doesPromptConflictWithUserToken,
@@ -349,6 +354,12 @@ export class AgentOrchestrator {
           provider: this.deps.openAIProvider,
           model: this.deps.agentConfig?.plannerModel,
         });
+        const redesignDials = await generateDesignDials({
+          websiteSpec: redesignWebsiteSpec,
+          userPrompt: input.prompt,
+          provider: this.deps.openAIProvider,
+          model: this.deps.agentConfig?.plannerModel,
+        });
         const redesignResult = await generateAndWriteDesignFile({
           projectId: input.projectId,
           workspaceRoot: getProjectWorkspaceRoot(input.projectId),
@@ -358,6 +369,7 @@ export class AgentOrchestrator {
           model: this.deps.agentConfig?.plannerModel,
           signal: input.signal,
           tokenHints: designIntent.tokenHints,
+          dials: redesignDials,
         });
         yield {
           type: "design_file_regenerated",
@@ -406,71 +418,33 @@ export class AgentOrchestrator {
 
       const registry = createDefaultCodeToolRegistry();
 
-      const eventQueue = new AsyncEventQueue<AgentStreamEvent>();
-      const loopPromise = (async (): Promise<AgenticLoopResult> => {
-        try {
-          const generator = runAgenticLoop(
-            {
-              projectId: input.projectId,
-              userId: input.userId,
-              messageId: run.id,
-              runId: run.id,
-              userPrompt: effectiveUserPrompt,
-              projectState: activeProjectState,
-              selectedStoreSlug,
-              thinkingResult: thinking,
-              context: toolExecutionContext,
-              signal: input.signal,
-            },
-            {
-              model: this.deps.agentConfig?.coderModel ?? "gpt-5.4",
-              maxIterations: this.deps.agentConfig?.agenticMaxIterations ?? 40,
-              maxConsecutiveToolErrors:
-                this.deps.agentConfig?.agenticMaxConsecutiveToolErrors ?? 5,
-              callModel: async (modelInput) => {
-                const coderModel =
-                  this.deps.agentConfig?.coderModel ?? "gpt-5.4";
-                const reasoningEffort = isReasoningModel(coderModel)
-                  ? selectReasoningEffort(thinking)
-                  : undefined;
-                return this.deps.openAIProvider!.streamCodeToolResponse({
-                  model: coderModel,
-                  input: modelInput.messages as unknown[],
-                  tools: modelInput.tools,
-                  toolChoice: "auto",
-                  signal: input.signal,
-                  onTextDelta: modelInput.onTextDelta,
-                  reasoningEffort,
-                });
-              },
-              executeTool: async (toolCall) => {
-                return executeProjectTool({
-                  registry,
-                  context: toolExecutionContext,
-                  toolCall,
-                  inspectionCompleted: true,
-                  mutationCompleted: false,
-                });
-              },
-              sendEvent: (event) => {
-                eventQueue.push(event as AgentStreamEvent);
-              },
-            },
-          );
-          let iterResult = await generator.next();
-          while (!iterResult.done) {
-            iterResult = await generator.next();
-          }
-          return iterResult.value;
-        } finally {
-          eventQueue.close();
-        }
-      })();
+      let loopResult = yield* this.runAgenticEditPass({
+        userPrompt: effectiveUserPrompt,
+        projectId: input.projectId,
+        userId: input.userId,
+        runId: run.id,
+        projectState: activeProjectState,
+        selectedStoreSlug,
+        thinking,
+        toolExecutionContext,
+        registry,
+        signal: input.signal,
+      });
 
-      for await (const event of eventQueue.drain()) {
-        yield event;
-      }
-      const loopResult = await loopPromise;
+      // Anti-slop enforcement: scan changed UI files, run bounded repair passes,
+      // then surface any remaining violations to the user (never loop forever).
+      loopResult = yield* this.enforceAntiSlop({
+        loopResult,
+        projectId: input.projectId,
+        userId: input.userId,
+        runId: run.id,
+        projectState: activeProjectState,
+        selectedStoreSlug,
+        thinking,
+        toolExecutionContext,
+        registry,
+        signal: input.signal,
+      });
 
       const nextProjectState = await this.deps.projectStateStore.patch(
         input.projectId,
@@ -597,6 +571,12 @@ export class AgentOrchestrator {
     };
 
     const initTokenHints = extractTokenHints(input.prompt);
+    const initDials = await generateDesignDials({
+      websiteSpec,
+      userPrompt: input.prompt,
+      provider: this.deps.openAIProvider,
+      model: this.deps.agentConfig?.plannerModel,
+    });
     const designResult = await runPhase("generate_design_file", () =>
       generateAndWriteDesignFile({
         projectId: input.projectId,
@@ -607,6 +587,7 @@ export class AgentOrchestrator {
         model: this.deps.agentConfig?.plannerModel,
         signal: input.signal,
         tokenHints: initTokenHints,
+        dials: initDials,
       }),
     );
     yield {
@@ -1282,6 +1263,175 @@ export class AgentOrchestrator {
     }
   }
 
+  /**
+   * Run one agentic edit pass and yield its stream events, returning the loop result.
+   * Extracted so anti-slop repair can re-run a pass with a corrective prompt.
+   */
+  private async *runAgenticEditPass(args: {
+    userPrompt: string;
+    projectId: string;
+    userId?: string;
+    runId: string;
+    projectState: ProjectState;
+    selectedStoreSlug: string | null;
+    thinking: ThinkingResult;
+    toolExecutionContext: ToolExecutionContext;
+    registry: ReturnType<typeof createDefaultCodeToolRegistry>;
+    signal?: AbortSignal;
+  }): AsyncGenerator<AgentStreamEvent, AgenticLoopResult, unknown> {
+    const eventQueue = new AsyncEventQueue<AgentStreamEvent>();
+    const loopPromise = (async (): Promise<AgenticLoopResult> => {
+      try {
+        const generator = runAgenticLoop(
+          {
+            projectId: args.projectId,
+            userId: args.userId,
+            messageId: args.runId,
+            runId: args.runId,
+            userPrompt: args.userPrompt,
+            projectState: args.projectState,
+            selectedStoreSlug: args.selectedStoreSlug,
+            thinkingResult: args.thinking,
+            context: args.toolExecutionContext,
+            signal: args.signal,
+          },
+          {
+            model: this.deps.agentConfig?.coderModel ?? "gpt-5.4",
+            maxIterations: this.deps.agentConfig?.agenticMaxIterations ?? 40,
+            maxConsecutiveToolErrors:
+              this.deps.agentConfig?.agenticMaxConsecutiveToolErrors ?? 5,
+            callModel: async (modelInput) => {
+              const coderModel = this.deps.agentConfig?.coderModel ?? "gpt-5.4";
+              const reasoningEffort = isReasoningModel(coderModel)
+                ? selectReasoningEffort(args.thinking)
+                : undefined;
+              return this.deps.openAIProvider!.streamCodeToolResponse({
+                model: coderModel,
+                input: modelInput.messages as unknown[],
+                tools: modelInput.tools,
+                toolChoice: "auto",
+                signal: args.signal,
+                onTextDelta: modelInput.onTextDelta,
+                reasoningEffort,
+              });
+            },
+            executeTool: async (toolCall) => {
+              return executeProjectTool({
+                registry: args.registry,
+                context: args.toolExecutionContext,
+                toolCall,
+                inspectionCompleted: true,
+                mutationCompleted: false,
+              });
+            },
+            sendEvent: (event) => {
+              eventQueue.push(event as AgentStreamEvent);
+            },
+          },
+        );
+        let iterResult = await generator.next();
+        while (!iterResult.done) {
+          iterResult = await generator.next();
+        }
+        return iterResult.value;
+      } finally {
+        eventQueue.close();
+      }
+    })();
+
+    for await (const event of eventQueue.drain()) {
+      yield event;
+    }
+    return loopPromise;
+  }
+
+  /**
+   * Scan changed UI files for anti-slop violations. Cross-references DESIGN.md tokens so
+   * legitimate brand colors are not flagged. Runs up to MAX_REPAIR_PASSES corrective
+   * agentic passes; if violations remain, surfaces them to the user instead of looping.
+   */
+  private async *enforceAntiSlop(args: {
+    loopResult: AgenticLoopResult;
+    projectId: string;
+    userId?: string;
+    runId: string;
+    projectState: ProjectState;
+    selectedStoreSlug: string | null;
+    thinking: ThinkingResult;
+    toolExecutionContext: ToolExecutionContext;
+    registry: ReturnType<typeof createDefaultCodeToolRegistry>;
+    signal?: AbortSignal;
+  }): AsyncGenerator<AgentStreamEvent, AgenticLoopResult, unknown> {
+    const MAX_REPAIR_PASSES = 2;
+    if (!this.deps.projectFileStore) return args.loopResult;
+
+    let loopResult = args.loopResult;
+    let designMarkdown: string | undefined;
+    try {
+      designMarkdown = await this.deps.projectFileStore.readTextFile(args.projectId, "DESIGN.md");
+    } catch {
+      designMarkdown = undefined;
+    }
+
+    for (let pass = 0; pass <= MAX_REPAIR_PASSES; pass += 1) {
+      const uiFiles = loopResult.changedFiles.filter((path) => /\.(tsx|jsx|css)$/.test(path));
+      const violations: Array<{ path: string; violation: AntiSlopViolation }> = [];
+      for (const path of uiFiles) {
+        let source: string;
+        try {
+          source = await this.deps.projectFileStore.readTextFile(args.projectId, path);
+        } catch {
+          continue;
+        }
+        const scan = scanForAntiSlop({ source, designMarkdown });
+        for (const violation of scan.violations) {
+          violations.push({ path, violation });
+        }
+      }
+
+      if (violations.length === 0) return loopResult;
+
+      // Out of repair passes — surface to the user and keep the code.
+      if (pass === MAX_REPAIR_PASSES) {
+        const lines = violations
+          .slice(0, 8)
+          .map((v) => `- \`${v.path}\`: ${v.violation.message}`)
+          .join("\n");
+        console.warn(
+          JSON.stringify({
+            event: "anti_slop_surfaced",
+            projectId: args.projectId,
+            runId: args.runId,
+            count: violations.length,
+            codes: violations.map((v) => v.violation.code),
+          }),
+        );
+        yield {
+          type: "assistant_message_delta",
+          delta: `\n\nHeads up — a few anti-slop design checks still didn't pass after ${MAX_REPAIR_PASSES} fix attempts. These may be intentional; review and confirm:\n${lines}\n`,
+        };
+        return loopResult;
+      }
+
+      // Run a corrective pass with a focused prompt.
+      const repairPrompt = buildAntiSlopRepairPrompt(violations);
+      loopResult = yield* this.runAgenticEditPass({
+        userPrompt: repairPrompt,
+        projectId: args.projectId,
+        userId: args.userId,
+        runId: args.runId,
+        projectState: args.projectState,
+        selectedStoreSlug: args.selectedStoreSlug,
+        thinking: args.thinking,
+        toolExecutionContext: args.toolExecutionContext,
+        registry: args.registry,
+        signal: args.signal,
+      });
+    }
+
+    return loopResult;
+  }
+
   private async *streamUserFacingSummary(args: {
     fallbackSummary: string;
     input: HandlePromptInput;
@@ -1673,3 +1823,32 @@ function buildRedesignRewritePrompt(
     "7. Validate full storefront compliance with new DESIGN.md before completion.",
   ].join("\n");
 }
+
+function buildAntiSlopRepairPrompt(
+  violations: ReadonlyArray<{ path: string; violation: AntiSlopViolation }>,
+): string {
+  const byPath = new Map<string, AntiSlopViolation[]>();
+  for (const { path, violation } of violations) {
+    const list = byPath.get(path) ?? [];
+    list.push(violation);
+    byPath.set(path, list);
+  }
+  const fileLines = Array.from(byPath.entries()).flatMap(([path, list]) => [
+    `   - ${path}:`,
+    ...list.map((v) => `     - ${v.message} (matched: ${v.sample})`),
+  ]);
+  return [
+    "Anti-slop design checks failed on the files you just changed. Fix ONLY these violations with minimal patches; do not redesign or touch unrelated code.",
+    "",
+    "DESIGN.md is the source of truth. Use only declared palette roles (primary/accent/highlight/deep + surface/foreground/semantic) via Tailwind semantic utilities — never raw color utilities like bg-purple-500 or text-rose-400, and never default AI-purple/violet gradients.",
+    "",
+    "Violations to fix:",
+    ...fileLines,
+    "",
+    "1. Call project_read_design_rules to reload DESIGN.md tokens.",
+    "2. Inspect each listed file with project_read_file before patching.",
+    "3. Replace off-palette colors with the matching DESIGN.md role utility.",
+    "4. Run project_run_validation after mutations.",
+  ].join("\n");
+}
+
