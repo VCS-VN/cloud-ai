@@ -1,4 +1,5 @@
 import type { CodeToolDefinition, ProjectToolResult, ProviderFunctionToolCall, ToolExecutionContext } from "../code-tools/code-agent-types";
+import type { CodeToolRegistry } from "../code-tools/code-tool-registry.server";
 import type { ProjectState } from "../project/project-state.schema";
 import type { ThinkingResult } from "../thinking/thinking.schema";
 
@@ -18,6 +19,10 @@ export type AgenticLoopInput = {
   thinkingResult: ThinkingResult;
   context: ToolExecutionContext;
   preloadedTasteSkill?: PreloadedTasteSkill;
+  /** When set, model tool list matches executeTool (required for init registry). */
+  registry?: CodeToolRegistry;
+  /** Block early text-only completion until at least one storefront UI path is written. */
+  requireStorefrontUiBeforeCompletion?: boolean;
   signal?: AbortSignal;
 };
 

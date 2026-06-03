@@ -739,6 +739,8 @@ export class AgentOrchestrator {
             thinkingResult: thinking,
             context: toolExecutionContext,
             preloadedTasteSkill,
+            registry,
+            requireStorefrontUiBeforeCompletion: true,
             signal: input.signal,
           },
           {
@@ -1357,6 +1359,7 @@ export class AgentOrchestrator {
             selectedStoreSlug: args.selectedStoreSlug,
             thinkingResult: args.thinking,
             context: args.toolExecutionContext,
+            registry: args.registry,
             signal: args.signal,
           },
           {

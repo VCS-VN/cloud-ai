@@ -5,6 +5,7 @@ import { CODE_TOOL_LIMITS } from "../code-tools/code-tool-registry.server";
 import { buildAgenticSystemPrompt, buildUserMessageWithThinking } from "./agentic-prompts.server";
 import { buildPreloadedTasteSkillDeveloperMessage } from "../code-tools/services/taste-skill-preload.server";
 import { createDefaultCodeToolRegistry } from "../code-tools/code-tool-registry.server";
+import { loopProducedInitUiFiles } from "../source/init-backfill-policy.server";
 import { compactConversation, estimateTokenCount } from "./context-compaction";
 import { withRetry } from "./retry";
 import { classifyError, describeError } from "./error-classifier";
@@ -20,7 +21,7 @@ export async function* runAgenticLoop(
   input: AgenticLoopInput,
   deps: AgenticLoopDeps,
 ): AsyncGenerator<unknown, AgenticLoopResult> {
-  const registry = createDefaultCodeToolRegistry();
+  const registry = input.registry ?? createDefaultCodeToolRegistry();
   const tools = registry.list();
   const messages = buildInitialMessages(input);
   const changedFiles = new Set<string>();
@@ -336,6 +337,29 @@ export async function* runAgenticLoop(
       });
 
       if (totalToolCalls > 0 && consecutiveTextOnlyTurns >= TEXT_ONLY_COMPLETION_THRESHOLD) {
+        const pendingStorefrontUi =
+          input.requireStorefrontUiBeforeCompletion === true &&
+          !loopProducedInitUiFiles([...changedFiles]);
+        if (pendingStorefrontUi) {
+          logAgenticLoop("blocked_text_only_completion_pending_ui", {
+            projectId: input.projectId,
+            iteration,
+            totalToolCalls,
+          });
+          consecutiveTextOnlyTurns = 0;
+          messages.push({
+            role: "developer",
+            content:
+              "Init is incomplete: no storefront UI files were created yet. Use write or project_create_file to create the required routes and components from the user message. Do not finish with text-only replies until those files exist.",
+          });
+          if (hasText) {
+            messages.push({
+              role: "assistant",
+              content: modelResult.outputText,
+            });
+          }
+          continue;
+        }
         return {
           status: "completed",
           summary: modelResult.outputText || "Agent completed.",
