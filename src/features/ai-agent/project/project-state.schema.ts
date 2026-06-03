@@ -193,6 +193,7 @@ export type ProjectToolExecutionLog = {
 
 export type AgentRunStatus =
   | "streaming"
+  | "awaiting_input"
   | "completed"
   | "failed"
   | "stopped";

@@ -141,6 +141,8 @@ export function useAgentStream({ projectId, initialMessages = [], activeRunId }:
           "message.delta",
           "message.completed",
           "skeleton.update",
+          "run.awaiting_input",          // T083: new SSE events
+          "option.selected",
           "run.completed",
           "run.failed",
           "run.stopped",
@@ -149,6 +151,28 @@ export function useAgentStream({ projectId, initialMessages = [], activeRunId }:
           source.addEventListener(type, onAny as EventListener);
         }
         armTimeout();
+
+        // T063: poll token context on run heartbeat (30s fallback)
+        const tokenInterval = setInterval(async () => {
+          try {
+            const resp = await fetch(
+              `/api/projects/${projectId}/token-context`,
+            );
+            if (resp.ok) {
+              const ctx = await resp.json();
+              // Store token context for TokenBar consumption
+              (window as any).__tokenContext = ctx;
+            }
+          } catch {
+            // non-critical
+          }
+        }, 30_000);
+
+        const origClose = source.close.bind(source);
+        source.close = () => {
+          clearInterval(tokenInterval);
+          origClose();
+        };
       };
 
       open();

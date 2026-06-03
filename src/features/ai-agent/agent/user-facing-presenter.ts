@@ -4,17 +4,56 @@ export type PresenterContext = {
 };
 
 export const TECHNICAL_PATTERNS: { pattern: RegExp; replace: string }[] = [
+  // T067: File paths — absolute and relative
+  { pattern: /\b(?:src|projects|public|node_modules|app|dist|build)\/[\w./-]+/g, replace: "your storefront" },
+  { pattern: /\b[\w./-]+\.(?:tsx?|jsx?|css|json|md|env|html|svg|png|jpg)\b/g, replace: "your storefront" },
+  { pattern: /\b(?:routeTree\.gen|__root|package\.json|drizzle\.config|tsconfig\.json|vite\.config)\b/g, replace: "" },
+
+  // T067: Env vars & secrets
   { pattern: /\bVITE_[A-Z0-9_]+\b/g, replace: "" },
   { pattern: /\b(?:process\.env\.)?[A-Z][A-Z0-9_]{3,}_(?:KEY|TOKEN|URL|SECRET|ID|SLUG|HOST)\b/g, replace: "" },
-  { pattern: /\b(?:ProjectState|BuilderIntent|ChangePlan|ThinkingResult|WebsiteSpec|AgentStreamEvent|ToolExecutionContext)\b/g, replace: "your storefront" },
-  { pattern: /\b(?:src|projects|public|node_modules)\/[\w./-]+/g, replace: "your storefront" },
-  { pattern: /\b[\w./-]+\.(?:tsx?|jsx?|css|json|md|env)\b/g, replace: "your storefront" },
-  { pattern: /\b(?:routeTree\.gen|__root|package\.json|drizzle\.config)\b/g, replace: "" },
-  { pattern: /\b(?:init_project|modify_design|modify_content|modify_products|add_feature|fix_bug|explain_project|needs_clarification|init_storefront_project|content_update|design_update|product_data_update|bug_fix|answer_question)\b/g, replace: "your request" },
-  { pattern: /\b(?:gpt-[\w.-]+|claude-[\w.-]+|openai|anthropic)\b/gi, replace: "" },
-  { pattern: /`[^`]*`/g, replace: "" },
+
+  // T067: Package names (npm, imports)
+  { pattern: /\b(?:node_modules\/)?@?[\w.-]+\/[\w.-]+(?:@[\d.]+)?\b/g, replace: "" },
+  { pattern: /\b(?:import\s+.*?\s+from\s+['"][^'"]+['"])\s*;?/g, replace: "" },
+
+  // T067: API endpoints
+  { pattern: /\b(?:\/api\/[\w./-]+|GET\s+\/[\w./-]+|POST\s+\/[\w./-]+)\b/g, replace: "" },
+
+  // T067: Model names / AI
+  { pattern: /\b(?:gpt-[\w.-]+|claude-[\w.-]+|openai|anthropic|gemini|llama)\b/gi, replace: "" },
+
+  // T067: DB / schema terms
+  { pattern: /\b(?:drizzle|postgres|postgresql|sqlite|mysql|migration)\b/gi, replace: "" },
+  { pattern: /\bschema\b(?:\s*\.\s*ts)?/gi, replace: "structure" },
+
+  // T067: Tool names
   { pattern: /\bcode_tool_\w+|\bapply_patch\b|\bread_file\b|\bwrite_file\b|\bproject_(?:read|get|write)_\w+/g, replace: "" },
+
+  // T067: Server / framework names
+  { pattern: /\b(?:vite|tanstack|react|next\.js|nuxt|express|fastify)\b/gi, replace: "" },
+
+  // T067: Internal type names
+  { pattern: /\b(?:ProjectState|BuilderIntent|ChangePlan|ThinkingResult|WebsiteSpec|AgentStreamEvent|ToolExecutionContext)\b/g, replace: "your storefront" },
+
+  // T067: Intent lifecycle terms
+  { pattern: /\b(?:init_project|modify_design|modify_content|modify_products|add_feature|fix_bug|explain_project|needs_clarification|init_storefront_project|content_update|design_update|product_data_update|bug_fix|answer_question)\b/g, replace: "your request" },
+
+  // T069: Code blocks — markdown fenced blocks
+  { pattern: /```[\s\S]*?```/g, replace: "" },
+
+  // T069: Inline code
+  { pattern: /`[^`]*`/g, replace: "" },
 ];
+
+// T068: Design language passthrough — these patterns are NEVER blocked
+// - Color: hex (#1a1a2e), rgb/rgba, hsl/hsla, tailwind names (slate-50, red-500)
+// - Font: font family names (Geist, Playfair, Inter, JetBrains Mono)
+// - Typography: font-size, line-height, font-weight, letter-spacing, text-transform
+// - Spacing: px, rem, em, vh/vw, gap, margin, padding, width/height values
+// - Layout: grid, flex, bento, masonry, sidebar, header, footer, hero, carousel
+// - UX: hover, transition, animation, scroll, sticky, overlay, drawer, modal
+// These are DESIGN LANGUAGE — they are NOT in TECHNICAL_PATTERNS → they pass through.
 
 /**
  * Redact technical tokens (file paths, env vars, tool/model names, etc.) WITHOUT

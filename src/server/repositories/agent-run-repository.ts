@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, or } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { agentRuns, projectToolExecutionLogs } from "@/db/schema";
 import type * as schema from "@/db/schema";
@@ -89,13 +89,14 @@ export class PgAgentRunRepository {
   }
 
   async getActiveRun(projectId: string, userId?: string): Promise<AgentRun | undefined> {
+    // Include awaiting_input as an active run status (023: interactive agent questions)
+    const isActive = or(
+      eq(agentRuns.status, "streaming"),
+      eq(agentRuns.status, "awaiting_input"),
+    );
     const filter = userId
-      ? and(
-          eq(agentRuns.projectId, projectId),
-          eq(agentRuns.userId, userId),
-          eq(agentRuns.status, "streaming"),
-        )
-      : and(eq(agentRuns.projectId, projectId), eq(agentRuns.status, "streaming"));
+      ? and(eq(agentRuns.projectId, projectId), eq(agentRuns.userId, userId), isActive)
+      : and(eq(agentRuns.projectId, projectId), isActive);
     const [row] = await this.db
       .select()
       .from(agentRuns)

@@ -59,3 +59,9 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+<!-- SPECKIT START -->
+**Current feature**: `023-interactive-agent-questions`
+**Plan**: `specs/023-interactive-agent-questions/plan.md`
+**Spec**: `specs/023-interactive-agent-questions/spec.md`
+<!-- SPECKIT END -->

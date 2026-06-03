@@ -1,4 +1,4 @@
-import { index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { index, integer, json, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
 export const projectMessages = pgTable(
   'project_messages',
@@ -13,6 +13,7 @@ export const projectMessages = pgTable(
     parentMessageId: text('parent_message_id'),
     runId: text('run_id'),
     kind: text('kind'),
+    metadata: json('metadata'),                                // ADD: 023 — chỉ populated cho kind='agent_question'
     provider: text('provider'),
     providerResponseId: text('provider_response_id'),
     errorMessage: text('error_message'),

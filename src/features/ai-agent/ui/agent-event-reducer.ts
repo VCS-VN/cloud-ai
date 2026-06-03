@@ -1,4 +1,5 @@
 import type {
+  AgentQuestionMetadata,
   Message,
   RunStreamEvent,
   RuntimeStreamEvent,
@@ -94,6 +95,7 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
         status: "completed",
         processingStatus: event.processingStatus,
         createdAt: event.createdAt,
+        metadata: event.metadata ?? null,           // T030: agent_question carries options
       };
       return { ...state, messages: upsertMessage(state.messages, message) };
     }
@@ -125,9 +127,33 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
         ...state,
         activeRun: {
           ...state.activeRun,
+          status: "streaming",                           // resume from awaiting_input → streaming
           skeleton: { phase: event.phase, label: event.label, detail: event.detail },
         },
       };
+
+    case "run.awaiting_input":                        // T031
+      if (!state.activeRun) return state;
+      return {
+        ...state,
+        activeRun: {
+          ...state.activeRun,
+          status: "awaiting_input",
+          skeleton: null,
+        },
+      };
+
+    case "option.selected": {                          // T032
+      const { messageId, optionId } = event;
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.id === messageId
+            ? { ...m, metadata: { ...m.metadata, selectedOptionId: optionId } as AgentQuestionMetadata }
+            : m,
+        ),
+      };
+    }
 
     case "run.completed":
     case "run.stopped":

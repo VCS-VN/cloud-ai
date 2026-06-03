@@ -7,8 +7,8 @@ export type MessageRole = 'user' | 'agent'
 export type MessageStatus = 0 | 'pending' | 'completed' | 'failed'
 export type ProjectProcessingStatus = 'idle' | 'processing'
 export type MessageProcessingStatus = 'pending' | 'streaming' | 'completed' | 'failed' | 'stopped'
-export type AgentMessageKind = 'plan' | 'answer' | 'clarification' | 'error' | 'review_required'
-export type AgentRunStatus = 'streaming' | 'completed' | 'failed' | 'stopped'
+export type AgentMessageKind = 'plan' | 'answer' | 'clarification' | 'error' | 'review_required' | 'agent_question'
+export type AgentRunStatus = 'streaming' | 'awaiting_input' | 'completed' | 'failed' | 'stopped'
 export type SkeletonPhase =
   | 'starting'
   | 'understanding'
@@ -32,8 +32,48 @@ export type StreamErrorCode =
   | 'MESSAGE_NOT_FOUND'
   | 'RUN_NOT_FOUND'
   | 'RUN_INTERRUPTED'
+  | 'RUN_NOT_AWAITING_INPUT'
+  | 'INVALID_OPTION'
+  | 'OPTION_ALREADY_SELECTED'
   | 'RETRY_NOT_ALLOWED'
   | 'STOP_NOT_ALLOWED'
+
+export type DesignVariant = {
+  id: string
+  label: string
+  description: string
+  preview: {
+    font: string
+    palette: string[]
+    motion: number
+    density?: number
+  }
+}
+
+export type AgentQuestionMetadata = {
+  options: DesignVariant[]
+  selectedOptionId: string | null
+  questionType?: 'design_variant' | 'optional_pages'
+}
+
+export type OrchestratorState =
+  | 'idle'
+  | 'analyzing'
+  | 'planning'
+  | 'awaiting_input'
+  | 'executing'
+  | 'validating'
+  | 'responding'
+  | 'completed'
+  | 'failed'
+  | 'stopped'
+
+export type TokenContext = {
+  used: number
+  total: number
+  percent: number
+  compactedRuns: number
+}
 
 export type PwaIcon = {
   src: string
@@ -83,6 +123,7 @@ export type Message = {
   parentMessageId?: string
   runId?: string
   kind?: AgentMessageKind
+  metadata?: AgentQuestionMetadata | null
   provider?: string
   providerResponseId?: string
   errorMessage?: string
@@ -147,6 +188,7 @@ export type RunMessageCreatedEvent = {
   content: string
   processingStatus: MessageProcessingStatus
   createdAt: string
+  metadata?: AgentQuestionMetadata | null
 }
 
 export type RunMessageDeltaEvent = {
@@ -189,6 +231,18 @@ export type RunHeartbeatEvent = {
   runId: string
 }
 
+export type RunAwaitingInputEvent = {
+  type: 'run.awaiting_input'
+  runId: string
+}
+
+export type OptionSelectedEvent = {
+  type: 'option.selected'
+  runId: string
+  messageId: string
+  optionId: string
+}
+
 export type RunStreamEvent =
   | RunStartedEvent
   | RunMessageCreatedEvent
@@ -198,6 +252,8 @@ export type RunStreamEvent =
   | RunTerminalEvent
   | RunFailedEvent
   | RunHeartbeatEvent
+  | RunAwaitingInputEvent
+  | OptionSelectedEvent
 
 export type RuntimeStreamEvent =
   | DevRuntimeEvent

@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, Loader2, Plus, Square, Wand2 } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
-import type { ComposerReasoningEffort } from "@/shared/project-types";
+import type { ComposerReasoningEffort, TokenContext } from "@/shared/project-types";
+import { TokenBar } from "./TokenBar";
 
 type MessageComposerProps = {
   value: string;
@@ -10,6 +11,7 @@ type MessageComposerProps = {
   processing?: boolean;
   error?: string;
   disabled?: boolean;
+  tokenContext?: TokenContext | null;
   onChange: (value: string) => void;
   onReasoningEffortChange: (value: ComposerReasoningEffort) => void;
   onPlanModeChange: (value: boolean) => void;
@@ -45,6 +47,7 @@ export function MessageComposer({
   processing = false,
   error,
   disabled = false,
+  tokenContext,
   onChange,
   onReasoningEffortChange,
   onPlanModeChange,
@@ -162,6 +165,8 @@ export function MessageComposer({
           </span>
         </div>
         <div className="flex items-center gap-xs">
+          {/* T062: TokenBar near send button */}
+          <TokenBar tokenContext={tokenContext ?? null} />
           {canStop ? (
             <button
               className="inline-flex h-8 items-center gap-xs rounded-pill border border-[var(--app-border)] bg-[var(--app-panel-bg)] px-sm text-[12px] text-[var(--app-panel-text)] transition-colors duration-200 hover:border-[var(--app-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"

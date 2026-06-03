@@ -61,3 +61,23 @@ export const retryProjectRun = createServerFn({ method: "POST" })
       user.id,
     );
   });
+
+// T022: Select option from agent_question
+export const selectRunOption = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: {
+      projectId: string;
+      runId: string;
+      optionId: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const user = await requireServerUser();
+    const { messageService } = await loadProjectServices();
+    return messageService.selectOption(
+      data.projectId,
+      data.runId,
+      data.optionId,
+      user.id,
+    );
+  });

@@ -19,6 +19,21 @@ const THROTTLE_MS = 200;
 
 type PhaseResolution = { phase: ServerSkeletonPhase; detail?: string };
 
+/**
+ * T045-T046: Per-page skeleton labels for sequential page generation.
+ * When the orchestrator emits a "generating_page" event, the skeleton label
+ * becomes "Đang thiết kế [Page Name] ([N]/[Total])".
+ */
+export type PageGenerationProgress = {
+  currentPage: string;
+  pageIndex: number;
+  totalPages: number;
+};
+
+export function formatPerPageLabel(progress: PageGenerationProgress): string {
+  return `Đang thiết kế ${progress.currentPage} (${progress.pageIndex + 1}/${progress.totalPages})`;
+}
+
 function resolvePhase(event: AgentStreamEvent): PhaseResolution | undefined {
   switch (event.type) {
     case "thinking_started":
@@ -52,13 +67,21 @@ function resolvePhase(event: AgentStreamEvent): PhaseResolution | undefined {
  * Emits immediately when the phase changes; throttles repeated updates within
  * the same phase to one per THROTTLE_MS so rapid tool calls don't spam the stream.
  * Returns undefined when the event is not skeleton-relevant or is throttled.
+ *
+ * T045-T046: Supports per-page labels via setPageProgress(). When page progress
+ * is set, editing-phase updates use "Đang thiết kế [Page] (N/Total)" format.
  */
 export function createSkeletonMapper(runId: string) {
   let lastPhase: ServerSkeletonPhase | null = null;
   let lastEmitAt = 0;
   let lastDetail: string | undefined;
+  let pageProgress: PageGenerationProgress | null = null;
 
-  return function map(
+  function setPageProgress(progress: PageGenerationProgress | null) {
+    pageProgress = progress;
+  }
+
+  function map(
     event: AgentStreamEvent,
     now: number = Date.now(),
   ): SkeletonUpdateEvent | undefined {
@@ -75,12 +98,20 @@ export function createSkeletonMapper(runId: string) {
     lastEmitAt = now;
     lastDetail = resolved.detail;
 
+    // T045-T046: Use per-page label when editing with page progress set
+    const label =
+      resolved.phase === "editing" && pageProgress
+        ? formatPerPageLabel(pageProgress)
+        : PHASE_LABELS[resolved.phase];
+
     return {
       type: "skeleton.update",
       runId,
       phase: resolved.phase,
-      label: PHASE_LABELS[resolved.phase],
+      label,
       detail: resolved.detail,
     };
-  };
+  }
+
+  return { map, setPageProgress };
 }

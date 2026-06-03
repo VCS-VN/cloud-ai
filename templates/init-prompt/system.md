@@ -5,9 +5,27 @@ warning: >
   project. Frontmatter (khối --- này) bị strip trước khi gửi. Đừng sửa nếu bạn
   không hiểu luồng init — sai một dòng có thể làm storefront sinh ra bị lỗi.
 ---
-FIRST call project_read_taste_skill to load the anti-slop design skill (the authoritative UI taste guide). THEN author THIS project's DESIGN.md yourself using project_create_file: a complete visual identity driven by the skill and the store brief below — YAML front-matter with 15 hex color tokens, plus typography, spacing, components, and layout sections. THEN call project_read_design_rules to load the DESIGN.md you just wrote (this is REQUIRED before any UI mutation). THEN create the files listed below using project_create_file.
+FIRST call project_read_taste_skill to load the anti-slop design skill (the authoritative UI taste guide). THEN author THIS project's DESIGN.md yourself using project_create_file. THEN call project_read_design_rules to load the DESIGN.md you just wrote (this is REQUIRED before any UI mutation). THEN create the files listed below using project_create_file.
 Do NOT inspect existing files. After loading the skill, authoring DESIGN.md, and loading design rules, CREATE the files directly.
 This is a retail e-commerce (online store) project. Every page and component must serve a storefront shopping experience.
+
+DESIGN.md AUTHORING RULES (REQUIRED — read before writing the file):
+
+1. DESIGN READ (mandatory first step inside DESIGN.md). Before any tokens, the file MUST open with a one-line Design Read in the exact form: `Reading this as: <page kind> for <audience>, with a <vibe> language, leaning toward <design system or aesthetic family>.` Derive each slot from the store brief — store name, store type, products, price tier, audience cues. Do NOT default to "minimalist e-commerce for general consumers" — read the brief.
+
+2. DIAL DECLARATION (mandatory in DESIGN.md YAML front-matter). The front-matter MUST include three integer dials sourced from the taste skill's "Dial Inference" table (Section 1.A) and "Use-Case Presets" (Section 1.B), reasoned from the Design Read above:
+   - `designVariance: <1-10>` — 1 = perfect symmetry, 10 = artsy chaos
+   - `motionIntensity: <1-10>` — 1 = static, 10 = cinematic / physics
+   - `visualDensity: <1-10>` — 1 = art gallery / airy, 10 = cockpit / packed data
+   Pick values that fit the Design Read. A premium consumer storefront is NOT 7/6/4 by default — read the table. Do NOT use baseline values without reasoning.
+
+3. PALETTE (mandatory in DESIGN.md YAML front-matter). 15 hex color tokens covering the roles your storefront uses: primary, primary-foreground, accent, accent-foreground, background, foreground, card, card-foreground, muted, muted-foreground, border, ring, deep, deep-foreground, highlight. Pick values that fit the Design Read and respect the taste skill's "Color Calibration" rules (Section 4.2): max 1 accent color, saturation < 80% by default, no AI-purple/blue gradient defaults, and — for premium-consumer briefs — NO default beige+brass+oxblood+espresso family.
+
+4. TYPOGRAPHY (mandatory in DESIGN.md YAML front-matter). Display font and body font choices that respect the taste skill's "Typography" rules (Section 4.1): Inter is discouraged as default; serif is very discouraged as default unless the brief is genuinely editorial/luxury/heritage.
+
+5. SECTIONS 1-8 (mandatory body). After the front-matter, write sections covering: 1. Visual Theme & Atmosphere, 2. Color Palette & Roles, 3. Typography Rules, 4. Spacing System, 5. Radius/Shadow/Motion, 6. Component Styling Rules, 7. Layout Principles, 8. Responsive Behavior. Each section grounds the front-matter tokens in storefront-specific guidance.
+
+The dials and tokens you declare in DESIGN.md drive every CSS decision in the generated storefront. The files listed below describe BEHAVIOR (hooks, routing, state, accessibility) — visual decisions (sizing, shape, spacing, color, shadow, motion) are yours to make based on the dials and tokens in DESIGN.md.
 
 PRICE & CURRENCY RULES:
 - Product price values (product.price, product.compareAtPrice, product.defaultModel.price, product.models[].price) are integer cents in state, hooks, and sample data. Never pre-divide.

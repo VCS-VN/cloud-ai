@@ -15,7 +15,9 @@ import { createSkeletonMapper } from "@/features/ai-agent/agent/agent-event-to-s
 import { decideMilestone } from "@/features/ai-agent/agent/agent-event-to-milestone";
 import type {
   AgentMessageKind,
+  AgentQuestionMetadata,
   ComposerReasoningEffort,
+  DesignVariant,
   Message,
   MessageCursor,
   MessagePage,
@@ -189,7 +191,7 @@ export class MessageService {
     userId?: string,
   ): Promise<void> {
     const signal = getRunAbortSignal(projectId, runId);
-    const skeletonMapper = createSkeletonMapper(runId);
+    const { map: skeletonMapper, setPageProgress } = createSkeletonMapper(runId);
     const language = detectUserLanguage({ userPrompt: prompt });
 
     publishRunEvent(projectId, runId, { type: "run.started", runId, projectId });
@@ -461,6 +463,7 @@ export class MessageService {
     processingStatus: Message["processingStatus"],
     userId?: string,
     createdAt?: string,
+    metadata?: AgentQuestionMetadata,
   ): Promise<Message> {
     const now = createdAt ?? new Date().toISOString();
     const message = await this.messageRepository.saveMessage(
@@ -475,6 +478,7 @@ export class MessageService {
         parentMessageId,
         runId,
         kind,
+        metadata: kind === "agent_question" ? metadata ?? null : null,
         provider: "agent-orchestrator",
         createdAt: now,
         updatedAt: now,
@@ -490,6 +494,15 @@ export class MessageService {
       processingStatus,
       createdAt: now,
     });
+
+    // T024: Emit run.awaiting_input when agent_question milestone is persisted
+    if (kind === "agent_question") {
+      publishRunEvent(projectId, runId, {
+        type: "run.awaiting_input",
+        runId,
+      });
+    }
+
     return message;
   }
 
@@ -568,13 +581,91 @@ export class MessageService {
     const run = await this.runStore.load(runId, userId).catch(() => undefined);
     if (!run) throw new Error("Run not found.");
 
-    if (run.status !== "streaming") {
+    if (run.status !== "streaming" && run.status !== "awaiting_input") {
       return { runId, status: run.status, projectProcessingStatus: project.processingStatus };
     }
 
     abortRun(projectId, runId);
 
     return { runId, status: "stopped" as const, projectProcessingStatus: "idle" as const };
+  }
+
+  /** T023: User selects an option from an agent_question message. */
+  async selectOption(
+    projectId: string,
+    runId: string,
+    optionId: string,
+    userId?: string,
+  ): Promise<{
+    runId: string;
+    messageId: string;
+    selectedOptionId: string;
+    status: "streaming";
+  }> {
+    const run = await this.runStore.load(runId, userId).catch(() => undefined);
+    if (!run) throw Object.assign(new Error("Run not found"), { code: "RUN_NOT_FOUND" as const });
+
+    if (run.status !== "awaiting_input") {
+      throw Object.assign(new Error("Run is not awaiting input"), {
+        code: "RUN_NOT_AWAITING_INPUT" as const,
+      });
+    }
+
+    const messages = await this.messageRepository.listMessagesByRunId(runId, userId);
+    const questionMessage = messages.findLast((m) => m.kind === "agent_question");
+    if (!questionMessage) {
+      throw Object.assign(new Error("No agent question found for this run"), {
+        code: "INVALID_OPTION" as const,
+      });
+    }
+
+    const metadata = questionMessage.metadata;
+    if (!metadata?.options?.length) {
+      throw Object.assign(new Error("Invalid question metadata"), {
+        code: "INVALID_OPTION" as const,
+      });
+    }
+
+    if (metadata.selectedOptionId) {
+      throw Object.assign(new Error("Option already selected for this question"), {
+        code: "OPTION_ALREADY_SELECTED" as const,
+      });
+    }
+
+    const option = metadata.options.find((o) => o.id === optionId);
+    if (!option) {
+      throw Object.assign(new Error(`Option "${optionId}" not found in question options`), {
+        code: "INVALID_OPTION" as const,
+      });
+    }
+
+    // Update message metadata
+    const updatedMetadata: AgentQuestionMetadata = {
+      ...metadata,
+      selectedOptionId: optionId,
+    };
+    await this.messageRepository.updateMessage(questionMessage.id, {
+      metadata: updatedMetadata,
+      updatedAt: new Date().toISOString(),
+    } as Partial<Message>);
+
+    // Resume run: awaiting_input → streaming
+    await this.runStore.update(run, { status: "streaming" });
+
+    // Broadcast option.selected to all tabs
+    publishRunEvent(projectId, runId, {
+      type: "option.selected",
+      runId,
+      messageId: questionMessage.id,
+      optionId,
+    });
+
+    return {
+      runId,
+      messageId: questionMessage.id,
+      selectedOptionId: optionId,
+      status: "streaming",
+    };
   }
 
   /** Retry a failed run: create a fresh run reusing the original user prompt. */

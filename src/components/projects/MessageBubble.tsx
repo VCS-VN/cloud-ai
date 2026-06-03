@@ -11,10 +11,13 @@ import {
 import { dumprify } from "@/lib/dumprify";
 import type { AgentMessageKind, Message } from "@/shared/project-types";
 import { PlanMessageContent } from "./PlanMessageContent";
+import { AgentQuestionBubble } from "./AgentQuestionBubble";
+import { ClarificationBubble } from "./ClarificationBubble";
 
 type MessageBubbleProps = {
   message: Message;
   onRetry?: (message: Message) => void;
+  onSelectOption?: (messageId: string, optionId: string) => Promise<void>;
 };
 
 const MARKDOWN_CLASS =
@@ -50,12 +53,14 @@ const KIND_META: Partial<Record<AgentMessageKind, KindMeta>> = {
   },
 };
 
-function AgentBody({ message }: { message: Message }) {
+function AgentBody({ message, onSelectOption }: { message: Message; onSelectOption?: (messageId: string, optionId: string) => Promise<void> }) {
   if (message.kind === "plan") return <PlanMessageContent content={message.content} />;
+  if (message.kind === "agent_question") return <AgentQuestionBubble message={message} onSelectOption={onSelectOption} />;
+  if (message.kind === "clarification") return <ClarificationBubble message={message} />;
   return <MarkdownContent content={message.content} />;
 }
 
-export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
+export function MessageBubble({ message, onRetry, onSelectOption }: MessageBubbleProps) {
   const isUser = message.role === "user";
 
   if (isUser) {
@@ -112,7 +117,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
           {headerLabel}
         </div>
 
-        <AgentBody message={message} />
+        <AgentBody message={message} onSelectOption={onSelectOption} />
 
         {canRetry ? (
           <div className="mt-sm flex justify-end">
