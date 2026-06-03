@@ -5,8 +5,8 @@ warning: >
   project. Frontmatter (khối --- này) bị strip trước khi gửi. Đừng sửa nếu bạn
   không hiểu luồng init — sai một dòng có thể làm storefront sinh ra bị lỗi.
 ---
-FIRST call project_read_taste_skill to load the anti-slop design skill (the authoritative UI taste guide). THEN author THIS project's DESIGN.md yourself using project_create_file. THEN call project_read_design_rules to load the DESIGN.md you just wrote (this is REQUIRED before any UI mutation). THEN create the files listed below using project_create_file.
-Do NOT inspect existing files. After loading the skill, authoring DESIGN.md, and loading design rules, CREATE the files directly.
+FIRST call project_read_taste_skill to load the design taste skill (the authoritative UI taste guide). DESIGN.md is a project-specific reference template for palette roles, typography, and layout; the taste skill is the primary guide for UI quality and visual direction. If DESIGN.md already exists, do NOT recreate it; optionally call project_read_design_rules only when you need the reference. If DESIGN.md is missing, author it with project_create_file before UI work.
+Do NOT inspect existing files during init. Many infrastructure, provider, route, layout, and store files are pre-seeded before the agent loop. Create only missing required files; for pre-seeded files, use write/edit only when customization is needed.
 This is a retail e-commerce (online store) project. Every page and component must serve a storefront shopping experience.
 
 DESIGN.md AUTHORING RULES (REQUIRED — read before writing the file):
@@ -23,9 +23,11 @@ DESIGN.md AUTHORING RULES (REQUIRED — read before writing the file):
 
 4. TYPOGRAPHY (mandatory in DESIGN.md YAML front-matter). Display font and body font choices that respect the taste skill's "Typography" rules (Section 4.1): Inter is discouraged as default; serif is very discouraged as default unless the brief is genuinely editorial/luxury/heritage.
 
-5. SECTIONS 1-8 (mandatory body). After the front-matter, write sections covering: 1. Visual Theme & Atmosphere, 2. Color Palette & Roles, 3. Typography Rules, 4. Spacing System, 5. Radius/Shadow/Motion, 6. Component Styling Rules, 7. Layout Principles, 8. Responsive Behavior. Each section grounds the front-matter tokens in storefront-specific guidance.
+5. RADIUS (mandatory in DESIGN.md YAML front-matter). Include `tokens.radius` with at least `md` or `lg` so app.css can map `--radius`.
 
-The dials and tokens you declare in DESIGN.md drive every CSS decision in the generated storefront. The files listed below describe BEHAVIOR (hooks, routing, state, accessibility) — visual decisions (sizing, shape, spacing, color, shadow, motion) are yours to make based on the dials and tokens in DESIGN.md.
+6. SECTIONS 1-8 (mandatory body). After the front-matter, write sections covering: 1. Visual Theme & Atmosphere, 2. Color Palette & Roles, 3. Typography Rules, 4. Spacing System, 5. Radius/Shadow/Motion, 6. Component Styling Rules, 7. Layout Principles, 8. Responsive Behavior. Each section grounds the front-matter tokens in storefront-specific guidance.
+
+The dials and tokens in DESIGN.md are a reference for CSS decisions. The files listed below describe BEHAVIOR (hooks, routing, state, accessibility) — visual decisions (sizing, shape, spacing, color, shadow, motion) are yours to make using the taste skill and DESIGN.md reference.
 
 PRICE & CURRENCY RULES:
 - Product price values (product.price, product.compareAtPrice, product.defaultModel.price, product.models[].price) are integer cents in state, hooks, and sample data. Never pre-divide.
@@ -68,4 +70,4 @@ BEFORE CREATING FILES — REQUIRED RULES TO PREVENT ERRORS:
 
 6. POST-GENERATION VALIDATION (MANDATORY): After creating ALL files with project_create_file, call `project_run_validation` with `level: 'fast'` and `reason: 'typecheck generated storefront files'`. Fix every error with project_apply_patch before declaring the task complete. If validation fails: inspect the error, apply the minimal fix, re-run validation. Repeat until validation passes. NEVER skip validation or leave errors unaddressed.
 
-NOW START: call project_read_taste_skill, then author DESIGN.md with project_create_file, then project_read_design_rules, then create ALL files using project_create_file.
+NOW START: call project_read_taste_skill, create DESIGN.md only if it is missing, create src/routes/__root.tsx and src/components/layout/site-header.tsx if missing, and patch pre-seeded commerce routes/components only when needed. Do NOT project_create_file files that already exist.

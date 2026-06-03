@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import type { TokenHint, TokenHintRole } from "../../planning/design-intent-heuristic";
 import { DESIGN_ERROR_CODES, type DesignErrorCode } from "./design-error-codes";
+import { patchAppCssFromDesignSource } from "./design-app-css-patch.server";
 
 const REQUIRED_SECTION_HEADINGS: ReadonlyArray<{ index: number; heading: string }> = [
   { index: 1, heading: "Visual Theme & Atmosphere" },
@@ -156,6 +157,13 @@ export async function applyTokenPatches(
   }
 
   await writeFile(designPath, working, "utf-8");
+  const cssPatch = await patchAppCssFromDesignSource(input.workspaceRoot, working);
+  if (!cssPatch.ok) {
+    return failure(
+      DESIGN_ERROR_CODES.DESIGN_PATCH_STRUCTURE_BROKEN,
+      `DESIGN.md was patched, but app.css token sync failed: ${cssPatch.message}`,
+    );
+  }
 
   return {
     ok: true,

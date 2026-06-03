@@ -8,36 +8,45 @@ export type TokenMappingResult =
   | { ok: true; content: string }
   | { ok: false; message: string };
 
-const SEMANTIC_TOKEN_MAP: Array<[string, string]> = [
-  ["background", "background"],
-  ["foreground", "foreground"],
-  ["card", "surface"],
-  ["card-foreground", "foreground"],
-  ["popover", "surface"],
-  ["popover-foreground", "foreground"],
-  ["primary", "primary"],
-  ["primary-foreground", "primary-foreground"],
-  ["secondary", "surface-muted"],
-  ["secondary-foreground", "foreground"],
-  ["muted", "surface-muted"],
-  ["muted-foreground", "muted-foreground"],
-  ["accent", "accent"],
-  ["accent-foreground", "accent-foreground"],
-  ["destructive", "error"],
-  ["destructive-foreground", "primary-foreground"],
-  ["border", "border"],
-  ["input", "border"],
-  ["ring", "primary"],
-  ["highlight", "highlight"],
-  ["highlight-foreground", "highlight-foreground"],
-  ["success", "success"],
-  ["warning", "warning"],
-  ["error", "error"],
+const SEMANTIC_TOKEN_MAP: Array<[string, string[]]> = [
+  ["background", ["background"]],
+  ["foreground", ["foreground"]],
+  ["card", ["card", "surface"]],
+  ["card-foreground", ["card-foreground", "foreground"]],
+  ["popover", ["popover", "card", "surface"]],
+  ["popover-foreground", ["popover-foreground", "foreground"]],
+  ["primary", ["primary"]],
+  ["primary-foreground", ["primary-foreground"]],
+  ["secondary", ["secondary", "surface-muted", "muted"]],
+  ["secondary-foreground", ["secondary-foreground", "foreground"]],
+  ["muted", ["muted", "surface-muted", "secondary"]],
+  ["muted-foreground", ["muted-foreground"]],
+  ["accent", ["accent"]],
+  ["accent-foreground", ["accent-foreground"]],
+  ["destructive", ["destructive", "error"]],
+  ["destructive-foreground", ["destructive-foreground", "primary-foreground"]],
+  ["border", ["border"]],
+  ["input", ["input", "border"]],
+  ["ring", ["ring", "primary"]],
+  ["highlight", ["highlight"]],
+  ["highlight-foreground", ["highlight-foreground"]],
+  ["success", ["success"]],
+  ["warning", ["warning"]],
+  ["error", ["error", "destructive"]],
 ];
+
+const REQUIRED_CSS_VARIABLES = [
+  "background",
+  "foreground",
+  "primary",
+  "primary-foreground",
+  "border",
+] as const;
 
 export function buildCssVariableMapping(designMarkdown: string): string {
   const block = parseDesignTokenBlock(designMarkdown);
   const colors = block?.tokens?.colors ?? {};
+  const radius = block?.tokens?.radius ?? {};
 
   const deepSurface =
     readMarkdownRoleValue(designMarkdown, ["Deep Brand", "Dark Surface", "Deep Surface"]) ??
@@ -47,24 +56,33 @@ export function buildCssVariableMapping(designMarkdown: string): string {
     readTokenValue(colors["primary-foreground"]);
 
   const lightLines = [":root {"];
-  for (const [semantic, tokenKey] of SEMANTIC_TOKEN_MAP) {
-    const value = readTokenValue(colors[tokenKey]);
+  for (const [semantic, tokenKeys] of SEMANTIC_TOKEN_MAP) {
+    const value = readFirstTokenValue(colors, tokenKeys);
     if (value) lightLines.push(`  --${semantic}: ${value};`);
   }
   if (deepSurface) lightLines.push(`  --deep: ${deepSurface};`);
   if (deepForeground) lightLines.push(`  --deep-foreground: ${deepForeground};`);
+  const radiusValue =
+    readTokenValue(radius.lg) ??
+    readTokenValue(radius.md) ??
+    readTokenValue(radius.pill);
+  if (radiusValue) lightLines.push(`  --radius: ${radiusValue};`);
   lightLines.push("}");
 
   // Dark block: emit only when at least one token declares valueDark.
   // Each var falls back to its light value so partial dark coverage stays coherent.
-  const hasDark = SEMANTIC_TOKEN_MAP.some(([, tokenKey]) => readTokenValueDark(colors[tokenKey]));
+  const hasDark = SEMANTIC_TOKEN_MAP.some(([, tokenKeys]) =>
+    readFirstTokenValueDark(colors, tokenKeys),
+  );
   if (!hasDark) {
     return lightLines.join("\n");
   }
 
   const darkLines = [".dark {"];
-  for (const [semantic, tokenKey] of SEMANTIC_TOKEN_MAP) {
-    const value = readTokenValueDark(colors[tokenKey]) ?? readTokenValue(colors[tokenKey]);
+  for (const [semantic, tokenKeys] of SEMANTIC_TOKEN_MAP) {
+    const value =
+      readFirstTokenValueDark(colors, tokenKeys) ??
+      readFirstTokenValue(colors, tokenKeys);
     if (value) darkLines.push(`  --${semantic}: ${value};`);
   }
   const deepDark = readTokenValueDark(colors.background) ?? deepSurface;
@@ -73,6 +91,38 @@ export function buildCssVariableMapping(designMarkdown: string): string {
   darkLines.push("}");
 
   return `${lightLines.join("\n")}\n${darkLines.join("\n")}`;
+}
+
+export function validateCssVariableMapping(mapping: string): {
+  ok: boolean;
+  missingVariables: string[];
+} {
+  const missingVariables = REQUIRED_CSS_VARIABLES.filter(
+    (name) => !new RegExp(`--${escapeRegex(name)}:\\s*[^;\\s][^;]*;`).test(mapping),
+  );
+  return { ok: missingVariables.length === 0, missingVariables };
+}
+
+function readFirstTokenValue(
+  tokens: Record<string, Parameters<typeof readTokenValue>[0]>,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = readTokenValue(tokens[key]);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function readFirstTokenValueDark(
+  tokens: Record<string, Parameters<typeof readTokenValueDark>[0]>,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = readTokenValueDark(tokens[key]);
+    if (value) return value;
+  }
+  return undefined;
 }
 
 function readMarkdownRoleValue(
@@ -88,6 +138,10 @@ function readMarkdownRoleValue(
     if (value) return value;
   }
   return undefined;
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function replaceOwnedDesignTokenRegion(

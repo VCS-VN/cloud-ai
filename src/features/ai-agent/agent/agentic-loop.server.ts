@@ -10,7 +10,13 @@ import {
   filterAssistantDeltaForUser,
 } from "./user-facing-presenter";
 import { createDefaultCodeToolRegistry } from "../code-tools/code-tool-registry.server";
-import { loopProducedInitUiFiles } from "../source/init-backfill-policy.server";
+import {
+  collectPresentInitPaths,
+  initCommerceRoutesStillMissing,
+  loopProducedInitUiFiles,
+  missingRequiredInitPaths,
+} from "../source/init-backfill-policy.server";
+import { REQUIRED_INIT_COMMERCE_ROUTE_FILES } from "../source/generated-project-layout";
 import { compactConversation, estimateTokenCount } from "./context-compaction";
 import { withRetry } from "./retry";
 import { classifyError, describeError } from "./error-classifier";
@@ -352,20 +358,37 @@ export async function* runAgenticLoop(
       });
 
       if (totalToolCalls > 0 && consecutiveTextOnlyTurns >= TEXT_ONLY_COMPLETION_THRESHOLD) {
+        const presentPaths = collectPresentInitPaths(
+          input.pathsSatisfiedAtRunStart ?? new Set(),
+          [...changedFiles],
+        );
+        const requiredBeforeCompletion =
+          input.requiredPathsBeforeCompletion ?? REQUIRED_INIT_COMMERCE_ROUTE_FILES;
+        const missingRequired = missingRequiredInitPaths(
+          requiredBeforeCompletion,
+          presentPaths,
+        );
         const pendingStorefrontUi =
           input.requireStorefrontUiBeforeCompletion === true &&
-          !loopProducedInitUiFiles([...changedFiles]);
+          (!loopProducedInitUiFiles([...changedFiles]) ||
+            missingRequired.length > 0 ||
+            initCommerceRoutesStillMissing(presentPaths));
         if (pendingStorefrontUi) {
           logAgenticLoop("blocked_text_only_completion_pending_ui", {
             projectId: input.projectId,
             iteration,
             totalToolCalls,
+            missingRequired: missingRequired.slice(0, 12),
           });
           consecutiveTextOnlyTurns = 0;
+          const missingList =
+            missingRequired.length > 0
+              ? missingRequired.join(", ")
+              : REQUIRED_INIT_COMMERCE_ROUTE_FILES.join(", ");
           messages.push({
             role: "developer",
             content:
-              "Init is incomplete: no storefront UI files were created yet. Use write or project_create_file to create the required routes and components from the user message. Do not finish with text-only replies until those files exist.",
+              `Init is incomplete. Required commerce routes and storefront files are still missing: ${missingList}. Use write or project_create_file to create them (or edit pre-seeded routes to match DESIGN.md). Do not finish with text-only replies until home (/), products, product detail, cart, checkout, orders, and order detail routes all exist.`,
           });
           if (hasText) {
             messages.push({

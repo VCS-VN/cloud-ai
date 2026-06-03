@@ -32,7 +32,14 @@ import {
   routeLoadingBarSource,
   siteHeaderSource,
 } from "../source/init-source.server";
-import { REQUIRED_GENERATED_STOREFRONT_FILES } from "../source/generated-project-layout";
+import {
+  REQUIRED_GENERATED_STOREFRONT_FILES,
+  REQUIRED_INIT_COMMERCE_ROUTE_FILES,
+} from "../source/generated-project-layout";
+import {
+  formatInitIntegrityViolations,
+  validateInitIntegrity,
+} from "../source/init-integrity-service.server";
 import { applyStoreSlugToEnv } from "../store-runtime/generated-project-env";
 import {
   buildInitStorefrontRecoveryPrompt,
@@ -45,6 +52,7 @@ import { buildInitDesignPipelineSignal } from "../design/init-design-signal.serv
 import { patchAppCssFromDesignSource } from "../code-tools/services/design-app-css-patch.server";
 import { loadTasteSkill } from "../code-tools/services/taste-skill-loader.server";
 import {
+  collectPresentInitPaths,
   filterInitBackfillFiles,
   isDeterministicInitBackfillAllowed,
   isInitUiStorefrontPath,
@@ -88,11 +96,6 @@ import {
 } from "../planning/design-intent-heuristic";
 import { applyTokenPatches } from "../code-tools/services/design-rule-patch-service.server";
 import { getProjectWorkspaceRoot } from "@/server/config/paths.server";
-import {
-  runProjectDesignComplianceValidation,
-  resolveDesignComplianceScope,
-} from "../code-tools/services/project-validation-service.server";
-
 export type HandlePromptInput = {
   projectId: string;
   userId?: string;
@@ -645,7 +648,7 @@ export class AgentOrchestrator {
         yield { type: "file_changed", path: designPath, operation: "created" };
       }
       serverDesignGuidance =
-        "\n\nSERVER DESIGN (already written): DESIGN.md and blocks.json were generated for this vertical before the agentic loop. Do NOT call project_create_file for DESIGN.md. Call project_read_design_rules once, then create ALL required routes and components (src/routes/*, src/components/layout/*, src/components/store/*) with write or project_create_file. You must create storefront implementation files — reading design rules alone does not complete init.";
+        "\n\nSERVER DESIGN (already written): DESIGN.md and blocks.json were generated for this vertical before the agentic loop. Commerce routes (home, products, product detail, cart, checkout, orders) are already seeded. Do NOT call project_create_file for DESIGN.md or commerce route files. Create src/routes/__root.tsx and src/components/layout/site-header.tsx, then patch pre-seeded routes/components with write/edit to match DESIGN.md and the taste skill.";
     } else {
       console.warn(
         JSON.stringify({
@@ -664,6 +667,11 @@ export class AgentOrchestrator {
         }),
       );
     }
+
+    const initPathsFromStart = new Set([
+      ...initResult.files.map((file) => file.path),
+      ...serverDesignPaths,
+    ]);
 
     const toolExecutionContext: ToolExecutionContext = {
       userId: input.userId ?? "",
@@ -746,6 +754,7 @@ export class AgentOrchestrator {
       registry,
       preloadedTasteSkill,
       userPrompt: retailInitPrompt,
+      pathsSatisfiedAtRunStart: initPathsFromStart,
       signal: input.signal,
     });
 
@@ -765,10 +774,6 @@ export class AgentOrchestrator {
       }),
     );
 
-    const initPathsFromStart = new Set([
-      ...initResult.files.map((file) => file.path),
-      ...serverDesignPaths,
-    ]);
     const missingRequiredFiles = REQUIRED_GENERATED_STOREFRONT_FILES.filter(
       (requiredPath) =>
         !initPathsFromStart.has(requiredPath) &&
@@ -876,15 +881,19 @@ export class AgentOrchestrator {
       stillMissingRequired.push(requiredPath);
     }
     let missingUi = stillMissingRequired.filter(isInitUiStorefrontPath);
-    if (
-      missingUi.length > 0 &&
-      !loopProducedInitUiFiles(loopResult.changedFiles)
-    ) {
+    const presentAfterLoop = collectPresentInitPaths(
+      initPathsFromStart,
+      loopResult.changedFiles,
+    );
+    if (missingUi.length > 0) {
       console.warn(
         JSON.stringify({
           event: "init_ui_recovery_pass_starting",
           projectId: input.projectId,
           missingCount: missingUi.length,
+          missingCommerceRoutes: REQUIRED_INIT_COMMERCE_ROUTE_FILES.filter(
+            (p) => !presentAfterLoop.has(p),
+          ),
           loopStatus: loopResult.status,
         }),
       );
@@ -892,6 +901,12 @@ export class AgentOrchestrator {
         type: "source_generation_started",
         message: "Completing storefront pages and components...",
       };
+      for (const requiredPath of REQUIRED_INIT_COMMERCE_ROUTE_FILES) {
+        if (presentAfterLoop.has(requiredPath)) continue;
+        if (await this.projectFileExists(input.projectId, requiredPath)) {
+          presentAfterLoop.add(requiredPath);
+        }
+      }
       const recoveryResult = yield* this.runInitAgenticLoopPass({
         input,
         runId: args.runId,
@@ -904,6 +919,7 @@ export class AgentOrchestrator {
           missingPaths: missingUi,
           hasServerDesign: serverDesignPaths.includes("DESIGN.md"),
         }),
+        pathsSatisfiedAtRunStart: presentAfterLoop,
         signal: input.signal,
       });
       loopResult = {
@@ -926,16 +942,27 @@ export class AgentOrchestrator {
       }
       missingUi = stillMissingRequired.filter(isInitUiStorefrontPath);
     }
-    if (
-      missingUi.length > 0 &&
-      !loopProducedInitUiFiles(loopResult.changedFiles)
-    ) {
-      const message = `Storefront UI was not generated (${missingUi.length} required UI paths missing). Agent loop status=${loopResult.status}. Retry init or check OPENAI_API_KEY / model errors.`;
+    const presentFinal = collectPresentInitPaths(
+      initPathsFromStart,
+      loopResult.changedFiles,
+    );
+    for (const requiredPath of REQUIRED_GENERATED_STOREFRONT_FILES) {
+      if (presentFinal.has(requiredPath)) continue;
+      if (await this.projectFileExists(input.projectId, requiredPath)) {
+        presentFinal.add(requiredPath);
+      }
+    }
+    const missingCommerceRoutes = REQUIRED_INIT_COMMERCE_ROUTE_FILES.filter(
+      (p) => !presentFinal.has(p),
+    );
+    if (missingUi.length > 0 || missingCommerceRoutes.length > 0) {
+      const message = `Storefront UI was not generated (${missingUi.length} required paths missing; commerce routes missing: ${missingCommerceRoutes.join(", ") || "none"}). Agent loop status=${loopResult.status}. Retry init or check OPENAI_API_KEY / model errors.`;
       console.error(
         JSON.stringify({
           event: "init_missing_ui_after_backfill",
           projectId: input.projectId,
           missingUi,
+          missingCommerceRoutes,
           loopStatus: loopResult.status,
         }),
       );
@@ -953,6 +980,27 @@ export class AgentOrchestrator {
     );
     for (const path of invariantFixes) {
       yield { type: "file_changed", path, operation: "modified" };
+    }
+
+    const integrity = await runPhase("validate_init_integrity", () =>
+      validateInitIntegrity({ workspaceRoot }),
+    );
+    if (!integrity.ok) {
+      const message = `Generated storefront integrity check failed:\n${formatInitIntegrityViolations(integrity.violations)}`;
+      console.error(
+        JSON.stringify({
+          event: "init_integrity_failed",
+          projectId: input.projectId,
+          violations: integrity.violations,
+        }),
+      );
+      yield {
+        type: "error",
+        code: "INIT_INTEGRITY_FAILED",
+        message,
+        recoverable: false,
+      };
+      throw new Error(message);
     }
 
     // Anti-slop enforcement on init output (LLM-generated + backfilled UI files):
@@ -1350,6 +1398,7 @@ export class AgentOrchestrator {
     registry: ReturnType<typeof createInitCodeToolRegistry>;
     userPrompt: string;
     preloadedTasteSkill?: PreloadedTasteSkill;
+    pathsSatisfiedAtRunStart?: ReadonlySet<string>;
     signal?: AbortSignal;
   }): AsyncGenerator<AgentStreamEvent, AgenticLoopResult, unknown> {
     const eventQueue = new AsyncEventQueue<AgentStreamEvent>();
@@ -1369,6 +1418,8 @@ export class AgentOrchestrator {
             preloadedTasteSkill: args.preloadedTasteSkill,
             registry: args.registry,
             requireStorefrontUiBeforeCompletion: true,
+            pathsSatisfiedAtRunStart: args.pathsSatisfiedAtRunStart,
+            requiredPathsBeforeCompletion: REQUIRED_INIT_COMMERCE_ROUTE_FILES,
             suppressAssistantStreaming: true,
             signal: args.signal,
           },

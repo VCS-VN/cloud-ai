@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   buildCssVariableMapping,
   replaceOwnedDesignTokenRegion,
+  validateCssVariableMapping,
 } from "./design-token-mapping-service.server";
 
 export async function patchAppCssFromDesignSource(
@@ -13,6 +14,13 @@ export async function patchAppCssFromDesignSource(
   try {
     const appCss = await readFile(appCssPath, "utf8");
     const mapping = buildCssVariableMapping(designSource);
+    const mappingValidation = validateCssVariableMapping(mapping);
+    if (!mappingValidation.ok) {
+      return {
+        ok: false,
+        message: `DESIGN.md did not produce required CSS variables: ${mappingValidation.missingVariables.join(", ")}.`,
+      };
+    }
     const mapped = replaceOwnedDesignTokenRegion(appCss, mapping);
     if (!mapped.ok) {
       return { ok: false, message: mapped.message };

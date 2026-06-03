@@ -82,9 +82,124 @@ const TAILWIND_RADIUS_REGEX = /rounded-\[([^\]]+)\]/g;
 const INLINE_RADIUS_REGEX = /border-radius\s*:\s*([^;\n]+)/gi;
 const TAILWIND_SHADOW_REGEX = /shadow-\[([^\]]+)\]/g;
 const INLINE_SHADOW_REGEX = /box-shadow\s*:\s*([^;\n]+)/gi;
-const TAILWIND_COLOR_UTILITY_REGEX = /\b(?:bg|text|border|ring|from|via|to)-([a-z]+(?:-[a-z]+)*)(?:-(?:50|100|200|300|400|500|600|700|800|900|950))?\b/g;
+const TAILWIND_COLOR_UTILITY_REGEX = /\b(?:bg|text|border|ring|from|via|to)-([a-z]+(?:-[a-z0-9]+)*)(?:-(?:50|100|200|300|400|500|600|700|800|900|950))?\b/g;
 const APPROVED_COLOR_UTILITIES = new Set<string>(APPROVED_SEMANTIC_COLOR_UTILITIES);
 const STRUCTURAL_COLOR_UTILITY_NAMES = new Set<string>(["transparent", "current", "white", "black"]);
+
+/** Tailwind palette roots (slate, zinc, …) — not typography, spacing, or borders. */
+const TAILWIND_PALETTE_ROOTS = new Set<string>([
+  "slate",
+  "gray",
+  "zinc",
+  "neutral",
+  "stone",
+  "red",
+  "orange",
+  "amber",
+  "yellow",
+  "lime",
+  "green",
+  "emerald",
+  "teal",
+  "cyan",
+  "sky",
+  "blue",
+  "indigo",
+  "violet",
+  "purple",
+  "fuchsia",
+  "pink",
+  "rose",
+]);
+
+const TEXT_NON_COLOR_SUFFIXES = new Set<string>([
+  "xs",
+  "sm",
+  "base",
+  "lg",
+  "xl",
+  "2xl",
+  "3xl",
+  "4xl",
+  "5xl",
+  "6xl",
+  "7xl",
+  "8xl",
+  "9xl",
+  "left",
+  "center",
+  "right",
+  "justify",
+  "start",
+  "end",
+  "nowrap",
+  "wrap",
+  "balance",
+  "pretty",
+  "truncate",
+  "ellipsis",
+  "clip",
+  "underline",
+  "overline",
+  "line-through",
+  "uppercase",
+  "lowercase",
+  "capitalize",
+]);
+
+const BORDER_NON_COLOR_SUFFIXES = new Set<string>([
+  "b",
+  "t",
+  "l",
+  "r",
+  "x",
+  "y",
+  "0",
+  "2",
+  "4",
+  "8",
+  "collapse",
+  "separate",
+]);
+
+const BG_NON_COLOR_SUFFIXES = new Set<string>([
+  "auto",
+  "cover",
+  "contain",
+  "center",
+  "top",
+  "bottom",
+  "left",
+  "right",
+  "fixed",
+  "local",
+  "scroll",
+  "no-repeat",
+  "repeat",
+  "full",
+  "none",
+  "clip",
+  "gradient-to-r",
+  "gradient-to-l",
+  "gradient-to-t",
+  "gradient-to-b",
+  "gradient-to-br",
+  "gradient-to-tr",
+]);
+
+const RING_NON_COLOR_SUFFIXES = new Set<string>([
+  "0",
+  "1",
+  "2",
+  "4",
+  "8",
+  "inset",
+  "offset",
+  "offset-0",
+  "offset-1",
+  "offset-2",
+  "offset-4",
+]);
 const FOOTER_DEEP_SURFACE_PATTERN = /<footer[\s\S]*?className=(['"])[^'"]*\bbg-deep\b[^'"]*\btext-deep-foreground\b[^'"]*\1/;
 const FOOTER_WRONG_SURFACE_PATTERN = /<footer[\s\S]*?className=(['"])[^'"]*\b(?:bg-card|bg-primary|bg-background|text-white|text-black)\b[^'"]*\1/;
 const BOTTOM_CTA_PATTERN = /bottomCta|homeBottomCta|Ready for your next favorite|Sẵn sàng/i;
@@ -144,9 +259,9 @@ export function scanPatchContent(input: PatchContentScanInput): PatchContentVerd
 
 
       forEachMatch(line, TAILWIND_COLOR_UTILITY_REGEX, (match) => {
+        const prefix = match[0].split("-")[0] as string;
         const role = match[1];
-        if (APPROVED_COLOR_UTILITIES.has(role)) return;
-        if (STRUCTURAL_COLOR_UTILITY_NAMES.has(role)) return;
+        if (!isOffPaletteTailwindColorUtility(prefix, role, match[0])) return;
         pushViolation(violations, seen, file.path, match[0], "tailwindColor", i + 1);
       });
 
@@ -202,6 +317,28 @@ export function scanPatchContent(input: PatchContentScanInput): PatchContentVerd
     ok: false,
     violations,
   };
+}
+
+/**
+ * True when a Tailwind utility is an off-palette color literal (should block).
+ * Ignores typography (text-lg), borders (border-b), layout bg-* (bg-cover), and semantic tokens.
+ */
+function isOffPaletteTailwindColorUtility(
+  prefix: string,
+  role: string,
+  fullUtility: string,
+): boolean {
+  if (APPROVED_COLOR_UTILITIES.has(role)) return false;
+  if (STRUCTURAL_COLOR_UTILITY_NAMES.has(role)) return false;
+
+  if (prefix === "text" && TEXT_NON_COLOR_SUFFIXES.has(role)) return false;
+  if (prefix === "border" && BORDER_NON_COLOR_SUFFIXES.has(role)) return false;
+  if (prefix === "bg" && BG_NON_COLOR_SUFFIXES.has(role)) return false;
+  if (prefix === "ring" && RING_NON_COLOR_SUFFIXES.has(role)) return false;
+
+  const paletteRoot = role.split("-")[0];
+  void fullUtility;
+  return TAILWIND_PALETTE_ROOTS.has(paletteRoot);
 }
 
 function pushSemanticSurfaceViolations(

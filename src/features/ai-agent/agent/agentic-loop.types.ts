@@ -21,8 +21,12 @@ export type AgenticLoopInput = {
   preloadedTasteSkill?: PreloadedTasteSkill;
   /** When set, model tool list matches executeTool (required for init registry). */
   registry?: CodeToolRegistry;
-  /** Block early text-only completion until at least one storefront UI path is written. */
+  /** Block early text-only completion until storefront UI requirements are met. */
   requireStorefrontUiBeforeCompletion?: boolean;
+  /** Paths already on disk at loop start (infra seed + prior writes). */
+  pathsSatisfiedAtRunStart?: ReadonlySet<string>;
+  /** All of these paths must be present (in start set or changedFiles) before text-only completion. */
+  requiredPathsBeforeCompletion?: readonly string[];
   /** Do not stream raw model text to the user (init uses skeleton + status events only). */
   suppressAssistantStreaming?: boolean;
   signal?: AbortSignal;

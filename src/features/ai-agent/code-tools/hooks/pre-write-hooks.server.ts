@@ -1,10 +1,11 @@
 import type { ToolHook } from "./hook-types";
 import type { CodeToolDefinition, ToolExecutionContext } from "../code-agent-types";
 import { evaluateProjectRiskPolicy } from "../services/project-risk-policy.server";
-import { scanPatchContent, formatViolations } from "../services/design-patch-content-validator.server";
-import { buildProjectTokenIndex } from "../services/design-token-extractor.server";
-import { loadProjectDesignRules } from "../services/design-file-service.server";
 import { scanGeneratedApiClientPolicy, formatGeneratedApiClientPolicyViolations } from "../services/generated-api-client-policy.server";
+import {
+  formatCommerceDataContractViolations,
+  scanCommerceDataContractPolicy,
+} from "../services/commerce-data-contract-policy.server";
 import { GENERATED_PROJECT_ENV_POLICY_MESSAGE, isProtectedGeneratedEnvPath } from "../services/project-patch-service.server";
 import { isStorefrontUiPath } from "../services/project-path-guard.server";
 
@@ -16,9 +17,8 @@ export function createPreWriteHooks(): ToolHook[] {
     snapshotGateHook,
     protectedEnvGateHook,
     apiClientPolicyHook,
+    commerceDataContractHook,
     tasteSkillGateHook,
-    designRulesGateHook,
-    designTokenScanHook,
     riskPolicyHook,
   ];
 }
@@ -102,6 +102,39 @@ const apiClientPolicyHook: ToolHook = {
   },
 };
 
+const commerceDataContractHook: ToolHook = {
+  type: "pre_write",
+  applicable: (tool) => tool.category === "mutate",
+  handler: async ({ tool, args }) => {
+    if (tool.name !== "project_create_file" && tool.name !== "write") {
+      return { ok: true };
+    }
+    const changedFilesWithContent = extractChangedFilesWithContent(tool.name, args);
+    if (changedFilesWithContent.length === 0) return { ok: true };
+    const verdict = scanCommerceDataContractPolicy({
+      changedFiles: changedFilesWithContent,
+    });
+    if (!verdict.ok) {
+      console.warn(
+        JSON.stringify({
+          event: "commerce_data_contract_violation",
+          tool: tool.name,
+          violationCount: verdict.violations.length,
+        }),
+      );
+      return {
+        ok: false,
+        error: {
+          code: "COMMERCE_DATA_CONTRACT_VIOLATION",
+          message: formatCommerceDataContractViolations(verdict.violations),
+          recoverable: true,
+        },
+      };
+    }
+    return { ok: true };
+  },
+};
+
 const tasteSkillGateHook: ToolHook = {
   type: "pre_write",
   applicable: (tool) => tool.category === "mutate",
@@ -119,52 +152,6 @@ const tasteSkillGateHook: ToolHook = {
           recoverable: true,
         },
       };
-    }
-    return { ok: true };
-  },
-};
-
-const designRulesGateHook: ToolHook = {
-  type: "pre_write",
-  applicable: (tool) => tool.category === "mutate",
-  handler: async ({ tool, context, args }) => {
-    const flags = (context as any).flags;
-    const designRulesLoaded = flags?.designRulesLoaded === true;
-    const changedFiles = extractPotentialChangedFiles(args);
-    const storefrontPaths = changedFiles.filter(
-      (file) => isUiRelatedFilePath(file) && file.replaceAll("\\", "/") !== "DESIGN.md",
-    );
-    if (!designRulesLoaded && storefrontPaths.length > 0) {
-      return { ok: false, error: { code: "DESIGN_RULES_REQUIRED", message: `Customer-facing storefront UI cannot be modified without loaded design rules. Affected paths: ${storefrontPaths.join(", ")}. Call project_read_design_rules first to load DESIGN.md.`, recoverable: true } };
-    }
-    return { ok: true };
-  },
-};
-
-const designTokenScanHook: ToolHook = {
-  type: "pre_write",
-  applicable: (tool) => tool.category === "mutate",
-  handler: async ({ tool, context, args }) => {
-    const changedPaths = extractPotentialChangedFiles(args);
-    const hasUiPath = changedPaths.some((file) => isUiRelatedFilePath(file));
-    if (hasUiPath) {
-      const changedFilesWithContent = extractChangedFilesWithContent(tool.name, args);
-      if (changedFilesWithContent.length > 0) {
-        try {
-          const designRules = await loadProjectDesignRules({ projectId: context.projectId, workspaceRoot: context.workspaceRoot });
-          (context as any).designRuleHash = designRules.hash;
-          const tokens = buildProjectTokenIndex(designRules.markdown);
-          const verdict = scanPatchContent({ changedFiles: changedFilesWithContent, tokens });
-          if (!verdict.ok) {
-            console.warn(JSON.stringify({ event: "design_token_literal_off_rule", tool: tool.name, violationCount: verdict.violations.length }));
-            return { ok: false, error: { code: "DESIGN_TOKEN_LITERAL_OFF_RULE", message: formatViolations(verdict.violations), recoverable: true } };
-          }
-        } catch (error: any) {
-          if (error?.code !== "DESIGN_FILE_MISSING") {
-            console.warn(JSON.stringify({ event: "design_patch_validator_load_failed", error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200) }));
-          }
-        }
-      }
     }
     return { ok: true };
   },

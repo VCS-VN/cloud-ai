@@ -22,6 +22,7 @@ export const REQUIRED_GENERATED_STOREFRONT_FILES = [
   "src/app/cart-provider.tsx",
   "src/app/cart-selection.ts",
   "src/components/layout/route-loading-bar.tsx",
+  "src/components/layout/theme-toggle.tsx",
   "src/components/layout/site-header.tsx",
   "src/components/layout/site-footer.tsx",
   "src/components/store/hero-section.tsx",
@@ -38,17 +39,36 @@ export const REQUIRED_GENERATED_STOREFRONT_FILES = [
   "src/components/ui/select.tsx",
   "src/components/ui/radio-group.tsx",
   "src/components/ui/dialog.tsx",
+  "src/components/ui/sheet.tsx",
   "src/components/ui/sonner.tsx",
   "src/components/ui/badge.tsx",
   "src/components/ui/card.tsx",
+  "src/components/ui/separator.tsx",
+  "src/components/ui/label.tsx",
   "src/data/products.ts",
   "src/data/categories.ts",
   "src/data/sample-store.ts",
+  "src/services/store/use-store-detail.ts",
+  "src/services/store/use-products-list.ts",
+  "src/services/store/use-product-detail.ts",
+  "src/services/store/use-categories-list.ts",
   "src/services/store/use-product-suggestions.ts",
   "src/lib/format-money.ts",
   "src/lib/website-config.ts",
   "src/lib/utils.ts",
   "src/styles/app.css",
+] as const;
+
+/** Commerce pages that must exist before init can complete (home + catalog + cart flow). */
+export const REQUIRED_INIT_COMMERCE_ROUTE_FILES = [
+  "src/routes/index.tsx",
+  "src/routes/products/route.tsx",
+  "src/routes/products/index.tsx",
+  "src/routes/products/$productId.tsx",
+  "src/routes/cart.tsx",
+  "src/routes/checkout.tsx",
+  "src/routes/orders/index.tsx",
+  "src/routes/orders/$orderId.tsx",
 ] as const;
 
 export type GeneratedStorefrontFilePath =

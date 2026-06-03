@@ -156,18 +156,10 @@ export class ProjectPatchService {
    * Throws if storefront paths are changed without loaded design rules.
    */
   assertStorefrontMutationGate(
-    changedFiles: string[],
-    gateContext: DesignRuleGateContext,
+    _changedFiles: string[],
+    _gateContext: DesignRuleGateContext,
   ): void {
-    const storefrontPaths = this.getStorefrontChangedPaths(changedFiles);
-    if (storefrontPaths.length === 0) return;
-
-    if (!gateContext.designRulesLoaded) {
-      throw new ProjectPatchPolicyError(
-        "FORBIDDEN_PATH",
-        STOREFRONT_MUTATION_GATE_POLICY_MESSAGE,
-      );
-    }
+    // DESIGN.md is a reference template; UI authoring is gated by taste skill in pre-write hooks.
   }
 
   async getDiff(input: { workspaceRoot: string; baselineRoot?: string; includePatch?: boolean; maxBytes?: number }) {
