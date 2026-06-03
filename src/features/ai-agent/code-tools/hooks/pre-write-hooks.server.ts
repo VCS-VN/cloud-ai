@@ -131,7 +131,9 @@ const designRulesGateHook: ToolHook = {
     const flags = (context as any).flags;
     const designRulesLoaded = flags?.designRulesLoaded === true;
     const changedFiles = extractPotentialChangedFiles(args);
-    const storefrontPaths = changedFiles.filter((file) => isUiRelatedFilePath(file));
+    const storefrontPaths = changedFiles.filter(
+      (file) => isUiRelatedFilePath(file) && file.replaceAll("\\", "/") !== "DESIGN.md",
+    );
     if (!designRulesLoaded && storefrontPaths.length > 0) {
       return { ok: false, error: { code: "DESIGN_RULES_REQUIRED", message: `Customer-facing storefront UI cannot be modified without loaded design rules. Affected paths: ${storefrontPaths.join(", ")}. Call project_read_design_rules first to load DESIGN.md.`, recoverable: true } };
     }

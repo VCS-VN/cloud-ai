@@ -34,6 +34,15 @@ export function filterInitBackfillFiles<T extends { path: string }>(
   });
 }
 
+/** True when the agent actually wrote routes/layout/store components (not just read DESIGN.md). */
+export function isInitStorefrontImplementationPath(filePath: string): boolean {
+  return (
+    filePath.startsWith("src/routes/") ||
+    filePath.startsWith("src/components/layout/") ||
+    filePath.startsWith("src/components/store/")
+  );
+}
+
 export function loopProducedInitUiFiles(changedFiles: readonly string[]): boolean {
-  return changedFiles.some(isInitUiStorefrontPath);
+  return changedFiles.some(isInitStorefrontImplementationPath);
 }

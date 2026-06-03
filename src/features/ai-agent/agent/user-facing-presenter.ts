@@ -28,7 +28,14 @@ export const TECHNICAL_PATTERNS: { pattern: RegExp; replace: string }[] = [
   { pattern: /\bschema\b(?:\s*\.\s*ts)?/gi, replace: "structure" },
 
   // T067: Tool names
-  { pattern: /\bcode_tool_\w+|\bapply_patch\b|\bread_file\b|\bwrite_file\b|\bproject_(?:read|get|write)_\w+/g, replace: "" },
+  { pattern: /\bcode_tool_\w+|\bapply_patch\b|\bread_file\b|\bwrite_file\b|\bproject_(?:read|get|write|create|run|apply|search)_\w+/g, replace: "" },
+  { pattern: /\b(?:write|edit|glob|grep)\b(?=\s+(?:tool|for|to)\b)/gi, replace: "" },
+  { pattern: /\bDESIGN\.md\b|\bblocks\.json\b/gi, replace: "design guidelines" },
+  { pattern: /\b(?:tasteSkillLoaded|designRulesLoaded|__designSourceHash)\b/g, replace: "" },
+  { pattern: /\b(?:bootstrap\s+)?deadlock\b|\btool\s+lock\b|\bplatform\s+fix\b/gi, replace: "" },
+  { pattern: /\b(?:Need|Try|Block(?:er)?)\s+(?:to\s+)?(?:call|load|write|author)\b[^\n.]*/gi, replace: "" },
+  { pattern: /\bReading this as:\s*/gi, replace: "" },
+  { pattern: /\b(?:init|agentic)[-_]?\w*\b/gi, replace: "" },
 
   // T067: Server / framework names
   { pattern: /\b(?:vite|tanstack|react|next\.js|nuxt|express|fastify)\b/gi, replace: "" },
@@ -65,6 +72,79 @@ export function redactTechnicalText(text: string): string {
   let out = text;
   for (const { pattern, replace } of TECHNICAL_PATTERNS) out = out.replace(pattern, replace);
   return out;
+}
+
+const INTERNAL_REASONING_LINE =
+  /(?:project_|tool_|design_rules|taste_skill|deadlock|blocker|cannot safely|need (?:to )?(?:call|load|write|author)|first\s+create|then\s+call|variance\s+\d|motion\s+\d|density\s+\d|palette:|dials?:)/i;
+
+/**
+ * Returns true when a streamed chunk is almost entirely internal agent reasoning
+ * (tool names, file paths, gate errors) and should not be shown to the user.
+ */
+export function isInternalAgentReasoningChunk(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  if (INTERNAL_REASONING_LINE.test(trimmed)) return true;
+  const letters = trimmed.replace(/[^a-zA-Z]/g, "");
+  const snakeTokens = trimmed.match(/[a-z]+_[a-z0-9_]+/g) ?? [];
+  if (snakeTokens.length >= 2) return true;
+  if (/\.(?:tsx?|jsx?|md)\b/.test(trimmed)) return true;
+  if (letters.length < 8 && /[{}[\]()`]/.test(trimmed)) return true;
+  return false;
+}
+
+/** Per-delta filter for assistant streaming: redact tokens and drop internal reasoning. */
+export function filterAssistantDeltaForUser(text: string): string {
+  if (!text || isInternalAgentReasoningChunk(text)) return "";
+  const redacted = redactTechnicalText(text);
+  if (!redacted.trim() || isInternalAgentReasoningChunk(redacted)) return "";
+  return redacted;
+}
+
+type ToolActivityCategory = "inspect" | "mutate" | "validate" | "planning" | string;
+
+const TOOL_ACTIVITY_LABELS: Record<string, string> = {
+  write: "Creating storefront content",
+  project_create_file: "Creating storefront content",
+  edit: "Updating storefront content",
+  project_apply_patch: "Updating storefront content",
+  project_read_design_rules: "Loading your shop design",
+  project_read_taste_skill: "Applying design standards",
+  project_get_file_tree: "Reviewing your shop structure",
+  project_read_file: "Reviewing your shop",
+  project_search_code: "Searching your shop",
+  project_run_validation: "Checking your shop",
+  project_get_context: "Reviewing your shop",
+  glob: "Scanning your shop files",
+  grep: "Searching your shop",
+};
+
+export function buildFriendlyToolActivitySummary(
+  toolName: string,
+  category: ToolActivityCategory,
+): string {
+  const label = TOOL_ACTIVITY_LABELS[toolName];
+  if (label) return label;
+  switch (category) {
+    case "mutate":
+      return "Updating your storefront";
+    case "validate":
+      return "Checking your storefront";
+    case "inspect":
+      return "Reviewing your storefront";
+    default:
+      return "Working on your storefront";
+  }
+}
+
+export function buildFriendlyToolCompletedSummary(
+  toolName: string,
+  category: ToolActivityCategory,
+  ok: boolean,
+): string {
+  const activity = buildFriendlyToolActivitySummary(toolName, category);
+  if (!ok) return `${activity} — needs another try`;
+  return `${activity} — done`;
 }
 
 /**

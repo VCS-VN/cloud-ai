@@ -60,11 +60,34 @@ function isEligible(block: Block, signal: EnrichedSignal, vibe: Vibe): boolean {
   return true;
 }
 
+/** Minimum affinity for a confident match; weaker scores use best-effort picking. */
+const AFFINITY_MATCH_THRESHOLD = 0.5;
+const AFFINITY_BEST_EFFORT_MIN = 0.35;
+
 function variantHasAffinity(variant: Variant, vibe: Vibe): boolean {
   for (const anchor of vibe.anchors) {
-    if ((variant.vibeAffinity[anchor] ?? 0) >= 0.5) return true;
+    if ((variant.vibeAffinity[anchor] ?? 0) >= AFFINITY_MATCH_THRESHOLD) return true;
   }
   return false;
+}
+
+function blockHasUsableVariants(block: Block, vibe: Vibe): boolean {
+  if (variantsHaveAnyAffinity(block, vibe)) return true;
+  return block.variants.some((v) => bestAffinityScore(v, vibe) >= AFFINITY_BEST_EFFORT_MIN);
+}
+
+function pickBestEffortVariant(block: Block, vibe: Vibe): Variant {
+  const sorted = [...block.variants].sort(
+    (a, b) => bestAffinityScore(b, vibe) - bestAffinityScore(a, vibe),
+  );
+  const best = sorted[0];
+  if (!best || bestAffinityScore(best, vibe) < AFFINITY_BEST_EFFORT_MIN) {
+    throw new CompositionError(
+      "affinity",
+      `block ${block.blockId} has no variants with measurable affinity to vibe ${vibe.anchors.join(",")}`,
+    );
+  }
+  return best;
 }
 
 function bestAffinityScore(variant: Variant, vibe: Vibe): number {
@@ -107,8 +130,18 @@ async function rankAndPickHighImpact(
   blockSeed: string,
   projectId: string,
 ): Promise<{ variant: Variant; rationale: string }> {
+  if (!blockHasUsableVariants(block, vibe)) {
+    throw new CompositionError(
+      "affinity",
+      `block ${block.blockId} variants have no usable affinity against vibe ${vibe.anchors.join(",")}`,
+    );
+  }
   if (!variantsHaveAnyAffinity(block, vibe)) {
-    throw new CompositionError("affinity", `block ${block.blockId} variants have no anchor with affinity >= 0.5 against vibe ${vibe.anchors.join(",")}`);
+    const best = pickBestEffortVariant(block, vibe);
+    return {
+      variant: best,
+      rationale: `Best-effort affinity (${bestAffinityScore(best, vibe).toFixed(2)}) for vibe ${vibe.anchors.join(",")}.`,
+    };
   }
   const baseInput: RankerInput = {
     block,
@@ -346,7 +379,7 @@ export async function composeDesign(input: {
   let socialPool = groupBlocks
     .filter((b) => b.requirementGroup === SOCIAL_PROOF_GROUP && isEligible(b, input.signal, input.vibe))
     .filter((b) => !vertical || !isBlockForbiddenForVertical(b.blockId, vertical))
-    .filter((b) => variantsHaveAnyAffinity(b, input.vibe))
+    .filter((b) => blockHasUsableVariants(b, input.vibe))
     .sort((a, b) => a.blockId.localeCompare(b.blockId));
   if (vertical?.homepage.preferredSocialProofBlocks?.length) {
     const preferred = socialPool.filter((b) =>
@@ -389,7 +422,7 @@ export async function composeDesign(input: {
   const optionalEligible = optionalBlocks
     .filter((b) => isEligible(b, input.signal, input.vibe))
     .filter((b) => !vertical || !isBlockForbiddenForVertical(b.blockId, vertical))
-    .filter((b) => variantsHaveAnyAffinity(b, input.vibe))
+    .filter((b) => blockHasUsableVariants(b, input.vibe))
     .map((b) => resolveBlockForVertical(b, vertical))
     .filter((b): b is Block => b !== null);
 

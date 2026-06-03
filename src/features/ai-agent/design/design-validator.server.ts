@@ -64,14 +64,15 @@ export async function validateManifestAndDesignSource(input: {
         details: `block ${block.blockId} has no variant ${entry.variantId}`,
       };
     }
-    const hasAffinity = manifest.vibe.anchors.some(
-      (anchor) => (variant.vibeAffinity[anchor] ?? 0) >= 0.5,
+    const bestScore = Math.max(
+      0,
+      ...manifest.vibe.anchors.map((anchor) => variant.vibeAffinity[anchor] ?? 0),
     );
-    if (!hasAffinity) {
+    if (bestScore < 0.35) {
       return {
         ok: false,
         reason: "affinity",
-        details: `variant ${entry.variantId} of block ${block.blockId} has no anchor affinity >= 0.5 with vibe ${manifest.vibe.anchors.join(",")}`,
+        details: `variant ${entry.variantId} of block ${block.blockId} has weak affinity (best ${bestScore.toFixed(2)}) with vibe ${manifest.vibe.anchors.join(",")}`,
       };
     }
   }

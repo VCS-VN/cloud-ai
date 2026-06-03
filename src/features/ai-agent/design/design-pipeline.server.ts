@@ -30,6 +30,7 @@ import {
 } from "@/features/ai-agent/planning/taxonomy-enrichment.server";
 import { lazyMigrateIfNeeded } from "@/features/ai-agent/design/lazy-migration.server";
 import { loadVerticalLayoutSpec } from "@/features/ai-agent/design/vertical-layout-spec.server";
+import { alignVibeAnchorsForInitTemplate } from "@/features/ai-agent/design/init-vibe-alignment.server";
 import type { TemplateId } from "@/features/ai-agent/source/template-registry.server";
 
 export type DesignPipelineInput = {
@@ -235,6 +236,10 @@ async function runFullGeneration(
         details: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  if (cfg.intent === "init") {
+    vibe = alignVibeAnchorsForInitTemplate(vibe, input.templateId);
   }
 
   let composition: CompositionEntry[];

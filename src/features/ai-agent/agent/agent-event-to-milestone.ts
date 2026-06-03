@@ -3,8 +3,6 @@ import type { ChangePlan } from "../project/project-state.schema";
 import type { AgentMessageKind } from "@/shared/project-types";
 import { sanitizeForUser } from "./user-facing-presenter";
 
-const FILE_LIST_LIMIT = 10;
-
 export type MilestoneDecision = {
   kind: AgentMessageKind;
   content: string;
@@ -29,18 +27,14 @@ function planHasFileOperations(plan: ChangePlan): boolean {
 
 function buildPlanContent(plan: ChangePlan): string {
   const summary = sanitizeForUser(plan.summary) || "Planned changes to your storefront.";
-  const files = plan.operations
-    .filter((op) => FILE_OPERATION_TYPES.has(op.type) && op.path)
-    .map((op) => op.path as string);
+  const fileCount = plan.operations.filter(
+    (op) => FILE_OPERATION_TYPES.has(op.type) && op.path,
+  ).length;
 
-  if (files.length === 0) return summary;
+  if (fileCount === 0) return summary;
 
-  const shown = files.slice(0, FILE_LIST_LIMIT);
-  const remaining = files.length - shown.length;
-  const lines = shown.map((path) => `- ${path}`);
-  if (remaining > 0) lines.push(`- +${remaining} more`);
-
-  return `${summary}\n\nWill update:\n${lines.join("\n")}`;
+  const noun = fileCount === 1 ? "update" : "updates";
+  return `${summary}\n\nPreparing ${fileCount} ${noun} across your storefront.`;
 }
 
 /**

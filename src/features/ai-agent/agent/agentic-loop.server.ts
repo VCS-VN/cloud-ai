@@ -4,6 +4,11 @@ import { buildToolCallRequestedEvent, buildToolCallCompletedEvent } from "../cod
 import { CODE_TOOL_LIMITS } from "../code-tools/code-tool-registry.server";
 import { buildAgenticSystemPrompt, buildUserMessageWithThinking } from "./agentic-prompts.server";
 import { buildPreloadedTasteSkillDeveloperMessage } from "../code-tools/services/taste-skill-preload.server";
+import {
+  buildFriendlyToolActivitySummary,
+  buildFriendlyToolCompletedSummary,
+  filterAssistantDeltaForUser,
+} from "./user-facing-presenter";
 import { createDefaultCodeToolRegistry } from "../code-tools/code-tool-registry.server";
 import { loopProducedInitUiFiles } from "../source/init-backfill-policy.server";
 import { compactConversation, estimateTokenCount } from "./context-compaction";
@@ -86,13 +91,15 @@ export async function* runAgenticLoop(
             messages,
             tools,
             onTextDelta: async (delta) => {
-              if (!delta) return;
-              streamedTextLength += delta.length;
+              if (!delta || input.suppressAssistantStreaming) return;
+              const userDelta = filterAssistantDeltaForUser(delta);
+              if (!userDelta) return;
+              streamedTextLength += userDelta.length;
               await deps.sendEvent({
                 type: "assistant_message_delta",
                 projectId: input.projectId,
                 messageId: input.messageId ?? input.runId,
-                delta,
+                delta: userDelta,
               });
             },
           }),
@@ -142,13 +149,16 @@ export async function* runAgenticLoop(
       textPreview: modelResult.outputText?.substring(0, 200) ?? "",
     });
 
-    if (hasText && streamedTextLength === 0) {
-      await deps.sendEvent({
-        type: "assistant_message_delta",
-        projectId: input.projectId,
-        messageId: input.messageId ?? input.runId,
-        delta: modelResult.outputText,
-      });
+    if (hasText && streamedTextLength === 0 && !input.suppressAssistantStreaming) {
+      const userDelta = filterAssistantDeltaForUser(modelResult.outputText);
+      if (userDelta) {
+        await deps.sendEvent({
+          type: "assistant_message_delta",
+          projectId: input.projectId,
+          messageId: input.messageId ?? input.runId,
+          delta: userDelta,
+        });
+      }
     }
 
     if (hasToolCalls) {
@@ -188,7 +198,10 @@ export async function* runAgenticLoop(
             messageId: input.messageId ?? input.runId,
             toolName: toolCall.name,
             category: toolDef?.category ?? "inspect",
-            safeSummary: `Executing ${toolCall.name}`,
+            safeSummary: buildFriendlyToolActivitySummary(
+              toolCall.name,
+              toolDef?.category ?? "inspect",
+            ),
           }),
         );
 
@@ -291,16 +304,18 @@ export async function* runAgenticLoop(
             messageId: input.messageId ?? input.runId,
             toolName: toolCall.name,
             ok: result.ok,
-            summary: result.ok
-              ? `Tool ${toolCall.name} succeeded`
-              : result.error?.message ?? "Tool failed",
+            summary: buildFriendlyToolCompletedSummary(
+              toolCall.name,
+              toolDef?.category ?? "inspect",
+              result.ok,
+            ),
             recoverable: result.error?.recoverable ?? true,
           }),
         );
 
         if (result.ok) {
           consecutiveErrors = 0;
-          trackChangedFiles(toolCall, result, changedFiles);
+          trackChangedFiles(toolCall, result, changedFiles, toolDef?.category);
         } else {
           consecutiveErrors++;
           if (consecutiveErrors >= maxConsecutiveErrors) {
@@ -421,6 +436,7 @@ function trackChangedFiles(
   toolCall: ProviderFunctionToolCall,
   result: ProjectToolResult,
   changedFiles: Set<string>,
+  toolCategory?: string,
 ) {
   if (!result.ok || !result.data) return;
   const data = result.data as Record<string, unknown>;
@@ -429,7 +445,8 @@ function trackChangedFiles(
       if (typeof f === "string") changedFiles.add(f);
     }
   }
-  if (typeof data.path === "string") {
+  // Inspect tools (e.g. project_read_design_rules) return `path` without mutating — do not count.
+  if (toolCategory === "mutate" && typeof data.path === "string") {
     changedFiles.add(data.path);
   }
 }

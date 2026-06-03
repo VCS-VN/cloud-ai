@@ -4,7 +4,7 @@ import type { ProjectRunStore } from "@/features/ai-agent/project/project-run-st
 import type { DevRuntimeEvent } from "@/features/ai-agent/runtime/runtime-events";
 import {
   sanitizeForUser,
-  redactTechnicalText,
+  filterAssistantDeltaForUser,
   detectUserLanguage,
   buildFriendlyErrorContent,
   interruptedAnswerSuffix,
@@ -306,7 +306,7 @@ export class MessageService {
           // Per-delta: redact technical tokens only. Do NOT trim/collapse here — a
           // trailing trim on each chunk eats boundary spaces and sticks words together
           // ("sẵn sàng.Khách"). Whitespace is normalized once on completion below.
-          const delta = redactTechnicalText(event.delta);
+          const delta = filterAssistantDeltaForUser(event.delta);
           if (!delta) continue;
           clearStillWorking(); // answer is streaming; user sees output now
           await createAnswerIfNeeded();

@@ -14,7 +14,11 @@ import type { AgentConfig } from "./agent-config";
 import type { ChatCompletionsProvider } from "../openai/chat-completions-provider.server";
 import type { RuntimeService } from "../runtime/runtime-service.server";
 import type { RuntimeOrchestrator } from "../runtime/runtime-orchestrator.server";
-import { sanitizeForUser, redactTechnicalText } from "./user-facing-presenter";
+import {
+  filterAssistantDeltaForUser,
+  sanitizeForUser,
+  redactTechnicalText,
+} from "./user-facing-presenter";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { buildFileManifest } from "../source/code-index-service.server";
 import {
@@ -30,7 +34,10 @@ import {
 } from "../source/init-source.server";
 import { REQUIRED_GENERATED_STOREFRONT_FILES } from "../source/generated-project-layout";
 import { applyStoreSlugToEnv } from "../store-runtime/generated-project-env";
-import { buildRetailInitPrompt } from "./init-prompt.server";
+import {
+  buildInitStorefrontRecoveryPrompt,
+  buildRetailInitPrompt,
+} from "./init-prompt.server";
 import { buildVerticalInitGuidance } from "./vertical-init-guidance.server";
 import { loadVerticalLayoutSpec } from "../design/vertical-layout-spec.server";
 import { runDesignPipeline } from "../design/design-pipeline.server";
@@ -62,7 +69,7 @@ import { toThinkingRunSummary } from "../thinking/thinking.repository.server";
 import type { ThinkingResult } from "../thinking/thinking.schema";
 import { redactSecrets } from "../security/secret-redactor";
 import { runAgenticLoop } from "./agentic-loop.server";
-import type { AgenticLoopResult } from "./agentic-loop.types";
+import type { AgenticLoopResult, PreloadedTasteSkill } from "./agentic-loop.types";
 import { AsyncEventQueue } from "./async-event-queue";
 import { isReasoningModel, selectReasoningEffort } from "./reasoning-effort";
 import { executeProjectTool } from "../code-tools/code-tool-executor.server";
@@ -638,7 +645,7 @@ export class AgentOrchestrator {
         yield { type: "file_changed", path: designPath, operation: "created" };
       }
       serverDesignGuidance =
-        "\n\nSERVER DESIGN (already written): DESIGN.md and blocks.json were generated for this vertical before the agentic loop. Call project_read_design_rules first, then implement storefront UI files using the preloaded taste skill, vertical layout contract, and tokens in DESIGN.md. Refine DESIGN.md only if the user brief clearly requires it.";
+        "\n\nSERVER DESIGN (already written): DESIGN.md and blocks.json were generated for this vertical before the agentic loop. Do NOT call project_create_file for DESIGN.md. Call project_read_design_rules once, then create ALL required routes and components (src/routes/*, src/components/layout/*, src/components/store/*) with write or project_create_file. You must create storefront implementation files — reading design rules alone does not complete init.";
     } else {
       console.warn(
         JSON.stringify({
@@ -649,6 +656,11 @@ export class AgentOrchestrator {
             designPipelineResult.status === "needs-manual-review"
               ? designPipelineResult.reason
               : "no-op",
+          details:
+            designPipelineResult.status === "needs-manual-review"
+              ? designPipelineResult.details
+              : undefined,
+          templateId,
         }),
       );
     }
@@ -724,73 +736,18 @@ export class AgentOrchestrator {
       }),
     );
 
-    const eventQueue = new AsyncEventQueue<AgentStreamEvent>();
-    const loopPromise = (async (): Promise<AgenticLoopResult> => {
-      try {
-        const generator = runAgenticLoop(
-          {
-            projectId: input.projectId,
-            userId: input.userId,
-            messageId: args.runId,
-            runId: args.runId,
-            userPrompt: retailInitPrompt,
-            projectState,
-            selectedStoreSlug,
-            thinkingResult: thinking,
-            context: toolExecutionContext,
-            preloadedTasteSkill,
-            registry,
-            requireStorefrontUiBeforeCompletion: true,
-            signal: input.signal,
-          },
-          {
-            model: this.deps.agentConfig?.coderModel ?? "gpt-5.4",
-            maxIterations: this.deps.agentConfig?.agenticMaxIterations ?? 40,
-            maxConsecutiveToolErrors:
-              this.deps.agentConfig?.agenticMaxConsecutiveToolErrors ?? 5,
-            callModel: async (modelInput) => {
-              const coderModel = this.deps.agentConfig?.coderModel ?? "gpt-5.4";
-              const reasoningEffort = isReasoningModel(coderModel)
-                ? selectReasoningEffort(thinking, { isInit: true })
-                : undefined;
-              return this.deps.openAIProvider!.streamCodeToolResponse({
-                model: coderModel,
-                input: modelInput.messages as unknown[],
-                tools: modelInput.tools,
-                toolChoice: "required",
-                signal: input.signal,
-                onTextDelta: modelInput.onTextDelta,
-                reasoningEffort,
-              });
-            },
-            executeTool: async (toolCall) => {
-              return executeProjectTool({
-                registry,
-                context: toolExecutionContext,
-                toolCall,
-                inspectionCompleted: true,
-                mutationCompleted: false,
-              });
-            },
-            sendEvent: (event) => {
-              eventQueue.push(event as AgentStreamEvent);
-            },
-          },
-        );
-        let iterResult = await generator.next();
-        while (!iterResult.done) {
-          iterResult = await generator.next();
-        }
-        return iterResult.value;
-      } finally {
-        eventQueue.close();
-      }
-    })();
-
-    for await (const event of eventQueue.drain()) {
-      yield event;
-    }
-    let loopResult = await loopPromise;
+    let loopResult = yield* this.runInitAgenticLoopPass({
+      input,
+      runId: args.runId,
+      projectState,
+      selectedStoreSlug,
+      thinking,
+      toolExecutionContext,
+      registry,
+      preloadedTasteSkill,
+      userPrompt: retailInitPrompt,
+      signal: input.signal,
+    });
 
     console.info(
       JSON.stringify({
@@ -799,6 +756,10 @@ export class AgentOrchestrator {
         status: loopResult.status,
         totalToolCalls: loopResult.totalToolCalls,
         changedFileCount: loopResult.changedFiles.length,
+        changedFiles: loopResult.changedFiles.slice(0, 40),
+        producedStorefrontImplementation: loopProducedInitUiFiles(
+          loopResult.changedFiles,
+        ),
         iterations: loopResult.iterations,
         summary: loopResult.summary?.substring(0, 200),
       }),
@@ -914,7 +875,57 @@ export class AgentOrchestrator {
       if (await this.projectFileExists(input.projectId, requiredPath)) continue;
       stillMissingRequired.push(requiredPath);
     }
-    const missingUi = stillMissingRequired.filter(isInitUiStorefrontPath);
+    let missingUi = stillMissingRequired.filter(isInitUiStorefrontPath);
+    if (
+      missingUi.length > 0 &&
+      !loopProducedInitUiFiles(loopResult.changedFiles)
+    ) {
+      console.warn(
+        JSON.stringify({
+          event: "init_ui_recovery_pass_starting",
+          projectId: input.projectId,
+          missingCount: missingUi.length,
+          loopStatus: loopResult.status,
+        }),
+      );
+      yield {
+        type: "source_generation_started",
+        message: "Completing storefront pages and components...",
+      };
+      const recoveryResult = yield* this.runInitAgenticLoopPass({
+        input,
+        runId: args.runId,
+        projectState,
+        selectedStoreSlug,
+        thinking,
+        toolExecutionContext,
+        registry,
+        userPrompt: buildInitStorefrontRecoveryPrompt({
+          missingPaths: missingUi,
+          hasServerDesign: serverDesignPaths.includes("DESIGN.md"),
+        }),
+        signal: input.signal,
+      });
+      loopResult = {
+        ...recoveryResult,
+        changedFiles: [
+          ...new Set([
+            ...loopResult.changedFiles,
+            ...recoveryResult.changedFiles,
+          ]),
+        ],
+        summary: `${loopResult.summary} Recovery pass: ${recoveryResult.summary}`,
+      };
+      stillMissingRequired.length = 0;
+      for (const requiredPath of REQUIRED_GENERATED_STOREFRONT_FILES) {
+        if (initPathsFromStart.has(requiredPath)) continue;
+        if (loopResult.changedFiles.includes(requiredPath)) continue;
+        if (await this.projectFileExists(input.projectId, requiredPath))
+          continue;
+        stillMissingRequired.push(requiredPath);
+      }
+      missingUi = stillMissingRequired.filter(isInitUiStorefrontPath);
+    }
     if (
       missingUi.length > 0 &&
       !loopProducedInitUiFiles(loopResult.changedFiles)
@@ -1329,6 +1340,88 @@ export class AgentOrchestrator {
     }
   }
 
+  private async *runInitAgenticLoopPass(args: {
+    input: HandlePromptInput;
+    runId: string;
+    projectState: ProjectState;
+    selectedStoreSlug: string | null;
+    thinking: ThinkingResult;
+    toolExecutionContext: ToolExecutionContext;
+    registry: ReturnType<typeof createInitCodeToolRegistry>;
+    userPrompt: string;
+    preloadedTasteSkill?: PreloadedTasteSkill;
+    signal?: AbortSignal;
+  }): AsyncGenerator<AgentStreamEvent, AgenticLoopResult, unknown> {
+    const eventQueue = new AsyncEventQueue<AgentStreamEvent>();
+    const loopPromise = (async (): Promise<AgenticLoopResult> => {
+      try {
+        const generator = runAgenticLoop(
+          {
+            projectId: args.input.projectId,
+            userId: args.input.userId,
+            messageId: args.runId,
+            runId: args.runId,
+            userPrompt: args.userPrompt,
+            projectState: args.projectState,
+            selectedStoreSlug: args.selectedStoreSlug,
+            thinkingResult: args.thinking,
+            context: args.toolExecutionContext,
+            preloadedTasteSkill: args.preloadedTasteSkill,
+            registry: args.registry,
+            requireStorefrontUiBeforeCompletion: true,
+            suppressAssistantStreaming: true,
+            signal: args.signal,
+          },
+          {
+            model: this.deps.agentConfig?.coderModel ?? "gpt-5.4",
+            maxIterations: this.deps.agentConfig?.agenticMaxIterations ?? 40,
+            maxConsecutiveToolErrors:
+              this.deps.agentConfig?.agenticMaxConsecutiveToolErrors ?? 5,
+            callModel: async (modelInput) => {
+              const coderModel = this.deps.agentConfig?.coderModel ?? "gpt-5.4";
+              const reasoningEffort = isReasoningModel(coderModel)
+                ? selectReasoningEffort(args.thinking, { isInit: true })
+                : undefined;
+              return this.deps.openAIProvider!.streamCodeToolResponse({
+                model: coderModel,
+                input: modelInput.messages as unknown[],
+                tools: modelInput.tools,
+                toolChoice: "required",
+                signal: args.signal,
+                onTextDelta: modelInput.onTextDelta,
+                reasoningEffort,
+              });
+            },
+            executeTool: async (toolCall) => {
+              return executeProjectTool({
+                registry: args.registry,
+                context: args.toolExecutionContext,
+                toolCall,
+                inspectionCompleted: true,
+                mutationCompleted: false,
+              });
+            },
+            sendEvent: (event) => {
+              eventQueue.push(event as AgentStreamEvent);
+            },
+          },
+        );
+        let iterResult = await generator.next();
+        while (!iterResult.done) {
+          iterResult = await generator.next();
+        }
+        return iterResult.value;
+      } finally {
+        eventQueue.close();
+      }
+    })();
+
+    for await (const event of eventQueue.drain()) {
+      yield event;
+    }
+    return loopPromise;
+  }
+
   /**
    * Run one agentic edit pass and yield its stream events, returning the loop result.
    * Extracted so anti-slop repair can re-run a pass with a corrective prompt.
@@ -1460,10 +1553,6 @@ export class AgentOrchestrator {
 
       // Out of repair passes — surface to the user and keep the code.
       if (pass === MAX_REPAIR_PASSES) {
-        const lines = violations
-          .slice(0, 8)
-          .map((v) => `- \`${v.path}\`: ${v.violation.message}`)
-          .join("\n");
         console.warn(
           JSON.stringify({
             event: "anti_slop_surfaced",
@@ -1471,11 +1560,13 @@ export class AgentOrchestrator {
             runId: args.runId,
             count: violations.length,
             codes: violations.map((v) => v.violation.code),
+            paths: violations.slice(0, 8).map((v) => v.path),
           }),
         );
         yield {
           type: "assistant_message_delta",
-          delta: `\n\nHeads up — a few anti-slop design checks still didn't pass after ${MAX_REPAIR_PASSES} fix attempts. These may be intentional; review and confirm:\n${lines}\n`,
+          delta:
+            "\n\nA few design quality checks still need your review. Please open the preview and confirm the look matches what you want.\n",
         };
         return loopResult;
       }
@@ -1524,7 +1615,7 @@ export class AgentOrchestrator {
       })) {
         if (event.type === "delta" && event.text) {
           // Redact-only per delta (keep boundary spaces); whitespace normalized once below.
-          const delta = redactTechnicalText(event.text);
+          const delta = filterAssistantDeltaForUser(event.text);
           if (!delta) continue;
           summary += delta;
           yield { type: "assistant_message_delta", delta };

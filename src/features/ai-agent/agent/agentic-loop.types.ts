@@ -23,6 +23,8 @@ export type AgenticLoopInput = {
   registry?: CodeToolRegistry;
   /** Block early text-only completion until at least one storefront UI path is written. */
   requireStorefrontUiBeforeCompletion?: boolean;
+  /** Do not stream raw model text to the user (init uses skeleton + status events only). */
+  suppressAssistantStreaming?: boolean;
   signal?: AbortSignal;
 };
 

@@ -1,5 +1,21 @@
 import type { WebsiteSpec } from "../project/project-state.schema";
 
+export function buildInitStorefrontRecoveryPrompt(input: {
+  missingPaths: string[];
+  hasServerDesign: boolean;
+}): string {
+  const lines = input.missingPaths.map((p) => `- ${p}`).join("\n");
+  return [
+    "INIT RECOVERY — required storefront implementation files are still missing.",
+    input.hasServerDesign
+      ? "DESIGN.md and blocks.json already exist. Call project_read_design_rules once, then create EVERY missing path below with write or project_create_file. Do NOT recreate DESIGN.md."
+      : "Create DESIGN.md, call project_read_design_rules, then create every missing path below.",
+    "Missing paths:",
+    lines,
+    "Use tool calls only until all paths exist. Follow DESIGN.md tokens and the preloaded taste skill.",
+  ].join("\n");
+}
+
 export function buildRetailInitPrompt(input: {
   userPrompt: string;
   websiteSpec: WebsiteSpec;
