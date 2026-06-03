@@ -1,5 +1,7 @@
+import { existsSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 import {
   BlockLibrarySchema,
@@ -10,8 +12,21 @@ import {
   type VibeReferencePool,
 } from "./blocks-manifest";
 
-const REPO_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
-const STOREFRONT_DIR = path.join(REPO_ROOT, "templates", "storefront");
+function resolveStorefrontTemplatesDir(): string {
+  let dir = path.dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 10; i += 1) {
+    const candidate = path.join(dir, "templates", "storefront");
+    if (existsSync(path.join(candidate, "block-library.yaml"))) {
+      return candidate;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.join(process.cwd(), "templates", "storefront");
+}
+
+const STOREFRONT_DIR = resolveStorefrontTemplatesDir();
 
 const DEFAULT_PATHS = {
   blockLibrary: path.join(STOREFRONT_DIR, "block-library.yaml"),
