@@ -2,7 +2,7 @@ import { AgentOrchestrator } from "@/features/ai-agent/agent/agent-orchestrator.
 import { PromptLayerStore } from "@/features/ai-agent/agent/init-prompt-store.server";
 import { loadAgentConfig } from "@/features/ai-agent/agent/agent-config";
 import { createOpenAIClient } from "@/features/ai-agent/openai/openai-client.server";
-import { OpenAIProvider } from "@/features/ai-agent/openai/openai-provider.server";
+import { ChatCompletionsProvider } from "@/features/ai-agent/openai/chat-completions-provider.server";
 import { ProjectRunStore } from "@/features/ai-agent/project/project-run-store.server";
 import { ProjectFileStore } from "@/features/ai-agent/project/project-file-store.server";
 import { SnapshotService } from "@/features/ai-agent/project/snapshot-service.server";
@@ -82,7 +82,7 @@ export async function getProjectServices() {
   const snapshotService = new SnapshotService(projectSnapshotRepo);
   const agentConfig = loadAgentConfig();
   const openAIClient = createOpenAIClient();
-  const openAIProvider = new OpenAIProvider(openAIClient);
+  const openAIProvider = new ChatCompletionsProvider(openAIClient);
   presenceService.setProcessManager(processManager);
   ensureRuntimeBootstrap();
   const errorFixer = new ErrorFixer({ openAIProvider, coderModel: agentConfig.coderModel });

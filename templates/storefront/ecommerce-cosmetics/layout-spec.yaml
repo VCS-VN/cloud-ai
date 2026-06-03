@@ -1,0 +1,47 @@
+templateId: ecommerce-cosmetics
+verticalLabel: cosmetics
+storeTypes: [cosmetics]
+homepage:
+  rhythm: ritual-and-ingredient-story
+  requiredOptionalSlots: [routine-builder, category-strip]
+  preferredOptionalSlots: [campaign-story, feature-band, newsletter]
+  forbiddenSlots: [gear-spec]
+  preferredSocialProofBlocks: [social-proof-material, social-proof-founder]
+blocks:
+  header:
+    allowedVariants: [botanical-natural, gallery-quiet, warm-rounded, handcraft-paper]
+    defaultVariant: botanical-natural
+  hero:
+    allowedVariants: [botanical-frame, gallery-still, split-grid, editorial-overlay]
+    defaultVariant: botanical-frame
+  category-strip:
+    allowedVariants: [pill-tabs, card-row]
+    defaultVariant: pill-tabs
+  product-grid:
+    allowedVariants: [botanical-grid, rounded-card, museum-caption, editorial-2up]
+    defaultVariant: botanical-grid
+  routine-builder:
+    allowedVariants: [step-card, ritual-spread]
+    defaultVariant: step-card
+  feature-band:
+    allowedVariants: [ingredient-window, pastel-block, dark-promo]
+    defaultVariant: ingredient-window
+  campaign-story:
+    allowedVariants: [ingredient-feature, editorial-spread]
+    defaultVariant: ingredient-feature
+  social-proof-material:
+    allowedVariants: [material-callouts, spec-sheet]
+    defaultVariant: material-callouts
+  social-proof-founder:
+    allowedVariants: [founder-letter, maker-card, luxury-letter]
+    defaultVariant: founder-letter
+  newsletter:
+    allowedVariants: [friendly-pill, editorial-quiet]
+    defaultVariant: friendly-pill
+  footer:
+    allowedVariants: [botanical-footer, warm-roundup, museum-quiet]
+    defaultVariant: botanical-footer
+overrides:
+  allowUserOverride: true
+  maxSlotRemovals: 1
+  maxSlotAdditions: 1

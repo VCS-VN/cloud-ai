@@ -1,0 +1,32 @@
+templateId: ecommerce-basic
+verticalLabel: general-retail
+storeTypes: [general, furniture, single-product]
+homepage:
+  rhythm: balanced-retail-default
+  requiredOptionalSlots: [category-strip]
+  preferredOptionalSlots: [feature-band, newsletter]
+  forbiddenSlots: []
+  preferredSocialProofBlocks: [social-proof-trust]
+blocks:
+  header:
+    allowedVariants: [minimal-mono, warm-rounded, editorial-strip]
+    defaultVariant: minimal-mono
+  hero:
+    allowedVariants: [split-grid, editorial-overlay, gallery-still]
+    defaultVariant: split-grid
+  category-strip:
+    allowedVariants: [card-row, pill-tabs]
+    defaultVariant: card-row
+  product-grid:
+    allowedVariants: [gallery-3up, dense-4up, rounded-card]
+    defaultVariant: gallery-3up
+  feature-band:
+    allowedVariants: [dark-promo, pastel-block]
+    defaultVariant: dark-promo
+  footer:
+    allowedVariants: [dense-link-grid, warm-roundup]
+    defaultVariant: dense-link-grid
+overrides:
+  allowUserOverride: true
+  maxSlotRemovals: 1
+  maxSlotAdditions: 1

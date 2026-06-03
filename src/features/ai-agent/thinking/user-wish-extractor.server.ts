@@ -1,4 +1,4 @@
-import type { OpenAIProvider } from "../openai/openai-provider.server";
+import type { ChatCompletionsProvider } from "../openai/chat-completions-provider.server";
 import { THINKING_LAYER_DEVELOPER_PROMPT, THINKING_LAYER_SYSTEM_PROMPT, THINKING_RESULT_FORMAT_CONTRACT } from "./thinking.prompt";
 import {
   structuredThinkingResultSchema,
@@ -8,7 +8,7 @@ import {
 
 export type ExtractUserWishesInput = {
   input: ThinkingInput;
-  provider?: OpenAIProvider;
+  provider?: ChatCompletionsProvider;
   model: string;
 };
 

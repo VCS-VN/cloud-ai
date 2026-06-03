@@ -2,6 +2,8 @@ export type AgentConfig = {
   plannerModel: string;
   coderModel: string;
   summaryModel: string;
+  providerBaseUrl?: string;
+  providerApiKey?: string;
   maxRepairAttempts: number;
   maxContextFiles: number;
   maxContextChars: number;
@@ -22,6 +24,8 @@ export function loadAgentConfig(env: NodeJS.ProcessEnv = process.env): AgentConf
     plannerModel: env.OPENAI_MODEL_PLANNER ?? env.OPENAI_MODEL ?? "gpt-5.4-mini",
     coderModel: env.OPENAI_MODEL_CODER ?? env.OPENAI_MODEL ?? "gpt-5.4",
     summaryModel: env.OPENAI_MODEL_SUMMARY ?? env.OPENAI_MODEL ?? "gpt-5.4-mini",
+    providerBaseUrl: env.AI_PROVIDER_BASE_URL,
+    providerApiKey: env.AI_PROVIDER_API_KEY,
     maxRepairAttempts: readNumber(env.AGENT_MAX_REPAIR_ATTEMPTS, 2),
     maxContextFiles: readNumber(env.AGENT_MAX_CONTEXT_FILES, 12),
     maxContextChars: readNumber(env.AGENT_MAX_CONTEXT_CHARS, 120000),

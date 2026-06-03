@@ -20,10 +20,10 @@ export function loadAIEnv(env: NodeJS.ProcessEnv = process.env): AIEnv {
   );
 
   const model = getFirstDefined(env.OPENAI_MODEL, env.AI_MODEL);
-  const apiKey = getFirstDefined(env.OPENAI_API_KEY, env.AI_API_KEY);
+  const apiKey = getFirstDefined(env.AI_PROVIDER_API_KEY, env.OPENAI_API_KEY, env.AI_API_KEY);
   if (!provider || !model || !apiKey)
     throw new Error("Missing AI provider configuration");
-  const baseUrl = getFirstDefined(env.OPENAI_BASE_URL, env.AI_BASE_URL);
+  const baseUrl = getFirstDefined(env.AI_PROVIDER_BASE_URL, env.OPENAI_BASE_URL, env.AI_BASE_URL);
   const timeoutMs = Number(
     getFirstDefined(env.OPENAI_TIMEOUT_MS, env.AI_TIMEOUT_MS) ?? 60000,
   );

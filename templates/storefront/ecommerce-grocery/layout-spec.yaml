@@ -1,0 +1,41 @@
+templateId: ecommerce-grocery
+verticalLabel: grocery
+storeTypes: [grocery, food]
+homepage:
+  rhythm: pantry-discovery-and-staples
+  requiredOptionalSlots: [category-strip]
+  preferredOptionalSlots: [feature-band, newsletter]
+  forbiddenSlots: [gear-spec, routine-builder, campaign-story]
+  preferredSocialProofBlocks: [social-proof-founder, social-proof-trust]
+blocks:
+  header:
+    allowedVariants: [warm-rounded, minimal-mono, handcraft-paper]
+    defaultVariant: warm-rounded
+  hero:
+    allowedVariants: [split-grid, sticker-stack, botanical-frame]
+    defaultVariant: split-grid
+  category-strip:
+    allowedVariants: [card-row, pill-tabs]
+    defaultVariant: card-row
+  product-grid:
+    allowedVariants: [rounded-card, dense-4up, botanical-grid, marker-grid]
+    defaultVariant: rounded-card
+  feature-band:
+    allowedVariants: [pastel-block, ingredient-window, dark-promo]
+    defaultVariant: pastel-block
+  social-proof-founder:
+    allowedVariants: [pantry-card, maker-card, rounded-letter]
+    defaultVariant: pantry-card
+  social-proof-trust:
+    allowedVariants: [badge-grid, rating-row]
+    defaultVariant: badge-grid
+  newsletter:
+    allowedVariants: [friendly-pill, editorial-quiet]
+    defaultVariant: friendly-pill
+  footer:
+    allowedVariants: [warm-roundup, playful-footer, handcraft-footer]
+    defaultVariant: warm-roundup
+overrides:
+  allowUserOverride: true
+  maxSlotRemovals: 1
+  maxSlotAdditions: 1

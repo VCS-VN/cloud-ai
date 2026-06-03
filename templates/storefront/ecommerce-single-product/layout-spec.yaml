@@ -1,0 +1,29 @@
+templateId: ecommerce-single-product
+verticalLabel: single-product
+storeTypes: [single-product]
+homepage:
+  rhythm: product-spotlight-funnel
+  requiredOptionalSlots: [feature-band]
+  preferredOptionalSlots: [newsletter]
+  forbiddenSlots: [category-strip, campaign-story, gear-spec, routine-builder]
+  preferredSocialProofBlocks: [social-proof-trust, social-proof-press]
+blocks:
+  header:
+    allowedVariants: [minimal-mono, gallery-quiet]
+    defaultVariant: minimal-mono
+  hero:
+    allowedVariants: [gallery-still, split-grid, editorial-overlay]
+    defaultVariant: gallery-still
+  product-grid:
+    allowedVariants: [museum-caption, editorial-2up, gallery-3up]
+    defaultVariant: museum-caption
+  feature-band:
+    allowedVariants: [dark-promo, spec-strip]
+    defaultVariant: dark-promo
+  footer:
+    allowedVariants: [museum-quiet, dense-link-grid]
+    defaultVariant: museum-quiet
+overrides:
+  allowUserOverride: true
+  maxSlotRemovals: 1
+  maxSlotAdditions: 1

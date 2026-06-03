@@ -15,6 +15,13 @@ import { projectPreviewStatusTool } from "./tools/project-preview-status.tool.se
 import { projectPreviewRestartTool } from "./tools/project-preview-restart.tool.server";
 import { projectReadDesignRulesTool } from "./tools/project-read-design-rules.tool.server";
 import { projectReadTasteSkillTool } from "./tools/project-read-taste-skill.tool.server";
+import { readTool } from "./tools/read.tool.server";
+import { writeTool } from "./tools/write.tool.server";
+import { editTool } from "./tools/edit.tool.server";
+import { globTool } from "./tools/glob.tool.server";
+import { grepTool } from "./tools/grep.tool.server";
+import { createPreWriteHooks } from "./hooks/pre-write-hooks.server";
+import { createPostWriteHooks } from "./hooks/post-write-hooks.server";
 
 export const CODE_TOOL_LIMITS = {
   maxToolLoopIterations: 40,
@@ -111,7 +118,9 @@ export function registerMutationAndSnapshotTools(registry: CodeToolRegistry) {
     .register(createProjectApplyPatchTool())
     .register(createProjectCreateFileTool())
     .register(createProjectGetDiffTool())
-    .register(createProjectRunValidationTool());
+    .register(createProjectRunValidationTool())
+    .register(editTool)
+    .register(writeTool);
 }
 
 export function createDefaultCodeToolRegistry() {
@@ -124,7 +133,10 @@ export function createDefaultCodeToolRegistry() {
     .register(projectPreviewStatusTool)
     .register(projectPreviewRestartTool)
     .register(projectReadDesignRulesTool)
-    .register(projectReadTasteSkillTool));
+    .register(projectReadTasteSkillTool)
+    .register(readTool)
+    .register(globTool)
+    .register(grepTool));
 }
 
 export function createInitCodeToolRegistry() {
@@ -133,7 +145,8 @@ export function createInitCodeToolRegistry() {
     .register(projectReadDesignRulesTool)
     .register(projectReadTasteSkillTool)
     .register(createProjectCreateFileTool())
-    .register(createProjectRunValidationTool());
+    .register(createProjectRunValidationTool())
+    .register(writeTool);
 }
 
 export function selectAllowedToolNames(input: {

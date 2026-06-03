@@ -34,7 +34,7 @@ export const ThinkingResultJsonSchema = {
       additionalProperties: false,
       required: ["storeType", "affectedPages", "affectedSections", "affectedFeatures", "affectedEntities", "conversionGoal"],
       properties: {
-        storeType: { type: "string", enum: ["fashion", "cosmetics", "electronics", "furniture", "food", "digital", "general", "unknown"] },
+        storeType: { type: "string", enum: ["fashion", "cosmetics", "electronics", "grocery", "nail", "furniture", "food", "digital", "general", "unknown"] },
         affectedPages: { type: "array", items: { type: "string" } },
         affectedSections: { type: "array", items: { type: "string" } },
         affectedFeatures: { type: "array", items: { type: "string" } },

@@ -74,7 +74,7 @@ export const brandSchema = z.object({
 export const websiteSpecSchema = z.object({
   store: z.object({
     name: z.string(),
-    type: z.enum(["fashion", "cosmetics", "electronics", "furniture", "food", "single-product", "general"]),
+    type: z.enum(["fashion", "cosmetics", "electronics", "grocery", "nail", "furniture", "food", "single-product", "general"]),
     description: z.string(),
     targetCustomers: z.array(z.string()),
   }),
@@ -97,7 +97,7 @@ export const websiteSpecProviderSchema = strictObjectSchema(
     store: strictObjectSchema(
       {
         name: { type: "string" },
-        type: { type: "string", enum: ["fashion", "cosmetics", "electronics", "furniture", "food", "single-product", "general"] },
+        type: { type: "string", enum: ["fashion", "cosmetics", "electronics", "grocery", "nail", "furniture", "food", "single-product", "general"] },
         description: { type: "string" },
         targetCustomers: { type: "array", items: { type: "string" } },
       },

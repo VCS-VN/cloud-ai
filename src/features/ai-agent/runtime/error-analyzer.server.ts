@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { OpenAIProvider } from "../openai/openai-provider.server";
+import type { ChatCompletionsProvider } from "../openai/chat-completions-provider.server";
 import { patchResultProviderSchema } from "../openai/schemas";
 import type { FileOperation } from "../project/project-state.schema";
 
@@ -94,7 +94,7 @@ export class ErrorAnalyzer {
 }
 
 export type ErrorFixerDeps = {
-  openAIProvider: OpenAIProvider;
+  openAIProvider: ChatCompletionsProvider;
   coderModel: string;
 };
 

@@ -1,0 +1,41 @@
+templateId: ecommerce-electronics
+verticalLabel: electronics
+storeTypes: [electronics]
+homepage:
+  rhythm: spec-forward-discovery
+  requiredOptionalSlots: [gear-spec]
+  preferredOptionalSlots: [feature-band, newsletter]
+  forbiddenSlots: [routine-builder, campaign-story, category-strip]
+  preferredSocialProofBlocks: [social-proof-trust, social-proof-material]
+blocks:
+  header:
+    allowedVariants: [minimal-mono, drop-bold, editorial-strip]
+    defaultVariant: minimal-mono
+  hero:
+    allowedVariants: [split-grid, drop-countdown, gallery-still]
+    defaultVariant: split-grid
+  product-grid:
+    allowedVariants: [field-spec, dense-4up, gallery-3up]
+    defaultVariant: field-spec
+  gear-spec:
+    allowedVariants: [spec-table, field-test]
+    defaultVariant: spec-table
+  feature-band:
+    allowedVariants: [spec-strip, dark-promo]
+    defaultVariant: spec-strip
+  social-proof-trust:
+    allowedVariants: [badge-grid, rating-row]
+    defaultVariant: badge-grid
+  social-proof-material:
+    allowedVariants: [spec-sheet, material-callouts]
+    defaultVariant: spec-sheet
+  newsletter:
+    allowedVariants: [friendly-pill, editorial-quiet]
+    defaultVariant: friendly-pill
+  footer:
+    allowedVariants: [dense-link-grid, drop-footer]
+    defaultVariant: dense-link-grid
+overrides:
+  allowUserOverride: true
+  maxSlotRemovals: 1
+  maxSlotAdditions: 1

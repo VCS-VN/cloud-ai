@@ -1,4 +1,4 @@
-import type { OpenAIProvider } from "../openai/openai-provider.server";
+import type { ChatCompletionsProvider } from "../openai/chat-completions-provider.server";
 import { ECOMMERCE_AGENT_SYSTEM_PROMPT } from "../openai/prompts";
 import { websiteSpecProviderSchema } from "../openai/schemas";
 import type { WebsiteSpec } from "../project/project-state.schema";
@@ -13,7 +13,7 @@ Use null for unavailable nullable fields. Prefer English storefront copy unless 
 Limits: max 4 pages, max 6 products, concise strings.
 Example shape: {"store":{"name":"Demo Store","type":"fashion","description":"Modern ecommerce store","targetCustomers":["shoppers"]},"brand":{"name":"Demo Store","tagline":null,"tone":"friendly","colors":{"primary":"#111827","secondary":null,"accent":"#3B82F6","background":"#FFFFFF","foreground":"#111827"},"typography":null,"visualStyle":null},"pages":[{"path":"/","name":"Home","sections":["Hero","Products"]}],"products":[{"id":"prod-1","name":"Featured Product","category":null,"price":99,"compareAtPrice":null,"description":"Featured item","imagePrompt":null,"attributes":null}],"features":{"productListing":true,"productDetail":true,"cart":true,"cartDrawer":false,"checkout":true,"productSearch":false,"productFilter":false,"wishlist":false,"reviews":false,"promotions":false,"newsletter":false,"auth":false,"adminDashboard":false,"paymentIntegration":"mock"},"content":{"heroTitle":"Shop new arrivals","heroSubtitle":"A modern shopping experience","primaryCta":"Shop now","secondaryCta":null,"trustSignals":["Mock checkout"],"faq":[]}}`;
 
-export async function extractWebsiteSpec(input: { prompt: string; provider?: OpenAIProvider; model?: string; projectState?: unknown }): Promise<WebsiteSpec> {
+export async function extractWebsiteSpec(input: { prompt: string; provider?: ChatCompletionsProvider; model?: string; projectState?: unknown }): Promise<WebsiteSpec> {
   const fallback = createFallbackWebsiteSpec(input.prompt);
   if (input.provider && input.model) {
     try {
@@ -41,7 +41,7 @@ export async function extractWebsiteSpec(input: { prompt: string; provider?: Ope
   return fallback;
 }
 
-async function parseProviderWebsiteSpec(input: { prompt: string; provider: OpenAIProvider; model: string; projectState?: unknown }) {
+async function parseProviderWebsiteSpec(input: { prompt: string; provider: ChatCompletionsProvider; model: string; projectState?: unknown }) {
   try {
     const firstSpec = await callWebsiteSpecProvider(input, WEBSITE_SPEC_CONTRACT_PROMPT);
     const firstValidation = validateProviderWebsiteSpecShape(firstSpec);
@@ -61,7 +61,7 @@ async function parseProviderWebsiteSpec(input: { prompt: string; provider: OpenA
 }
 
 async function retryProviderWebsiteSpec(
-  input: { prompt: string; provider: OpenAIProvider; model: string; projectState?: unknown },
+  input: { prompt: string; provider: ChatCompletionsProvider; model: string; projectState?: unknown },
   errors: string[],
   metadata: { missingKeys: string[]; extraKeys: string[] },
 ) {
@@ -94,7 +94,7 @@ Your previous output did not match the required WebsiteSpec contract. Fix these 
   );
 }
 
-function callWebsiteSpecProvider(input: { prompt: string; provider: OpenAIProvider; model: string; projectState?: unknown }, contractPrompt: string) {
+function callWebsiteSpecProvider(input: { prompt: string; provider: ChatCompletionsProvider; model: string; projectState?: unknown }, contractPrompt: string) {
   return input.provider.parseStructured({
     model: input.model,
     system: `${ECOMMERCE_AGENT_SYSTEM_PROMPT}
@@ -228,15 +228,22 @@ function unwrapWebsiteSpec(rawSpec: unknown) {
 
 function createFallbackWebsiteSpec(prompt: string): WebsiteSpec {
   const lower = prompt.toLowerCase();
-  const type = lower.includes("cosmetic") || lower.includes("beauty")
-    ? "cosmetics"
-    : lower.includes("electronic") || lower.includes("tech")
-      ? "electronics"
-      : lower.includes("single")
-        ? "single-product"
-        : lower.includes("sneaker") || lower.includes("fashion") || lower.includes("streetwear")
-          ? "fashion"
-          : "general";
+  const type = lower.includes("nail") || lower.includes("mani") || lower.includes("salon")
+    ? "nail"
+    : lower.includes("grocery") ||
+        lower.includes("supermarket") ||
+        lower.includes("pantry") ||
+        (lower.includes("food") && !lower.includes("streetfood"))
+      ? "grocery"
+      : lower.includes("cosmetic") || lower.includes("beauty") || lower.includes("skincare")
+        ? "cosmetics"
+        : lower.includes("electronic") || lower.includes("tech") || lower.includes("gadget")
+          ? "electronics"
+          : lower.includes("single")
+            ? "single-product"
+            : lower.includes("sneaker") || lower.includes("fashion") || lower.includes("streetwear")
+              ? "fashion"
+              : "general";
   const tone = lower.includes("streetwear") ? "streetwear" : lower.includes("luxury") ? "luxury" : "friendly";
   const name = lower.includes("sneaker") ? "Sneaker Lab" : "AI Storefront";
   return {
@@ -318,7 +325,7 @@ function asOptionalNumber(value: unknown, fallback?: number) {
 }
 
 function asStoreType(value: unknown, fallback: WebsiteSpec["store"]["type"]): WebsiteSpec["store"]["type"] {
-  return ["fashion", "cosmetics", "electronics", "furniture", "food", "single-product", "general"].includes(String(value))
+  return ["fashion", "cosmetics", "electronics", "grocery", "nail", "furniture", "food", "single-product", "general"].includes(String(value))
     ? value as WebsiteSpec["store"]["type"]
     : fallback;
 }

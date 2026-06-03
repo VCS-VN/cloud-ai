@@ -2,6 +2,7 @@ import type { CodeToolDefinition } from "../code-agent-types";
 import { toolError, toolSuccess } from "../code-tool-executor.server";
 import { searchProjectCode } from "../services/project-code-search.server";
 
+/** @deprecated Use grepTool instead. Remove after 2026-07-01. */
 export const projectSearchCodeTool: CodeToolDefinition<{ query: string; globs?: string[]; maxResults?: number }> = {
   name: "project_search_code",
   category: "inspect",

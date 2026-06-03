@@ -1,0 +1,38 @@
+templateId: ecommerce-fashion
+verticalLabel: fashion
+storeTypes: [fashion]
+homepage:
+  rhythm: editorial-lookbook-first
+  requiredOptionalSlots: [category-strip]
+  preferredOptionalSlots: [campaign-story, feature-band, newsletter]
+  forbiddenSlots: [routine-builder, gear-spec]
+  preferredSocialProofBlocks: [social-proof-press, social-proof-founder]
+blocks:
+  header:
+    allowedVariants: [editorial-strip, gallery-quiet, drop-bold, minimal-mono]
+    defaultVariant: editorial-strip
+  hero:
+    allowedVariants: [editorial-overlay, split-grid, drop-countdown, gallery-still]
+    defaultVariant: editorial-overlay
+  category-strip:
+    allowedVariants: [card-row, pill-tabs, mono-list]
+    defaultVariant: card-row
+  product-grid:
+    allowedVariants: [editorial-2up, gallery-3up, dense-4up, drop-grid, museum-caption]
+    defaultVariant: editorial-2up
+  feature-band:
+    allowedVariants: [dark-promo, pastel-block, sticker-collage]
+    defaultVariant: dark-promo
+  campaign-story:
+    allowedVariants: [editorial-spread, drop-poster]
+    defaultVariant: editorial-spread
+  newsletter:
+    allowedVariants: [editorial-quiet, drop-alert]
+    defaultVariant: editorial-quiet
+  footer:
+    allowedVariants: [museum-quiet, dense-link-grid, drop-footer]
+    defaultVariant: museum-quiet
+overrides:
+  allowUserOverride: true
+  maxSlotRemovals: 1
+  maxSlotAdditions: 1

@@ -2,6 +2,7 @@ import type { CodeToolDefinition } from "../code-agent-types";
 import { toolError, toolSuccess } from "../code-tool-executor.server";
 import { readProjectFile } from "../services/project-file-reader.server";
 
+/** @deprecated Use readTool instead. Remove after 2026-07-01. */
 export const projectReadFileTool: CodeToolDefinition<{ path: string; maxBytes?: number }> = {
   name: "project_read_file",
   category: "inspect",

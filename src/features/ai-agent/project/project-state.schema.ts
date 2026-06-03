@@ -38,6 +38,8 @@ export type ProjectState = {
       | "fashion"
       | "cosmetics"
       | "electronics"
+      | "grocery"
+      | "nail"
       | "furniture"
       | "food"
       | "single-product"

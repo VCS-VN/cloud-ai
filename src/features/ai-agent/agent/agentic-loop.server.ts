@@ -3,10 +3,12 @@ import type { ProviderFunctionToolCall, ProjectToolResult } from "../code-tools/
 import { buildToolCallRequestedEvent, buildToolCallCompletedEvent } from "../code-tools/code-tool-events.server";
 import { CODE_TOOL_LIMITS } from "../code-tools/code-tool-registry.server";
 import { buildAgenticSystemPrompt, buildUserMessageWithThinking } from "./agentic-prompts.server";
+import { buildPreloadedTasteSkillDeveloperMessage } from "../code-tools/services/taste-skill-preload.server";
 import { createDefaultCodeToolRegistry } from "../code-tools/code-tool-registry.server";
 import { compactConversation, estimateTokenCount } from "./context-compaction";
 import { withRetry } from "./retry";
 import { classifyError, describeError } from "./error-classifier";
+import { withToolRetry } from "../code-tools/retry/tool-retry.server";
 
 const AUTO_COMPACT_TOKEN_LIMIT = 150_000;
 
@@ -189,9 +191,43 @@ export async function* runAgenticLoop(
           }),
         );
 
+        const toolStartedAt = Date.now();
+        await deps.sendEvent({
+          type: "tool_progress",
+          projectId: input.projectId,
+          messageId: input.messageId ?? input.runId,
+          toolName: toolCall.name,
+          status: "running",
+          startedAt: new Date(toolStartedAt).toISOString(),
+        });
+
         let result: ProjectToolResult;
         try {
-          result = await deps.executeTool(toolCall);
+          result = await withToolRetry({
+            toolCall,
+            signal: input.signal,
+            execute: async () => deps.executeTool(toolCall),
+            onRetry: async ({ attempt, delayMs, errorCode, errorMessage }) => {
+              logAgenticLoop("tool_retry", {
+                projectId: input.projectId,
+                iteration,
+                toolName: toolCall.name,
+                attempt,
+                delayMs,
+                errorCode,
+                errorMessage,
+              });
+              await deps.sendEvent({
+                type: "tool_progress",
+                projectId: input.projectId,
+                messageId: input.messageId ?? input.runId,
+                toolName: toolCall.name,
+                status: "running",
+                durationMs: Date.now() - toolStartedAt,
+                error: `Retrying after ${errorCode}: ${errorMessage}`,
+              });
+            },
+          });
         } catch (err) {
           result = {
             ok: false,
@@ -209,6 +245,33 @@ export async function* runAgenticLoop(
             },
           };
         }
+
+        if (toolCall.name === "project_run_validation" && result.ok && result.data && typeof result.data === "object") {
+          const data = result.data as any;
+          for (const command of Array.isArray(data.commands) ? data.commands : []) {
+            const stdout = typeof command.stdoutSummary === "string" ? command.stdoutSummary : "";
+            const stderr = typeof command.stderrSummary === "string" ? command.stderrSummary : "";
+            for (const line of [stdout, stderr].filter(Boolean)) {
+              await deps.sendEvent({
+                type: "tool_stdout",
+                projectId: input.projectId,
+                messageId: input.messageId ?? input.runId,
+                toolName: toolCall.name,
+                line,
+              });
+            }
+          }
+        }
+
+        await deps.sendEvent({
+          type: "tool_progress",
+          projectId: input.projectId,
+          messageId: input.messageId ?? input.runId,
+          toolName: toolCall.name,
+          status: result.ok ? "completed" : "failed",
+          durationMs: Date.now() - toolStartedAt,
+          error: result.ok ? undefined : result.error?.message,
+        });
 
         totalToolCalls++;
 
@@ -317,10 +380,17 @@ export async function* runAgenticLoop(
 }
 
 function buildInitialMessages(input: AgenticLoopInput): ConversationMessage[] {
-  return [
+  const messages: ConversationMessage[] = [
     { role: "developer", content: buildAgenticSystemPrompt(input) },
-    { role: "user", content: buildUserMessageWithThinking(input) },
   ];
+  if (input.preloadedTasteSkill) {
+    messages.push({
+      role: "developer",
+      content: buildPreloadedTasteSkillDeveloperMessage(input.preloadedTasteSkill),
+    });
+  }
+  messages.push({ role: "user", content: buildUserMessageWithThinking(input) });
+  return messages;
 }
 
 function trackChangedFiles(

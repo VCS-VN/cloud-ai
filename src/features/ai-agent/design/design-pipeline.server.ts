@@ -29,11 +29,14 @@ import {
   type EnrichedSignal,
 } from "@/features/ai-agent/planning/taxonomy-enrichment.server";
 import { lazyMigrateIfNeeded } from "@/features/ai-agent/design/lazy-migration.server";
+import { loadVerticalLayoutSpec } from "@/features/ai-agent/design/vertical-layout-spec.server";
+import type { TemplateId } from "@/features/ai-agent/source/template-registry.server";
 
 export type DesignPipelineInput = {
   projectId: string;
   intent: DesignIntent;
   workspacePath: string;
+  templateId?: TemplateId;
   signal: {
     primaryCategoryId: string;
     subcategoryId: string | null;
@@ -235,6 +238,9 @@ async function runFullGeneration(
   }
 
   let composition: CompositionEntry[];
+  const verticalLayout = input.templateId
+    ? await loadVerticalLayoutSpec(input.templateId, deps.loaderOverrides)
+    : undefined;
   try {
     if (cfg.preservedComposition) {
       composition = await reshakeComposition(cfg.preservedComposition, vibe, seed, enriched, input.projectId, deps.rankVariants);
@@ -245,6 +251,7 @@ async function runFullGeneration(
         vibe,
         seed,
         ranker: deps.rankVariants,
+        verticalLayout,
         options: { loaderOverrides: deps.loaderOverrides },
       });
       composition = result.composition;

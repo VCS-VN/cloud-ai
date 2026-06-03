@@ -11,6 +11,11 @@ import type {
 } from "@/features/ai-agent/design/blocks-manifest";
 import type { EnrichedSignal } from "@/features/ai-agent/planning/taxonomy-enrichment.server";
 import { computeBlockSeed, pickIndexFromSeed } from "@/features/ai-agent/design/seed";
+import {
+  applyVerticalVariantFilter,
+  isBlockForbiddenForVertical,
+} from "@/features/ai-agent/design/vertical-layout-spec.server";
+import type { VerticalLayoutSpec } from "@/features/ai-agent/design/vertical-layout-spec.schema";
 
 export type RankerInput = {
   block: Block;
@@ -277,14 +282,21 @@ function pickPositionForBlock(
   return null;
 }
 
+function resolveBlockForVertical(block: Block, vertical?: VerticalLayoutSpec): Block | null {
+  if (!vertical) return block;
+  return applyVerticalVariantFilter(block, vertical);
+}
+
 export async function composeDesign(input: {
   projectId: string;
   signal: EnrichedSignal;
   vibe: Vibe;
   seed: string;
   ranker?: VariantRankerFn;
+  verticalLayout?: VerticalLayoutSpec;
   options?: ComposerOptions;
 }): Promise<{ composition: CompositionEntry[]; library: BlockLibrary }> {
+  const vertical = input.verticalLayout;
   const library = await loadBlockLibrary(input.options?.loaderOverrides);
   const blocksById = new Map(library.blocks.map((b) => [b.blockId, b] as const));
 
@@ -298,33 +310,50 @@ export async function composeDesign(input: {
   // Tier 1: always include at fixed defaultPosition.
   const tier1Ordered = [...tier1].sort((a, b) => (a.defaultPosition ?? 0) - (b.defaultPosition ?? 0));
   for (const block of tier1Ordered) {
-    const blockSeed = computeBlockSeed(input.seed, block.blockId);
+    const resolved = resolveBlockForVertical(block, vertical);
+    if (!resolved) {
+      if (vertical && isBlockForbiddenForVertical(block.blockId, vertical)) {
+        continue;
+      }
+      throw new CompositionError(
+        "composition",
+        `tier-1 block ${block.blockId} has no variants allowed for vertical ${vertical?.templateId ?? "none"}`,
+      );
+    }
+    const blockSeed = computeBlockSeed(input.seed, resolved.blockId);
     let variantId: string;
     let rationale: string | null;
-    if (block.tier === "high-impact") {
-      const picked = await rankAndPickHighImpact(block, input.vibe, input.signal, entries, input.ranker, blockSeed, input.projectId);
+    if (resolved.tier === "high-impact") {
+      const picked = await rankAndPickHighImpact(resolved, input.vibe, input.signal, entries, input.ranker, blockSeed, input.projectId);
       variantId = picked.variant.variantId;
       rationale = picked.rationale;
     } else {
-      variantId = chooseSupportingVariant(block, input.vibe, blockSeed).variantId;
+      variantId = chooseSupportingVariant(resolved, input.vibe, blockSeed).variantId;
       rationale = null;
     }
-    const position = block.defaultPosition!;
+    const position = resolved.defaultPosition!;
     usedPositions.add(position);
     entries.push({
-      blockId: block.blockId,
+      blockId: resolved.blockId,
       variantId,
-      tier: block.tier,
+      tier: resolved.tier,
       position,
       rankRationale: rationale,
     });
   }
 
   // Group: pick one social-proof block deterministically.
-  const socialPool = groupBlocks
+  let socialPool = groupBlocks
     .filter((b) => b.requirementGroup === SOCIAL_PROOF_GROUP && isEligible(b, input.signal, input.vibe))
+    .filter((b) => !vertical || !isBlockForbiddenForVertical(b.blockId, vertical))
     .filter((b) => variantsHaveAnyAffinity(b, input.vibe))
     .sort((a, b) => a.blockId.localeCompare(b.blockId));
+  if (vertical?.homepage.preferredSocialProofBlocks?.length) {
+    const preferred = socialPool.filter((b) =>
+      vertical.homepage.preferredSocialProofBlocks!.includes(b.blockId),
+    );
+    if (preferred.length > 0) socialPool = preferred;
+  }
   if (socialPool.length === 0) {
     const fallback = groupBlocks
       .filter((b) => b.requirementGroup === SOCIAL_PROOF_GROUP)
@@ -335,7 +364,9 @@ export async function composeDesign(input: {
     socialPool.push(...fallback);
   }
   const groupSeed = computeBlockSeed(input.seed, "social-proof-group");
-  const chosenGroupBlock = socialPool[pickIndexFromSeed(groupSeed, socialPool.length)];
+  const chosenGroupBlockRaw = socialPool[pickIndexFromSeed(groupSeed, socialPool.length)];
+  const chosenGroupBlock =
+    resolveBlockForVertical(chosenGroupBlockRaw, vertical) ?? chosenGroupBlockRaw;
   const groupVariant = chooseSupportingVariant(
     chosenGroupBlock,
     input.vibe,
@@ -351,13 +382,22 @@ export async function composeDesign(input: {
     rankRationale: null,
   });
 
-  // Optional: include category-specific high-impact + 1 supporting (newsletter/category-strip) deterministically.
+  // Optional: include category-specific high-impact + supporting blocks.
+  const requiredOptional = new Set(vertical?.homepage.requiredOptionalSlots ?? []);
+  const preferredOptional = new Set(vertical?.homepage.preferredOptionalSlots ?? []);
+
   const optionalEligible = optionalBlocks
     .filter((b) => isEligible(b, input.signal, input.vibe))
-    .filter((b) => variantsHaveAnyAffinity(b, input.vibe));
+    .filter((b) => !vertical || !isBlockForbiddenForVertical(b.blockId, vertical))
+    .filter((b) => variantsHaveAnyAffinity(b, input.vibe))
+    .map((b) => resolveBlockForVertical(b, vertical))
+    .filter((b): b is Block => b !== null);
 
   const optionalSeed = computeBlockSeed(input.seed, "optional-pool");
-  const optionalIncludeMask = optionalEligible.map((_b, i) => {
+  const optionalIncludeMask = optionalEligible.map((block, i) => {
+    if (requiredOptional.has(block.blockId) || preferredOptional.has(block.blockId)) {
+      return true;
+    }
     const childSeed = computeBlockSeed(optionalSeed, `slot-${i}`);
     return parseInt(childSeed.slice(0, 8), 16) % 2 === 0;
   });

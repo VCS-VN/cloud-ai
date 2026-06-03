@@ -1,0 +1,44 @@
+templateId: ecommerce-nail
+verticalLabel: nail
+storeTypes: [nail]
+homepage:
+  rhythm: service-menu-and-ritual-steps
+  requiredOptionalSlots: [routine-builder, category-strip]
+  preferredOptionalSlots: [feature-band, newsletter]
+  forbiddenSlots: [gear-spec, campaign-story]
+  preferredSocialProofBlocks: [social-proof-trust, social-proof-founder]
+blocks:
+  header:
+    allowedVariants: [warm-rounded, minimal-mono, handcraft-paper]
+    defaultVariant: warm-rounded
+  hero:
+    allowedVariants: [sticker-stack, split-grid, gallery-still, botanical-frame]
+    defaultVariant: sticker-stack
+  category-strip:
+    allowedVariants: [pill-tabs, card-row]
+    defaultVariant: pill-tabs
+  product-grid:
+    allowedVariants: [rounded-card, dense-4up, marker-grid]
+    defaultVariant: rounded-card
+  routine-builder:
+    allowedVariants: [step-card, ritual-spread]
+    defaultVariant: step-card
+  feature-band:
+    allowedVariants: [pastel-block, sticker-collage, dark-promo]
+    defaultVariant: pastel-block
+  social-proof-trust:
+    allowedVariants: [rating-row, quote-card]
+    defaultVariant: rating-row
+  social-proof-founder:
+    allowedVariants: [rounded-letter, maker-card, pantry-card]
+    defaultVariant: rounded-letter
+  newsletter:
+    allowedVariants: [friendly-pill, drop-alert]
+    defaultVariant: friendly-pill
+  footer:
+    allowedVariants: [playful-footer, warm-roundup, handcraft-footer]
+    defaultVariant: playful-footer
+overrides:
+  allowUserOverride: true
+  maxSlotRemovals: 1
+  maxSlotAdditions: 1

@@ -11,7 +11,7 @@ import type { ProjectStateStore } from "../project/project-state-store.server";
 import type { ProjectFileStore } from "../project/project-file-store.server";
 import type { SnapshotService } from "../project/snapshot-service.server";
 import type { AgentConfig } from "./agent-config";
-import type { OpenAIProvider } from "../openai/openai-provider.server";
+import type { ChatCompletionsProvider } from "../openai/chat-completions-provider.server";
 import type { RuntimeService } from "../runtime/runtime-service.server";
 import type { RuntimeOrchestrator } from "../runtime/runtime-orchestrator.server";
 import { sanitizeForUser, redactTechnicalText } from "./user-facing-presenter";
@@ -31,6 +31,20 @@ import {
 import { REQUIRED_GENERATED_STOREFRONT_FILES } from "../source/generated-project-layout";
 import { applyStoreSlugToEnv } from "../store-runtime/generated-project-env";
 import { buildRetailInitPrompt } from "./init-prompt.server";
+import { buildVerticalInitGuidance } from "./vertical-init-guidance.server";
+import { loadVerticalLayoutSpec } from "../design/vertical-layout-spec.server";
+import { runDesignPipeline } from "../design/design-pipeline.server";
+import { buildInitDesignPipelineSignal } from "../design/init-design-signal.server";
+import { patchAppCssFromDesignSource } from "../code-tools/services/design-app-css-patch.server";
+import { loadTasteSkill } from "../code-tools/services/taste-skill-loader.server";
+import {
+  filterInitBackfillFiles,
+  isDeterministicInitBackfillAllowed,
+  isInitUiStorefrontPath,
+  loopProducedInitUiFiles,
+} from "../source/init-backfill-policy.server";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import { PromptLayerStore } from "./init-prompt-store.server";
 import {
   selectTemplate,
@@ -88,7 +102,7 @@ export type AgentOrchestratorDeps = {
   projectFileStore?: ProjectFileStore;
   snapshotService?: SnapshotService;
   validationService?: ValidationService;
-  openAIProvider?: OpenAIProvider;
+  openAIProvider?: ChatCompletionsProvider;
   agentConfig?: AgentConfig;
   runtimeService?: RuntimeService;
   runtimeOrchestrator?: RuntimeOrchestrator;
@@ -500,6 +514,19 @@ export class AgentOrchestrator {
     const templateId = await runPhase("select_template", () =>
       selectTemplate(websiteSpec),
     );
+    const verticalLayout = await runPhase("load_vertical_layout", () =>
+      loadVerticalLayoutSpec(templateId),
+    );
+    console.info(
+      JSON.stringify({
+        event: "vertical_layout_loaded",
+        projectId: input.projectId,
+        templateId,
+        verticalLabel: verticalLayout.verticalLabel,
+        rhythm: verticalLayout.homepage.rhythm,
+        storeType: websiteSpec.store.type,
+      }),
+    );
 
     yield {
       type: "source_generation_started",
@@ -554,25 +581,102 @@ export class AgentOrchestrator {
       message: "Generating retail storefront UI...",
     };
 
+    const preloadedTasteSkill = await runPhase("preload_taste_skill", () =>
+      loadTasteSkill(),
+    );
+    console.info(
+      JSON.stringify({
+        event: "taste_skill_preloaded_init",
+        projectId: input.projectId,
+        hash: preloadedTasteSkill.hash,
+        contentChars: preloadedTasteSkill.content.length,
+      }),
+    );
+
+    const workspaceRoot = getProjectWorkspaceRoot(input.projectId);
+    const serverDesignPaths: string[] = [];
+    let serverDesignGuidance = "";
+    let serverDesignSourceHash: string | undefined;
+
+    const designPipelineResult = await runPhase("init_design_pipeline", () =>
+      runDesignPipeline({
+        projectId: input.projectId,
+        intent: "init",
+        workspacePath: workspaceRoot,
+        templateId,
+        signal: buildInitDesignPipelineSignal(websiteSpec, input.prompt),
+      }),
+    );
+
+    if (designPipelineResult.status === "ok") {
+      serverDesignPaths.push("DESIGN.md", "blocks.json");
+      serverDesignSourceHash = designPipelineResult.designSourceHash;
+      const designSource = await fs.readFile(
+        path.join(workspaceRoot, "DESIGN.md"),
+        "utf8",
+      );
+      const cssPatch = await patchAppCssFromDesignSource(
+        workspaceRoot,
+        designSource,
+      );
+      if (cssPatch.ok) {
+        serverDesignPaths.push("src/styles/app.css");
+      } else {
+        console.warn(
+          `[init] app.css token patch skipped: ${cssPatch.message}`,
+        );
+      }
+      console.info(
+        JSON.stringify({
+          event: "init_design_pipeline_ok",
+          projectId: input.projectId,
+          templateId,
+          designSourceHash: designPipelineResult.designSourceHash,
+        }),
+      );
+      for (const designPath of serverDesignPaths) {
+        yield { type: "file_changed", path: designPath, operation: "created" };
+      }
+      serverDesignGuidance =
+        "\n\nSERVER DESIGN (already written): DESIGN.md and blocks.json were generated for this vertical before the agentic loop. Call project_read_design_rules first, then implement storefront UI files using the preloaded taste skill, vertical layout contract, and tokens in DESIGN.md. Refine DESIGN.md only if the user brief clearly requires it.";
+    } else {
+      console.warn(
+        JSON.stringify({
+          event: "init_design_pipeline_skipped",
+          projectId: input.projectId,
+          status: designPipelineResult.status,
+          reason:
+            designPipelineResult.status === "needs-manual-review"
+              ? designPipelineResult.reason
+              : "no-op",
+        }),
+      );
+    }
+
     const toolExecutionContext: ToolExecutionContext = {
       userId: input.userId ?? "",
       projectId: input.projectId,
       messageId: args.runId,
-      workspaceRoot: getProjectWorkspaceRoot(input.projectId),
+      workspaceRoot,
       projectState,
       flags: {
-        // The agent authors DESIGN.md inside the loop, then must call
-        // project_read_design_rules before any UI mutation. Start false so
-        // Gate 1 (code-tool-executor) enforces that ordering.
-        designRulesLoaded: false,
+        tasteSkillLoaded: true,
+        designRulesLoaded: serverDesignPaths.includes("DESIGN.md"),
       },
+      tasteSkillHash: preloadedTasteSkill.hash,
     };
     (toolExecutionContext as any).__codeToolSnapshotId = "init-snapshot";
+    if (serverDesignSourceHash) {
+      (toolExecutionContext as any).__designSourceHash = serverDesignSourceHash;
+    }
 
     const registry = createInitCodeToolRegistry();
-    const retailInitPrompt = this.deps.promptLayerStore
-      ? this.deps.promptLayerStore.assembleInitPrompt({ websiteSpec })
-      : buildRetailInitPrompt({ userPrompt: input.prompt, websiteSpec });
+    const retailInitPrompt =
+      (this.deps.promptLayerStore
+        ? this.deps.promptLayerStore.assembleInitPrompt({ websiteSpec })
+        : buildRetailInitPrompt({ userPrompt: input.prompt, websiteSpec })) +
+      buildVerticalInitGuidance(verticalLayout) +
+      serverDesignGuidance;
 
     const thinking = createHeuristicThinkingResult({
       projectId: input.projectId,
@@ -634,6 +738,7 @@ export class AgentOrchestrator {
             selectedStoreSlug,
             thinkingResult: thinking,
             context: toolExecutionContext,
+            preloadedTasteSkill,
             signal: input.signal,
           },
           {
@@ -697,32 +802,61 @@ export class AgentOrchestrator {
       }),
     );
 
+    const initPathsFromStart = new Set([
+      ...initResult.files.map((file) => file.path),
+      ...serverDesignPaths,
+    ]);
     const missingRequiredFiles = REQUIRED_GENERATED_STOREFRONT_FILES.filter(
       (requiredPath) =>
-        !initResult.files.some((file) => file.path === requiredPath) &&
+        !initPathsFromStart.has(requiredPath) &&
         !loopResult.changedFiles.includes(requiredPath),
     );
 
-    if (
-      loopResult.changedFiles.length === 0 ||
-      missingRequiredFiles.length > 0
-    ) {
+    const loopFailed =
+      loopResult.status === "failed" || loopResult.status === "aborted";
+    if (loopFailed && !loopProducedInitUiFiles(loopResult.changedFiles)) {
+      const message =
+        loopResult.status === "aborted"
+          ? "Project initialization was cancelled before storefront UI could be generated."
+          : "Project initialization failed: the coding agent did not produce storefront UI. Check model/API errors in logs (init_agentic_loop_completed).";
+      console.error(
+        JSON.stringify({
+          event: "init_agentic_loop_failed_no_ui",
+          projectId: input.projectId,
+          status: loopResult.status,
+          summary: loopResult.summary?.substring(0, 300),
+          totalToolCalls: loopResult.totalToolCalls,
+        }),
+      );
+      yield {
+        type: "error",
+        code: "INIT_AGENTIC_LOOP_FAILED",
+        message,
+        recoverable: false,
+      };
+      throw new Error(message);
+    }
+
+    const shouldBackfill =
+      missingRequiredFiles.length > 0 &&
+      isDeterministicInitBackfillAllowed(loopResult);
+
+    if (shouldBackfill) {
       console.info(
         JSON.stringify({
           event: "init_backfill_required_files",
           projectId: input.projectId,
           reason:
-            loopResult.changedFiles.length === 0
-              ? "Agentic loop created 0 files, backfilling deterministic storefront baseline"
-              : "Agentic loop missed required storefront files, backfilling deterministic baseline",
+            "Backfilling non-UI required files only (no generic template UI overwrite)",
           missingRequiredFiles,
+          loopStatus: loopResult.status,
         }),
       );
 
       yield {
         type: "source_generation_started",
         message:
-          "Ensuring required storefront pages, components, and Store Provider exist...",
+          "Ensuring required storefront data, providers, and hooks exist...",
       };
 
       const fallbackResult = await runPhase("backfill_init_source", () =>
@@ -736,15 +870,18 @@ export class AgentOrchestrator {
       );
 
       const existingChangedFiles = new Set([
-        ...initResult.files.map((file) => file.path),
+        ...initPathsFromStart,
         ...loopResult.changedFiles,
       ]);
+      const filesToBackfill = filterInitBackfillFiles(
+        fallbackResult.files,
+        existingChangedFiles,
+      );
       const backfilledFiles: string[] = [];
 
       logAgentPhase("started", "write_backfill_files", phaseContext);
       try {
-        for (const file of fallbackResult.files) {
-          if (existingChangedFiles.has(file.path)) continue;
+        for (const file of filesToBackfill) {
           if (await this.projectFileExists(input.projectId, file.path))
             continue;
           await this.deps.projectFileStore?.writeTextFile(
@@ -761,12 +898,41 @@ export class AgentOrchestrator {
       }
 
       loopResult = {
-        status: "completed",
-        summary: `Created storefront using agentic loop plus deterministic baseline backfill. ${backfilledFiles.length} files backfilled.`,
+        ...loopResult,
+        status: loopResult.status === "max_iterations" ? "max_iterations" : "completed",
+        summary: `${loopResult.summary} Infrastructure backfill wrote ${backfilledFiles.length} file(s); generic UI template paths were not overwritten.`,
         changedFiles: [...loopResult.changedFiles, ...backfilledFiles],
-        iterations: 1,
-        totalToolCalls: loopResult.totalToolCalls,
       };
+    }
+
+    const stillMissingRequired: string[] = [];
+    for (const requiredPath of REQUIRED_GENERATED_STOREFRONT_FILES) {
+      if (initPathsFromStart.has(requiredPath)) continue;
+      if (loopResult.changedFiles.includes(requiredPath)) continue;
+      if (await this.projectFileExists(input.projectId, requiredPath)) continue;
+      stillMissingRequired.push(requiredPath);
+    }
+    const missingUi = stillMissingRequired.filter(isInitUiStorefrontPath);
+    if (
+      missingUi.length > 0 &&
+      !loopProducedInitUiFiles(loopResult.changedFiles)
+    ) {
+      const message = `Storefront UI was not generated (${missingUi.length} required UI paths missing). Agent loop status=${loopResult.status}. Retry init or check OPENAI_API_KEY / model errors.`;
+      console.error(
+        JSON.stringify({
+          event: "init_missing_ui_after_backfill",
+          projectId: input.projectId,
+          missingUi,
+          loopStatus: loopResult.status,
+        }),
+      );
+      yield {
+        type: "error",
+        code: "INIT_MISSING_UI",
+        message,
+        recoverable: false,
+      };
+      throw new Error(message);
     }
 
     const invariantFixes = await this.ensureGeneratedProjectInvariants(
@@ -793,6 +959,7 @@ export class AgentOrchestrator {
 
     const allChangedFiles = [
       ...initResult.files.map((f) => f.path),
+      ...serverDesignPaths,
       ...loopResult.changedFiles,
       ...invariantFixes,
     ];
@@ -868,7 +1035,6 @@ export class AgentOrchestrator {
 
     let previewUrl: string | undefined;
 
-    const workspaceRoot = getProjectWorkspaceRoot(input.projectId);
     if (this.deps.runtimeOrchestrator) {
       void this.deps.runtimeOrchestrator
         .scheduleEnsureRunning({

@@ -15,18 +15,18 @@ import type { CodeToolDefinition, ProjectToolResult, ProviderFunctionToolCall } 
 
 export type OpenAITextStreamEvent = { type: "delta" | "done"; text?: string };
 
-type OpenAIProviderLogLevel = "info" | "error";
+type ChatCompletionsProviderLogLevel = "info" | "error";
 
-export type OpenAIProviderLogger = (
-  level: OpenAIProviderLogLevel,
+export type ChatCompletionsProviderLogger = (
+  level: ChatCompletionsProviderLogLevel,
   event: string,
   data: Record<string, unknown>,
 ) => void;
 
-export class OpenAIProvider {
+export class ChatCompletionsProvider {
   constructor(
     private readonly client: OpenAI,
-    private readonly logger: OpenAIProviderLogger = defaultOpenAIProviderLogger,
+    private readonly logger: ChatCompletionsProviderLogger = defaultChatCompletionsProviderLogger,
   ) {}
 
   async createCodeToolResponse(args: {
@@ -378,13 +378,13 @@ Do not include markdown fences, prose, comments, or explanations.`,
     }
   }
 
-  private log(level: OpenAIProviderLogLevel, event: string, data: Record<string, unknown>) {
+  private log(level: ChatCompletionsProviderLogLevel, event: string, data: Record<string, unknown>) {
     this.logger(level, event, data);
   }
 }
 
-function defaultOpenAIProviderLogger(
-  level: OpenAIProviderLogLevel,
+function defaultChatCompletionsProviderLogger(
+  level: ChatCompletionsProviderLogLevel,
   event: string,
   data: Record<string, unknown>,
 ) {

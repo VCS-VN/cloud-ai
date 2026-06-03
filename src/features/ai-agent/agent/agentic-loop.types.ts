@@ -2,6 +2,11 @@ import type { CodeToolDefinition, ProjectToolResult, ProviderFunctionToolCall, T
 import type { ProjectState } from "../project/project-state.schema";
 import type { ThinkingResult } from "../thinking/thinking.schema";
 
+export type PreloadedTasteSkill = {
+  content: string;
+  hash: string;
+};
+
 export type AgenticLoopInput = {
   projectId: string;
   userId?: string;
@@ -12,6 +17,7 @@ export type AgenticLoopInput = {
   selectedStoreSlug?: string | null;
   thinkingResult: ThinkingResult;
   context: ToolExecutionContext;
+  preloadedTasteSkill?: PreloadedTasteSkill;
   signal?: AbortSignal;
 };
 

@@ -1,5 +1,5 @@
 import type { AgentConfig } from "../agent/agent-config";
-import type { OpenAIProvider } from "../openai/openai-provider.server";
+import type { ChatCompletionsProvider } from "../openai/chat-completions-provider.server";
 import type { AgentRun, ProjectState } from "../project/project-state.schema";
 import {
   createClarificationStructuredThinkingResult,
@@ -26,7 +26,7 @@ export type RunThinkingLayerInput = {
   userId?: string;
   userPrompt: string;
   projectState: ProjectState | null;
-  provider?: OpenAIProvider;
+  provider?: ChatCompletionsProvider;
   agentConfig?: AgentConfig;
   saveResult?: (result: ThinkingResult) => Promise<void> | void;
 };
@@ -85,7 +85,7 @@ export async function runThinkingLayer(
 
 async function runLLMThinkingWithFallback(args: {
   thinkingInput: ThinkingInput;
-  provider?: OpenAIProvider;
+  provider?: ChatCompletionsProvider;
   model?: string;
 }): Promise<ThinkingResult> {
   if (!args.provider || !args.model) {

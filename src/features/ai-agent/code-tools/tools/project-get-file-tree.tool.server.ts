@@ -4,6 +4,7 @@ import type { CodeToolDefinition } from "../code-agent-types";
 import { toolError, toolSuccess } from "../code-tool-executor.server";
 import { guardProjectPath, isForbiddenProjectPath } from "../services/project-path-guard.server";
 
+/** @deprecated Use globTool instead. Remove after 2026-07-01. */
 export const projectGetFileTreeTool: CodeToolDefinition<{ root?: string; maxDepth?: number }> = {
   name: "project_get_file_tree",
   category: "inspect",

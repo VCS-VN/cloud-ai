@@ -16,7 +16,7 @@ export function buildRetailInitPrompt(input: {
     .join("\n");
 
   return [
-    "FIRST call project_read_taste_skill to load the anti-slop design skill (the authoritative UI taste guide). THEN call project_read_design_rules to load THIS project's DESIGN.md. THEN create all files listed below using project_create_file.",
+    "The design-taste-frontend skill is preloaded server-side for this init (see developer message). FIRST create DESIGN.md with project_create_file using that skill and the vertical layout contract. THEN call project_read_design_rules. THEN create the remaining files listed below with project_create_file.",
     "Do NOT inspect existing files. After loading the skill + design rules, CREATE the files directly.",
     "",
     "STORE: " + spec.store.name + " (" + spec.store.type + ")",
@@ -80,6 +80,8 @@ export function buildRetailInitPrompt(input: {
     "- Cart page selection MUST use Jotai selectedCartItemIdsAtom storing ids only, default empty. Cart page MUST provide per-item checkbox, select all toggle, selected subtotal/count summary, disabled checkout when none selected, and checkout navigation to /checkout with search { method: 'cart' }. Checkout resolves selected item details from selected ids plus current cart state.",
     "",
     "CREATE THESE FILES:",
+    "",
+    "DESIGN.md - REQUIRED first file. Full storefront design rules (8 sections + YAML palette tokens) authored using the preloaded design-taste-frontend skill and the vertical layout contract. This becomes the source of truth before any TSX/UI files.",
     "",
     "tsconfig.json - REQUIRED TanStack Start TypeScript config: target ES2022, lib ES2022/DOM/DOM.Iterable, module ESNext, moduleResolution Bundler, jsx react-jsx, strict true, esModuleInterop true, skipLibCheck true, forceConsistentCasingInFileNames true, resolveJsonModule true, noEmit true, types ['node'], baseUrl '.', paths {'@/*':['src/*'], '@app/*':['app/*']}, ignoreDeprecations '6.0', include ['app','src','vite.config.ts','tailwind.config.ts'].",
     "src/components/ui/button.tsx - shadcn Button with cva, variants: default/destructive/outline/secondary/ghost/link, sizes: default/sm/lg/icon, rounded-full, active:scale-95, use cn()",
@@ -174,6 +176,6 @@ export function buildRetailInitPrompt(input: {
     "",
     "6. POST-GENERATION VALIDATION (MANDATORY): After creating ALL files with project_create_file, call `project_run_validation` with `level: \'fast\'` and `reason: \'typecheck generated storefront files\'`. Fix every error with project_apply_patch before declaring the task complete. If validation fails: inspect the error, apply the minimal fix, re-run validation. Repeat until validation passes. NEVER skip validation or leave errors unaddressed.",
     "",
-    "NOW START: call project_read_taste_skill, then project_read_design_rules, then create ALL files using project_create_file.",
+    "NOW START: create DESIGN.md, then project_read_design_rules, then create ALL remaining files using project_create_file.",
   ].join("\n");
 }

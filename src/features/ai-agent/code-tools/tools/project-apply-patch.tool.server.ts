@@ -2,6 +2,7 @@ import type { CodeToolDefinition } from "../code-agent-types";
 import { toolError, toolSuccess } from "../code-tool-executor.server";
 import { ProjectPatchPolicyError, ProjectPatchService } from "../services/project-patch-service.server";
 
+/** @deprecated Use editTool instead. Remove after 2026-07-01. */
 export function createProjectApplyPatchTool(service = new ProjectPatchService()): CodeToolDefinition<{ patch?: string; reason?: string; expectedChangedFiles?: string[] }> {
   return {
     name: "project_apply_patch",
