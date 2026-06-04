@@ -17,6 +17,10 @@ import {
   missingRequiredInitPaths,
 } from "../source/init-backfill-policy.server";
 import { REQUIRED_INIT_COMMERCE_ROUTE_FILES } from "../source/generated-project-layout";
+import {
+  assessInitStorefrontCompletion,
+  buildInitCompletionBlockedMessage,
+} from "../source/init-completion-gate.server";
 import { compactConversation, estimateTokenCount } from "./context-compaction";
 import { withRetry } from "./retry";
 import { classifyError, describeError } from "./error-classifier";
@@ -368,27 +372,38 @@ export async function* runAgenticLoop(
           requiredBeforeCompletion,
           presentPaths,
         );
+        const initCompletionAssessment =
+          input.requireStorefrontUiBeforeCompletion === true
+            ? await assessInitStorefrontCompletion({
+                workspaceRoot: input.context.workspaceRoot,
+                presentPaths,
+              })
+            : { ok: true, blockers: [] as string[] };
         const pendingStorefrontUi =
           input.requireStorefrontUiBeforeCompletion === true &&
           (!loopProducedInitUiFiles([...changedFiles]) ||
             missingRequired.length > 0 ||
-            initCommerceRoutesStillMissing(presentPaths));
+            initCommerceRoutesStillMissing(presentPaths) ||
+            !initCompletionAssessment.ok);
         if (pendingStorefrontUi) {
           logAgenticLoop("blocked_text_only_completion_pending_ui", {
             projectId: input.projectId,
             iteration,
             totalToolCalls,
             missingRequired: missingRequired.slice(0, 12),
+            initBlockers: initCompletionAssessment.blockers.slice(0, 8),
           });
           consecutiveTextOnlyTurns = 0;
           const missingList =
             missingRequired.length > 0
               ? missingRequired.join(", ")
               : REQUIRED_INIT_COMMERCE_ROUTE_FILES.join(", ");
+          const completionMessage = !initCompletionAssessment.ok
+            ? buildInitCompletionBlockedMessage(initCompletionAssessment.blockers)
+            : `Init is incomplete. Required commerce routes and storefront files are still missing: ${missingList}. Use write or project_create_file to create them (or edit pre-seeded routes to match DESIGN.md). Do not finish with text-only replies until home (/), products, product detail, cart, checkout, orders, and order detail routes all exist.`;
           messages.push({
             role: "developer",
-            content:
-              `Init is incomplete. Required commerce routes and storefront files are still missing: ${missingList}. Use write or project_create_file to create them (or edit pre-seeded routes to match DESIGN.md). Do not finish with text-only replies until home (/), products, product detail, cart, checkout, orders, and order detail routes all exist.`,
+            content: completionMessage,
           });
           if (hasText) {
             messages.push({

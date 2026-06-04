@@ -2080,20 +2080,63 @@ function cartDrawerSource() {
   return `import { ShoppingCart } from 'lucide-react'\nexport function CartDrawer() { return <div className='inline-flex items-center gap-2'><ShoppingCart className='h-4 w-4' /></div> }\n`;
 }
 function homeRouteSource() {
-  return `import { createFileRoute } from '@tanstack/react-router'
+  return `import { createFileRoute, Link } from '@tanstack/react-router'
 import { useStore } from '@/app/store-provider'
+import { useProductsList } from '@/services/store/use-products-list'
+import { formatMoney, resolveProductPrice } from '@/lib/format-money'
 
 export const Route = createFileRoute('/')({ component: HomePage })
 
 function HomePage() {
   const { storeDetail } = useStore()
+  const storeId = storeDetail?.id
+  const currency = storeDetail?.setting?.currency ?? 'AUD'
+  const { products, total, isLoading } = useProductsList({ storeId })
+
   return (
     <main className='mx-auto max-w-7xl px-4 py-12'>
-      <p className='text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground'>Home</p>
-      <h1 className='mt-2 text-3xl font-bold'>{storeDetail?.name ?? 'Storefront'}</h1>
-      <p className='mt-4 max-w-2xl text-muted-foreground'>
-        Route shell — expand with layout and sections via the design taste skill.
-      </p>
+      <h1 className='text-3xl font-bold'>{storeDetail?.name ?? 'Store'}</h1>
+      <p className='mt-2 max-w-2xl text-muted-foreground'>Discover our latest products.</p>
+      <section className='mt-10'>
+        <h2 className='text-xl font-semibold'>Featured products</h2>
+        {isLoading ? (
+          <div className='mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4'>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className='h-64 animate-pulse rounded-lg border bg-muted/40' />
+            ))}
+          </div>
+        ) : total === 0 ? (
+          <p className='mt-6 text-muted-foreground'>No products available yet.</p>
+        ) : (
+          <ul className='mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4'>
+            {products.slice(0, 8).map((product) => {
+              const price = resolveProductPrice(product)
+              const image = product.image ?? product.images?.[0]
+              const imgSrc =
+                image ?? \`https://picsum.photos/seed/\${encodeURIComponent(product.id)}/600/600\`
+              return (
+                <li key={product.id}>
+                  <Link
+                    to='/products/$productId'
+                    params={{ productId: product.id }}
+                    className='block overflow-hidden rounded-lg border bg-card shadow-sm transition hover:shadow-md'
+                  >
+                    <img src={imgSrc} alt={product.name} className='aspect-square w-full object-cover' />
+                    <div className='p-4'>
+                      <p className='font-medium'>{product.name}</p>
+                      {price !== undefined ? (
+                        <p className='mt-1 text-sm text-muted-foreground'>
+                          {formatMoney(price, { currency })}
+                        </p>
+                      ) : null}
+                    </div>
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
     </main>
   )
 }
@@ -2103,10 +2146,10 @@ function productsLayoutRouteSource() {
   return `import { Outlet, createFileRoute } from '@tanstack/react-router'\nexport const Route = createFileRoute('/products')({ component: ProductsLayout })\nfunction ProductsLayout() { return <Outlet /> }\n`;
 }
 function productsIndexRouteSource() {
-  return `import { createFileRoute } from '@tanstack/react-router'
+  return `import { createFileRoute, Link } from '@tanstack/react-router'
 import { useStore } from '@/app/store-provider'
 import { useProductsList } from '@/services/store/use-products-list'
-import { useCategoriesList } from '@/services/store/use-categories-list'
+import { formatMoney, resolveProductPrice } from '@/lib/format-money'
 
 type ProductsSearch = { q: string; sort: string; category: string }
 
@@ -2120,22 +2163,53 @@ export const Route = createFileRoute('/products/')({
 })
 
 function ProductsPage() {
-  const { q, sort, category } = Route.useSearch()
+  const { q } = Route.useSearch()
   const { storeDetail } = useStore()
   const storeId = storeDetail?.id
-  const productsQuery = useProductsList({ storeId, query: q })
-  const categoriesQuery = useCategoriesList(storeId)
+  const currency = storeDetail?.setting?.currency ?? 'AUD'
+  const { products, total, isLoading } = useProductsList({ storeId, query: q })
 
   return (
     <main className='mx-auto max-w-7xl px-4 py-12'>
       <h1 className='text-3xl font-bold'>Products</h1>
-      <p className='mt-2 text-sm text-muted-foreground'>
-        Shell — q="{q || '—'}", sort="{sort}", category="{category || '—'}", total={productsQuery.total}
-        {categoriesQuery.isLoading ? ', categories loading' : ''}
-      </p>
-      <p className='mt-4 text-muted-foreground'>
-        Build catalog layout and product cards here using the design taste skill.
-      </p>
+      {q ? <p className='mt-2 text-sm text-muted-foreground'>Showing results for &ldquo;{q}&rdquo;</p> : null}
+      {isLoading ? (
+        <div className='mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4'>
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div key={index} className='h-64 animate-pulse rounded-lg border bg-muted/40' />
+          ))}
+        </div>
+      ) : total === 0 ? (
+        <p className='mt-8 text-muted-foreground'>No products match your search.</p>
+      ) : (
+        <ul className='mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4'>
+          {products.map((product) => {
+            const price = resolveProductPrice(product)
+            const image = product.image ?? product.images?.[0]
+            const imgSrc =
+              image ?? \`https://picsum.photos/seed/\${encodeURIComponent(product.id)}/600/600\`
+            return (
+              <li key={product.id}>
+                <Link
+                  to='/products/$productId'
+                  params={{ productId: product.id }}
+                  className='block overflow-hidden rounded-lg border bg-card shadow-sm transition hover:shadow-md'
+                >
+                  <img src={imgSrc} alt={product.name} className='aspect-square w-full object-cover' />
+                  <div className='p-4'>
+                    <p className='font-medium'>{product.name}</p>
+                    {price !== undefined ? (
+                      <p className='mt-1 text-sm text-muted-foreground'>
+                        {formatMoney(price, { currency })}
+                      </p>
+                    ) : null}
+                  </div>
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </main>
   )
 }
@@ -2145,7 +2219,7 @@ function productDetailRouteSource() {
   return `import { Link, createFileRoute } from '@tanstack/react-router'
 import { useProductDetail } from '@/services/store/use-product-detail'
 import { useStore } from '@/app/store-provider'
-import { useCart } from '@/app/cart-provider'
+import { formatMoney, resolveProductPrice } from '@/lib/format-money'
 
 export const Route = createFileRoute('/products/$productId')({ component: ProductDetailPage })
 
@@ -2153,23 +2227,40 @@ function ProductDetailPage() {
   const { productId } = Route.useParams()
   const { data: product, isLoading, isError } = useProductDetail(productId)
   const { storeDetail } = useStore()
-  const { totalItems } = useCart()
+  const currency = storeDetail?.setting?.currency ?? 'AUD'
+  const price = resolveProductPrice(product)
+  const image = product?.image ?? product?.images?.[0]
+  const imgSrc =
+    image ??
+    (product?.id
+      ? \`https://picsum.photos/seed/\${encodeURIComponent(product.id)}/1200/800\`
+      : undefined)
 
   return (
     <main className='mx-auto max-w-7xl px-4 py-12'>
-      <Link to='/products' className='text-sm text-muted-foreground'>← Products</Link>
-      <h1 className='mt-4 text-3xl font-bold'>Product detail</h1>
-      <p className='mt-2 text-sm text-muted-foreground'>
-        Shell — id={productId}
-        {isLoading ? ', loading' : ''}
-        {isError ? ', error' : ''}
-        {product?.name ? ', name=' + product.name : ''}
-        {storeDetail?.name ? ', store=' + storeDetail.name : ''}
-        , cart items={totalItems}
-      </p>
-      <p className='mt-4 text-muted-foreground'>
-        Build PDP layout, model picker, and add-to-cart here using the design taste skill.
-      </p>
+      <Link to='/products' className='text-sm text-muted-foreground'>
+        ← Back to products
+      </Link>
+      {isLoading ? (
+        <p className='mt-6 text-muted-foreground'>Loading product…</p>
+      ) : isError || !product ? (
+        <p className='mt-6 text-muted-foreground'>This product could not be loaded.</p>
+      ) : (
+        <article className='mt-6 grid gap-8 lg:grid-cols-2'>
+          {imgSrc ? (
+            <img src={imgSrc} alt={product.name} className='aspect-square w-full rounded-lg object-cover' />
+          ) : null}
+          <div>
+            <h1 className='text-3xl font-bold'>{product.name}</h1>
+            {price !== undefined ? (
+              <p className='mt-2 text-lg font-medium'>{formatMoney(price, { currency })}</p>
+            ) : null}
+            {product.descriptions ? (
+              <p className='mt-4 text-muted-foreground'>{product.descriptions}</p>
+            ) : null}
+          </div>
+        </article>
+      )}
     </main>
   )
 }
@@ -2177,43 +2268,40 @@ function ProductDetailPage() {
 }
 function cartRouteSource() {
   return `import { Link, createFileRoute } from '@tanstack/react-router'
-import { useAtom } from 'jotai'
 import { useCart } from '@/app/cart-provider'
-import { selectedCartItemIdsAtom } from '@/app/cart-selection'
 
 export const Route = createFileRoute('/cart')({ component: CartPage })
 
 function CartPage() {
   const { items, totalItems } = useCart()
-  const [selectedIds] = useAtom(selectedCartItemIdsAtom)
 
   return (
     <main className='mx-auto max-w-7xl px-4 py-12'>
-      <h1 className='text-3xl font-bold'>Cart</h1>
-      <p className='mt-2 text-sm text-muted-foreground'>
-        Shell — {totalItems} item{totalItems === 1 ? '' : 's'}, {selectedIds.length} selected
-      </p>
+      <h1 className='text-3xl font-bold'>Your cart</h1>
       {totalItems === 0 ? (
         <p className='mt-4 text-muted-foreground'>
-          <Link to='/products' className='text-primary underline'>Browse products</Link> to add items.
+          Your cart is empty.{' '}
+          <Link to='/products' className='text-primary underline'>
+            Browse products
+          </Link>
         </p>
       ) : (
-        <ul className='mt-4 list-disc pl-5 text-sm text-muted-foreground'>
+        <ul className='mt-6 divide-y rounded-lg border'>
           {items.map((item) => (
-            <li key={item.id}>{item.product.name} × {item.quantity}</li>
+            <li key={item.id} className='flex items-center justify-between gap-4 px-4 py-3 text-sm'>
+              <span>{item.product.name}</span>
+              <span className='text-muted-foreground'>Qty {item.quantity}</span>
+            </li>
           ))}
         </ul>
       )}
-      <p className='mt-4 text-muted-foreground'>
-        Build cart rows and checkout selection UX here using the design taste skill.
-      </p>
     </main>
   )
 }
 `;
 }
 function checkoutRouteSource() {
-  return `import { createFileRoute } from '@tanstack/react-router'
+  return `import { createFileRoute, Link } from '@tanstack/react-router'
 import { useAtomValue } from 'jotai'
 import { useCart } from '@/app/cart-provider'
 import { selectedCartItemIdsAtom } from '@/app/cart-selection'
@@ -2229,23 +2317,27 @@ export const Route = createFileRoute('/checkout')({
 })
 
 function CheckoutPage() {
-  const { method } = Route.useSearch()
   const selectedIds = useAtomValue(selectedCartItemIdsAtom)
   const { items } = useCart()
   const { storeDetail } = useStore()
-  const selectedItems =
-    method === 'cart' ? items.filter((item) => selectedIds.includes(item.id)) : []
+  const selectedItems = items.filter((item) => selectedIds.includes(item.id))
 
   return (
     <main className='mx-auto max-w-3xl px-4 py-12'>
       <h1 className='text-3xl font-bold'>Checkout</h1>
-      <p className='mt-2 text-sm text-muted-foreground'>
-        Shell — method="{method || '—'}", {selectedItems.length} line(s)
-        {storeDetail?.name ? ', store=' + storeDetail.name : ''}
-      </p>
-      <p className='mt-4 text-muted-foreground'>
-        Build checkout form and order summary here using the design taste skill.
-      </p>
+      {selectedItems.length === 0 ? (
+        <p className='mt-4 text-muted-foreground'>
+          Add items from your cart before checking out.{' '}
+          <Link to='/cart' className='text-primary underline'>
+            View cart
+          </Link>
+        </p>
+      ) : (
+        <p className='mt-4 text-muted-foreground'>
+          Checkout for {selectedItems.length} item{selectedItems.length === 1 ? '' : 's'} at{' '}
+          {storeDetail?.name ?? 'our store'} is coming soon.
+        </p>
+      )}
     </main>
   )
 }

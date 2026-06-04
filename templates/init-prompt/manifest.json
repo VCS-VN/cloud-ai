@@ -10,6 +10,7 @@
     { "marker": "PROJECT_RULE_LOADING_UX", "file": "../project-rules/loading-ux.md", "order": 26 },
     { "marker": "PACKAGES", "file": "packages.md", "order": 30 },
     { "marker": "PROVIDER", "file": "provider.md", "order": 40 },
+    { "marker": "CATALOG_DATA", "file": "catalog-data.md", "order": 45 },
     { "marker": "DATA", "file": "data.md", "order": 50 },
     { "marker": "COMPONENT", "file": "component.md", "order": 60 },
     { "marker": "HOME_PAGE", "file": "home-page.md", "order": 70 },

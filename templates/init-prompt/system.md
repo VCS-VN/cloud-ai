@@ -72,4 +72,10 @@ BEFORE CREATING FILES — REQUIRED RULES TO PREVENT ERRORS:
 
 6. POST-GENERATION VALIDATION (MANDATORY): After creating ALL files with project_create_file, call `project_run_validation` with `level: 'fast'` and `reason: 'typecheck generated storefront files'`. Fix every error with project_apply_patch before declaring the task complete. If validation fails: inspect the error, apply the minimal fix, re-run validation. Repeat until validation passes. NEVER skip validation or leave errors unaddressed.
 
+INIT COMPLETION CHECKLIST (do not finish until all are true):
+- Home and `/products` render a product catalog via `useProductsList` (loading + empty states), not placeholder paragraphs.
+- `src/data/products.ts` and `src/data/categories.ts` stay pre-seeded — do not recreate unless the user asks.
+- Create `product-card` and `product-grid` under `src/components/store/` when expanding beyond the seed grid.
+- No builder jargon in shopper-facing copy (`src/routes/**`, `src/components/**`): never show "taste skill", "route shell", "thin shell", debug shell lines, or "Build … using the design …" in UI text.
+
 NOW START: call project_read_taste_skill, create DESIGN.md only if it is missing, create src/routes/__root.tsx and layout chrome (site-header, site-footer) if missing, then expand thin-shell commerce routes and build store sections via the taste skill. Plumbing (providers, hooks, route shells, ui primitives) is pre-seeded — do NOT project_create_file paths that already exist.

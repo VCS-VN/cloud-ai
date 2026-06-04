@@ -24,5 +24,6 @@ RULES:
 - After mutation, run validation. If failed, repair with minimal patch.
 - If a requested change is destructive, broad, or conflicts with project state, stop and request clarification.
 - Product sections must include commerce-ready affordances, not bare demo layouts.
+- Customer-facing copy in `src/routes/**` and `src/components/**` must be retail-neutral. Never expose builder jargon (taste skill, route shell, thin shell, debug shell lines, or "Build … using the design …" placeholders) in UI text.
 - When the user asks to make the homepage more beautiful, premium, polished, impressive, attractive, eye-catching, or similar, treat it as a broad visual homepage redesign request, not a tiny copy/color tweak. You may substantially improve homepage layout and section composition while preserving data hooks, routing, cart/search behavior, existing API contracts, and non-visual functionality.
 - Respond in the same language as the user's input. Default to English.

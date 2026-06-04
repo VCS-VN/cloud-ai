@@ -1,6 +1,10 @@
 import type { ToolHook } from "./hook-types";
 import { scanForAntiSlop } from "../services/anti-slop-scanner.server";
 import { isStorefrontUiPath } from "../services/project-path-guard.server";
+import {
+  isStorefrontCustomerCopyPath,
+  scanStorefrontCustomerCopy,
+} from "../services/storefront-customer-copy-guard.server";
 
 export function createPostWriteHooks(): ToolHook[] {
   return [antiSlopHook];
@@ -21,6 +25,12 @@ const antiSlopHook: ToolHook = {
         if (typeof source !== "string") continue;
         const scan = scanForAntiSlop({ source, designMarkdown: undefined });
         for (const violation of scan.violations) warnings.push(`${path}: ${violation.message}`);
+        if (isStorefrontCustomerCopyPath(path)) {
+          const copyScan = scanStorefrontCustomerCopy({ source, path });
+          for (const violation of copyScan.violations) {
+            warnings.push(`${path}: ${violation.message}`);
+          }
+        }
       } catch {
         continue;
       }

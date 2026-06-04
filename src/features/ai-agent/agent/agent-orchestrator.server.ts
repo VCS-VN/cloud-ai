@@ -89,6 +89,7 @@ import {
   scanForAntiSlop,
   type AntiSlopViolation,
 } from "../code-tools/services/anti-slop-scanner.server";
+import { scanStorefrontCustomerCopy } from "../code-tools/services/storefront-customer-copy-guard.server";
 import {
   classifyDesignIntent,
   type DesignIntentLabel,
@@ -1609,6 +1610,17 @@ export class AgentOrchestrator {
         const scan = scanForAntiSlop({ source, designMarkdown });
         for (const violation of scan.violations) {
           violations.push({ path, violation });
+        }
+        const copyScan = scanStorefrontCustomerCopy({ source, path });
+        for (const violation of copyScan.violations) {
+          violations.push({
+            path,
+            violation: {
+              code: violation.code,
+              message: violation.message,
+              sample: violation.sample,
+            },
+          });
         }
       }
 
