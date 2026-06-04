@@ -30,7 +30,16 @@ const CONTRACTS: ReadonlyArray<{
   },
   {
     path: "src/routes/products/$productId.tsx",
-    requiredSnippets: ["useProductDetail", "useCart"],
+    requiredSnippets: [
+      "useProductDetail",
+      "useCart",
+      "ProductModel",
+      "selectedModel",
+      "setSelectedModel",
+      "getItemQuantity",
+      "addItem",
+      "updateItemQuantity",
+    ],
   },
   {
     path: "src/routes/cart.tsx",
@@ -74,6 +83,14 @@ export function scanCommerceDataContractPolicy(input: {
       });
     }
 
+    if (normalized === "src/routes/__root.tsx" && !hasRequiredRootRouteImportOrder(file.content)) {
+      violations.push({
+        filePath: normalized,
+        message:
+          "Root route must start with import '@vitejs/plugin-react/preamble' followed immediately by import '@/styles/app.css' so hydration and first-paint CSS load correctly.",
+      });
+    }
+
     const contract = CONTRACTS.find((item) => item.path === normalized);
     if (contract) {
       for (const snippet of contract.requiredSnippets) {
@@ -111,4 +128,8 @@ function hasForbiddenStorefrontLoadingSkeleton(content: string) {
     || /\bSkeleton\b/.test(content)
     || /\bskeleton\b/i.test(content)
     || /Array\.from\s*\(\s*\{\s*length\s*:/.test(content);
+}
+
+function hasRequiredRootRouteImportOrder(content: string) {
+  return content.startsWith("import '@vitejs/plugin-react/preamble'\nimport '@/styles/app.css'\n");
 }

@@ -1682,7 +1682,9 @@ export function useCart() {
 `;
 }
 export function rootRouteSource() {
-  return `import { Suspense } from 'react'
+  return `import '@vitejs/plugin-react/preamble'
+import '@/styles/app.css'
+import { Suspense } from 'react'
 import { Outlet, createRootRoute, HeadContent, Scripts } from '@tanstack/react-router'
 import { Providers } from '@/app/providers'
 import { StoreProvider } from '@/app/store-provider'
@@ -1693,7 +1695,6 @@ import { SiteHeader } from '@/components/layout/site-header'
 import { SiteFooter } from '@/components/layout/site-footer'
 import { NotFound } from '@/components/store/not-found'
 import { Toaster } from '@/components/ui/sonner'
-import '@/styles/app.css'
 
 export const Route = createRootRoute({ component: Root, notFoundComponent: NotFound })
 
@@ -2185,10 +2186,12 @@ function ProductsPage() {
 `;
 }
 function productDetailRouteSource() {
-  return `import { useMemo } from 'react'
+  return `import { useMemo, useState } from 'react'
 import DOMPurify from 'dompurify'
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { useCart } from '@/app/cart-provider'
 import { useProductDetail } from '@/services/store/use-product-detail'
+import type { ProductModel } from '@/services/store/use-products-list'
 import { useStore } from '@/app/store-provider'
 import { formatMoney, resolveProductPrice } from '@/lib/format-money'
 
@@ -2201,12 +2204,23 @@ const escapeHtml = (value: string) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
 
+function getModelLabel(model: ProductModel, index: number) {
+  const value = model.name ?? model.sku ?? model.title
+  return typeof value === 'string' && value.trim() ? value : \`Option \${index + 1}\`
+}
+
 function ProductDetailPage() {
   const { productId } = Route.useParams()
   const { data: product, isLoading, isError } = useProductDetail(productId)
   const { storeDetail } = useStore()
+  const { addItem, updateItemQuantity, getItemQuantity } = useCart()
+  const [selectedModel, setSelectedModel] = useState<ProductModel | undefined>(undefined)
+  const [quantity, setQuantity] = useState(1)
   const currency = storeDetail?.setting?.currency ?? 'AUD'
-  const price = resolveProductPrice(product)
+  const availableModels = product?.models?.length ? product.models : product?.defaultModel ? [product.defaultModel] : []
+  const selectedModelId = selectedModel?.id
+  const existingQuantity = selectedModelId ? getItemQuantity(selectedModelId) : 0
+  const price = selectedModel?.price ?? product?.defaultModel?.price ?? resolveProductPrice(product)
   const image = product?.image ?? product?.images?.[0]
   const imgSrc =
     image ??
@@ -2217,6 +2231,20 @@ function ProductDetailPage() {
     const html = product?.descriptions ?? ''
     return typeof window !== 'undefined' ? DOMPurify.sanitize(html) : escapeHtml(html)
   }, [product?.descriptions])
+  const canMutateCart = Boolean(product && selectedModel && selectedModelId)
+
+  function handleCartAction() {
+    if (!product || !selectedModel || !selectedModelId) return
+    if (quantity <= 0) {
+      if (existingQuantity > 0) updateItemQuantity(selectedModelId, 0)
+      return
+    }
+    if (existingQuantity > 0) {
+      updateItemQuantity(selectedModelId, quantity)
+      return
+    }
+    addItem({ product, model: selectedModel, quantity })
+  }
 
   return (
     <main className='mx-auto max-w-7xl px-4 py-12'>
@@ -2243,6 +2271,54 @@ function ProductDetailPage() {
                 dangerouslySetInnerHTML={{ __html: sanitizedDescriptions }}
               />
             ) : null}
+            <section className='mt-8 space-y-4'>
+              <div>
+                <h2 className='text-sm font-semibold uppercase tracking-wide text-muted-foreground'>Choose an option</h2>
+                <div className='mt-3 flex flex-wrap gap-2'>
+                  {availableModels.map((model, index) => {
+                    const isSelected = selectedModel?.id === model.id
+                    return (
+                      <button
+                        key={model.id ?? index}
+                        type='button'
+                        onClick={() => setSelectedModel(model)}
+                        className={
+                          isSelected
+                            ? 'rounded-full border border-primary bg-primary px-4 py-2 text-sm font-medium text-primary-foreground'
+                            : 'rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-primary'
+                        }
+                      >
+                        {getModelLabel(model, index)}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              <div className='flex flex-wrap items-center gap-3'>
+                <label className='text-sm font-medium text-muted-foreground' htmlFor='product-quantity'>
+                  Quantity
+                </label>
+                <input
+                  id='product-quantity'
+                  type='number'
+                  min='0'
+                  value={quantity}
+                  onChange={(event) => setQuantity(Math.max(0, Number(event.target.value) || 0))}
+                  className='h-10 w-24 rounded-md border border-input bg-background px-3 text-sm'
+                />
+                {selectedModelId ? (
+                  <p className='text-sm text-muted-foreground'>In cart: {existingQuantity}</p>
+                ) : null}
+              </div>
+              <button
+                type='button'
+                disabled={!canMutateCart}
+                onClick={handleCartAction}
+                className='inline-flex h-11 items-center justify-center rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50'
+              >
+                {existingQuantity > 0 ? 'Update cart' : 'Add to cart'}
+              </button>
+            </section>
           </div>
         </article>
       )}

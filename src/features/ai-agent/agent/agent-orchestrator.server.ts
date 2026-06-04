@@ -1192,32 +1192,7 @@ export class AgentOrchestrator {
         projectId,
         rootPath,
       );
-      let nextRootSource = rootSource
-        .replace(/^import\s+['\"]\.\.\/app\.css['\"];?\s*$/m, "")
-        .replace(/^import\s+['\"]\.\/app\.css['\"];?\s*$/m, "")
-        .replace(
-          /^import\s+appCss\s+from\s+['\"]\.\.\/app\.css\?url['\"];?\s*$/m,
-          "",
-        )
-        .replace(
-          /^import\s+appCss\s+from\s+['\"]@\/styles\/app\.css\?url['\"];?\s*$/m,
-          "",
-        );
-
-      // if (!nextRootSource.includes("@vitejs/plugin-react/preamble")) {
-      //   nextRootSource = `import '@vitejs/plugin-react/preamble'\n${nextRootSource}`;
-      // }
-      if (!nextRootSource.includes("@/styles/app.css")) {
-        // const preambleImport = "import '@vitejs/plugin-react/preamble'";
-        nextRootSource =
-          // nextRootSource.includes(preambleImport)
-          //   ? nextRootSource.replace(
-          //       preambleImport,
-          //       `${preambleImport}\nimport '@/styles/app.css'`,
-          //     )
-          //   :
-          `import '@/styles/app.css'\n${nextRootSource}`;
-      }
+      let nextRootSource = normalizeRootRouteRuntimeImports(rootSource);
       if (!nextRootSource.includes("notFoundComponent")) {
         if (!nextRootSource.includes("@/components/store/not-found")) {
           const footerImport =
@@ -2024,6 +1999,18 @@ function buildTokenPatchRewritePrompt(
     originalPrompt,
     appliedRoles: appliedRoles.join(", "),
   });
+}
+
+function normalizeRootRouteRuntimeImports(source: string): string {
+  const cleaned = source
+    .replace(/^@vitejs\/plugin-react\/preamble;?\s*$/gm, "")
+    .replace(/^import\s+['"]@vitejs\/plugin-react\/preamble['"];?\s*$/gm, "")
+    .replace(/^import\s+.*\s+from\s+['"]@vitejs\/plugin-react\/preamble['"];?\s*$/gm, "")
+    .replace(/^import\s+['"](?:\.\.\/app\.css|\.\/app\.css|@\/styles\/app\.css)['"];?\s*$/gm, "")
+    .replace(/^import\s+\w+\s+from\s+['"](?:\.\.\/app\.css\?url|\.\/app\.css\?url|@\/styles\/app\.css\?url)['"];?\s*$/gm, "")
+    .replace(/^\s*\n/, "");
+
+  return `import '@vitejs/plugin-react/preamble'\nimport '@/styles/app.css'\n${cleaned}`;
 }
 
 function buildRedesignRewritePrompt(

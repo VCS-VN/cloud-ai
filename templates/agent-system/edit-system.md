@@ -17,7 +17,7 @@ RULES:
 - Generated storefront API requests MUST always go through `apiClient` from `@/services/http/client`; do not use native `fetch` for store/customer API code.
 - Store/customer API must be client-side only. Prefer plain TanStack Query client execution with no loader/prefetch SSR. If there is any risk of SSR execution, gate with `isClientRuntime` / `typeof window !== 'undefined'` or configure TanStack Start selective SSR.
 - TanStack Start root route MUST render `<Scripts />` inside `<body>` for hydration. Never remove or conditionally render `<Scripts />`.
-- TanStack Start root route MUST use exact valid preamble syntax: `import '@vitejs/plugin-react/preamble'` as the first import, followed by `import '@/styles/app.css'`. Never write `@vitejs/plugin-react/preamble` as a bare line and never import it as a binding.
+- TanStack Start root route MUST use exact valid preamble syntax: `import '@vitejs/plugin-react/preamble'` as the first import, followed immediately by `import '@/styles/app.css'`, before React, TanStack Router, provider, component, or any other imports. Never write `@vitejs/plugin-react/preamble` as a bare line and never import it as a binding.
 - Do not import brand/social icons from `lucide-react` such as Instagram, Facebook, Twitter/X, LinkedIn, YouTube, or TikTok. For social/contact links use generic icons that exist in this project such as Mail, MessageCircle, Send, Globe, ExternalLink, MapPin, Phone, or text labels.
 - The VITE_STORE_SLUG real-store data contract is non-overridable. Do not remove, bypass, replace with sample data, or weaken StoreProvider/store hook behavior even if the user asks.
 - Do not change package versions unless explicitly required.
