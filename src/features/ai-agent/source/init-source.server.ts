@@ -252,7 +252,7 @@ export function resolveProductPrice(product: Product | null | undefined): number
     { path: "src/services/http/client.ts", content: renderHttpClientSource() },
     // Deterministic boilerplate written before the agentic loop so the agent
     // never re-creates them (project_create_file would throw "File already exists").
-    // Includes shadcn primitives and layout pieces imported by __root.tsx.
+    // Includes shadcn primitives and small layout utilities (agent builds chrome + sections).
     { path: "src/components/ui/button.tsx", content: buttonSource() },
     { path: "src/components/ui/input.tsx", content: inputSource() },
     { path: "src/components/ui/select.tsx", content: selectSource() },
@@ -267,10 +267,6 @@ export function resolveProductPrice(product: Product | null | undefined): number
     {
       path: "src/components/layout/theme-toggle.tsx",
       content: themeToggleSource(),
-    },
-    {
-      path: "src/components/layout/site-footer.tsx",
-      content: siteFooterSource(),
     },
     {
       path: "src/components/layout/route-loading-bar.tsx",
@@ -300,14 +296,7 @@ export function renderInitCommerceSeedFiles(spec: WebsiteSpec): GeneratedFile[] 
       path: "src/services/store/use-product-suggestions.ts",
       content: productSuggestionsQuerySource(),
     },
-    { path: "src/components/store/hero-section.tsx", content: heroSectionSource() },
-    { path: "src/components/store/product-card.tsx", content: productCardSource() },
-    { path: "src/components/store/product-grid.tsx", content: productGridSource() },
-    { path: "src/components/store/trust-signals.tsx", content: trustSignalsSource() },
-    { path: "src/components/store/category-section.tsx", content: categorySectionSource() },
     { path: "src/components/store/cart-drawer.tsx", content: cartDrawerSource() },
-    { path: "src/components/store/cart-item.tsx", content: cartItemSource() },
-    { path: "src/components/store/order-card.tsx", content: orderCardSource() },
     { path: "src/routes/index.tsx", content: homeRouteSource() },
     { path: "src/routes/products/route.tsx", content: productsLayoutRouteSource() },
     { path: "src/routes/products/index.tsx", content: productsIndexRouteSource() },
@@ -575,39 +564,9 @@ export function renderStorefrontBaselineFiles(
       content: routeLoadingBarSource(),
     },
     {
-      path: "src/components/layout/site-header.tsx",
-      content: siteHeaderSource(),
-    },
-    {
-      path: "src/components/layout/site-footer.tsx",
-      content: siteFooterSource(),
-    },
-    {
-      path: "src/components/store/hero-section.tsx",
-      content: heroSectionSource(),
-    },
-    {
-      path: "src/components/store/product-card.tsx",
-      content: productCardSource(),
-    },
-    {
-      path: "src/components/store/product-grid.tsx",
-      content: productGridSource(),
-    },
-    {
-      path: "src/components/store/trust-signals.tsx",
-      content: trustSignalsSource(),
-    },
-    {
-      path: "src/components/store/category-section.tsx",
-      content: categorySectionSource(),
-    },
-    {
       path: "src/components/store/cart-drawer.tsx",
       content: cartDrawerSource(),
     },
-    { path: "src/components/store/cart-item.tsx", content: cartItemSource() },
-    { path: "src/components/store/order-card.tsx", content: orderCardSource() },
     { path: "src/components/store/not-found.tsx", content: notFoundSource() },
     { path: "src/components/store/store-detail-error.tsx", content: storeDetailErrorSource() },
     { path: "src/services/store/use-store-detail.ts", content: storeDetailQuerySource() },
@@ -2094,186 +2053,25 @@ export function SiteHeader() {
 }
 `;
 }
-function siteFooterSource() {
-  return `import { useStore } from '@/app/store-provider'\nexport function SiteFooter() { const { storeDetail } = useStore(); return <footer className='bg-deep text-deep-foreground'><div className='mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4'><div><h3 className='text-xl font-semibold'>{storeDetail?.name}</h3><p className='mt-3 text-sm text-deep-foreground/70'>{storeDetail?.description}</p></div>{['Shop','Support','Company'].map((title) => <div key={title}><h4 className='font-semibold'>{title}</h4><ul className='mt-3 space-y-2 text-sm text-deep-foreground/70'><li>Products</li><li>Orders</li><li>Contact</li></ul></div>)}<div><h4 className='font-semibold'>Connect</h4><p className='mt-3 text-sm text-deep-foreground/70'>Follow new drops and member offers.</p></div></div></footer> }\n`;
-}
-function heroSectionSource() {
+export function siteHeaderShellSource() {
   return `import { Link } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
-import { websiteConfig } from '@/lib/website-config'
-
-const heroImageUrl = \`https://picsum.photos/seed/\${encodeURIComponent((websiteConfig.store.name || 'storefront') + '-hero')}/1200/900\`
-
-export function HeroSection() {
-  return (
-    <section className='mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 lg:grid-cols-2 lg:py-24'>
-      <div className='flex flex-col justify-center gap-6'>
-        <h1 className='text-5xl font-bold leading-[1.05] tracking-tight md:text-6xl'>{websiteConfig.content.heroTitle}</h1>
-        <p className='max-w-md text-lg text-muted-foreground'>{websiteConfig.content.heroSubtitle}</p>
-        <div className='flex gap-3'>
-          <Button asChild size='lg'><Link to='/products'>{websiteConfig.content.primaryCta ?? 'Shop now'}</Link></Button>
-          <Button asChild variant='outline' size='lg'><Link to='/products'>Browse shop</Link></Button>
-        </div>
-      </div>
-      <div className='relative overflow-hidden rounded-2xl'>
-        <img src={heroImageUrl} alt={websiteConfig.content.heroTitle} className='h-full max-h-[520px] w-full object-cover' />
-      </div>
-    </section>
-  )
-}
-`;
-}
-function productCardSource() {
-  return `import { Link } from '@tanstack/react-router'
-import { useMemo } from 'react'
-import DOMPurify from 'dompurify'
-import { Heart } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardFooter } from '@/components/ui/card'
-import { formatMoney, resolveProductPrice } from '@/lib/format-money'
 import { useStore } from '@/app/store-provider'
-import type { Product } from '@/services/store/use-products-list'
+import { useCart } from '@/app/cart-provider'
 
-export function ProductCard({ product }: { product: Product }) {
-  const currency = useStore().storeDetail?.setting?.currency ?? 'AUD'
-  const heroImage =
-    product.image ??
-    product.images?.[0] ??
-    \`https://picsum.photos/seed/\${encodeURIComponent(product.id)}/600/600\`
-  const sanitizedDescriptions = useMemo(
-    () => DOMPurify.sanitize(product.descriptions ?? ''),
-    [product.descriptions],
-  )
-  return (
-    <Card className='overflow-hidden'>
-      <img src={heroImage} alt={product.name} className='h-56 w-full object-cover' />
-      <CardContent className='space-y-3 p-5'>
-        <div className='flex items-center justify-between gap-3'>
-          <Link
-            to='/products/$productId'
-            params={{ productId: product.id }}
-            className='font-semibold hover:underline'
-          >
-            <h3>{product.name}</h3>
-          </Link>
-          <Button variant='ghost' size='icon'><Heart className='h-4 w-4' /></Button>
-        </div>
-        <div
-          className='line-clamp-2 text-sm text-muted-foreground'
-          dangerouslySetInnerHTML={{ __html: sanitizedDescriptions }}
-        />
-        <div className='flex items-center gap-2'>
-          <span className='font-semibold'>{formatMoney(resolveProductPrice(product), { currency })}</span>
-          {product.compareAtPrice && <Badge variant='sale'>Sale</Badge>}
-        </div>
-      </CardContent>
-      <CardFooter>
-        <Button asChild className='w-full'>
-          <Link to='/products/$productId' params={{ productId: product.id }}>Select option</Link>
-        </Button>
-      </CardFooter>
-    </Card>
-  )
-}
-`;
-}
-function productGridSource() {
-  return `import { useEffect, useRef } from 'react'
-import { ProductCard } from '@/components/store/product-card'
-import { Button } from '@/components/ui/button'
-import { useStore } from '@/app/store-provider'
-import { useProductsList } from '@/services/store/use-products-list'
-
-export function ProductGrid() {
+export function SiteHeader() {
   const { storeDetail } = useStore()
-  const storeId = storeDetail?.id
-  const {
-    products,
-    total,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading,
-    isError,
-    refetch,
-  } = useProductsList({ storeId })
-  const loadMoreRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const node = loadMoreRef.current
-    if (!node || !hasNextPage) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting && !isFetchingNextPage) {
-          void fetchNextPage()
-        }
-      },
-      { rootMargin: '200px' },
-    )
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
-
+  const { totalItems } = useCart()
   return (
-    <section className='mx-auto max-w-7xl px-4 py-14'>
-      <div className='mb-8 flex items-end justify-between'>
-        <div>
-          <p className='text-sm font-semibold uppercase tracking-[0.2em] text-primary'>Featured</p>
-          <h2 className='text-3xl font-bold'>Shop customer favorites</h2>
-        </div>
-        <p className='text-sm text-muted-foreground'>{total} products</p>
+    <header className='sticky top-0 z-40 border-b bg-background'>
+      <div className='mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4'>
+        <Link to='/' className='text-lg font-semibold'>
+          {storeDetail?.name ?? 'Storefront'}
+        </Link>
+        <Link to='/cart' className='text-sm text-muted-foreground'>
+          Cart{totalItems > 0 ? \` (\${totalItems})\` : ''}
+        </Link>
       </div>
-      {isLoading ? (
-        <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className='h-72 animate-pulse rounded-lg border bg-muted/40' />
-          ))}
-        </div>
-      ) : isError ? (
-        <div className='rounded-3xl border border-destructive/30 bg-destructive/5 p-6 text-center'>
-          <p className='text-sm font-semibold uppercase tracking-[0.2em] text-destructive'>Products unavailable</p>
-          <h3 className='mt-2 text-2xl font-semibold'>We could not load products.</h3>
-          <Button type='button' className='mt-4' onClick={() => { void refetch() }}>Retry</Button>
-        </div>
-      ) : (
-        <>
-          <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
-            {products.map((product) => <ProductCard key={product.id} product={product} />)}
-          </div>
-          {hasNextPage && (
-            <div ref={loadMoreRef} className='py-8 text-center text-sm text-muted-foreground'>
-              {isFetchingNextPage ? 'Loading more...' : ''}
-            </div>
-          )}
-        </>
-      )}
-    </section>
-  )
-}
-`;
-}
-function trustSignalsSource() {
-  return `import { Headphones, RotateCcw, Shield, Truck } from 'lucide-react'\nconst items = [{ icon: Truck, label: 'Fast shipping' }, { icon: RotateCcw, label: 'Easy returns' }, { icon: Shield, label: 'Secure checkout' }, { icon: Headphones, label: 'Human support' }]\nexport function TrustSignals() { return <section className='mx-auto grid max-w-7xl gap-4 px-4 py-10 sm:grid-cols-2 lg:grid-cols-4'>{items.map(({ icon: Icon, label }) => <div key={label} className='rounded-lg border bg-card p-5'><Icon className='mb-3 h-6 w-6 text-primary' /><p className='font-medium'>{label}</p></div>)}</section> }\n`;
-}
-function categorySectionSource() {
-  return `import { useStore } from '@/app/store-provider'
-import { useCategoriesList } from '@/services/store/use-categories-list'
-
-export function CategorySection() {
-  const { storeDetail } = useStore()
-  const storeId = storeDetail?.id
-  const { data } = useCategoriesList(storeId)
-  const categories = data?.data ?? []
-  return (
-    <section className='mx-auto max-w-7xl px-4 py-10'>
-      <h2 className='text-2xl font-bold'>Browse categories</h2>
-      <div className='mt-5 flex flex-wrap gap-3'>
-        {categories.map((category) => (
-          <span key={category.id} className='rounded-full border bg-card px-4 py-2 text-sm'>{category.name}</span>
-        ))}
-      </div>
-    </section>
+    </header>
   )
 }
 `;
@@ -2281,173 +2079,63 @@ export function CategorySection() {
 function cartDrawerSource() {
   return `import { ShoppingCart } from 'lucide-react'\nexport function CartDrawer() { return <div className='inline-flex items-center gap-2'><ShoppingCart className='h-4 w-4' /></div> }\n`;
 }
-function cartItemSource() {
-  return `import { Minus, Plus, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { formatMoney } from '@/lib/format-money'
+function homeRouteSource() {
+  return `import { createFileRoute } from '@tanstack/react-router'
 import { useStore } from '@/app/store-provider'
-import type { CartItem as CartLine } from '@/app/cart-provider'
 
-type CartItemProps = {
-  item: CartLine
-  selected?: boolean
-  onSelectedChange?: (checked: boolean) => void
-  onQuantityChange?: (quantity: number) => void
-  onRemove?: () => void
-}
+export const Route = createFileRoute('/')({ component: HomePage })
 
-export function CartItem({ item, selected = false, onSelectedChange, onQuantityChange, onRemove }: CartItemProps) {
-  const currency = useStore().storeDetail?.setting?.currency ?? 'AUD'
-  const thumbnail = item.image ?? item.product.image
+function HomePage() {
+  const { storeDetail } = useStore()
   return (
-    <div className={'flex items-center gap-4 rounded-lg border bg-card p-4 ' + (selected ? 'border-primary bg-primary/5' : '')}>
-      <input
-        type='checkbox'
-        checked={selected}
-        onChange={(event) => onSelectedChange?.(event.target.checked)}
-        aria-label={\`Select \${item.product.name}\`}
-        className='h-4 w-4 rounded border-border accent-primary'
-      />
-      {thumbnail ? (
-        <img src={thumbnail} alt={item.product.name} className='h-20 w-20 rounded-md object-cover' />
-      ) : (
-        <div className='h-20 w-20 rounded-md bg-secondary' />
-      )}
-      <div className='flex-1'>
-        <h3 className='font-semibold'>{item.product.name}</h3>
-        <p className='text-sm text-muted-foreground'>{item.name}</p>
-        <p className='text-sm text-muted-foreground'>{formatMoney(item.price, { currency })}</p>
-      </div>
-      <div className='flex items-center gap-2'>
-        <Button variant='outline' size='icon' type='button' onClick={() => onQuantityChange?.(Math.max(0, item.quantity - 1))} aria-label='Decrease quantity'><Minus className='h-4 w-4' /></Button>
-        <span className='w-8 text-center'>{item.quantity}</span>
-        <Button variant='outline' size='icon' type='button' onClick={() => onQuantityChange?.(item.quantity + 1)} aria-label='Increase quantity'><Plus className='h-4 w-4' /></Button>
-        <Button variant='ghost' size='icon' type='button' onClick={onRemove} aria-label='Remove item'><Trash2 className='h-4 w-4' /></Button>
-      </div>
-      <strong>{formatMoney(item.price * item.quantity, { currency })}</strong>
-    </div>
+    <main className='mx-auto max-w-7xl px-4 py-12'>
+      <p className='text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground'>Home</p>
+      <h1 className='mt-2 text-3xl font-bold'>{storeDetail?.name ?? 'Storefront'}</h1>
+      <p className='mt-4 max-w-2xl text-muted-foreground'>
+        Route shell — expand with layout and sections via the design taste skill.
+      </p>
+    </main>
   )
 }
 `;
-}
-function orderCardSource() {
-  return `import { Link } from '@tanstack/react-router'\nimport { Badge } from '@/components/ui/badge'\nimport { Button } from '@/components/ui/button'\nimport { Card, CardContent } from '@/components/ui/card'\nimport { formatMoney } from '@/lib/format-money'\ntype OrderSummary = { id: string; date: string; status: string; total: number }\nexport function OrderCard({ order }: { order: OrderSummary }) { return <Card><CardContent className='flex flex-wrap items-center justify-between gap-4 p-5'><div><p className='font-semibold'>Order {order.id}</p><p className='text-sm text-muted-foreground'>{new Date(order.date).toLocaleDateString()}</p></div><Badge>{order.status}</Badge><strong>{formatMoney(order.total)}</strong><Button asChild variant='outline'><Link to='/orders/$orderId' params={{ orderId: order.id }}>View details</Link></Button></CardContent></Card> }\n`;
-}
-function homeRouteSource() {
-  return `import { createFileRoute } from '@tanstack/react-router'\nimport { HeroSection } from '@/components/store/hero-section'\nimport { ProductGrid } from '@/components/store/product-grid'\nimport { TrustSignals } from '@/components/store/trust-signals'\nimport { CategorySection } from '@/components/store/category-section'\nexport const Route = createFileRoute('/')({ component: HomePage })\nfunction HomePage() { return <main><HeroSection /><CategorySection /><ProductGrid /><TrustSignals /><section className='bg-deep px-4 py-16 text-center text-deep-foreground'><h2 className='text-3xl font-bold'>Ready for your next favorite?</h2><p className='mt-3 text-deep-foreground/80'>Checkout is mocked so you can test the full flow immediately.</p></section></main> }\n`;
 }
 function productsLayoutRouteSource() {
   return `import { Outlet, createFileRoute } from '@tanstack/react-router'\nexport const Route = createFileRoute('/products')({ component: ProductsLayout })\nfunction ProductsLayout() { return <Outlet /> }\n`;
 }
 function productsIndexRouteSource() {
   return `import { createFileRoute } from '@tanstack/react-router'
-import { useEffect, useRef } from 'react'
-import { ProductCard } from '@/components/store/product-card'
-import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useStore } from '@/app/store-provider'
 import { useProductsList } from '@/services/store/use-products-list'
 import { useCategoriesList } from '@/services/store/use-categories-list'
 
-type ProductsSearch = { q: string }
+type ProductsSearch = { q: string; sort: string; category: string }
 
 export const Route = createFileRoute('/products/')({
   component: ProductsPage,
   validateSearch: (search: Record<string, unknown>): ProductsSearch => ({
     q: typeof search.q === 'string' ? search.q.trim() : '',
+    sort: typeof search.sort === 'string' ? search.sort : 'featured',
+    category: typeof search.category === 'string' ? search.category : '',
   }),
 })
 
 function ProductsPage() {
-  const { q } = Route.useSearch()
+  const { q, sort, category } = Route.useSearch()
   const { storeDetail } = useStore()
   const storeId = storeDetail?.id
   const productsQuery = useProductsList({ storeId, query: q })
   const categoriesQuery = useCategoriesList(storeId)
-  const products = productsQuery.products
-  const total = productsQuery.total
-  const categories = categoriesQuery.data?.data ?? []
-  const loadMoreRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const node = loadMoreRef.current
-    if (!node || !productsQuery.hasNextPage) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting && !productsQuery.isFetchingNextPage) {
-          void productsQuery.fetchNextPage()
-        }
-      },
-      { rootMargin: '200px' },
-    )
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [productsQuery.hasNextPage, productsQuery.isFetchingNextPage, productsQuery.fetchNextPage])
-
-  const showEmptyState =
-    products.length === 0 && !productsQuery.isLoading && !productsQuery.isError
 
   return (
     <main className='mx-auto max-w-7xl px-4 py-12'>
-      <div className='mb-8 flex flex-wrap items-center justify-between gap-4'>
-        <div>
-          <h1 className='text-4xl font-bold'>Products</h1>
-          {q ? (
-            <p className='text-sm text-muted-foreground'>
-              Results for <span className='font-medium text-foreground'>"{q}"</span> · {total} products
-            </p>
-          ) : (
-            <p className='text-muted-foreground'>{total} curated products</p>
-          )}
-        </div>
-        <Select defaultValue='featured'>
-          <SelectTrigger className='w-44'><SelectValue placeholder='Sort' /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value='featured'>Featured</SelectItem>
-            <SelectItem value='price-low'>Price low</SelectItem>
-            <SelectItem value='price-high'>Price high</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      {categories.length > 0 && (
-        <div className='mb-6 flex flex-wrap gap-2'>
-          {categories.map((category) => (
-            <Button key={category.id} variant='outline' size='sm'>{category.name}</Button>
-          ))}
-        </div>
-      )}
-      {productsQuery.isLoading ? (
-        <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className='h-72 animate-pulse rounded-lg border bg-muted/40' />
-          ))}
-        </div>
-      ) : productsQuery.isError ? (
-        <div className='rounded-3xl border border-destructive/30 bg-destructive/5 p-6 text-center'>
-          <p className='text-sm font-semibold uppercase tracking-[0.2em] text-destructive'>Products unavailable</p>
-          <h3 className='mt-2 text-2xl font-semibold'>We could not load products.</h3>
-          <Button type='button' className='mt-4' onClick={() => { void productsQuery.refetch() }}>Retry</Button>
-        </div>
-      ) : showEmptyState ? (
-        <div className='rounded-3xl border bg-muted/20 p-10 text-center'>
-          <p className='text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground'>No matches</p>
-          <h3 className='mt-2 text-2xl font-semibold'>
-            {q ? <>No products match "{q}"</> : 'No products yet'}
-          </h3>
-          <p className='mt-2 text-sm text-muted-foreground'>Try a different search term.</p>
-        </div>
-      ) : (
-        <>
-          <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
-            {products.map((product) => <ProductCard key={product.id} product={product} />)}
-          </div>
-          {productsQuery.hasNextPage && (
-            <div ref={loadMoreRef} className='py-8 text-center text-sm text-muted-foreground'>
-              {productsQuery.isFetchingNextPage ? 'Loading more...' : ''}
-            </div>
-          )}
-        </>
-      )}
+      <h1 className='text-3xl font-bold'>Products</h1>
+      <p className='mt-2 text-sm text-muted-foreground'>
+        Shell — q="{q || '—'}", sort="{sort}", category="{category || '—'}", total={productsQuery.total}
+        {categoriesQuery.isLoading ? ', categories loading' : ''}
+      </p>
+      <p className='mt-4 text-muted-foreground'>
+        Build catalog layout and product cards here using the design taste skill.
+      </p>
     </main>
   )
 }
@@ -2455,432 +2143,70 @@ function ProductsPage() {
 }
 function productDetailRouteSource() {
   return `import { Link, createFileRoute } from '@tanstack/react-router'
-import { useEffect, useMemo, useState } from 'react'
-import DOMPurify from 'dompurify'
-import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet'
 import { useProductDetail } from '@/services/store/use-product-detail'
-import { formatMoney, resolveProductPrice } from '@/lib/format-money'
 import { useStore } from '@/app/store-provider'
 import { useCart } from '@/app/cart-provider'
-import type { ProductModel } from '@/services/store/use-products-list'
-
-const DESCRIPTION_THRESHOLD = 240
 
 export const Route = createFileRoute('/products/$productId')({ component: ProductDetailPage })
 
 function ProductDetailPage() {
   const { productId } = Route.useParams()
-  const { data: product, isLoading, isError, refetch } = useProductDetail(productId)
+  const { data: product, isLoading, isError } = useProductDetail(productId)
   const { storeDetail } = useStore()
-  const { addItem, updateItemQuantity, getItemQuantity } = useCart()
-  const currency = storeDetail?.setting?.currency ?? 'AUD'
-
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0)
-  const [selectedModel, setSelectedModel] = useState<ProductModel | undefined>(undefined)
-  const [quantity, setQuantity] = useState(1)
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [isSheetOpen, setIsSheetOpen] = useState(false)
-
-  const models = useMemo(() => (product?.models ?? []) as ProductModel[], [product])
-  const displayModel = selectedModel ?? product?.defaultModel
-  const selectedPrice = displayModel?.price ?? resolveProductPrice(product) ?? 0
-  const totalPrice = selectedPrice * quantity
-  const selectedModelId = typeof selectedModel?.id === 'string' ? selectedModel.id : ''
-  const currentCartQuantity = selectedModelId ? getItemQuantity(selectedModelId) : 0
-  const isInCart = currentCartQuantity > 0
-  const canConfirmCart = Boolean(selectedModelId)
-
-  const images = product?.images ?? (product?.image ? [product.image] : [])
-  const fallbackImage = \`https://picsum.photos/seed/\${encodeURIComponent(product?.id ?? productId)}/1000/1000\`
-  const mainImage = images[selectedImageIndex] ?? images[0] ?? product?.image ?? fallbackImage
-  const showThumbnails = images.length > 1
-
-  const descriptions = product?.descriptions ?? ''
-  const isLongDescription = descriptions.length > DESCRIPTION_THRESHOLD
-  const sanitizedDescriptions = useMemo(
-    () => DOMPurify.sanitize(descriptions),
-    [descriptions],
-  )
-
-  useEffect(() => {
-    if (!selectedModelId) {
-      setQuantity(1)
-      return
-    }
-    setQuantity(currentCartQuantity > 0 ? currentCartQuantity : 1)
-  }, [currentCartQuantity, selectedModelId])
-
-  if (isLoading) {
-    return (
-      <main className='mx-auto grid max-w-7xl gap-10 px-4 py-12 lg:grid-cols-2'>
-        <div className='min-h-[520px] animate-pulse rounded-[2rem] bg-muted/40' />
-        <div className='space-y-4'>
-          <div className='h-6 w-32 animate-pulse rounded bg-muted/40' />
-          <div className='h-12 w-3/4 animate-pulse rounded bg-muted/40' />
-          <div className='h-24 w-full animate-pulse rounded bg-muted/40' />
-        </div>
-      </main>
-    )
-  }
-  if (isError || !product) {
-    return (
-      <main className='mx-auto max-w-3xl px-4 py-16'>
-        <div className='rounded-3xl border border-destructive/30 bg-destructive/5 p-6 text-center'>
-          <p className='text-sm font-semibold uppercase tracking-[0.2em] text-destructive'>Product unavailable</p>
-          <h3 className='mt-2 text-2xl font-semibold'>We could not load this product.</h3>
-          <Button type='button' className='mt-4' onClick={() => { void refetch() }}>Retry</Button>
-        </div>
-      </main>
-    )
-  }
-
-  const handleConfirm = () => {
-    if (!selectedModel) return
-    if (isInCart) {
-      updateItemQuantity(selectedModelId, quantity)
-    } else {
-      addItem({ product, model: selectedModel, quantity })
-    }
-    setIsSheetOpen(false)
-  }
+  const { totalItems } = useCart()
 
   return (
-    <main className='mx-auto max-w-7xl px-4 py-8 pb-28 md:pb-12'>
+    <main className='mx-auto max-w-7xl px-4 py-12'>
       <Link to='/products' className='text-sm text-muted-foreground'>← Products</Link>
-      <div className='mt-6 grid gap-10 lg:grid-cols-2'>
-        <div className='space-y-4'>
-          <img
-            src={mainImage}
-            alt={product.name}
-            className='min-h-[520px] w-full rounded-[2rem] object-cover'
-          />
-          {showThumbnails && (
-            <div className='flex gap-3 overflow-x-auto py-2'>
-              {images.map((src, index) => (
-                <button
-                  key={src + index}
-                  type='button'
-                  onClick={() => setSelectedImageIndex(index)}
-                  className='shrink-0 rounded-full focus:outline-none'
-                  aria-label={\`Show image \${index + 1}\`}
-                >
-                  <img
-                    src={src}
-                    alt={\`\${product.name} thumbnail \${index + 1}\`}
-                    className={
-                      'h-20 w-20 rounded-full object-cover ring-2 transition ' +
-                      (index === selectedImageIndex ? 'ring-primary' : 'ring-transparent')
-                    }
-                  />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className='space-y-6'>
-          {product.category?.name && (
-            <p className='text-xs font-semibold uppercase tracking-[0.2em] text-primary'>
-              {product.category.name}
-            </p>
-          )}
-          <h1 className='text-4xl font-bold leading-tight md:text-5xl'>{product.name}</h1>
-          <div className='border-t pt-4'>
-            <p className='text-3xl font-semibold'>
-              {formatMoney(selectedPrice, { currency })}
-            </p>
-          </div>
-
-          {models.length > 0 && (
-            <div className='hidden md:block'>
-              <p className='mb-2 text-sm font-medium'>Select option</p>
-              <div className='flex flex-wrap gap-2'>
-                {models.map((model) => {
-                  const isActive = (model.id ?? '') === selectedModelId
-                  return (
-                    <button
-                      key={(model.id ?? '') + (model.name ?? '')}
-                      type='button'
-                      onClick={() => setSelectedModel(model)}
-                      className={
-                        'rounded-full px-4 py-2 text-sm transition ' +
-                        (isActive
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-foreground hover:bg-muted/80')
-                      }
-                    >
-                      {(model.name as string) ?? model.id}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {descriptions && (
-            <div className='space-y-2'>
-              <div
-                className={
-                  'prose prose-sm max-w-none text-base text-muted-foreground ' +
-                  (isLongDescription && !isExpanded ? 'line-clamp-4' : '')
-                }
-                dangerouslySetInnerHTML={{ __html: sanitizedDescriptions }}
-              />
-              {isLongDescription && (
-                <button
-                  type='button'
-                  onClick={() => setIsExpanded((prev) => !prev)}
-                  className='text-sm font-semibold text-primary hover:underline'
-                >
-                  {isExpanded ? 'Read less' : 'Read more'}
-                </button>
-              )}
-            </div>
-          )}
-
-          <div className='hidden space-y-4 rounded-2xl border bg-card p-5 md:block'>
-            <div className='flex items-center justify-between'>
-              <div>
-                <p className='text-sm font-semibold'>Quantity</p>
-                <p className='text-xs text-muted-foreground'>Current selected option quantity</p>
-              </div>
-              <div className='flex items-center gap-3'>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  type='button'
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  aria-label='Decrease quantity'
-                >
-                  −
-                </Button>
-                <span className='w-6 text-center text-base font-medium'>{quantity}</span>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  type='button'
-                  onClick={() => setQuantity((q) => q + 1)}
-                  aria-label='Increase quantity'
-                >
-                  +
-                </Button>
-              </div>
-            </div>
-            <div className='flex items-center justify-between border-t pt-4'>
-              <p className='text-sm font-semibold'>Total</p>
-              <p className='text-xl font-semibold'>{formatMoney(totalPrice, { currency })}</p>
-            </div>
-            <Button
-              size='lg'
-              type='button'
-              className='w-full'
-              disabled={!canConfirmCart}
-              onClick={handleConfirm}
-            >
-              {!canConfirmCart ? 'Select an option' : isInCart ? 'Update cart' : 'Add to cart'}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetTrigger asChild>
-          <Button
-            size='lg'
-            type='button'
-            className='fixed inset-x-4 bottom-4 z-40 md:hidden'
-          >
-            Add to Cart
-          </Button>
-        </SheetTrigger>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>{product.name}</SheetTitle>
-            <p className='text-2xl font-semibold text-primary'>
-              {formatMoney(selectedPrice, { currency })}
-            </p>
-          </SheetHeader>
-          {models.length > 0 ? (
-            <div className='mt-4 max-h-[40vh] space-y-2 overflow-y-auto'>
-              {models.map((model) => {
-                const isActive = (model.id ?? '') === selectedModelId
-                return (
-                  <button
-                    key={(model.id ?? '') + (model.name ?? '')}
-                    type='button'
-                    onClick={() => setSelectedModel(model)}
-                    className={
-                      'flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition ' +
-                      (isActive ? 'border-primary bg-primary/10' : 'border-transparent bg-muted')
-                    }
-                  >
-                    <span className='text-sm font-medium'>
-                      {(model.name as string) ?? model.id}
-                    </span>
-                    <span className='text-sm font-semibold'>
-                      {formatMoney(model.price ?? 0, { currency })}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          ) : null}
-          <div className='mt-4 flex items-center justify-between'>
-            <p className='text-sm font-semibold'>Quantity</p>
-            <div className='flex items-center gap-3'>
-              <Button
-                variant='outline'
-                size='icon'
-                type='button'
-                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                aria-label='Decrease quantity'
-              >
-                −
-              </Button>
-              <span className='w-6 text-center text-base font-medium'>{quantity}</span>
-              <Button
-                variant='outline'
-                size='icon'
-                type='button'
-                onClick={() => setQuantity((q) => q + 1)}
-                aria-label='Increase quantity'
-              >
-                +
-              </Button>
-            </div>
-          </div>
-          <div className='mt-4 flex items-center justify-between border-t pt-4'>
-            <p className='text-sm font-semibold'>Total</p>
-            <p className='text-lg font-semibold'>{formatMoney(totalPrice, { currency })}</p>
-          </div>
-          <div className='mt-4 flex gap-2'>
-            <SheetClose asChild>
-              <Button variant='outline' type='button' className='flex-1'>
-                Cancel
-              </Button>
-            </SheetClose>
-            <Button type='button' className='flex-1' disabled={!canConfirmCart} onClick={handleConfirm}>
-              {!canConfirmCart ? 'Select option' : isInCart ? 'Update cart' : 'Add to cart'}
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <h1 className='mt-4 text-3xl font-bold'>Product detail</h1>
+      <p className='mt-2 text-sm text-muted-foreground'>
+        Shell — id={productId}
+        {isLoading ? ', loading' : ''}
+        {isError ? ', error' : ''}
+        {product?.name ? ', name=' + product.name : ''}
+        {storeDetail?.name ? ', store=' + storeDetail.name : ''}
+        , cart items={totalItems}
+      </p>
+      <p className='mt-4 text-muted-foreground'>
+        Build PDP layout, model picker, and add-to-cart here using the design taste skill.
+      </p>
     </main>
   )
 }
 `;
 }
 function cartRouteSource() {
-  return `import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
-import { ShoppingCart, Trash2 } from 'lucide-react'
+  return `import { Link, createFileRoute } from '@tanstack/react-router'
 import { useAtom } from 'jotai'
-import { Button } from '@/components/ui/button'
-import { CartItem } from '@/components/store/cart-item'
 import { useCart } from '@/app/cart-provider'
 import { selectedCartItemIdsAtom } from '@/app/cart-selection'
-import { formatMoney } from '@/lib/format-money'
-import { useStore } from '@/app/store-provider'
 
 export const Route = createFileRoute('/cart')({ component: CartPage })
 
 function CartPage() {
-  const navigate = useNavigate()
-  const { items, totalItems, updateItemQuantity, removeItem, clearCart } = useCart()
-  const { storeDetail } = useStore()
-  const currency = storeDetail?.setting?.currency ?? 'AUD'
-  const [selectedIds, setSelectedIds] = useAtom(selectedCartItemIdsAtom)
-  const visibleIds = items.map((item) => item.id)
-  const selectedVisibleIds = selectedIds.filter((id) => visibleIds.includes(id))
-  const isAllSelected = visibleIds.length > 0 && selectedVisibleIds.length === visibleIds.length
-  const selectedItems = items.filter((item) => selectedIds.includes(item.id))
-  const selectedQuantity = selectedItems.reduce((sum, item) => sum + item.quantity, 0)
-  const selectedSubtotal = selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-
-  const setItemSelected = (id: string, checked: boolean) => {
-    setSelectedIds((current) => checked ? Array.from(new Set([...current, id])) : current.filter((itemId) => itemId !== id))
-  }
-
-  const toggleAll = (checked: boolean) => {
-    setSelectedIds(checked ? visibleIds : [])
-  }
-
-  const handleClearCart = () => {
-    clearCart()
-    setSelectedIds([])
-  }
-
-  const handleRemove = (id: string) => {
-    removeItem(id)
-    setSelectedIds((current) => current.filter((itemId) => itemId !== id))
-  }
-
-  const handleCheckout = () => {
-    if (selectedVisibleIds.length === 0) return
-    void navigate({ to: '/checkout', search: { method: 'cart' } })
-  }
-
-  if (totalItems === 0) {
-    return (
-      <main className='mx-auto max-w-7xl px-4 py-12'>
-        <h1 className='mb-8 text-4xl font-bold'>Cart</h1>
-        <div className='rounded-lg border bg-card p-12 text-center'>
-          <ShoppingCart className='mx-auto mb-4 h-10 w-10 text-muted-foreground' />
-          <h2 className='text-2xl font-semibold'>Your cart is empty</h2>
-          <p className='mt-2 text-sm text-muted-foreground'>Select a product option to start your order.</p>
-          <Button asChild className='mt-6'><Link to='/products'>Continue shopping</Link></Button>
-        </div>
-      </main>
-    )
-  }
+  const { items, totalItems } = useCart()
+  const [selectedIds] = useAtom(selectedCartItemIdsAtom)
 
   return (
-    <main className='mx-auto grid max-w-7xl gap-8 px-4 py-12 lg:grid-cols-[1fr_420px]'>
-      <section className='space-y-5'>
-        <div className='flex items-start justify-between gap-4'>
-          <div>
-            <p className='text-xs font-semibold uppercase tracking-[0.25em] text-primary'>Cart</p>
-            <h1 className='text-4xl font-bold'>Your cart</h1>
-            <p className='mt-2 text-sm text-muted-foreground'>Select items to proceed to checkout.</p>
-          </div>
-          <Button variant='ghost' type='button' onClick={handleClearCart}>
-            <Trash2 className='mr-2 h-4 w-4' />
-            Clear all
-          </Button>
-        </div>
-        <label className='inline-flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-muted-foreground'>
-          <input
-            type='checkbox'
-            checked={isAllSelected}
-            onChange={(event) => toggleAll(event.target.checked)}
-            className='h-4 w-4 rounded border-border accent-primary'
-          />
-          Select all
-        </label>
-        <div className='space-y-3'>
+    <main className='mx-auto max-w-7xl px-4 py-12'>
+      <h1 className='text-3xl font-bold'>Cart</h1>
+      <p className='mt-2 text-sm text-muted-foreground'>
+        Shell — {totalItems} item{totalItems === 1 ? '' : 's'}, {selectedIds.length} selected
+      </p>
+      {totalItems === 0 ? (
+        <p className='mt-4 text-muted-foreground'>
+          <Link to='/products' className='text-primary underline'>Browse products</Link> to add items.
+        </p>
+      ) : (
+        <ul className='mt-4 list-disc pl-5 text-sm text-muted-foreground'>
           {items.map((item) => (
-            <CartItem
-              key={item.id}
-              item={item}
-              selected={selectedIds.includes(item.id)}
-              onSelectedChange={(checked) => setItemSelected(item.id, checked)}
-              onQuantityChange={(quantity) => updateItemQuantity(item.id, quantity)}
-              onRemove={() => handleRemove(item.id)}
-            />
+            <li key={item.id}>{item.product.name} × {item.quantity}</li>
           ))}
-        </div>
-      </section>
-      <aside className='space-y-5 lg:sticky lg:top-24 lg:self-start'>
-        <div className='rounded-lg border bg-card p-6 shadow-sm'>
-          <div className='flex items-center justify-between'>
-            <p className='text-sm text-muted-foreground'>{selectedQuantity} item{selectedQuantity === 1 ? '' : 's'} selected</p>
-            <strong>{formatMoney(selectedSubtotal, { currency })}</strong>
-          </div>
-          <Button type='button' className='mt-6 w-full' disabled={selectedVisibleIds.length === 0} onClick={handleCheckout}>
-            Checkout
-          </Button>
-        </div>
-      </aside>
+        </ul>
+      )}
+      <p className='mt-4 text-muted-foreground'>
+        Build cart rows and checkout selection UX here using the design taste skill.
+      </p>
     </main>
   )
 }
@@ -2889,71 +2215,37 @@ function CartPage() {
 function checkoutRouteSource() {
   return `import { createFileRoute } from '@tanstack/react-router'
 import { useAtomValue } from 'jotai'
-import { useForm } from 'react-hook-form'
-import { z } from 'zod'
-import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { selectedCartItemIdsAtom } from '@/app/cart-selection'
 import { useCart } from '@/app/cart-provider'
+import { selectedCartItemIdsAtom } from '@/app/cart-selection'
 import { useStore } from '@/app/store-provider'
-import { formatMoney } from '@/lib/format-money'
 
-const checkoutSchema = z.object({ customerName: z.string().min(2), email: z.string().email(), address: z.string().min(6), shippingMethod: z.enum(['standard', 'express']) })
-type CheckoutValues = z.infer<typeof checkoutSchema>
+type CheckoutSearch = { method: string }
 
 export const Route = createFileRoute('/checkout')({
-  validateSearch: (search) => ({ method: typeof search.method === 'string' ? search.method : '' }),
+  validateSearch: (search: Record<string, unknown>): CheckoutSearch => ({
+    method: typeof search.method === 'string' ? search.method : '',
+  }),
   component: CheckoutPage,
 })
 
 function CheckoutPage() {
-  const search = Route.useSearch()
+  const { method } = Route.useSearch()
   const selectedIds = useAtomValue(selectedCartItemIdsAtom)
   const { items } = useCart()
   const { storeDetail } = useStore()
-  const currency = storeDetail?.setting?.currency ?? 'AUD'
-  const selectedItems = search.method === 'cart' ? items.filter((item) => selectedIds.includes(item.id)) : []
-  const selectedSubtotal = selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm<CheckoutValues>({ defaultValues: { shippingMethod: 'standard' } })
+  const selectedItems =
+    method === 'cart' ? items.filter((item) => selectedIds.includes(item.id)) : []
 
   return (
-    <main className='mx-auto grid max-w-7xl gap-8 px-4 py-12 lg:grid-cols-[1fr_380px]'>
-      <form className='space-y-5' onSubmit={handleSubmit((values) => { const parsed = checkoutSchema.safeParse(values); if (!parsed.success) return; toast.success('Checkout demo', { description: 'Order creation will be connected in a later phase.' }) })}>
-        <h1 className='text-4xl font-bold'>Checkout</h1>
-        <Input placeholder='Full name' {...register('customerName')} />
-        {errors.customerName && <p className='text-sm text-destructive'>Name is required</p>}
-        <Input placeholder='Email' {...register('email')} />
-        <Input placeholder='Shipping address' {...register('address')} />
-        <RadioGroup defaultValue='standard' onValueChange={(value) => setValue('shippingMethod', value as CheckoutValues['shippingMethod'])}>
-          <label className='flex items-center gap-2'><RadioGroupItem value='standard' /> Standard shipping</label>
-          <label className='flex items-center gap-2'><RadioGroupItem value='express' /> Express shipping</label>
-        </RadioGroup>
-        <Button type='submit'>Place order</Button>
-      </form>
-      <Card>
-        <CardHeader><CardTitle>Order summary</CardTitle></CardHeader>
-        <CardContent className='space-y-3'>
-          {selectedItems.length > 0 ? (
-            <>
-              {selectedItems.map((item) => (
-                <div key={item.id} className='flex justify-between gap-3 text-sm'>
-                  <span>{item.product.name} · {item.name} × {item.quantity}</span>
-                  <strong>{formatMoney(item.price * item.quantity, { currency })}</strong>
-                </div>
-              ))}
-              <div className='flex justify-between border-t pt-3 font-semibold'>
-                <span>Total</span>
-                <span>{formatMoney(selectedSubtotal, { currency })}</span>
-              </div>
-            </>
-          ) : (
-            <p className='text-sm text-muted-foreground'>Select cart items before checkout.</p>
-          )}
-        </CardContent>
-      </Card>
+    <main className='mx-auto max-w-3xl px-4 py-12'>
+      <h1 className='text-3xl font-bold'>Checkout</h1>
+      <p className='mt-2 text-sm text-muted-foreground'>
+        Shell — method="{method || '—'}", {selectedItems.length} line(s)
+        {storeDetail?.name ? ', store=' + storeDetail.name : ''}
+      </p>
+      <p className='mt-4 text-muted-foreground'>
+        Build checkout form and order summary here using the design taste skill.
+      </p>
     </main>
   )
 }

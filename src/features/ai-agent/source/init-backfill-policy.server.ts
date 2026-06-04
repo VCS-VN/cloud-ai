@@ -7,7 +7,6 @@ const INIT_UI_BACKFILL_EXACT = new Set(["DESIGN.md", "src/styles/app.css"]);
 /** Stable layout + commerce routes; safe to backfill even under UI prefixes. */
 const INIT_DETERMINISTIC_BACKFILL_ALLOW = new Set([
   "src/components/layout/theme-toggle.tsx",
-  "src/components/layout/site-footer.tsx",
   "src/components/layout/route-loading-bar.tsx",
   "src/components/store/not-found.tsx",
   "src/components/store/cart-drawer.tsx",

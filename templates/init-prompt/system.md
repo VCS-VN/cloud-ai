@@ -72,4 +72,4 @@ BEFORE CREATING FILES — REQUIRED RULES TO PREVENT ERRORS:
 
 6. POST-GENERATION VALIDATION (MANDATORY): After creating ALL files with project_create_file, call `project_run_validation` with `level: 'fast'` and `reason: 'typecheck generated storefront files'`. Fix every error with project_apply_patch before declaring the task complete. If validation fails: inspect the error, apply the minimal fix, re-run validation. Repeat until validation passes. NEVER skip validation or leave errors unaddressed.
 
-NOW START: call project_read_taste_skill, create DESIGN.md only if it is missing, create src/routes/__root.tsx and src/components/layout/site-header.tsx if missing, and patch pre-seeded commerce routes/components only when needed. Do NOT project_create_file files that already exist.
+NOW START: call project_read_taste_skill, create DESIGN.md only if it is missing, create src/routes/__root.tsx and layout chrome (site-header, site-footer) if missing, then expand thin-shell commerce routes and build store sections via the taste skill. Plumbing (providers, hooks, route shells, ui primitives) is pre-seeded — do NOT project_create_file paths that already exist.

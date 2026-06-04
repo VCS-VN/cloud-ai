@@ -12,4 +12,5 @@ rule: ui-design
 - Product/category visuals should use real product images when available.
 - If product images are missing, use stable seeded real photographic placeholders, not gray boxes or generic gradients.
 - Product cards link to product detail; product detail is the only product surface that mutates cart state.
-- Header includes brand/search/cart affordance. Footer and loading/not-found states remain storefront-branded.
+- Plumbing (providers, hooks, route shells, loading bar, not-found) is pre-wired at init; you own layout chrome and page sections via the design taste skill.
+- Build header (brand/search/cart), footer, and route content to match DESIGN.md — no fixed section layout is pre-seeded.

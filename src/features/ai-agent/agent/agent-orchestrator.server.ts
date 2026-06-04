@@ -23,14 +23,13 @@ import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
 import { buildFileManifest } from "../source/code-index-service.server";
 import {
   ensureRootRouteLoadingBarContract,
-  hasSiteHeaderSearchSuggestionContract,
   initInfrastructureSource,
   initSource,
   notFoundSource,
   productSuggestionsQuerySource,
   renderEnvSource,
   routeLoadingBarSource,
-  siteHeaderSource,
+  siteHeaderShellSource,
 } from "../source/init-source.server";
 import {
   REQUIRED_GENERATED_STOREFRONT_FILES,
@@ -379,6 +378,14 @@ export class AgentOrchestrator {
 
       const registry = createDefaultCodeToolRegistry();
 
+      const preloadedTasteSkill = await loadTasteSkill();
+      toolExecutionContext.flags = {
+        ...(toolExecutionContext.flags ?? {}),
+        tasteSkillLoaded: true,
+        designRulesLoaded: toolExecutionContext.flags?.designRulesLoaded ?? false,
+      };
+      toolExecutionContext.tasteSkillHash = preloadedTasteSkill.hash;
+
       let loopResult = yield* this.runAgenticEditPass({
         userPrompt: effectiveUserPrompt,
         projectId: input.projectId,
@@ -389,6 +396,7 @@ export class AgentOrchestrator {
         thinking,
         toolExecutionContext,
         registry,
+        preloadedTasteSkill,
         signal: input.signal,
       });
 
@@ -404,6 +412,7 @@ export class AgentOrchestrator {
         thinking,
         toolExecutionContext,
         registry,
+        preloadedTasteSkill,
         signal: input.signal,
       });
 
@@ -1333,15 +1342,13 @@ export class AgentOrchestrator {
 
     const siteHeaderPath = "src/components/layout/site-header.tsx";
     try {
-      const siteHeader = await this.deps.projectFileStore.readTextFile(
-        projectId,
-        siteHeaderPath,
-      );
-      if (!hasSiteHeaderSearchSuggestionContract(siteHeader)) {
+      await this.deps.projectFileStore.readTextFile(projectId, siteHeaderPath);
+    } catch {
+      try {
         await this.deps.projectFileStore.writeTextFile(
           projectId,
           siteHeaderPath,
-          siteHeaderSource(),
+          siteHeaderShellSource(),
         );
         changedFiles.push(siteHeaderPath);
         console.info(
@@ -1349,22 +1356,22 @@ export class AgentOrchestrator {
             event: "init_invariant_repaired",
             projectId,
             path: siteHeaderPath,
-            invariant: "site_header_search_suggestions_dropdown",
+            invariant: "site_header_missing_shell",
+          }),
+        );
+      } catch (error) {
+        console.warn(
+          JSON.stringify({
+            event: "init_invariant_repair_failed",
+            projectId,
+            path: siteHeaderPath,
+            error:
+              error instanceof Error
+                ? error.message.slice(0, 200)
+                : String(error).slice(0, 200),
           }),
         );
       }
-    } catch (error) {
-      console.warn(
-        JSON.stringify({
-          event: "init_invariant_repair_failed",
-          projectId,
-          path: siteHeaderPath,
-          error:
-            error instanceof Error
-              ? error.message.slice(0, 200)
-              : String(error).slice(0, 200),
-        }),
-      );
     }
 
     return changedFiles;
@@ -1489,6 +1496,7 @@ export class AgentOrchestrator {
     thinking: ThinkingResult;
     toolExecutionContext: ToolExecutionContext;
     registry: ReturnType<typeof createDefaultCodeToolRegistry>;
+    preloadedTasteSkill?: PreloadedTasteSkill;
     signal?: AbortSignal;
   }): AsyncGenerator<AgentStreamEvent, AgenticLoopResult, unknown> {
     const eventQueue = new AsyncEventQueue<AgentStreamEvent>();
@@ -1506,6 +1514,7 @@ export class AgentOrchestrator {
             thinkingResult: args.thinking,
             context: args.toolExecutionContext,
             registry: args.registry,
+            preloadedTasteSkill: args.preloadedTasteSkill,
             signal: args.signal,
           },
           {
@@ -1573,6 +1582,7 @@ export class AgentOrchestrator {
     thinking: ThinkingResult;
     toolExecutionContext: ToolExecutionContext;
     registry: ReturnType<typeof createDefaultCodeToolRegistry>;
+    preloadedTasteSkill?: PreloadedTasteSkill;
     signal?: AbortSignal;
   }): AsyncGenerator<AgentStreamEvent, AgenticLoopResult, unknown> {
     const MAX_REPAIR_PASSES = 2;
@@ -1636,6 +1646,7 @@ export class AgentOrchestrator {
         thinking: args.thinking,
         toolExecutionContext: args.toolExecutionContext,
         registry: args.registry,
+        preloadedTasteSkill: args.preloadedTasteSkill,
         signal: args.signal,
       });
     }
