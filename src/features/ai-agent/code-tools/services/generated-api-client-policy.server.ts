@@ -1,3 +1,5 @@
+import { renderPromptDoc } from "../../agent/prompt-template-store.server";
+
 export type GeneratedApiClientPolicyViolation = {
   filePath: string;
   message: string;
@@ -49,11 +51,12 @@ export function scanGeneratedApiClientPolicy(changedFiles: ReadonlyArray<{ path:
 }
 
 export function formatGeneratedApiClientPolicyViolations(violations: readonly GeneratedApiClientPolicyViolation[]) {
-  return [
-    "Generated storefront API requests must use `apiClient` from `@/services/http/client`.",
-    "Do not use native `fetch`, `URLSearchParams`, `response.json()`, or hand-built `/api/...` URLs in generated store/customer API code.",
-    ...violations.slice(0, 12).map((violation) => `- ${violation.filePath}: ${violation.message}`),
-  ].join("\n");
+  return renderPromptDoc("templates/policies/api-client-policy.md", {
+    violations: violations
+      .slice(0, 12)
+      .map((violation) => `- ${violation.filePath}: ${violation.message}`)
+      .join("\n"),
+  });
 }
 
 function isGeneratedApiCodePath(filePath: string) {

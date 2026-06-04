@@ -3,15 +3,9 @@ import { ECOMMERCE_AGENT_SYSTEM_PROMPT } from "../openai/prompts";
 import { websiteSpecProviderSchema } from "../openai/schemas";
 import type { WebsiteSpec } from "../project/project-state.schema";
 import { AgentError } from "../agent/agent-errors";
+import { loadPromptDoc } from "../agent/prompt-template-store.server";
 
-const WEBSITE_SPEC_CONTRACT_PROMPT = `Extract a complete ecommerce WebsiteSpec from the user prompt.
-Return exactly one compact JSON object matching this contract.
-Allowed top-level keys only: store, brand, pages, products, features, content.
-Do not include projectId, fileManifest, decisionLog, recentChanges, routes, sourceCode, generatedFiles, surface, textPrimary, textSecondary, or any other extra top-level keys.
-brand.colors may only include primary, secondary, accent, background, foreground.
-Use null for unavailable nullable fields. Prefer English storefront copy unless the user asks for another language.
-Limits: max 4 pages, max 6 products, concise strings.
-Example shape: {"store":{"name":"Demo Store","type":"fashion","description":"Modern ecommerce store","targetCustomers":["shoppers"]},"brand":{"name":"Demo Store","tagline":null,"tone":"friendly","colors":{"primary":"#111827","secondary":null,"accent":"#3B82F6","background":"#FFFFFF","foreground":"#111827"},"typography":null,"visualStyle":null},"pages":[{"path":"/","name":"Home","sections":["Hero","Products"]}],"products":[{"id":"prod-1","name":"Featured Product","category":null,"price":99,"compareAtPrice":null,"description":"Featured item","imagePrompt":null,"attributes":null}],"features":{"productListing":true,"productDetail":true,"cart":true,"cartDrawer":false,"checkout":true,"productSearch":false,"productFilter":false,"wishlist":false,"reviews":false,"promotions":false,"newsletter":false,"auth":false,"adminDashboard":false,"paymentIntegration":"mock"},"content":{"heroTitle":"Shop new arrivals","heroSubtitle":"A modern shopping experience","primaryCta":"Shop now","secondaryCta":null,"trustSignals":["Mock checkout"],"faq":[]}}`;
+const WEBSITE_SPEC_CONTRACT_PROMPT = loadPromptDoc("templates/planning/website-spec-contract.md");
 
 export async function extractWebsiteSpec(input: { prompt: string; provider?: ChatCompletionsProvider; model?: string; projectState?: unknown }): Promise<WebsiteSpec> {
   const fallback = createFallbackWebsiteSpec(input.prompt);

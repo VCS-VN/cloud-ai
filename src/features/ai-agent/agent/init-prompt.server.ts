@@ -1,6 +1,9 @@
 import type { WebsiteSpec } from "../project/project-state.schema";
 import { REQUIRED_INIT_COMMERCE_ROUTE_FILES } from "../source/generated-project-layout";
 import { loadProjectRuleDocsForPrompt } from "./project-rule-docs.server";
+import { renderPromptDoc } from "./prompt-template-store.server";
+
+const INIT_RECOVERY_PROMPT = "templates/init-recovery/recovery.md";
 
 export function buildInitStorefrontRecoveryPrompt(input: {
   missingPaths: string[];
@@ -22,17 +25,13 @@ export function buildInitStorefrontRecoveryPrompt(input: {
           "Commerce routes (must all exist):",
           ...REQUIRED_INIT_COMMERCE_ROUTE_FILES.map((p) => `- ${p}`),
         ];
-  return [
-    "INIT RECOVERY — required storefront implementation files are still missing.",
-    input.hasServerDesign
+  return renderPromptDoc(INIT_RECOVERY_PROMPT, {
+    designLine: input.hasServerDesign
       ? "DESIGN.md and blocks.json already exist (reference template). Create EVERY missing path below with write or project_create_file. Do NOT recreate DESIGN.md."
       : "Create DESIGN.md as a reference template, then create every missing path below.",
-    ...routeBlock,
-    "",
-    "All missing paths:",
-    lines,
-    "Use tool calls only until all paths exist. Apply the preloaded taste skill for UI; use DESIGN.md as a structural reference when helpful.",
-  ].join("\n");
+    routeBlock: routeBlock.join("\n"),
+    missingPaths: lines,
+  });
 }
 
 export function buildRetailInitPrompt(input: {
@@ -156,7 +155,7 @@ export function buildRetailInitPrompt(input: {
     "",
     "src/components/ui/sonner.tsx - Toaster wrapper using sonner; checkout uses toast.success after createOrder",
     "",
-    "src/components/layout/theme-toggle.tsx - ThemeToggle: import { Moon, Sun } from 'lucide-react', Button from @/components/ui/button. useState for light|dark, useEffect reads document.documentElement.classList on mount, toggle sets localStorage theme and document.documentElement.classList.toggle('dark'). Render outline icon Button between header search and cart; aria-label 'Toggle color theme'.",
+    "src/components/layout/theme-toggle.tsx - ThemeToggle: import { Moon, Sun } from 'lucide-react', Button from @/components/ui/button. useState for light|dark, useEffect reads document.documentElement.classList on mount, toggle stores localStorage key 'storefront-theme' and document.documentElement.classList.toggle('dark'). Default theme is light unless the user explicitly toggled dark. Render outline icon Button between header search and cart; aria-label 'Toggle color theme'.",
     "",
     "src/components/layout/site-header.tsx - Retail header. Import { ThemeToggle } from '@/components/layout/theme-toggle'. Destructure `const { storeDetail } = useStore()` and `const { totalItems } = useCart()` at the top, then render brand name as <Link to='/'>{storeDetail?.name}</Link> on the left (StoreProvider gives storeDetail from GET /api/v1/stores/:storeSlug when VITE_STORE_SLUG is set, and sampleStore otherwise; do NOT use websiteConfig.store.name, do NOT call useStoreDetail() directly here, do NOT hardcode the brand string), a search bar in the middle, <ThemeToggle /> before the cart button, and a ShoppingCart icon Button on the right linking to /cart. Show a cart badge only when totalItems > 0. Derive storeId from storeDetail?.id (NOT from useStoreDetail().data?.id). NO Home/Products/Orders nav links. NO mobile Sheet menu. sticky top-0 border-b. Search-bar accent colors MUST bind to the DESIGN.md primary token (lighter tint of primary for input fill, soft primary tint for the focus ring, primary for the submit button background, primary for match highlight) — do NOT hardcode rose/pink. Pill input: rounded-full, h-11, pl-5 pr-1.5 py-2.5, focus:outline-none focus:ring-2 with the primary-tinted ring, no border. Leading Lucide Search icon h-4 w-4 with a muted primary tint. Input class 'text-sm text-slate-700 placeholder:text-slate-400'; placeholder MUST be exactly 'What are you looking for?'. Trailing inset circular submit Button (type='submit', size='icon', h-9 w-9 rounded-full bg-primary hover:bg-primary/90 text-white) containing a white Lucide Search icon h-4 w-4. Submit (form onSubmit OR Enter) calls useNavigate() from @tanstack/react-router and navigate({ to: '/products', search: { q: value.trim() } }) when value is non-empty, then closes the dropdown. Debounce the suggestions input value by 800ms via a useEffect+setTimeout — track BOTH the raw input value (for the input field, dropdown visibility gating, and form submit) AND a debouncedValue (passed as the query to useProductSuggestions) so users can type freely without firing a request per keystroke. Suggestions dropdown renders below the input (absolute, w-full, mt-2) when the input is focused AND inputValue.trim().length > 0 AND suggestions.length > 0, with class 'rounded-2xl bg-white p-3 shadow-lg shadow-black/5' (no hard border). Inside: 'Suggestions' label (text-xs font-medium text-slate-400 mb-1) then suggestion rows ('flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer' with a primary-tinted hover background) each with a leading Lucide Search icon h-4 w-4 text-slate-400 and the suggestion text (text-sm text-slate-700). Clicking a row sets the input value to the suggestion, navigates to /products with search { q: suggestion }, and closes the dropdown. Highlight matched substrings of the current input value against each suggestion (case-insensitive) by escaping regex metacharacters in the query, splitting via new RegExp('(' + escaped + ')', 'gi'), and wrapping matched parts with <span className='text-primary'> — same weight, no background. Accessibility: input role='combobox' with aria-expanded and aria-controls='site-search-suggestions'; dropdown role='listbox' id='site-search-suggestions'; rows role='option' aria-selected. Keyboard: ArrowDown/ArrowUp move active row, Enter selects active row (or submits typed value when no row is active), Escape closes. Hide dropdown on outside click and on isError from the suggestions hook. Wire suggestions via useProductSuggestions({ storeId, query: debouncedValue }) — do NOT branch on hasStoreSlug here, the hook handles the fallback internally.",
     "SiteHeader search suggestions MUST use the canonical state model: inputValue controls the input; debouncedValue is passed to useProductSuggestions; open closes only on outside click, Escape, submit, or suggestion click; showDropdown = open && inputValue.trim().length > 0 && suggestions.length > 0 && !isError. Render suggestions.map directly inside #site-search-suggestions. Do NOT hide the dropdown just because debouncedValue differs from inputValue or a new request is loading. Suggestion rows MUST use onMouseDown(event.preventDefault()) so blur cannot close the list before selection. Never make network suggestions without visible dropdown UI.",

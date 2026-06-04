@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
+import { loadPromptDoc } from "./prompt-template-store.server";
 
 const PROJECT_RULE_DOCS_RELATIVE_DIR = "templates/project-rules";
 const PROJECT_RULE_DOCS = [
@@ -8,6 +8,7 @@ const PROJECT_RULE_DOCS = [
   "protected-files.md",
   "data-contract.md",
   "ui-design.md",
+  "loading-ux.md",
 ] as const;
 
 let cachedProjectRuleDocs: string | null = null;
@@ -15,13 +16,10 @@ let cachedProjectRuleDocs: string | null = null;
 export function loadProjectRuleDocsForPrompt(): string {
   if (cachedProjectRuleDocs !== null) return cachedProjectRuleDocs;
 
-  const root = process.cwd();
-  const dir = path.resolve(root, PROJECT_RULE_DOCS_RELATIVE_DIR);
   const blocks: string[] = [];
   for (const file of PROJECT_RULE_DOCS) {
     try {
-      const raw = readFileSync(path.join(dir, file), "utf8");
-      const body = stripFrontmatter(raw);
+      const body = loadPromptDoc(path.join(PROJECT_RULE_DOCS_RELATIVE_DIR, file));
       if (!body) continue;
       const marker = file
         .replace(/\.md$/, "")
@@ -41,13 +39,4 @@ export function loadProjectRuleDocsForPrompt(): string {
 
   cachedProjectRuleDocs = blocks.join("\n\n");
   return cachedProjectRuleDocs;
-}
-
-function stripFrontmatter(content: string): string {
-  if (!content.startsWith("---")) return content.trim();
-  const end = content.indexOf("\n---", 3);
-  if (end === -1) return content.trim();
-  const afterFence = content.indexOf("\n", end + 1);
-  if (afterFence === -1) return "";
-  return content.slice(afterFence + 1).trim();
 }

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { WebsiteSpec } from "../project/project-state.schema";
+import { loadPromptDoc } from "./prompt-template-store.server";
 
 const INIT_PROMPT_LAYERS_RELATIVE_PATH = "templates/init-prompt";
 const MANIFEST_FILE = "manifest.json";
@@ -19,20 +20,6 @@ type LoadedLayer = {
   body?: string;
   dynamic: boolean;
 };
-
-/**
- * Strip a leading YAML frontmatter block (--- ... ---) used to carry
- * human-facing warnings/metadata that must NOT reach the model. Everything
- * after the closing fence is the prompt body.
- */
-function stripFrontmatter(content: string): string {
-  if (!content.startsWith("---")) return content.trim();
-  const end = content.indexOf("\n---", 3);
-  if (end === -1) return content.trim();
-  const afterFence = content.indexOf("\n", end + 1);
-  if (afterFence === -1) return "";
-  return content.slice(afterFence + 1).trim();
-}
 
 function resolveLayersDir(): string {
   return path.resolve(process.cwd(), INIT_PROMPT_LAYERS_RELATIVE_PATH);
@@ -89,8 +76,9 @@ export class PromptLayerStore {
         continue;
       }
       try {
-        const raw = await readFile(path.join(dir, entry.file), "utf8");
-        const body = stripFrontmatter(raw);
+        const body = loadPromptDoc(
+          path.join(INIT_PROMPT_LAYERS_RELATIVE_PATH, entry.file),
+        );
         if (!body) {
           console.warn(
             `[init-prompt] layer ${entry.marker} (${entry.file}) is empty after frontmatter strip; skipped.`,

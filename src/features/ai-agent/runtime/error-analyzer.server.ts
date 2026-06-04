@@ -3,6 +3,7 @@ import path from "node:path";
 import type { ChatCompletionsProvider } from "../openai/chat-completions-provider.server";
 import { patchResultProviderSchema } from "../openai/schemas";
 import type { FileOperation } from "../project/project-state.schema";
+import { loadPromptDoc } from "../agent/prompt-template-store.server";
 
 export type ErrorAnalysis = {
   tier: "code" | "config" | "system";
@@ -125,13 +126,7 @@ export class ErrorFixer {
       .map((f) => `--- ${f.path} ---\n${f.content}`)
       .join("\n\n");
 
-    const systemPrompt = `You are an expert TypeScript/Vite/React developer fixing a dev server startup error.
-The project uses TanStack Start, Vite, React, TailwindCSS, and TypeScript.
-Internal imports use "@/" as the alias for "src/".
-Return a JSON patch with file operations to fix the error.
-Create new files only when necessary (e.g., missing module).
-Do NOT modify package.json unless a dependency is missing.
-Preserve existing code style and naming conventions.`;
+    const systemPrompt = loadPromptDoc("templates/maintenance/error-analyzer-system.md");
 
     const userPrompt = {
       errorLog: errorContext,

@@ -5,11 +5,12 @@ import { CODE_TOOL_LIMITS } from "../code-tool-registry.server";
 import { evaluateProjectRiskPolicy } from "./project-risk-policy.server";
 import { guardProjectPath, isProtectedProjectEnvPath, isStorefrontUiPath } from "./project-path-guard.server";
 import { getPreviewRestartRequirement } from "./preview-restart-policy.server";
+import { loadPromptDoc } from "../../agent/prompt-template-store.server";
 
 const PROTECTED_FILES = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb"]);
 const FORBIDDEN_SEGMENTS = new Set([".git", "node_modules", "dist", "build", ".next", ".tanstack"]);
 const SECRET_PATTERN = /(api[_-]?key|secret|token|password|private[_-]?key)\s*[:=]\s*["'][^"']{8,}["']/i;
-export const GENERATED_PROJECT_ENV_POLICY_MESSAGE = "Generated project .env is managed by the Builder app process and cannot be changed by the AI Agent.";
+export const GENERATED_PROJECT_ENV_POLICY_MESSAGE = loadPromptDoc("templates/policies/env-policy.md");
 
 export type PatchPolicyViolationCode =
   | "EMPTY_PATCH"

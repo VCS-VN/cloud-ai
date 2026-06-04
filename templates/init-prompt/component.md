@@ -16,7 +16,7 @@ SiteHeader MUST derive `const storeId = storeDetail?.id` from `const { storeDeta
 
 src/components/layout/site-footer.tsx - PRE-SEEDED. Storefront footer with Shop/Support/Company/Connect column groups in a responsive grid. Colors MUST come from DESIGN.md token utilities (e.g. the deep/dark surface + text-on-dark roles declared in DESIGN.md), never hardcoded hex — the footer must change tone with the project's DESIGN.md.
 
-src/components/layout/theme-toggle.tsx - PRE-SEEDED. ThemeToggle toggles document.documentElement.classList 'dark' and localStorage theme. SiteHeader must import and render it.
+src/components/layout/theme-toggle.tsx - PRE-SEEDED. ThemeToggle toggles document.documentElement.classList 'dark' and localStorage key `storefront-theme`. The generated storefront defaults to light theme unless the user explicitly toggles dark. SiteHeader must import and render it.
 
 src/components/layout/route-loading-bar.tsx - PRE-SEEDED. RouteLoadingBar uses useRouterState from @tanstack/react-router with select: state.status, visible only when status === 'pending'. Render a fixed-top progress indicator above the whole website that uses the DESIGN.md primary token (bg-primary), pointer-events-none, with opacity/transform transition, no layout shift, no minimum-duration timer, no hard reload fallback.
 

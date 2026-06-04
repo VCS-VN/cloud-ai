@@ -96,6 +96,7 @@ import {
 } from "../planning/design-intent-heuristic";
 import { applyTokenPatches } from "../code-tools/services/design-rule-patch-service.server";
 import { getProjectWorkspaceRoot } from "@/server/config/paths.server";
+import { loadPromptDoc, renderPromptDoc } from "./prompt-template-store.server";
 export type HandlePromptInput = {
   projectId: string;
   userId?: string;
@@ -648,7 +649,8 @@ export class AgentOrchestrator {
         yield { type: "file_changed", path: designPath, operation: "created" };
       }
       serverDesignGuidance =
-        "\n\nSERVER DESIGN (already written): DESIGN.md and blocks.json were generated for this vertical before the agentic loop. Commerce routes (home, products, product detail, cart, checkout, orders) are already seeded. Do NOT call project_create_file for DESIGN.md or commerce route files. Create src/routes/__root.tsx and src/components/layout/site-header.tsx, then patch pre-seeded routes/components with write/edit to match DESIGN.md and the taste skill.";
+        "\n\n" +
+        loadPromptDoc("templates/init-recovery/server-design-guidance.md");
     } else {
       console.warn(
         JSON.stringify({
@@ -1658,7 +1660,7 @@ export class AgentOrchestrator {
     try {
       for await (const event of this.deps.openAIProvider.streamText({
         model: this.deps.agentConfig.summaryModel,
-        system: `Write a 1-2 sentence user-facing confirmation in the SAME LANGUAGE as the user prompt. Refer to the storefront in product terms only ("your shop", "the homepage", "the products page"). Describe the OUTCOME and behavior change, NOT which files changed — the list of changed files is shown separately, so do not enumerate or name files. NEVER mention: file paths, environment variable names, schema names, tool names, model names, internal status codes, or technical taxonomy. Do not echo this instruction.`,
+        system: loadPromptDoc("templates/maintenance/post-run-summary.md"),
         input: {
           prompt: args.input.prompt,
           ok: args.validation.ok,
@@ -1743,6 +1745,10 @@ const CORE_STOREFRONT_FILES = [
   "src/routes/__root.tsx",
   "src/routes/index.tsx",
 ] as const;
+
+const REDESIGN_REWRITE_PROMPT = "templates/redesign/redesign-rewrite.md";
+const TOKEN_PATCH_REWRITE_PROMPT = "templates/redesign/token-patch-rewrite.md";
+const ANTI_SLOP_REPAIR_PROMPT = "templates/redesign/anti-slop-repair.md";
 
 function shouldInitializeProject(
   projectState: ProjectState,
@@ -1963,55 +1969,27 @@ function buildTokenPatchRewritePrompt(
   originalPrompt: string,
   appliedRoles: ReadonlyArray<string>,
 ): string {
-  return [
-    "User token-level update request:",
+  return renderPromptDoc(TOKEN_PATCH_REWRITE_PROMPT, {
     originalPrompt,
-    "",
-    `DESIGN.md has been patched in place for these roles only: ${appliedRoles.join(", ")}.`,
-    "All other roles (vibe, typography, spacing, radius, shadow, components, layout, responsive) remain unchanged. The DESIGN.md hash has changed because token values changed.",
-    "",
-    "Task: update only the storefront UI surfaces that read the patched roles, so they reflect the new token values via tailwind config / CSS variables / token mapping.",
-    "",
-    "Validation scope: changed-files (only affected UI surfaces).",
-    "Scope constraint: do NOT validate or modify unrelated storefront surfaces.",
-    "",
-    "1. Call project_read_design_rules to load the new DESIGN.md.",
-    "2. Refresh token mapping in src/styles/app.css when patched roles map to CSS variables.",
-    "3. Inspect existing UI files; identify references to the patched roles only.",
-    "4. Apply minimal patches; do NOT regenerate unrelated styles or sections.",
-    "5. Run project_run_validation after mutations; repair on failure.",
-  ].join("\n");
+    appliedRoles: appliedRoles.join(", "),
+  });
 }
 
 function buildRedesignRewritePrompt(
   originalPrompt: string,
   tokenHints?: ReadonlyArray<{ role: string; value: string }>,
 ): string {
-  const hintLines =
+  const tokenHintBlock =
     tokenHints && tokenHints.length > 0
       ? [
-          "",
-          "User-specified token values honored in the new DESIGN.md:",
+          "\n\nUser-specified token values honored in the new DESIGN.md:",
           ...tokenHints.map((h) => `   - ${h.role}: ${h.value}`),
-        ]
-      : [];
-  return [
-    "User redesign request:",
+        ].join("\n")
+      : "";
+  return renderPromptDoc(REDESIGN_REWRITE_PROMPT, {
     originalPrompt,
-    ...hintLines,
-    "",
-    "Task: redesign the storefront. You author DESIGN.md yourself, then rewrite the UI to match it.",
-    "",
-    "Validation scope: full-storefront (all customer-facing UI must comply with the new DESIGN.md).",
-    "",
-    "1. FIRST call project_read_taste_skill (the anti-slop design skill) to load the authoritative UI taste guide.",
-    "2. REWRITE DESIGN.md via project_create_file: a new visual identity (palette as 15 hex color tokens in the YAML front-matter, typography, components, layout) driven by the skill and the request above. Honor any user-specified token values listed above. This file is the source of truth.",
-    "3. Call project_read_design_rules to load the DESIGN.md you just wrote (this is required before any UI mutation). The app.css token region is refreshed automatically when you write DESIGN.md.",
-    "4. Inspect existing UI files with project_get_file_tree and project_read_file before patching.",
-    "5. Update the storefront UI so it matches DESIGN.md (palette, typography, spacing, radii, components, layout): tailwind.config.ts, src/styles/* (if present), and the storefront components/routes. Use minimal patches per file.",
-    "6. Do NOT modify: src/data/** (product/category/sample-store data), src/app/cart-provider.tsx and state management, src/app/store-provider.tsx, package.json dependencies, route structure (only update className when strictly needed).",
-    "7. Run project_run_validation after mutations; repair on failure. Validate full storefront compliance with the new DESIGN.md before completion.",
-  ].join("\n");
+    tokenHints: tokenHintBlock,
+  });
 }
 
 function buildAntiSlopRepairPrompt(
@@ -2027,18 +2005,8 @@ function buildAntiSlopRepairPrompt(
     `   - ${path}:`,
     ...list.map((v) => `     - ${v.message} (matched: ${v.sample})`),
   ]);
-  return [
-    "Anti-slop design checks failed on the files you just changed. Fix ONLY these violations with minimal patches; do not redesign or touch unrelated code.",
-    "",
-    "DESIGN.md is the source of truth. Use only declared palette roles (primary/accent/highlight/deep + surface/foreground/semantic) via Tailwind semantic utilities — never raw color utilities like bg-purple-500 or text-rose-400, and never default AI-purple/violet gradients.",
-    "",
-    "Violations to fix:",
-    ...fileLines,
-    "",
-    "1. Call project_read_design_rules to reload DESIGN.md tokens.",
-    "2. Inspect each listed file with project_read_file before patching.",
-    "3. Replace off-palette colors with the matching DESIGN.md role utility.",
-    "4. Run project_run_validation after mutations.",
-  ].join("\n");
+  return renderPromptDoc(ANTI_SLOP_REPAIR_PROMPT, {
+    violations: fileLines.join("\n"),
+  });
 }
 

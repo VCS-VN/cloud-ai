@@ -1,3 +1,5 @@
+import { renderPromptDoc } from "../../agent/prompt-template-store.server";
+
 export type CommerceDataContractViolation = {
   filePath: string;
   message: string;
@@ -66,7 +68,9 @@ export function scanCommerceDataContractPolicy(input: {
 export function formatCommerceDataContractViolations(
   violations: readonly CommerceDataContractViolation[],
 ) {
-  return violations.map((v) => `${v.filePath}: ${v.message}`).join("\n");
+  return renderPromptDoc("templates/policies/data-contract-policy.md", {
+    violations: violations.map((v) => `${v.filePath}: ${v.message}`).join("\n"),
+  });
 }
 
 function isStorefrontContractPath(path: string) {

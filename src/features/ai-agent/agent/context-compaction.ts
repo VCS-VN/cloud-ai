@@ -1,15 +1,7 @@
 import type { ConversationMessage } from "./agentic-loop.types";
+import { loadPromptDoc } from "./prompt-template-store.server";
 
-const COMPACTION_PROMPT = `You are performing a CONTEXT CHECKPOINT COMPACTION.
-Create a handoff summary for another LLM that will resume the task.
-
-Include:
-- Current progress and key decisions made
-- Important context, constraints, or user preferences
-- What remains to be done (clear next steps)
-- Any critical data, examples, or references needed to continue
-
-Be concise but thorough. This summary will replace the conversation history.`;
+const COMPACTION_PROMPT = loadPromptDoc("templates/maintenance/context-compaction.md");
 
 const MAX_RECENT_MESSAGES = 10;
 const HARD_TRUNCATE_RECENT = 6;

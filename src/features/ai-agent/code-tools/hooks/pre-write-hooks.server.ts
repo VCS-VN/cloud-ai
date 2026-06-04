@@ -3,6 +3,14 @@ import type { CodeToolDefinition, ToolExecutionContext } from "../code-agent-typ
 import { evaluateProjectRiskPolicy } from "../services/project-risk-policy.server";
 import { GENERATED_PROJECT_ENV_POLICY_MESSAGE, isProtectedGeneratedEnvPath } from "../services/project-patch-service.server";
 import { isStorefrontUiPath } from "../services/project-path-guard.server";
+import { loadPromptDoc } from "../../agent/prompt-template-store.server";
+
+const [
+  READ_ONLY_MUTATION_POLICY_MESSAGE,
+  INSPECTION_REQUIRED_POLICY_MESSAGE,
+  SNAPSHOT_REQUIRED_POLICY_MESSAGE,
+  TASTE_SKILL_REQUIRED_POLICY_TEMPLATE,
+] = loadPromptDoc("templates/policies/pre-write-gates.md").split(/\n{2,}/);
 
 export function createPreWriteHooks(): ToolHook[] {
   return [
@@ -21,7 +29,7 @@ const sandboxGateHook: ToolHook = {
   applicable: (tool) => tool.category === "mutate",
   handler: async ({ tool, context }) => {
     if ((context as any).sandboxMode === "read-only") {
-      return { ok: false, error: { code: "POLICY_FORBIDDEN", message: "Mutation tools are not allowed in read-only mode.", recoverable: true } };
+      return { ok: false, error: { code: "POLICY_FORBIDDEN", message: READ_ONLY_MUTATION_POLICY_MESSAGE, recoverable: true } };
     }
     return { ok: true };
   },
@@ -49,7 +57,7 @@ const inspectionGateHook: ToolHook = {
   applicable: (tool) => tool.category === "mutate",
   handler: async ({ context }) => {
     if (!(context as any).inspectionCompleted) {
-      return { ok: false, error: { code: "INSPECTION_REQUIRED", message: "The agent must inspect project code before using mutation tools.", recoverable: true } };
+      return { ok: false, error: { code: "INSPECTION_REQUIRED", message: INSPECTION_REQUIRED_POLICY_MESSAGE, recoverable: true } };
     }
     return { ok: true };
   },
@@ -60,7 +68,7 @@ const snapshotGateHook: ToolHook = {
   applicable: (tool) => tool.category === "mutate",
   handler: async ({ context }) => {
     if (!(context as unknown as { __codeToolSnapshotId?: string }).__codeToolSnapshotId) {
-      return { ok: false, error: { code: "SNAPSHOT_REQUIRED", message: "Create a project snapshot before the first mutation tool call.", recoverable: true } };
+      return { ok: false, error: { code: "SNAPSHOT_REQUIRED", message: SNAPSHOT_REQUIRED_POLICY_MESSAGE, recoverable: true } };
     }
     return { ok: true };
   },
@@ -92,7 +100,10 @@ const tasteSkillGateHook: ToolHook = {
         ok: false,
         error: {
           code: "TASTE_SKILL_REQUIRED",
-          message: `Storefront design cannot be authored without the taste skill. Affected paths: ${designFacingPaths.join(", ")}. Call project_read_taste_skill first (or use a run where the Builder preloaded it).`,
+          message: TASTE_SKILL_REQUIRED_POLICY_TEMPLATE.replace(
+            "{{affectedPaths}}",
+            designFacingPaths.join(", "),
+          ),
           recoverable: true,
         },
       };

@@ -7,6 +7,7 @@
     { "marker": "PROJECT_RULE_PROTECTED_FILES", "file": "../project-rules/protected-files.md", "order": 23 },
     { "marker": "PROJECT_RULE_DATA_CONTRACT", "file": "../project-rules/data-contract.md", "order": 24 },
     { "marker": "PROJECT_RULE_UI_DESIGN", "file": "../project-rules/ui-design.md", "order": 25 },
+    { "marker": "PROJECT_RULE_LOADING_UX", "file": "../project-rules/loading-ux.md", "order": 26 },
     { "marker": "PACKAGES", "file": "packages.md", "order": 30 },
     { "marker": "PROVIDER", "file": "provider.md", "order": 40 },
     { "marker": "DATA", "file": "data.md", "order": 50 },

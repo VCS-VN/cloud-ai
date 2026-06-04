@@ -1176,6 +1176,8 @@ function themeToggleSource() {
 import { Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
+const THEME_STORAGE_KEY = 'storefront-theme'
+
 function getInitialTheme(): 'light' | 'dark' {
   if (typeof document !== 'undefined' && document.documentElement.classList.contains('dark')) return 'dark'
   return 'light'
@@ -1194,7 +1196,7 @@ export function ThemeToggle() {
     const next = theme === 'dark' ? 'light' : 'dark'
     setTheme(next)
     try {
-      localStorage.setItem('theme', next)
+      localStorage.setItem(THEME_STORAGE_KEY, next)
     } catch {}
     document.documentElement.classList.toggle('dark', next === 'dark')
   }
@@ -1767,7 +1769,7 @@ import '@/styles/app.css'
 
 export const Route = createRootRoute({ component: Root, notFoundComponent: NotFound })
 
-const THEME_INIT_SCRIPT = \`(function(){try{var t=localStorage.getItem('theme');if(!t){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}if(t==='dark'){document.documentElement.classList.add('dark');}else{document.documentElement.classList.remove('dark');}}catch(e){}})();\`
+const THEME_INIT_SCRIPT = \`(function(){try{var t=localStorage.getItem('storefront-theme')||'light';if(t==='dark'){document.documentElement.classList.add('dark');}else{document.documentElement.classList.remove('dark');}}catch(e){document.documentElement.classList.remove('dark');}})();\`
 
 function Root() {
   return (
