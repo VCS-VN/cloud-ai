@@ -225,6 +225,74 @@
   --app-icon-on-color-block: var(--app-on-color-block);
 }
 
+.preview-theme-isolate {
+  color-scheme: light;
+  --app-page-bg: var(--color-canvas);
+  --app-page-text: var(--color-ink);
+  --app-panel-bg: var(--color-canvas);
+  --app-panel-text: var(--color-ink);
+  --app-muted-text: rgb(0 0 0 / 0.62);
+  --app-subtle-text: rgb(0 0 0 / 0.42);
+  --app-bg: var(--app-page-bg);
+  --app-surface: var(--app-panel-bg);
+  --app-panel: var(--app-panel-bg);
+  --app-panel-strong: var(--color-surface-soft);
+  --app-control: var(--app-panel-bg);
+  --app-text: var(--app-page-text);
+  --app-muted: var(--app-muted-text);
+  --app-subtle: var(--app-subtle-text);
+  --app-border: var(--color-hairline);
+  --app-border-strong: var(--color-primary);
+  --app-accent: var(--color-primary);
+  --app-hero-text: var(--color-ink);
+  --app-hero-muted: rgb(0 0 0 / 0.64);
+  --app-hero-control: var(--color-canvas);
+  --app-hero-control-hover: var(--color-surface-soft);
+  --app-hero-control-text: var(--color-ink);
+  --app-hero-inverse: var(--color-primary);
+  --app-hero-inverse-text: var(--color-on-primary);
+  --app-hero-glow: radial-gradient(ellipse 60% 50% at 50% 40%, color-mix(in srgb, var(--color-block-lime) 25%, transparent), transparent);
+  --app-pill-bg: var(--color-primary);
+  --app-pill-hover: #222222;
+  --app-pill-text: var(--color-on-primary);
+  --app-composer-bg: var(--color-canvas);
+  --app-composer-text: var(--color-ink);
+  --app-composer-muted: rgb(0 0 0 / 0.62);
+  --app-composer-placeholder: rgb(0 0 0 / 0.42);
+  --app-composer-border: var(--color-hairline);
+  --app-composer-border-focus: var(--color-primary);
+  --app-composer-shadow: none;
+  --app-composer-ring: transparent;
+  --app-sidebar-bg: var(--color-canvas);
+  --app-sidebar-text: var(--color-ink);
+  --app-sidebar-muted: rgb(0 0 0 / 0.62);
+  --app-sidebar-subtle: rgb(0 0 0 / 0.42);
+  --app-sidebar-control: var(--color-surface-soft);
+  --app-sidebar-control-hover: var(--color-hairline-soft);
+  --app-sidebar-border: var(--color-hairline);
+  --app-dropdown-bg: var(--color-canvas);
+  --app-dropdown-text: var(--color-ink);
+  --app-dropdown-muted: rgb(0 0 0 / 0.62);
+  --app-dropdown-control-hover: var(--color-surface-soft);
+  --app-dropdown-control-active: var(--app-selected-bg);
+  --app-dropdown-border: var(--color-hairline);
+  --app-focus-ring: rgb(0 0 0 / 0.28);
+  --app-danger-bg: var(--color-block-coral);
+  --app-danger-text: var(--color-ink);
+  --app-color-block: var(--color-block-lilac);
+  --app-color-block-alt: var(--color-block-lime);
+  --app-on-primary: var(--color-on-primary);
+  --app-on-inverse: var(--color-inverse-ink);
+  --app-on-color-block: var(--color-ink);
+  --app-selected-bg: var(--color-primary);
+  --app-selected-text: var(--color-on-primary);
+  --app-icon: var(--app-page-text);
+  --app-icon-muted: var(--app-muted-text);
+  --app-icon-subtle: var(--app-subtle-text);
+  --app-icon-selected: var(--app-selected-text);
+  --app-icon-on-color-block: var(--app-on-color-block);
+}
+
 * {
   box-sizing: border-box;
 }

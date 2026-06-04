@@ -1219,7 +1219,7 @@ function PreviewWorkspace({
   const statusBadge = runtimeStatusBadge(runtimeState, previewStarting);
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--app-panel)] transition-colors duration-300">
+    <section className="preview-theme-isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--app-panel)] transition-colors duration-300">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-sm border border-[var(--app-border)] bg-[var(--app-surface)] transition-colors duration-300">
         <div className="flex h-11 shrink-0 items-center justify-between gap-sm border-b border-[var(--app-border)] bg-[var(--app-panel)] px-sm transition-colors duration-300">
           <div className="min-w-0">
@@ -1245,6 +1245,7 @@ function PreviewWorkspace({
             key={`${previewUrl}:${previewTokenState.refreshedAt ?? "ready"}:${previewReloadKey}`}
             src={previewUrl}
             className="h-full w-full border-0"
+            style={{ colorScheme: "light", backgroundColor: "var(--app-panel)" }}
             title="Project preview"
             sandbox="allow-scripts allow-same-origin allow-forms"
           />
