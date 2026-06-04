@@ -3,6 +3,7 @@ import type { ChatCompletionsProvider } from "../openai/chat-completions-provide
 import type { AgentRun, ProjectState } from "../project/project-state.schema";
 import {
   createClarificationStructuredThinkingResult,
+  createDefaultClarificationOptions,
   createHeuristicThinkingResult,
 } from "./thinking-fallback";
 import { preflightUserPrompt } from "./thinking-preflight";
@@ -170,6 +171,7 @@ function structuredThinkingToLegacyResult(
     pickNonEmpty(result.userWish.explicitRequests[0], input.userPrompt, result.normalizedTask.title) ??
     "Process the user prompt.";
   const acceptanceCriteria = filterNonEmpty(result.normalizedTask.acceptanceCriteria);
+  const clarificationOptions = result.projectAction.clarificationOptions;
   const safeAcceptanceCriteria = acceptanceCriteria.length > 0
     ? acceptanceCriteria
     : [result.normalizedTask.description];
@@ -288,6 +290,7 @@ function structuredThinkingToLegacyResult(
               result.projectAction.clarificationQuestion ??
               "Please confirm before continuing.",
             reason: result.risk.reasons.join("; "),
+            options: clarificationOptions,
           }
         : undefined,
       storefront: {
@@ -302,6 +305,7 @@ function structuredThinkingToLegacyResult(
           clarificationReason: needsClarification
             ? result.risk.reasons.join("; ")
             : null,
+          clarificationOptions: needsClarification ? clarificationOptions : [],
         },
         acceptanceCriteria: safeAcceptanceCriteria,
         implementationBias: {
@@ -411,6 +415,7 @@ function buildBlockedThinkingResult(
         question:
           "Please resubmit your request without bypassing security policies.",
         reason,
+        options: createDefaultClarificationOptions(),
       },
     },
   };

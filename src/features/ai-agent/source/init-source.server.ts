@@ -641,6 +641,7 @@ export type StoreDetail = {
 
 export const storeSlug = import.meta.env.VITE_STORE_SLUG?.trim() || ''
 export const hasStoreSlug = storeSlug.length > 0
+export const isClientRuntime = typeof window !== 'undefined'
 
 export async function getStoreDetail(slug = storeSlug) {
   const response = await apiClient.get<StoreDetail>(\`/api/v1/stores/\${slug}\`)
@@ -651,7 +652,7 @@ export function useStoreDetail() {
   return useQuery({
     queryKey: ['store-detail', storeSlug],
     queryFn: () => getStoreDetail(storeSlug),
-    enabled: hasStoreSlug,
+    enabled: isClientRuntime && hasStoreSlug,
     retry: 1,
   })
 }
@@ -661,7 +662,7 @@ export function useStoreDetail() {
 function productsListQuerySource() {
   return `import { useInfiniteQuery } from '@tanstack/react-query'
 import { apiClient } from '@/services/http/client'
-import { hasStoreSlug } from '@/services/store/use-store-detail'
+import { hasStoreSlug, isClientRuntime } from '@/services/store/use-store-detail'
 import { products as sampleProducts } from '@/data/products'
 
 export const PRODUCTS_PAGE_SIZE = 12
@@ -726,7 +727,7 @@ export function useProductsList(params: ProductsListParams = {}): UseProductsLis
       const loaded = allPages.reduce((sum, page) => sum + page.data.length, 0)
       return loaded < lastPage.total ? allPages.length + 1 : undefined
     },
-    enabled: hasStoreSlug && Boolean(params.storeId),
+    enabled: isClientRuntime && hasStoreSlug && Boolean(params.storeId),
   })
 
   if (!hasStoreSlug) {
@@ -769,7 +770,7 @@ export function useProductsList(params: ProductsListParams = {}): UseProductsLis
 function productDetailQuerySource() {
   return `import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { apiClient } from '@/services/http/client'
-import { hasStoreSlug, type StoreDetail } from '@/services/store/use-store-detail'
+import { hasStoreSlug, isClientRuntime, type StoreDetail } from '@/services/store/use-store-detail'
 import { products as sampleProducts } from '@/data/products'
 import type { Product } from '@/services/store/use-products-list'
 
@@ -792,7 +793,7 @@ export function useProductDetail(productId?: string): UseQueryResult<ProductDeta
   const query = useQuery({
     queryKey: ['product-detail', productId],
     queryFn: () => getProductDetail(productId ?? ''),
-    enabled: hasStoreSlug && Boolean(productId),
+    enabled: isClientRuntime && hasStoreSlug && Boolean(productId),
   })
   if (!hasStoreSlug) {
     const list = sampleProducts as unknown as Product[]
@@ -816,7 +817,7 @@ export function useProductDetail(productId?: string): UseQueryResult<ProductDeta
 function categoriesListQuerySource() {
   return `import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { apiClient } from '@/services/http/client'
-import { hasStoreSlug } from '@/services/store/use-store-detail'
+import { hasStoreSlug, isClientRuntime } from '@/services/store/use-store-detail'
 import { categories as sampleCategoryNames } from '@/data/categories'
 
 export type Category = {
@@ -850,7 +851,7 @@ export function useCategoriesList(storeId?: string): UseQueryResult<CategoriesLi
   const query = useQuery({
     queryKey: ['categories-list', storeId],
     queryFn: () => getCategoriesList(storeId),
-    enabled: hasStoreSlug && Boolean(storeId),
+    enabled: isClientRuntime && hasStoreSlug && Boolean(storeId),
   })
   if (!hasStoreSlug) {
     return {
@@ -886,7 +887,7 @@ export function hasSiteHeaderSearchSuggestionContract(source: string) {
 export function productSuggestionsQuerySource() {
   return `import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/services/http/client'
-import { hasStoreSlug } from '@/services/store/use-store-detail'
+import { hasStoreSlug, isClientRuntime } from '@/services/store/use-store-detail'
 import { products as sampleProducts } from '@/data/products'
 
 export type ProductSuggestionsList = {
@@ -945,7 +946,7 @@ export function useProductSuggestions(
   params: ProductSuggestionsParams = {},
 ): UseProductSuggestionsResult {
   const trimmed = (params.query ?? '').trim()
-  const enabled = hasStoreSlug && Boolean(params.storeId) && trimmed.length > 0
+  const enabled = isClientRuntime && hasStoreSlug && Boolean(params.storeId) && trimmed.length > 0
   const query = useQuery({
     queryKey: ['product-suggestions', params.storeId, trimmed],
     queryFn: () => getProductSuggestions({ storeId: params.storeId, query: trimmed }),
@@ -1197,7 +1198,8 @@ export const sampleStore: StoreDetail = ${sample}
 function storeProviderSource() {
   return `import type { PropsWithChildren } from 'react'
 import { createContext, useContext, useMemo } from 'react'
-import { useStoreDetail, hasStoreSlug, type StoreDetail } from '@/services/store/use-store-detail'
+import { LoaderCircle, Store } from 'lucide-react'
+import { useStoreDetail, hasStoreSlug, isClientRuntime, type StoreDetail } from '@/services/store/use-store-detail'
 import { sampleStore } from '@/data/sample-store'
 
 type StoreContextValue = {
@@ -1226,7 +1228,7 @@ export function StoreProvider({ children }: PropsWithChildren) {
     }
   }, [query.data, query.error, query.isLoading, query.refetch])
 
-  if (hasStoreSlug && query.isLoading) {
+  if (hasStoreSlug && (!isClientRuntime || query.isLoading)) {
     return <StorefrontLoadingScreen />
   }
 
@@ -1249,60 +1251,26 @@ export function StoreProvider({ children }: PropsWithChildren) {
 
 function StorefrontLoadingScreen() {
   return (
-    <div className='relative min-h-screen overflow-hidden bg-background px-4 py-10'>
-      <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,var(--primary)_0,transparent_32%),radial-gradient(circle_at_bottom_right,var(--highlight)_0,transparent_28%)] opacity-10' />
-      <div className='pointer-events-none absolute inset-x-0 top-0 h-1 overflow-hidden bg-muted'>
-        <div className='h-full w-1/3 animate-[store-loading-bar_1.25s_ease-in-out_infinite] bg-primary' />
+    <div className='flex min-h-screen items-center justify-center bg-background px-4 text-foreground'>
+      <div className='flex max-w-sm flex-col items-center gap-5 text-center'>
+        <div className='relative flex h-20 w-20 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary shadow-[0_18px_50px_rgba(0,0,0,0.12)]'>
+          <span className='absolute inset-0 rounded-full border border-primary/20 animate-ping' />
+          <Store className='relative h-9 w-9' aria-hidden='true' />
+          <LoaderCircle className='absolute -right-1 -top-1 h-6 w-6 animate-spin rounded-full bg-background p-1 text-primary' aria-hidden='true' />
+        </div>
+        <div className='space-y-2'>
+          <p className='text-xs font-semibold uppercase tracking-[0.22em] text-primary'>Loading store</p>
+          <h1 className='text-2xl font-semibold tracking-tight'>Fetching live store data</h1>
+          <p className='text-sm leading-6 text-muted-foreground'>
+            Connecting to the selected store and preparing products, categories, and cart data.
+          </p>
+        </div>
+        <div className='h-1.5 w-44 overflow-hidden rounded-full bg-muted' aria-hidden='true'>
+          <div className='h-full w-16 animate-[store-loading-bar_1.25s_ease-in-out_infinite] rounded-full bg-primary' />
+        </div>
+        <span className='sr-only'>Loading live store data</span>
       </div>
-      <div className='relative mx-auto max-w-7xl space-y-8'>
-        <div className='flex items-center justify-between gap-4'>
-          <div className='h-8 w-40 animate-pulse rounded-full bg-muted/70' />
-          <div className='hidden gap-3 md:flex'>
-            {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className='h-5 w-20 animate-pulse rounded-full bg-muted/60' />
-            ))}
-          </div>
-        </div>
-        <div className='grid items-center gap-8 lg:grid-cols-[1.1fr_0.9fr]'>
-          <div className='space-y-5'>
-            <div className='inline-flex items-center gap-2 rounded-full border bg-card px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary shadow-sm'>
-              <span className='relative flex h-2.5 w-2.5'>
-                <span className='absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60' />
-                <span className='relative inline-flex h-2.5 w-2.5 rounded-full bg-primary' />
-              </span>
-              Loading store
-            </div>
-            <div className='h-16 w-full max-w-xl animate-pulse rounded-3xl bg-muted/70' />
-            <div className='h-5 w-full max-w-lg animate-pulse rounded-full bg-muted/60' />
-            <div className='h-5 w-2/3 animate-pulse rounded-full bg-muted/50' />
-            <div className='flex gap-3 pt-2'>
-              <div className='h-11 w-32 animate-pulse rounded-full bg-primary/30' />
-              <div className='h-11 w-36 animate-pulse rounded-full border bg-card' />
-            </div>
-          </div>
-          <div className='relative h-80 overflow-hidden rounded-[2rem] border bg-card shadow-xl'>
-            <div className='absolute inset-0 animate-pulse bg-gradient-to-br from-primary/20 via-highlight/20 to-deep/20' />
-            <div className='absolute inset-x-8 bottom-8 space-y-3 rounded-2xl border bg-background/80 p-4 backdrop-blur'>
-              <div className='h-4 w-2/3 animate-pulse rounded-full bg-muted' />
-              <div className='h-4 w-full animate-pulse rounded-full bg-muted/70' />
-              <div className='h-9 w-28 animate-pulse rounded-full bg-primary/30' />
-            </div>
-          </div>
-        </div>
-        <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-4'>
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className='overflow-hidden rounded-2xl border bg-card shadow-sm'>
-              <div className='h-40 animate-pulse bg-muted/60' />
-              <div className='space-y-3 p-4'>
-                <div className='h-4 w-3/4 animate-pulse rounded-full bg-muted' />
-                <div className='h-4 w-1/2 animate-pulse rounded-full bg-muted/70' />
-                <div className='h-9 w-full animate-pulse rounded-full bg-primary/20' />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <style>{'@keyframes store-loading-bar { 0% { transform: translateX(-110%); } 50% { transform: translateX(120%); } 100% { transform: translateX(320%); } }'}</style>
+      <style>{'@keyframes store-loading-bar { 0% { transform: translateX(-120%); } 50% { transform: translateX(110%); } 100% { transform: translateX(320%); } }'}</style>
     </div>
   )
 }
@@ -1336,6 +1304,7 @@ type AuthContextValue = {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
+const isClientRuntime = typeof window !== 'undefined'
 
 async function getProfile() {
   const response = await apiClient.get<AuthProfile>('/api/v1/auth/profile')
@@ -1348,7 +1317,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     queryKey: ['auth-profile'],
     queryFn: getProfile,
     retry: false,
-    enabled: !isLoggedOut,
+    enabled: isClientRuntime && !isLoggedOut,
   })
 
   const isUnauthorized = Boolean(query.error && typeof query.error === 'object' && 'status' in query.error && query.error.status === 401)

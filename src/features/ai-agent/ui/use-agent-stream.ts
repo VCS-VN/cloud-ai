@@ -39,7 +39,7 @@ export function streamActionReducer(state: ChatUIState, action: StreamAction): C
     case "optimistic":
       return {
         ...state,
-        messages: [...state.messages, action.userMessage],
+        messages: upsertById(state.messages, action.userMessage),
         activeRun: {
           runId: action.userMessage.id, // temp id until POST returns real runId
           status: "streaming",
@@ -65,6 +65,14 @@ export function streamActionReducer(state: ChatUIState, action: StreamAction): C
     default:
       return state;
   }
+}
+
+function upsertById(messages: Message[], message: Message): Message[] {
+  const index = messages.findIndex((item) => item.id === message.id);
+  if (index < 0) return [...messages, message];
+  const next = [...messages];
+  next[index] = message;
+  return next;
 }
 
 export type UseAgentStreamArgs = {

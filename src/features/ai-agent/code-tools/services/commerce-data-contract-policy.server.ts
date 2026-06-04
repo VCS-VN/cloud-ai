@@ -13,6 +13,10 @@ const CONTRACTS: ReadonlyArray<{
   requiredSnippets: readonly string[];
 }> = [
   {
+    path: "src/routes/__root.tsx",
+    requiredSnippets: ["HeadContent", "Scripts", "<Scripts />", "createRootRoute", "notFoundComponent"],
+  },
+  {
     path: "src/routes/products/index.tsx",
     requiredSnippets: ["useProductsList", "useCategoriesList"],
   },
@@ -32,6 +36,10 @@ const CONTRACTS: ReadonlyArray<{
     path: "src/components/store/product-grid.tsx",
     requiredSnippets: ["useProductsList"],
   },
+  {
+    path: "src/app/store-provider.tsx",
+    requiredSnippets: ["useStoreDetail", "hasStoreSlug", "lucide-react", "StorefrontLoadingScreen"],
+  },
 ];
 
 export function scanCommerceDataContractPolicy(input: {
@@ -47,6 +55,14 @@ export function scanCommerceDataContractPolicy(input: {
         filePath: normalized,
         message:
           "Routes and storefront components must use store service hooks, not direct @/data products/categories imports.",
+      });
+    }
+
+    if (normalized === "src/app/store-provider.tsx" && hasForbiddenStorefrontLoadingSkeleton(file.content)) {
+      violations.push({
+        filePath: normalized,
+        message:
+          "StorefrontLoadingScreen must use a branded animated icon loading UI, not skeleton components, animate-pulse placeholders, gray bars/boxes, placeholder cards, or simulated storefront layouts.",
       });
     }
 
@@ -76,7 +92,15 @@ export function formatCommerceDataContractViolations(
 function isStorefrontContractPath(path: string) {
   return (
     path.startsWith("src/routes/") ||
+    path === "src/app/store-provider.tsx" ||
     path.startsWith("src/components/store/") ||
     path === "src/components/layout/site-header.tsx"
   );
+}
+
+function hasForbiddenStorefrontLoadingSkeleton(content: string) {
+  return content.includes("animate-pulse")
+    || /\bSkeleton\b/.test(content)
+    || /\bskeleton\b/i.test(content)
+    || /Array\.from\s*\(\s*\{\s*length\s*:/.test(content);
 }

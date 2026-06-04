@@ -69,6 +69,9 @@ export async function executeProjectTool(input: {
     for (const hook of postWriteHooks) {
       if (!hook.applicable(tool, args)) continue;
       const hookResult = await hook.handler({ tool, context: input.context, args });
+      if (!hookResult.ok) {
+        return toolError(input.context, tool.name, tool.category, startedAt, hookResult.error.code, hookResult.error.message, hookResult.error.recoverable);
+      }
       if (hookResult.warnings?.length) warnings.push(...hookResult.warnings);
     }
     return warnings.length ? { ...result, warnings } : result;

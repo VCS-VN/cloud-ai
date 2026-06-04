@@ -145,9 +145,17 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
 
     case "option.selected": {                          // T032
       const { messageId, optionId } = event;
+      const messages = event.userMessage
+        ? upsertMessage(state.messages, event.userMessage)
+        : state.messages;
       return {
         ...state,
-        messages: state.messages.map((m) =>
+        activeRun: {
+          runId: event.runId,
+          status: "streaming",
+          skeleton: { phase: "starting", label: CLIENT_SKELETON_LABELS.starting },
+        },
+        messages: messages.map((m) =>
           m.id === messageId
             ? { ...m, metadata: { ...m.metadata, selectedOptionId: optionId } as AgentQuestionMetadata }
             : m,

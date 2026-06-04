@@ -16,6 +16,7 @@ type ProjectMessagesPanelProps = {
   error?: string;
   onLoadOlder?: () => void;
   onRetryMessage?: (message: Message) => void;
+  onSelectOption?: (messageId: string, optionId: string) => Promise<void>;
 };
 
 const STICK_TO_BOTTOM_THRESHOLD = 72;
@@ -57,6 +58,7 @@ export function ProjectMessagesPanel({
   error,
   onLoadOlder,
   onRetryMessage,
+  onSelectOption,
 }: ProjectMessagesPanelProps) {
   const viewportRef = useRef<HTMLElement | null>(null);
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -186,7 +188,11 @@ export function ProjectMessagesPanel({
           {renderItems.map((item) =>
             item.type === "single" ? (
               <div key={item.message.id} data-message-bubble="true">
-                <MessageBubble message={item.message} onRetry={onRetryMessage} />
+                <MessageBubble
+                  message={item.message}
+                  onRetry={onRetryMessage}
+                  onSelectOption={onSelectOption}
+                />
               </div>
             ) : (
               <div
@@ -196,7 +202,11 @@ export function ProjectMessagesPanel({
               >
                 {item.messages.map((message) => (
                   <div key={message.id} data-message-bubble="true">
-                    <MessageBubble message={message} onRetry={onRetryMessage} />
+                    <MessageBubble
+                      message={message}
+                      onRetry={onRetryMessage}
+                      onSelectOption={onSelectOption}
+                    />
                   </div>
                 ))}
               </div>

@@ -350,11 +350,23 @@ export class MessageService {
             milestone.content,
             "completed",
             userId,
+            undefined,
+            milestone.metadata ?? undefined,
           );
         }
       }
 
       clearStillWorking();
+
+      const latestRun = await this.runStore.load(runId, userId).catch(() => undefined);
+      if (latestRun?.status === "awaiting_input") {
+        await this.projectRepository.updateProjectProcessingState(projectId, "idle", userId);
+        publishRunEvent(projectId, runId, {
+          type: "run.awaiting_input",
+          runId,
+        });
+        return;
+      }
 
       if (runError) {
         await persistErrorOutcome(runError.code, runError.rawMessage);
@@ -488,7 +500,10 @@ export class MessageService {
         parentMessageId,
         runId,
         kind,
-        metadata: kind === "agent_question" ? metadata ?? null : null,
+        metadata:
+          kind === "agent_question" || kind === "clarification"
+            ? metadata ?? null
+            : null,
         provider: "agent-orchestrator",
         createdAt: now,
         updatedAt: now,
@@ -503,10 +518,15 @@ export class MessageService {
       content,
       processingStatus,
       createdAt: now,
+      metadata:
+        kind === "agent_question" || kind === "clarification"
+          ? metadata ?? null
+          : null,
     });
 
-    // T024: Emit run.awaiting_input when agent_question milestone is persisted
-    if (kind === "agent_question") {
+    // Interactive agent questions and selectable clarifications pause the run
+    // until the user chooses an option or types a custom answer.
+    if (kind === "agent_question" || kind === "clarification") {
       publishRunEvent(projectId, runId, {
         type: "run.awaiting_input",
         runId,
@@ -532,10 +552,13 @@ export class MessageService {
         content: message.content,
         processingStatus: message.processingStatus,
         createdAt: message.createdAt,
+        metadata: message.metadata ?? null,
       });
     }
     const terminal: RunStreamEvent =
-      run.status === "failed"
+      run.status === "awaiting_input"
+        ? { type: "run.awaiting_input", runId }
+        : run.status === "failed"
         ? {
             type: "run.failed",
             runId,
@@ -610,6 +633,8 @@ export class MessageService {
     runId: string;
     messageId: string;
     selectedOptionId: string;
+    userMessage: Message;
+    stream: { url: string };
     status: "streaming";
   }> {
     const run = await this.runStore.load(runId, userId).catch(() => undefined);
@@ -622,9 +647,11 @@ export class MessageService {
     }
 
     const messages = await this.messageRepository.listMessagesByRunId(runId, userId);
-    const questionMessage = messages.findLast((m) => m.kind === "agent_question");
+    const questionMessage = messages.findLast(
+      (m) => m.kind === "agent_question" || m.kind === "clarification",
+    );
     if (!questionMessage) {
-      throw Object.assign(new Error("No agent question found for this run"), {
+      throw Object.assign(new Error("No interactive question found for this run"), {
         code: "INVALID_OPTION" as const,
       });
     }
@@ -642,8 +669,15 @@ export class MessageService {
       });
     }
 
-    const option = metadata.options.find((o) => o.id === optionId);
-    if (!option) {
+    const selectedOptionIds =
+      metadata.questionType === "optional_pages"
+        ? optionId.split(",").map((id) => id.trim()).filter(Boolean)
+        : [optionId];
+    const selectedOptions = selectedOptionIds
+      .map((id) => metadata.options.find((option) => option.id === id))
+      .filter((option): option is (typeof metadata.options)[number] => Boolean(option));
+
+    if (selectedOptions.length !== selectedOptionIds.length) {
       throw Object.assign(new Error(`Option "${optionId}" not found in question options`), {
         code: "INVALID_OPTION" as const,
       });
@@ -659,8 +693,40 @@ export class MessageService {
       updatedAt: new Date().toISOString(),
     } as Partial<Message>);
 
-    // Resume run: awaiting_input → streaming
-    await this.runStore.update(run, { status: "streaming" });
+    const selectedAnswer = buildSelectedOptionUserMessage(metadata, selectedOptions);
+    const now = new Date().toISOString();
+    const userMessage = await this.messageRepository.saveMessage(
+      {
+        id: crypto.randomUUID(),
+        userId,
+        projectId,
+        role: "user",
+        content: selectedAnswer,
+        status: "completed",
+        processingStatus: "completed",
+        parentMessageId: questionMessage.id,
+        runId,
+        createdAt: now,
+        updatedAt: now,
+      },
+      userId,
+    );
+
+    await this.runStore.update(run, {
+      status: "streaming",
+      parentMessageId: userMessage.id,
+      userPrompt: selectedAnswer,
+    });
+
+    await this.projectRepository.updateProjectProcessingState(
+      projectId,
+      "processing",
+      userId,
+      runId,
+      now,
+    );
+
+    reserveRunProducer(projectId, runId);
 
     // Broadcast option.selected to all tabs
     publishRunEvent(projectId, runId, {
@@ -668,12 +734,15 @@ export class MessageService {
       runId,
       messageId: questionMessage.id,
       optionId,
+      userMessage,
     });
 
     return {
       runId,
       messageId: questionMessage.id,
       selectedOptionId: optionId,
+      userMessage,
+      stream: { url: getProjectRunStreamUrl(projectId, runId) },
       status: "streaming",
     };
   }
@@ -720,6 +789,28 @@ export class MessageService {
 
     return { newRunId: newRun.id, streamUrl: getProjectRunStreamUrl(projectId, newRun.id) };
   }
+}
+
+function buildSelectedOptionUserMessage(
+  metadata: AgentQuestionMetadata,
+  selectedOptions: Array<{ label: string; description: string }>,
+): string {
+  if (metadata.questionType === "clarification_options") {
+    const option = selectedOptions[0];
+    return option
+      ? `Selected option: ${option.label}\n\n${option.description}`
+      : "Selected a clarification option.";
+  }
+
+  if (metadata.questionType === "optional_pages") {
+    const labels = selectedOptions.map((option) => option.label).join(", ");
+    return `Selected optional pages: ${labels}`;
+  }
+
+  const option = selectedOptions[0];
+  return option
+    ? `Selected design direction: ${option.label}\n\n${option.description}`
+    : "Selected an option.";
 }
 
 function normalizeCursor(cursor?: MessageCursor): MessageCursor {

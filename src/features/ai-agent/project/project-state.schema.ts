@@ -261,7 +261,25 @@ export type BuilderIntent = {
   };
   shouldAskClarifyingQuestion: boolean;
   clarificationQuestion: string | null;
+  clarificationOptions?: ClarificationOption[];
   riskLevel: "low" | "medium" | "high";
+};
+
+export type ClarificationOption = {
+  id: string;
+  label: string;
+  description: string;
+  pros: string[];
+  cons: string[];
+  recommended: boolean;
+};
+
+export type ClarificationEventMetadata = {
+  questionType: "clarification_options";
+  options: ClarificationOption[];
+  selectedOptionId: string | null;
+  customAnswerAllowed?: boolean;
+  source?: "thinking" | "execution_fallback";
 };
 
 export type WebsiteSpec = {
@@ -439,7 +457,7 @@ export type AgentStreamEvent =
         priority: "must_have" | "should_have" | "nice_to_have";
       }>;
     }
-  | { type: "thinking_needs_clarification"; runId: string; question: string; reason: string }
+  | { type: "thinking_needs_clarification"; runId: string; question: string; reason: string; metadata?: ClarificationEventMetadata | null }
   | {
       type: "thinking_completed";
       runId: string;
@@ -464,7 +482,7 @@ export type AgentStreamEvent =
       conversionGoal?: string;
     }
   | { type: "intent_detected"; intent: BuilderIntent }
-  | { type: "clarification_required"; runId?: string; question: string; reason?: string }
+  | { type: "clarification_required"; runId?: string; question: string; reason?: string; metadata?: ClarificationEventMetadata | null }
   | { type: "context_retrieved"; files: Array<{ path: string; reason: string }> }
   | { type: "plan_created"; plan: ChangePlan }
   | { type: "source_generation_started"; message: string }

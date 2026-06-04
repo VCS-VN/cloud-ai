@@ -2,6 +2,8 @@ import type {
   AgentStreamEvent,
   BuilderIntent,
   ChangePlan,
+  ClarificationEventMetadata,
+  ClarificationOption,
   FileOperation,
   ProjectState,
   ValidationResult,
@@ -67,7 +69,7 @@ import {
 import { ValidationService } from "../source/validation-service.server";
 import { toSafeAgentError } from "./agent-errors";
 import { runThinkingLayer } from "../thinking/thinking-orchestrator.server";
-import { createHeuristicThinkingResult } from "../thinking/thinking-fallback";
+import { createDefaultClarificationOptions, createHeuristicThinkingResult } from "../thinking/thinking-fallback";
 import {
   mapThinkingToCompletedEvent,
   mapThinkingToUserWishEvent,
@@ -183,6 +185,10 @@ export class AgentOrchestrator {
           reason:
             thinking.downstreamTask.clarification?.reason ??
             "Thinking layer requires clarification.",
+          metadata: buildClarificationMetadata(
+            thinking.downstreamTask.clarification?.options,
+            "thinking",
+          ),
         };
         await this.deps.runStore.waitForClarification(run, {
           thinking: toThinkingRunSummary(thinking),
@@ -216,6 +222,10 @@ export class AgentOrchestrator {
           question:
             intent.clarificationQuestion ??
             "Please confirm before applying this high-risk storefront change.",
+          metadata: buildClarificationMetadata(
+            intent.clarificationOptions,
+            "execution_fallback",
+          ),
         };
         await this.deps.runStore.waitForClarification(run, {
           intent,
@@ -272,6 +282,7 @@ export class AgentOrchestrator {
             type: "clarification_required",
             question:
               "Bạn muốn đổi token nào? Hãy nêu rõ giá trị cụ thể (ví dụ: 'đổi màu primary thành #1F3A2E' hoặc 'đổi font sang \"Crimson Pro\"').",
+            metadata: buildClarificationMetadata(undefined, "execution_fallback"),
           };
           await this.deps.runStore.waitForClarification(run, {
             intent,
@@ -293,6 +304,7 @@ export class AgentOrchestrator {
               patchResult.code === "DESIGN_PATCH_TOKEN_ROLE_NOT_FOUND"
                 ? `Không tìm thấy role tương ứng trong DESIGN.md (${patchResult.message}). Nếu bạn muốn thêm role mới, hãy gửi prompt redesign tổng thể.`
                 : patchResult.message,
+            metadata: buildClarificationMetadata(undefined, "execution_fallback"),
           };
           await this.deps.runStore.waitForClarification(run, {
             intent,
@@ -1744,7 +1756,23 @@ function builderIntentFromThinking(thinking: ThinkingResult): BuilderIntent {
       Boolean(clarification?.required) ||
       thinking.riskAssessment.requiresUserConfirmation,
     clarificationQuestion: clarification?.question ?? null,
+    clarificationOptions: clarification?.options,
     riskLevel: thinking.riskAssessment.level,
+  };
+}
+
+function buildClarificationMetadata(
+  options: ClarificationOption[] | undefined,
+  source: ClarificationEventMetadata["source"],
+): ClarificationEventMetadata {
+  const nextOptions =
+    options && options.length > 0 ? options : createDefaultClarificationOptions();
+  return {
+    questionType: "clarification_options",
+    options: nextOptions,
+    selectedOptionId: null,
+    customAnswerAllowed: true,
+    source,
   };
 }
 
@@ -2032,4 +2060,3 @@ function buildAntiSlopRepairPrompt(
     violations: fileLines.join("\n"),
   });
 }
-

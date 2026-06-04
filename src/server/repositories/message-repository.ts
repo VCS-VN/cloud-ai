@@ -25,6 +25,7 @@ function toMessage(row: ProjectMessageRow): Message {
     parentMessageId: row.parentMessageId ?? undefined,
     runId: row.runId ?? undefined,
     kind: (row.kind as AgentMessageKind | null) ?? undefined,
+    metadata: (row.metadata as Message["metadata"] | null) ?? null,
     provider: row.provider ?? undefined,
     providerResponseId: row.providerResponseId ?? undefined,
     errorMessage: row.errorMessage ?? undefined,
@@ -59,6 +60,7 @@ export class PgProjectMessageRepository implements ProjectMessageRepository {
         provider: message.provider,
         providerResponseId: message.providerResponseId,
         errorMessage: message.errorMessage,
+        metadata: message.metadata ?? null,
         startedAt: message.startedAt ? new Date(message.startedAt) : null,
         completedAt: message.completedAt ? new Date(message.completedAt) : null,
         createdAt: new Date(message.createdAt),
@@ -106,6 +108,7 @@ export class PgProjectMessageRepository implements ProjectMessageRepository {
         | "provider"
         | "providerResponseId"
         | "errorMessage"
+        | "metadata"
         | "startedAt"
         | "completedAt"
         | "updatedAt"
@@ -126,6 +129,7 @@ export class PgProjectMessageRepository implements ProjectMessageRepository {
           : undefined,
       errorMessage:
         "errorMessage" in updates ? updates.errorMessage ?? null : undefined,
+      metadata: "metadata" in updates ? updates.metadata ?? null : undefined,
       startedAt:
         "startedAt" in updates ? toOptionalDate(updates.startedAt) : undefined,
       completedAt:

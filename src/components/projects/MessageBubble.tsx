@@ -56,7 +56,7 @@ const KIND_META: Partial<Record<AgentMessageKind, KindMeta>> = {
 function AgentBody({ message, onSelectOption }: { message: Message; onSelectOption?: (messageId: string, optionId: string) => Promise<void> }) {
   if (message.kind === "plan") return <PlanMessageContent content={message.content} />;
   if (message.kind === "agent_question") return <AgentQuestionBubble message={message} onSelectOption={onSelectOption} />;
-  if (message.kind === "clarification") return <ClarificationBubble message={message} />;
+  if (message.kind === "clarification") return <ClarificationBubble message={message} onSelectOption={onSelectOption} />;
   return <MarkdownContent content={message.content} />;
 }
 

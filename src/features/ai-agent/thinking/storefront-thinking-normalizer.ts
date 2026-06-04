@@ -10,6 +10,7 @@ import {
   inferStorefrontIntent,
   isLikelyStorefrontPrompt,
 } from "./storefront-prompt-policy";
+import { createDefaultClarificationOptions } from "./thinking-fallback";
 
 export function normalizeStructuredThinkingForProjectDetail(input: {
   thinking: StructuredThinkingResult;
@@ -34,6 +35,7 @@ export function normalizeStructuredThinkingForProjectDetail(input: {
     );
     normalized.projectAction.shouldAskClarification = false;
     normalized.projectAction.clarificationQuestion = null;
+    normalized.projectAction.clarificationOptions = [];
     normalized.projectAction.shouldInitProject = false;
     normalized.projectAction.shouldModifyExistingProject = true;
     normalized.projectAction.requiresSourceInit = false;
@@ -67,6 +69,7 @@ export function normalizeStructuredThinkingForProjectDetail(input: {
 
   normalized.projectAction.shouldAskClarification = false;
   normalized.projectAction.clarificationQuestion = null;
+  normalized.projectAction.clarificationOptions = [];
   normalized.projectAction.shouldInitProject = false;
   normalized.projectAction.shouldModifyExistingProject = false;
   normalized.projectAction.requiresSourceInit = false;
@@ -145,6 +148,7 @@ export function toStorefrontThinkingResult(input: {
       shouldAskClarification: Boolean(block),
       clarificationQuestion: block?.question ?? null,
       clarificationReason: block?.reason ?? null,
+      clarificationOptions: block ? createDefaultClarificationOptions() : [],
     },
     implementationBias: {
       preferMinimalPatch: true,
@@ -170,6 +174,7 @@ function applyClarificationBlock(
   const normalized = structuredCloneThinking(result);
   normalized.projectAction.shouldAskClarification = true;
   normalized.projectAction.clarificationQuestion = question;
+  normalized.projectAction.clarificationOptions = createDefaultClarificationOptions();
   normalized.projectAction.shouldModifyExistingProject = false;
   normalized.projectAction.requiresPatchGeneration = false;
   normalized.projectAction.requiresValidation = false;

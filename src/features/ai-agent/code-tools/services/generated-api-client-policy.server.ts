@@ -12,6 +12,12 @@ export type GeneratedApiClientPolicyVerdict =
 const API_FETCH_PATTERN = /\bfetch\s*\(\s*([`'"])\s*\/api\//;
 const URL_SEARCH_PARAMS_PATTERN = /\bnew\s+URLSearchParams\s*\(/;
 const RESPONSE_JSON_PATTERN = /\.json\s*\(/;
+const CLIENT_RUNTIME_GUARD_PATTERN =
+  /\bisClientRuntime\b|typeof\s+window\s*!==\s*['"]undefined['"]/;
+const SSR_LIVE_QUERY_PATTERN =
+  /\b(?:ensureQueryData|prefetchQuery|prefetchInfiniteQuery)\s*\(|\b(?:loader|beforeLoad)\s*:/;
+const SELECTIVE_SSR_PATTERN =
+  /\bssr\s*:\s*(?:false|['"]data-only['"])/;
 
 export function scanGeneratedApiClientPolicy(changedFiles: ReadonlyArray<{ path: string; content: string }>): GeneratedApiClientPolicyVerdict {
   const violations: GeneratedApiClientPolicyViolation[] = [];
@@ -44,6 +50,19 @@ export function scanGeneratedApiClientPolicy(changedFiles: ReadonlyArray<{ path:
         filePath: file.path,
         message: "Generated auth/cart API code must import apiClient from @/services/http/client.",
       });
+      continue;
+    }
+    if (
+      isClientOnlyStorefrontApiPath(file.path)
+      && file.content.includes("apiClient.")
+      && SSR_LIVE_QUERY_PATTERN.test(file.content)
+      && !CLIENT_RUNTIME_GUARD_PATTERN.test(file.content)
+      && !SELECTIVE_SSR_PATTERN.test(file.content)
+    ) {
+      violations.push({
+        filePath: file.path,
+        message: "Generated storefront API requests must remain client-side only; do not run live store/customer API through SSR loaders/prefetch unless guarded with isClientRuntime/typeof window or configured with TanStack Start selective SSR.",
+      });
     }
   }
 
@@ -70,4 +89,9 @@ function isGeneratedApiCodePath(filePath: string) {
 function usesCustomerApiEndpoint(content: string) {
   return content.includes("/api/v1/auth/profile")
     || content.includes("/api/v1/carts");
+}
+
+function isClientOnlyStorefrontApiPath(filePath: string) {
+  return filePath.startsWith("src/services/store/")
+    || filePath === "src/app/auth-provider.tsx";
 }

@@ -188,6 +188,17 @@ export const storefrontIntentSchema = z.enum([
   "unknown_storefront_change",
 ]);
 
+export const clarificationOptionSchema = z.object({
+  id: nonEmptyString,
+  label: nonEmptyString,
+  description: nonEmptyString,
+  pros: z.array(nonEmptyString).min(1),
+  cons: z.array(nonEmptyString).min(1),
+  recommended: z.boolean(),
+});
+
+export const clarificationOptionsSchema = z.array(clarificationOptionSchema).max(4);
+
 export const storefrontAreaSchema = z.enum([
   "homepage",
   "product_listing",
@@ -232,6 +243,7 @@ export const storefrontThinkingResultSchema = z.object({
     shouldAskClarification: z.boolean(),
     clarificationQuestion: z.string().nullable(),
     clarificationReason: z.string().nullable(),
+    clarificationOptions: clarificationOptionsSchema.optional(),
   }),
   implementationBias: z.object({
     preferMinimalPatch: z.boolean(),
@@ -298,6 +310,7 @@ export const structuredThinkingResultSchema = z.object({
     shouldModifyExistingProject: z.boolean(),
     shouldAskClarification: z.boolean(),
     clarificationQuestion: z.string().nullable(),
+    clarificationOptions: clarificationOptionsSchema,
     requiresSourceInit: z.boolean(),
     requiresPatchGeneration: z.boolean(),
     requiresValidation: z.boolean(),
@@ -497,6 +510,7 @@ export const agentTaskSchema = z
         required: z.boolean(),
         question: z.string().optional(),
         reason: z.string().optional(),
+        options: clarificationOptionsSchema.optional(),
       })
       .optional(),
     storefront: z
@@ -593,6 +607,7 @@ export type ThinkingConversionGoal = z.infer<
 export type ThinkingRecommendedNextStep = z.infer<
   typeof thinkingRecommendedNextStepSchema
 >;
+export type ClarificationOption = z.infer<typeof clarificationOptionSchema>;
 
 export type ThinkingInput = z.infer<typeof thinkingInputSchema>;
 export type PreflightResult = z.infer<typeof preflightResultSchema>;

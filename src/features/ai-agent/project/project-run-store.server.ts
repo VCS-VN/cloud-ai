@@ -70,14 +70,13 @@ export class ProjectRunStore {
   }
 
   async waitForClarification(run: AgentRun, updates: Partial<AgentRun> = {}): Promise<AgentRun> {
-    const now = new Date().toISOString();
     return this.repository.save({
       ...run,
       ...updates,
       thinking: updates.thinking ?? run.thinking,
-      status: "completed",
-      completedAt: now,
-      updatedAt: now,
+      status: "awaiting_input",
+      completedAt: undefined,
+      updatedAt: new Date().toISOString(),
     });
   }
 

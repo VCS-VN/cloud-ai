@@ -29,6 +29,21 @@ export function validateThinkingBusinessRules(input: {
     errors.push("Clarification-blocked requests must not modify the existing project.");
   }
 
+  const options = result.projectAction.clarificationOptions;
+  if (!result.projectAction.shouldAskClarification && options.length > 0) {
+    errors.push("Clarification options must only be present when asking clarification.");
+  }
+
+  if (options.length > 0) {
+    if (options.length < 2 || options.length > 4) {
+      errors.push("Clarification options must include 2-4 choices.");
+    }
+    const recommendedCount = options.filter((option) => option.recommended).length;
+    if (recommendedCount !== 1) {
+      errors.push("Exactly one clarification option must be recommended.");
+    }
+  }
+
   if (result.confidence < THINKING_LAYER_CONFIG.confidence.askClarificationBelow && !result.projectAction.shouldAskClarification) {
     errors.push("Low-confidence requests require clarification.");
   }

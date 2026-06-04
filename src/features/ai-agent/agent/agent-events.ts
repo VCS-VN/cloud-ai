@@ -3,6 +3,8 @@ export type {
   AgentRunStatus,
   BuilderIntent,
   ChangePlan,
+  ClarificationEventMetadata,
+  ClarificationOption,
   DevRuntime,
   DevRuntimeStatus,
   FileOperation,

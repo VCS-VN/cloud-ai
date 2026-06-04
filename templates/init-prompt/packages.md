@@ -10,7 +10,7 @@ IMPORTS AVAILABLE:
 - { formatMoney, resolveProductPrice } from "@/lib/format-money"
 - { cn } from "@/lib/utils"
 - { StoreProvider, useStore } from "@/app/store-provider"  // useStore() returns { storeDetail, isLoading, error, refetch, isUsingSampleData }; storeDetail.setting?.currency carries the ISO currency (default fallback: AUD)
-- { AuthProvider, useAuth } from "@/app/auth-provider"  // AuthProvider loads GET /api/v1/auth/profile via apiClient; profile present means user cart mode; logout clears profile and auth tokens
+- { AuthProvider, useAuth } from "@/app/auth-provider"  // AuthProvider loads GET /api/v1/auth/profile via apiClient on the client runtime only; profile present means user cart mode; logout clears profile and auth tokens
 - { CartProvider, useCart } from "@/app/cart-provider"  // active cart state for guest/user modes; guest uses localStorage key store_cart; user uses cart APIs through apiClient
 - { selectedCartItemIdsAtom } from "@/app/cart-selection"  // Jotai atom storing selected cart item ids only for checkout preparation
 - { sampleStore } from "@/data/sample-store"

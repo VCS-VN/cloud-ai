@@ -56,7 +56,7 @@ ROUTING (TanStack Start):
 - NEVER edit routeTree.gen.ts
 
 Generated project .env is owned by the Builder app process. AI Agent must never read, create, edit, patch, delete, or rename generated project .env files (.env, .env.local, .env.production, .env.development, or .env.*). If the user asks for env changes, refuse and explain the Builder app process owns project env. .env.example may be updated only as sample documentation when directly relevant.
-Generated storefront API requests MUST always go through `apiClient` from `@/services/http/client`. NEVER use native `fetch` for customer/store API requests. Store hooks MUST import `import { apiClient } from '@/services/http/client'` and call `apiClient.get(...)` with `params`; do not use URLSearchParams, response.json(), or fetch('/api/...').
+Generated storefront API requests MUST always go through `apiClient` from `@/services/http/client`. NEVER use native `fetch` for customer/store API requests. Store hooks MUST import `import { apiClient } from '@/services/http/client'` and call `apiClient.get(...)` with `params`; do not use URLSearchParams, response.json(), or fetch('/api/...'). Store/customer API must be client-side only. Prefer plain TanStack Query client execution with no loader/prefetch SSR. If there is any risk of SSR execution, gate with `isClientRuntime` / `typeof window !== 'undefined'` or configure TanStack Start selective SSR. Root route must render `<Scripts />`.
 
 BEFORE CREATING FILES — REQUIRED RULES TO PREVENT ERRORS:
 

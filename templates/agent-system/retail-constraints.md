@@ -14,7 +14,7 @@ RETAIL E-COMMERCE CONSTRAINT (STRICT):
 - Use product data from src/data/products.ts.
 - Use website config from src/lib/website-config.ts.
 - Align storefront UI with DESIGN.md sections 1-8 and front-matter dials/locks when present. Prefer semantic token utilities (bg-primary, text-foreground, border-border, etc.) over random raw Tailwind palette classes. The taste skill is the primary guide for layout, polish, and anti-generic patterns.
-- StoreProvider loading state must be a branded animated icon loading UI using DESIGN.md semantic colors and a clear commerce/store icon treatment (for example a Lucide Store, ShoppingBag, or LoaderCircle icon). It must include accessible loading text and visible motion/state. It must not be a skeleton, plain text-only state, empty screen, or bare generic spinner.
+- StoreProvider loading state must be implemented in StorefrontLoadingScreen as a branded animated icon loading UI using DESIGN.md semantic colors and a clear commerce/store icon treatment (for example a Lucide Store, ShoppingBag, or LoaderCircle icon). It must include accessible loading text and visible motion/state. StorefrontLoadingScreen must not render skeleton UI: no Skeleton component, animate-pulse placeholders, gray bars/boxes, simulated header/product-card grid, placeholder cards, plain text-only state, empty screen, or bare generic spinner.
 
 PROJECT RULE DOCS (authoritative project-specific reference):
 {{projectRuleDocs}}

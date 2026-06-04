@@ -1,4 +1,5 @@
 import type {
+  ClarificationOption,
   StructuredThinkingInput,
   StructuredThinkingResult,
   ThinkingInput,
@@ -151,6 +152,7 @@ export function createClarificationStructuredThinkingResult(
       shouldAskClarification: true,
       clarificationQuestion:
         "Could you describe the storefront change you want more clearly?",
+      clarificationOptions: createDefaultClarificationOptions(),
       requiresSourceInit: false,
       requiresPatchGeneration: false,
       requiresValidation: false,
@@ -215,6 +217,7 @@ function createApplyStructuredThinkingResult(
       shouldModifyExistingProject: true,
       shouldAskClarification: false,
       clarificationQuestion: null,
+      clarificationOptions: [],
       requiresSourceInit: false,
       requiresPatchGeneration: true,
       requiresValidation: true,
@@ -250,4 +253,33 @@ function createApplyStructuredThinkingResult(
       priority: "normal",
     },
   };
+}
+
+export function createDefaultClarificationOptions(): ClarificationOption[] {
+  return [
+    {
+      id: "clarify_scope",
+      label: "Clarify the intended scope",
+      description: "Share the exact page, feature, or design direction before any source changes.",
+      pros: ["Avoids changing the wrong area", "Keeps the existing storefront intact"],
+      cons: ["Requires one extra user response"],
+      recommended: true,
+    },
+    {
+      id: "use_safe_default",
+      label: "Use safe defaults",
+      description: "Let the agent proceed with the smallest reversible interpretation of the request.",
+      pros: ["Fastest path forward", "Limits changes to low-risk defaults"],
+      cons: ["May not match the user's preferred direction"],
+      recommended: false,
+    },
+    {
+      id: "cancel_change",
+      label: "Cancel this change",
+      description: "Stop this run without modifying source files.",
+      pros: ["No project changes happen", "Useful when the request was accidental"],
+      cons: ["The original goal remains unresolved"],
+      recommended: false,
+    },
+  ];
 }

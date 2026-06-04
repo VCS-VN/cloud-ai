@@ -1,11 +1,12 @@
 import type { AgentStreamEvent } from "./agent-events";
 import type { ChangePlan } from "../project/project-state.schema";
-import type { AgentMessageKind } from "@/shared/project-types";
+import type { AgentMessageKind, AgentQuestionMetadata } from "@/shared/project-types";
 import { sanitizeForUser } from "./user-facing-presenter";
 
 export type MilestoneDecision = {
   kind: AgentMessageKind;
   content: string;
+  metadata?: AgentQuestionMetadata | null;
 };
 
 const FILE_OPERATION_TYPES = new Set([
@@ -58,6 +59,7 @@ export function decideMilestone(event: AgentStreamEvent): MilestoneDecision | un
       return {
         kind: "clarification",
         content: question || "Could you share a bit more detail so I can continue?",
+        metadata: event.metadata as AgentQuestionMetadata | null | undefined,
       };
     }
     case "human_review_required": {

@@ -57,6 +57,7 @@ import { listProjectMessages } from "@/server/functions/project-messages";
 import {
   createProjectRun,
   retryProjectRun,
+  selectRunOption,
   stopProjectRun,
 } from "@/server/functions/project-runs";
 import {
@@ -622,6 +623,40 @@ function ProjectDetailPage() {
     }
   }
 
+  async function handleSelectOption(messageId: string, optionId: string) {
+    if (!project) return;
+    const message = messages.find((item) => item.id === messageId);
+    if (!message?.runId) return;
+    setSendError(undefined);
+    try {
+      const result = await selectRunOption({
+        data: {
+          projectId: project.id,
+          runId: message.runId,
+          optionId,
+        },
+      });
+      setProject((currentProject) =>
+        currentProject
+          ? {
+              ...currentProject,
+              processingStatus: "processing",
+              activeRunId: result.runId,
+              processingStartedAt: new Date().toISOString(),
+            }
+          : currentProject,
+      );
+      agentStream.beginRun(result.runId, result.userMessage);
+    } catch (cause) {
+      setSendError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to select that option. Please try again.",
+      );
+      throw cause;
+    }
+  }
+
   function handleStopGeneration() {
     if (!project?.activeRunId) return;
     const runId = project.activeRunId;
@@ -730,6 +765,7 @@ function ProjectDetailPage() {
                     hasMore={hasMoreMessages}
                     onLoadOlder={loadOlderMessages}
                     onRetryMessage={handleRetryMessage}
+                    onSelectOption={handleSelectOption}
                   />
                 </div>
               </div>

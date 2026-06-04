@@ -45,12 +45,29 @@ export const ThinkingResultJsonSchema = {
     projectAction: {
       type: "object",
       additionalProperties: false,
-      required: ["shouldInitProject", "shouldModifyExistingProject", "shouldAskClarification", "clarificationQuestion", "requiresSourceInit", "requiresPatchGeneration", "requiresValidation", "requiresPreviewRefresh"],
+      required: ["shouldInitProject", "shouldModifyExistingProject", "shouldAskClarification", "clarificationQuestion", "clarificationOptions", "requiresSourceInit", "requiresPatchGeneration", "requiresValidation", "requiresPreviewRefresh"],
       properties: {
         shouldInitProject: { type: "boolean" },
         shouldModifyExistingProject: { type: "boolean" },
         shouldAskClarification: { type: "boolean" },
         clarificationQuestion: { anyOf: [{ type: "string" }, { type: "null" }] },
+        clarificationOptions: {
+          type: "array",
+          maxItems: 4,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["id", "label", "description", "pros", "cons", "recommended"],
+            properties: {
+              id: { type: "string" },
+              label: { type: "string" },
+              description: { type: "string" },
+              pros: { type: "array", minItems: 1, items: { type: "string" } },
+              cons: { type: "array", minItems: 1, items: { type: "string" } },
+              recommended: { type: "boolean" },
+            },
+          },
+        },
         requiresSourceInit: { type: "boolean" },
         requiresPatchGeneration: { type: "boolean" },
         requiresValidation: { type: "boolean" },

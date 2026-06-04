@@ -50,11 +50,30 @@ export type DesignVariant = {
   }
 }
 
-export type AgentQuestionMetadata = {
+export type ClarificationOption = {
+  id: string
+  label: string
+  description: string
+  pros: string[]
+  cons: string[]
+  recommended: boolean
+}
+
+export type DesignQuestionMetadata = {
   options: DesignVariant[]
   selectedOptionId: string | null
   questionType?: 'design_variant' | 'optional_pages'
 }
+
+export type ClarificationQuestionMetadata = {
+  questionType: 'clarification_options'
+  options: ClarificationOption[]
+  selectedOptionId: string | null
+  customAnswerAllowed?: boolean
+  source?: 'thinking' | 'execution_fallback'
+}
+
+export type AgentQuestionMetadata = DesignQuestionMetadata | ClarificationQuestionMetadata
 
 export type OrchestratorState =
   | 'idle'
@@ -241,6 +260,7 @@ export type OptionSelectedEvent = {
   runId: string
   messageId: string
   optionId: string
+  userMessage?: Message
 }
 
 export type RunStreamEvent =
@@ -344,6 +364,7 @@ export interface ProjectMessageRepository {
         | 'startedAt'
         | 'completedAt'
         | 'updatedAt'
+        | 'metadata'
       >
     >
   ): Promise<Message | undefined>
