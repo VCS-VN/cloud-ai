@@ -14,7 +14,15 @@ const CONTRACTS: ReadonlyArray<{
 }> = [
   {
     path: "src/routes/__root.tsx",
-    requiredSnippets: ["HeadContent", "Scripts", "<Scripts />", "createRootRoute", "notFoundComponent"],
+    requiredSnippets: [
+      "import '@vitejs/plugin-react/preamble'",
+      "import '@/styles/app.css'",
+      "HeadContent",
+      "Scripts",
+      "<Scripts />",
+      "createRootRoute",
+      "notFoundComponent",
+    ],
   },
   {
     path: "src/routes/products/index.tsx",

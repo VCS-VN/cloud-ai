@@ -11,3 +11,5 @@ rule: imports
   - `src/routeTree.gen.ts` may import route modules with `./routes/...`.
 - Package imports such as `react`, `@tanstack/react-router`, and `lucide-react` stay as package imports.
 - CSS must be imported as `@/styles/app.css` from the root route.
+- Root route preamble MUST be a valid side-effect import exactly: `import '@vitejs/plugin-react/preamble'`. Never write `@vitejs/plugin-react/preamble` as a bare line, never omit quotes, and never import it as a binding.
+- Do not import brand/social icons from `lucide-react` (for example Instagram, Facebook, Twitter/X, LinkedIn, YouTube). `lucide-react@1.14.0` may not export brand icons. For social/contact links use generic Lucide icons that exist in this project such as `Mail`, `MessageCircle`, `Send`, `Globe`, `ExternalLink`, or text labels.

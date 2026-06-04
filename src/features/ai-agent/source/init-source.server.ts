@@ -2185,12 +2185,21 @@ function ProductsPage() {
 `;
 }
 function productDetailRouteSource() {
-  return `import { Link, createFileRoute } from '@tanstack/react-router'
+  return `import { useMemo } from 'react'
+import DOMPurify from 'dompurify'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { useProductDetail } from '@/services/store/use-product-detail'
 import { useStore } from '@/app/store-provider'
 import { formatMoney, resolveProductPrice } from '@/lib/format-money'
 
 export const Route = createFileRoute('/products/$productId')({ component: ProductDetailPage })
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 
 function ProductDetailPage() {
   const { productId } = Route.useParams()
@@ -2204,6 +2213,10 @@ function ProductDetailPage() {
     (product?.id
       ? \`https://picsum.photos/seed/\${encodeURIComponent(product.id)}/1200/800\`
       : undefined)
+  const sanitizedDescriptions = useMemo(() => {
+    const html = product?.descriptions ?? ''
+    return typeof window !== 'undefined' ? DOMPurify.sanitize(html) : escapeHtml(html)
+  }, [product?.descriptions])
 
   return (
     <main className='mx-auto max-w-7xl px-4 py-12'>
@@ -2224,8 +2237,11 @@ function ProductDetailPage() {
             {price !== undefined ? (
               <p className='mt-2 text-lg font-medium'>{formatMoney(price, { currency })}</p>
             ) : null}
-            {product.descriptions ? (
-              <p className='mt-4 text-muted-foreground'>{product.descriptions}</p>
+            {sanitizedDescriptions ? (
+              <div
+                className='mt-4 text-muted-foreground'
+                dangerouslySetInnerHTML={{ __html: sanitizedDescriptions }}
+              />
             ) : null}
           </div>
         </article>
