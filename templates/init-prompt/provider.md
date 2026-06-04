@@ -17,7 +17,7 @@ AUTH + CART RUNTIME RULES:
 
 PRE-SEEDED PROVIDERS + ROOT FILE:
 
-src/app/store-provider.tsx - PRE-SEEDED. StoreProvider focuses ONLY on store detail. When VITE_STORE_SLUG is set, fetch store detail via useStoreDetail, block app rendering with a full-page loading skeleton while loading, show a store load error UI with retry on error, and expose { storeDetail, isLoading, error, refetch, isUsingSampleData=false }. When VITE_STORE_SLUG is missing, return sampleStore from @/data/sample-store with isUsingSampleData=true. Do NOT include cart, order, or checkout state.
+src/app/store-provider.tsx - PRE-SEEDED. StoreProvider focuses ONLY on store detail. When VITE_STORE_SLUG is set, fetch store detail via useStoreDetail, block app rendering with a full-page branded icon loading UI while loading, show a store load error UI with retry on error, and expose { storeDetail, isLoading, error, refetch, isUsingSampleData=false }. The loading UI MUST use a clear commerce/store icon treatment (for example a Lucide Store, ShoppingBag, or LoaderCircle icon), DESIGN.md token colors, accessible loading text, and visible motion/state. It MUST NOT use a skeleton, plain text-only state, empty screen, or bare generic spinner. When VITE_STORE_SLUG is missing, return sampleStore from @/data/sample-store with isUsingSampleData=true. Do NOT include cart, order, or checkout state.
 
 src/app/auth-provider.tsx - PRE-SEEDED. AuthProvider wraps children with AuthContext, calls GET /api/v1/auth/profile through apiClient using useQuery, exposes { profile, isLoading, isAuthenticated, logout }, clears auth tokens and profile on logout, clears auth tokens and falls back to guest profile null on 401, and exposes no profile error UI state.
 
