@@ -162,6 +162,15 @@ export function sanitizeForUser(text: string): string {
 }
 
 export type UserLanguage = "vi" | "en";
+export type UserFacingSkeletonPhase =
+  | "understanding"
+  | "planning"
+  | "editing"
+  | "installing"
+  | "starting_preview"
+  | "validating"
+  | "repairing"
+  | "responding";
 
 const VIETNAMESE_DIACRITICS =
   /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
@@ -241,12 +250,87 @@ export function interruptedAnswerSuffix(language: UserLanguage): string {
   return INTERRUPTED_ANSWER_SUFFIX[language];
 }
 
-const STILL_WORKING_LABEL: Record<UserLanguage, string> = {
-  vi: "Vẫn đang xử lý, việc này mất hơn chút thời gian…",
-  en: "Still working on it, this is taking a moment…",
+const PHASE_STEP_LABELS: Record<UserFacingSkeletonPhase, Record<UserLanguage, string>> = {
+  understanding: {
+    vi: "Đang hiểu yêu cầu",
+    en: "Understanding your request",
+  },
+  planning: {
+    vi: "Đang lập kế hoạch",
+    en: "Planning the changes",
+  },
+  editing: {
+    vi: "Đang cập nhật storefront",
+    en: "Updating your storefront",
+  },
+  installing: {
+    vi: "Đang chuẩn bị gói cần thiết",
+    en: "Preparing packages",
+  },
+  starting_preview: {
+    vi: "Đang khởi động bản xem trước",
+    en: "Starting your preview",
+  },
+  validating: {
+    vi: "Đang kiểm tra kết quả",
+    en: "Checking the result",
+  },
+  repairing: {
+    vi: "Đang sửa lỗi vừa phát hiện",
+    en: "Fixing an issue",
+  },
+  responding: {
+    vi: "Đang viết phản hồi",
+    en: "Writing a response",
+  },
 };
 
-/** Skeleton label shown when a phase goes quiet for a while (no events). */
-export function stillWorkingLabel(language: UserLanguage): string {
-  return STILL_WORKING_LABEL[language];
+const PHASE_STEP_DETAILS: Record<UserFacingSkeletonPhase, Record<UserLanguage, string>> = {
+  understanding: {
+    vi: "Mình đang đọc yêu cầu và xác định việc cần làm.",
+    en: "Reading the request and identifying what needs to change.",
+  },
+  planning: {
+    vi: "Mình đang chọn các bước xử lý phù hợp.",
+    en: "Choosing the right implementation steps.",
+  },
+  editing: {
+    vi: "Mình đang tạo hoặc cập nhật các phần cần thiết.",
+    en: "Creating or updating the required pieces.",
+  },
+  installing: {
+    vi: "Mình đang đảm bảo môi trường có đủ dependency.",
+    en: "Making sure the environment has the needed dependencies.",
+  },
+  starting_preview: {
+    vi: "Mình đang chuẩn bị để bạn xem thử giao diện.",
+    en: "Preparing the preview so you can review the storefront.",
+  },
+  validating: {
+    vi: "Mình đang chạy kiểm tra để phát hiện lỗi.",
+    en: "Running checks to catch errors.",
+  },
+  repairing: {
+    vi: "Mình đang áp dụng bản sửa nhỏ rồi kiểm tra lại.",
+    en: "Applying a focused fix and checking again.",
+  },
+  responding: {
+    vi: "Mình đang tóm tắt kết quả cho bạn.",
+    en: "Summarizing the result for you.",
+  },
+};
+
+export function phaseStepLabel(
+  phase: UserFacingSkeletonPhase,
+  language: UserLanguage,
+): string {
+  return PHASE_STEP_LABELS[phase][language];
+}
+
+/** Detail shown when a phase goes quiet for a while (no events). */
+export function phaseStepDetail(
+  phase: UserFacingSkeletonPhase,
+  language: UserLanguage,
+): string {
+  return PHASE_STEP_DETAILS[phase][language];
 }

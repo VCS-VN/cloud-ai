@@ -1,11 +1,6 @@
 import type { ToolHook } from "./hook-types";
 import type { CodeToolDefinition, ToolExecutionContext } from "../code-agent-types";
 import { evaluateProjectRiskPolicy } from "../services/project-risk-policy.server";
-import { scanGeneratedApiClientPolicy, formatGeneratedApiClientPolicyViolations } from "../services/generated-api-client-policy.server";
-import {
-  formatCommerceDataContractViolations,
-  scanCommerceDataContractPolicy,
-} from "../services/commerce-data-contract-policy.server";
 import { GENERATED_PROJECT_ENV_POLICY_MESSAGE, isProtectedGeneratedEnvPath } from "../services/project-patch-service.server";
 import { isStorefrontUiPath } from "../services/project-path-guard.server";
 
@@ -16,8 +11,6 @@ export function createPreWriteHooks(): ToolHook[] {
     inspectionGateHook,
     snapshotGateHook,
     protectedEnvGateHook,
-    apiClientPolicyHook,
-    commerceDataContractHook,
     tasteSkillGateHook,
     riskPolicyHook,
   ];
@@ -86,55 +79,6 @@ const protectedEnvGateHook: ToolHook = {
   },
 };
 
-const apiClientPolicyHook: ToolHook = {
-  type: "pre_write",
-  applicable: (tool) => tool.category === "mutate",
-  handler: async ({ tool, args }) => {
-    const changedFilesWithContent = extractChangedFilesWithContent(tool.name, args);
-    if (changedFilesWithContent.length > 0) {
-      const apiClientPolicy = scanGeneratedApiClientPolicy(changedFilesWithContent);
-      if (!apiClientPolicy.ok) {
-        console.warn(JSON.stringify({ event: "generated_api_client_policy_violation", tool: tool.name, violationCount: apiClientPolicy.violations.length }));
-        return { ok: false, error: { code: "GENERATED_API_CLIENT_POLICY_VIOLATION", message: formatGeneratedApiClientPolicyViolations(apiClientPolicy.violations), recoverable: true } };
-      }
-    }
-    return { ok: true };
-  },
-};
-
-const commerceDataContractHook: ToolHook = {
-  type: "pre_write",
-  applicable: (tool) => tool.category === "mutate",
-  handler: async ({ tool, args }) => {
-    if (tool.name !== "project_create_file" && tool.name !== "write") {
-      return { ok: true };
-    }
-    const changedFilesWithContent = extractChangedFilesWithContent(tool.name, args);
-    if (changedFilesWithContent.length === 0) return { ok: true };
-    const verdict = scanCommerceDataContractPolicy({
-      changedFiles: changedFilesWithContent,
-    });
-    if (!verdict.ok) {
-      console.warn(
-        JSON.stringify({
-          event: "commerce_data_contract_violation",
-          tool: tool.name,
-          violationCount: verdict.violations.length,
-        }),
-      );
-      return {
-        ok: false,
-        error: {
-          code: "COMMERCE_DATA_CONTRACT_VIOLATION",
-          message: formatCommerceDataContractViolations(verdict.violations),
-          recoverable: true,
-        },
-      };
-    }
-    return { ok: true };
-  },
-};
-
 const tasteSkillGateHook: ToolHook = {
   type: "pre_write",
   applicable: (tool) => tool.category === "mutate",
@@ -175,22 +119,6 @@ function extractPotentialChangedFiles(args: unknown) {
   const record = args as Record<string, unknown>;
   if (Array.isArray(record.expectedChangedFiles)) return record.expectedChangedFiles.filter((v): v is string => typeof v === "string");
   if (typeof record.path === "string") return [record.path];
-  return [];
-}
-
-function extractChangedFilesWithContent(toolName: string, args: unknown): Array<{ path: string; content: string }> {
-  if (!args || typeof args !== "object") return [];
-  const record = args as Record<string, unknown>;
-  if (toolName === "project_create_file" || toolName === "write") {
-    const path = typeof record.path === "string" ? record.path : "";
-    const content = typeof record.content === "string" ? record.content : "";
-    return path ? [{ path, content }] : [];
-  }
-  if (toolName === "project_apply_patch" || toolName === "edit") {
-    const patch = typeof record.patch === "string" ? record.patch : "";
-    const expected = Array.isArray(record.expectedChangedFiles) ? record.expectedChangedFiles.filter((v): v is string => typeof v === "string") : [];
-    return patch && expected.length > 0 ? expected.map((path) => ({ path, content: patch })) : [];
-  }
   return [];
 }
 

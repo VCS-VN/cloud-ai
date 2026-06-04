@@ -540,7 +540,7 @@ export class AgentOrchestrator {
 
     yield {
       type: "source_generation_started",
-      message: "Generating infrastructure...",
+      message: "Đang chuẩn bị cấu trúc cửa hàng",
     };
 
     // Write .env with VITE_API_BASE_URL. The AI Agent is NOT allowed to read or
@@ -588,7 +588,7 @@ export class AgentOrchestrator {
 
     yield {
       type: "source_generation_started",
-      message: "Generating retail storefront UI...",
+      message: "Đang tạo giao diện storefront",
     };
 
     const preloadedTasteSkill = await runPhase("preload_taste_skill", () =>
@@ -824,7 +824,7 @@ export class AgentOrchestrator {
       yield {
         type: "source_generation_started",
         message:
-          "Ensuring required storefront data, providers, and hooks exist...",
+          "Đang bổ sung dữ liệu và luồng mua hàng cần thiết",
       };
 
       const fallbackResult = await runPhase("backfill_init_source", () =>
@@ -899,7 +899,7 @@ export class AgentOrchestrator {
       );
       yield {
         type: "source_generation_started",
-        message: "Completing storefront pages and components...",
+        message: "Đang hoàn thiện các trang còn thiếu",
       };
       for (const requiredPath of REQUIRED_INIT_COMMERCE_ROUTE_FILES) {
         if (presentAfterLoop.has(requiredPath)) continue;

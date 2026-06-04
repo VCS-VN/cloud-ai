@@ -1,5 +1,6 @@
 import type { WebsiteSpec } from "../project/project-state.schema";
 import { REQUIRED_INIT_COMMERCE_ROUTE_FILES } from "../source/generated-project-layout";
+import { loadProjectRuleDocsForPrompt } from "./project-rule-docs.server";
 
 export function buildInitStorefrontRecoveryPrompt(input: {
   missingPaths: string[];
@@ -52,6 +53,9 @@ export function buildRetailInitPrompt(input: {
   return [
     "The design-taste-frontend skill is preloaded server-side for this init (see developer message). FIRST create DESIGN.md with project_create_file as a reference template (skill + vertical layout contract). THEN create the remaining files listed below with project_create_file.",
     "Do NOT inspect existing files. Use the preloaded taste skill for all UI; CREATE the files directly.",
+    "",
+    "PROJECT RULE DOCS (authoritative project-specific reference):",
+    loadProjectRuleDocsForPrompt() || "(No project rule docs were loaded.)",
     "",
     "STORE: " + spec.store.name + " (" + spec.store.type + ")",
     "PRODUCTS:",

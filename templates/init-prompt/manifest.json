@@ -2,6 +2,11 @@
   "layers": [
     { "marker": "SYSTEM", "file": "system.md", "order": 10 },
     { "marker": "BRIEF", "type": "dynamic", "order": 20 },
+    { "marker": "PROJECT_RULE_ROUTING", "file": "../project-rules/routing.md", "order": 21 },
+    { "marker": "PROJECT_RULE_IMPORTS", "file": "../project-rules/imports.md", "order": 22 },
+    { "marker": "PROJECT_RULE_PROTECTED_FILES", "file": "../project-rules/protected-files.md", "order": 23 },
+    { "marker": "PROJECT_RULE_DATA_CONTRACT", "file": "../project-rules/data-contract.md", "order": 24 },
+    { "marker": "PROJECT_RULE_UI_DESIGN", "file": "../project-rules/ui-design.md", "order": 25 },
     { "marker": "PACKAGES", "file": "packages.md", "order": 30 },
     { "marker": "PROVIDER", "file": "provider.md", "order": 40 },
     { "marker": "DATA", "file": "data.md", "order": 50 },

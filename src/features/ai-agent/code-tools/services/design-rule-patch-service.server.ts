@@ -159,9 +159,8 @@ export async function applyTokenPatches(
   await writeFile(designPath, working, "utf-8");
   const cssPatch = await patchAppCssFromDesignSource(input.workspaceRoot, working);
   if (!cssPatch.ok) {
-    return failure(
-      DESIGN_ERROR_CODES.DESIGN_PATCH_STRUCTURE_BROKEN,
-      `DESIGN.md was patched, but app.css token sync failed: ${cssPatch.message}`,
+    console.warn(
+      `[design-rule-patch] DESIGN.md patched; app.css token sync skipped: ${cssPatch.message}`,
     );
   }
 

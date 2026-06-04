@@ -9,6 +9,8 @@ FIRST call project_read_taste_skill to load the design taste skill (the authorit
 Do NOT inspect existing files during init. Many infrastructure, provider, route, layout, and store files are pre-seeded before the agent loop. Create only missing required files; for pre-seeded files, use write/edit only when customization is needed.
 This is a retail e-commerce (online store) project. Every page and component must serve a storefront shopping experience.
 
+Project rule docs from templates/project-rules are embedded in this prompt as the authoritative generated-project reference. Follow those docs for routing, imports, protected files, data contracts, and UI/design behavior.
+
 DESIGN.md AUTHORING RULES (REQUIRED — read before writing the file):
 
 1. DESIGN READ (mandatory first step inside DESIGN.md). Before any tokens, the file MUST open with a one-line Design Read in the exact form: `Reading this as: <page kind> for <audience>, with a <vibe> language, leaning toward <design system or aesthetic family>.` Derive each slot from the store brief — store name, store type, products, price tier, audience cues. Do NOT default to "minimalist e-commerce for general consumers" — read the brief.

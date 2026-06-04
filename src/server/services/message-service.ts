@@ -8,7 +8,8 @@ import {
   detectUserLanguage,
   buildFriendlyErrorContent,
   interruptedAnswerSuffix,
-  stillWorkingLabel,
+  phaseStepDetail,
+  phaseStepLabel,
   type UserLanguage,
 } from "@/features/ai-agent/agent/user-facing-presenter";
 import { createSkeletonMapper } from "@/features/ai-agent/agent/agent-event-to-skeleton";
@@ -191,19 +192,20 @@ export class MessageService {
     userId?: string,
   ): Promise<void> {
     const signal = getRunAbortSignal(projectId, runId);
-    const { map: skeletonMapper, setPageProgress } = createSkeletonMapper(runId);
     const language = detectUserLanguage({ userPrompt: prompt });
+    const { map: skeletonMapper, setPageProgress } = createSkeletonMapper(runId, language);
 
     publishRunEvent(projectId, runId, { type: "run.started", runId, projectId });
 
     let answerMessageId: string | null = null;
     let answerContent = "";
     let lastPhase: Exclude<import("@/shared/project-types").SkeletonPhase, "starting"> = "understanding";
+    let lastSkeletonDetail: string | undefined;
     let runError: { code?: string; rawMessage?: string } | null = null;
 
-    // "Still working" nudge: if a phase goes quiet (no event) for STILL_WORKING_MS
-    // before the answer starts streaming, reassure the user once until the next
-    // event arrives. Keeps a long model call from feeling like a dead UI.
+    // Step nudge: if a phase goes quiet (no event) for STILL_WORKING_MS before
+    // the answer starts streaming, repeat the current step with a useful detail
+    // instead of a generic "still working" message.
     let stillWorkingTimer: ReturnType<typeof setTimeout> | null = null;
     let stillWorkingEmitted = false;
     const clearStillWorking = () => {
@@ -220,7 +222,8 @@ export class MessageService {
           type: "skeleton.update",
           runId,
           phase: lastPhase,
-          label: stillWorkingLabel(language),
+          label: phaseStepLabel(lastPhase, language),
+          detail: lastSkeletonDetail ?? phaseStepDetail(lastPhase, language),
         });
       }, STILL_WORKING_MS);
     };
@@ -292,6 +295,12 @@ export class MessageService {
         armStillWorking();
 
         if (isDevRuntimeEvent(event)) {
+          const skeleton = skeletonMapper(event);
+          if (skeleton) {
+            lastPhase = skeleton.phase;
+            lastSkeletonDetail = skeleton.detail;
+            publishRunEvent(projectId, runId, skeleton);
+          }
           publishRuntimeEvent(projectId, event);
           continue;
         }
@@ -299,6 +308,7 @@ export class MessageService {
         const skeleton = skeletonMapper(event);
         if (skeleton) {
           lastPhase = skeleton.phase;
+          lastSkeletonDetail = skeleton.detail;
           publishRunEvent(projectId, runId, skeleton);
         }
 

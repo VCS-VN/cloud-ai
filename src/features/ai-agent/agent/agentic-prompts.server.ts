@@ -2,8 +2,10 @@ import { buildStoreRuntimeInstructions, buildStoreRuntimePromptContext } from ".
 import type { AgenticLoopInput } from "./agentic-loop.types";
 import type { ProjectState } from "../project/project-state.schema";
 import { isProtectedProjectEnvPath } from "../code-tools/services/project-path-guard.server";
+import { loadProjectRuleDocsForPrompt } from "./project-rule-docs.server";
 
 export function buildAgenticSystemPrompt(input: AgenticLoopInput): string {
+  const projectRuleDocs = loadProjectRuleDocsForPrompt();
   return `You are the Code Agent for an AI E-commerce Website Builder.
 You are editing an existing generated storefront project.
 Stack: TanStack Start, TanStack Router, TanStack Query, React, Tailwind CSS, Vite 8.
@@ -44,6 +46,9 @@ RETAIL E-COMMERCE CONSTRAINT (STRICT):
 - Use website config from src/lib/website-config.ts.
 - Align storefront UI with DESIGN.md sections 1-8 and front-matter dials/locks when present. Prefer semantic token utilities (bg-primary, text-foreground, border-border, etc.) over random raw Tailwind palette classes. The taste skill is the primary guide for layout, polish, and anti-generic patterns.
 - StoreProvider loading state must be a branded animated storefront skeleton (pulsing hero/product placeholders using DESIGN.md semantic colors), not plain text or a bare spinner.
+
+PROJECT RULE DOCS (authoritative project-specific reference):
+${projectRuleDocs || "(No project rule docs were loaded.)"}
 
 REASONING WORKFLOW:
 You MUST follow this sequence for every request:
