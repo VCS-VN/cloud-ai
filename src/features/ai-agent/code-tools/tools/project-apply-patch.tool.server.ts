@@ -3,6 +3,7 @@ import { toolError, toolSuccess } from "../code-tool-executor.server";
 import { ProjectPatchPolicyError, ProjectPatchService } from "../services/project-patch-service.server";
 import { patchAppCssFromDesignSource } from "../services/design-app-css-patch.server";
 import { hashContent } from "../services/design-file-service.server";
+import { recordMutationResult } from "./mutation-context.server";
 
 /** @deprecated Use editTool instead. Remove after 2026-07-01. */
 export function createProjectApplyPatchTool(service = new ProjectPatchService()): CodeToolDefinition<{ patch?: string; reason?: string; expectedChangedFiles?: string[] }> {
@@ -18,7 +19,7 @@ export function createProjectApplyPatchTool(service = new ProjectPatchService())
       const startedAt = Date.now();
       try {
         const result = await service.applyPatch({ workspaceRoot: context.workspaceRoot, patch: args.patch ?? "", expectedChangedFiles: args.expectedChangedFiles });
-        Object.assign(context, { __codeToolChangedFiles: result.changedFiles });
+        recordMutationResult(context, result);
         if (result.changedFiles.includes("DESIGN.md")) {
           try {
             const { readFile } = await import("node:fs/promises");

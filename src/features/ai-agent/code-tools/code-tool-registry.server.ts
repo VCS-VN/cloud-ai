@@ -22,16 +22,9 @@ import { globTool } from "./tools/glob.tool.server";
 import { grepTool } from "./tools/grep.tool.server";
 import { createPreWriteHooks } from "./hooks/pre-write-hooks.server";
 import { createPostWriteHooks } from "./hooks/post-write-hooks.server";
+import { CODE_TOOL_LIMITS } from "./code-tool-limits.server";
 
-export const CODE_TOOL_LIMITS = {
-  maxToolLoopIterations: 40,
-  maxMutationToolsPerMessage: 8,
-  maxValidationAttempts: 3,
-  maxRepairAttempts: 2,
-  maxFilesChangedWithoutReview: 12,
-  maxPatchBytes: 300_000,
-  maxToolOutputBytes: 120_000,
-} as const;
+export { CODE_TOOL_LIMITS };
 
 const PHASE_TOOL_NAMES: Record<CodeToolPhase, string[]> = {
   context_bootstrap: [

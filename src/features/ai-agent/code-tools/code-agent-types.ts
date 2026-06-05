@@ -83,6 +83,12 @@ export type PatchResult = {
   requiresPreviewRestart: boolean;
   requiresPackageInstall: boolean;
   warnings: string[];
+  mutationRecords?: Array<{
+    path: string;
+    operation: "created" | "modified" | "deleted";
+    beforeBytes: number;
+    afterBytes: number;
+  }>;
 };
 
 export type ValidationResult = {

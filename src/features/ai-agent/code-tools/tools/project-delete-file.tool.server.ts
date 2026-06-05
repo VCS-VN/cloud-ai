@@ -1,6 +1,7 @@
 import type { CodeToolDefinition } from "../code-agent-types";
 import { toolError, toolSuccess } from "../code-tool-executor.server";
 import { ProjectPatchPolicyError, ProjectPatchService } from "../services/project-patch-service.server";
+import { recordMutationResult } from "./mutation-context.server";
 
 export function createProjectDeleteFileTool(service = new ProjectPatchService()): CodeToolDefinition<{ path?: string; reason?: string }> {
   return {
@@ -16,7 +17,7 @@ export function createProjectDeleteFileTool(service = new ProjectPatchService())
       const startedAt = Date.now();
       try {
         const result = await service.deleteFile({ workspaceRoot: context.workspaceRoot, relativePath: args.path ?? "" });
-        Object.assign(context, { __codeToolChangedFiles: result.changedFiles });
+        recordMutationResult(context, result);
         return toolSuccess({ context, toolName: "project_delete_file", category: "mutate", startedAt, data: result });
       } catch (error) {
         if (error instanceof ProjectPatchPolicyError) return toolError(context, "project_delete_file", "mutate", startedAt, error.code, error.message, true);

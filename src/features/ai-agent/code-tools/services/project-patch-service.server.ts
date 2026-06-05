@@ -1,7 +1,7 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PatchResult } from "../code-agent-types";
-import { CODE_TOOL_LIMITS } from "../code-tool-registry.server";
+import { CODE_TOOL_LIMITS } from "../code-tool-limits.server";
 import { evaluateProjectRiskPolicy } from "./project-risk-policy.server";
 import { guardProjectPath, isProtectedProjectEnvPath, isStorefrontUiPath } from "./project-path-guard.server";
 import { getPreviewRestartRequirement } from "./preview-restart-policy.server";
@@ -85,9 +85,9 @@ export class ProjectPatchService {
     const modifiedFiles: string[] = [];
     const createdFiles: string[] = [];
     const deletedFiles: string[] = [];
+    const mutationRecords: NonNullable<PatchResult["mutationRecords"]> = [];
     let insertions = 0;
     let deletions = 0;
-    let actualChangedFiles = 0;
 
     for (const filePatch of filePatches) {
       if (filePatch.hunks.length === 0) {
@@ -106,7 +106,13 @@ export class ProjectPatchService {
 
       await mkdir(path.dirname(targetPath), { recursive: true });
       await writeFile(targetPath, nextContent, "utf8");
-      actualChangedFiles += 1;
+      const operation = exists ? "modified" : "created";
+      mutationRecords.push({
+        path: filePatch.path,
+        operation,
+        beforeBytes: Buffer.byteLength(oldContent, "utf8"),
+        afterBytes: Buffer.byteLength(nextContent, "utf8"),
+      });
 
       insertions += filePatch.insertions;
       deletions += filePatch.deletions;
@@ -114,24 +120,26 @@ export class ProjectPatchService {
       else modifiedFiles.push(filePatch.path);
     }
 
-    if (actualChangedFiles === 0) {
+    if (mutationRecords.length === 0) {
       throw new ProjectPatchPolicyError(
         "PATCH_APPLY_FAILED",
         "Patch applied no changes to target files.",
       );
     }
 
-    const previewRestart = getPreviewRestartRequirement(changedFiles);
+    const actualChangedFiles = mutationRecords.map((record) => record.path);
+    const previewRestart = getPreviewRestartRequirement(actualChangedFiles);
     return {
-      changedFiles,
+      changedFiles: actualChangedFiles,
       createdFiles,
       modifiedFiles,
       deletedFiles,
       insertions,
       deletions,
       requiresPreviewRestart: previewRestart.required,
-      requiresPackageInstall: changedFiles.includes("package.json"),
+      requiresPackageInstall: actualChangedFiles.includes("package.json"),
       warnings: [],
+      mutationRecords,
     };
   }
 
@@ -143,6 +151,7 @@ export class ProjectPatchService {
     await mkdir(path.dirname(targetPath), { recursive: true });
     await writeFile(targetPath, input.content, "utf8");
     const previewRestart = getPreviewRestartRequirement([input.relativePath]);
+    const afterBytes = Buffer.byteLength(input.content, "utf8");
     return {
       changedFiles: [input.relativePath],
       createdFiles: [input.relativePath],
@@ -153,6 +162,12 @@ export class ProjectPatchService {
       requiresPreviewRestart: previewRestart.required,
       requiresPackageInstall: input.relativePath === "package.json",
       warnings: [],
+      mutationRecords: [{
+        path: input.relativePath,
+        operation: "created",
+        beforeBytes: 0,
+        afterBytes,
+      }],
     };
   }
 
@@ -160,8 +175,12 @@ export class ProjectPatchService {
     this.assertMutablePath(input.relativePath);
     const guarded = guardProjectPath({ workspaceRoot: input.workspaceRoot, path: input.relativePath });
     if (!guarded.ok) throw new ProjectPatchPolicyError("FORBIDDEN_PATH", guarded.message);
+    if (!(await fileExists(guarded.absolutePath))) {
+      throw new ProjectPatchPolicyError("PATCH_APPLY_FAILED", "File does not exist.");
+    }
+    const oldContent = await readFile(guarded.absolutePath, "utf8");
     const { rm } = await import("node:fs/promises");
-    await rm(guarded.absolutePath, { force: true });
+    await rm(guarded.absolutePath, { force: false });
     return {
       changedFiles: [guarded.relativePath],
       createdFiles: [],
@@ -172,6 +191,12 @@ export class ProjectPatchService {
       requiresPreviewRestart: false,
       requiresPackageInstall: false,
       warnings: [],
+      mutationRecords: [{
+        path: guarded.relativePath,
+        operation: "deleted",
+        beforeBytes: Buffer.byteLength(oldContent, "utf8"),
+        afterBytes: 0,
+      }],
     };
   }
   /**

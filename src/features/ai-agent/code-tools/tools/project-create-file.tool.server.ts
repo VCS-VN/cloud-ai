@@ -3,6 +3,7 @@ import { toolError, toolSuccess } from "../code-tool-executor.server";
 import { ProjectPatchPolicyError, ProjectPatchService } from "../services/project-patch-service.server";
 import { patchAppCssFromDesignSource } from "../services/design-app-css-patch.server";
 import { hashContent } from "../services/design-file-service.server";
+import { recordMutationResult } from "./mutation-context.server";
 
 /** @deprecated Use writeTool instead. Remove after 2026-07-01. */
 export function createProjectCreateFileTool(service = new ProjectPatchService()): CodeToolDefinition<{ path?: string; content?: string; reason?: string }> {
@@ -18,7 +19,7 @@ export function createProjectCreateFileTool(service = new ProjectPatchService())
       const startedAt = Date.now();
       try {
         const result = await service.createFile({ workspaceRoot: context.workspaceRoot, relativePath: args.path ?? "", content: args.content ?? "" });
-        Object.assign(context, { __codeToolChangedFiles: result.changedFiles });
+        recordMutationResult(context, result);
         if ((args.path ?? "") === "DESIGN.md") {
           try {
             const designContent = args.content ?? "";

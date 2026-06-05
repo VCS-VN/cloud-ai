@@ -1,4 +1,4 @@
-import { CODE_TOOL_LIMITS } from "../code-tool-registry.server";
+import { CODE_TOOL_LIMITS } from "../code-tool-limits.server";
 
 const SENSITIVE_PATH_PATTERNS = [
   /^\.env(?:\.|$)/,

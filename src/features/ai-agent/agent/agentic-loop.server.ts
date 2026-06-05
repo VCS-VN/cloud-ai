@@ -1,7 +1,7 @@
 import type { AgenticLoopInput, AgenticLoopDeps, AgenticLoopResult, ConversationMessage } from "./agentic-loop.types";
 import type { ProviderFunctionToolCall, ProjectToolResult } from "../code-tools/code-agent-types";
 import { buildToolCallRequestedEvent, buildToolCallCompletedEvent } from "../code-tools/code-tool-events.server";
-import { CODE_TOOL_LIMITS } from "../code-tools/code-tool-registry.server";
+import { CODE_TOOL_LIMITS } from "../code-tools/code-tool-limits.server";
 import { buildAgenticSystemPrompt, buildUserMessageWithThinking } from "./agentic-prompts.server";
 import { buildPreloadedTasteSkillDeveloperMessage } from "../code-tools/services/taste-skill-preload.server";
 import {
@@ -509,19 +509,20 @@ function trackChangedFiles(
       if (typeof f === "string") changedFiles.add(f);
     }
   }
-  // Inspect tools (e.g. project_read_design_rules) return `path` without mutating — do not count.
-  if (toolCategory === "mutate" && typeof data.path === "string") {
-    changedFiles.add(data.path);
-  }
+  // Mutate tools must report concrete changedFiles from a verified write/delete.
+  void toolCall;
+  void toolCategory;
 }
 
 function resultHasActualFileMutation(result: ProjectToolResult) {
   if (!result.ok || !result.data || typeof result.data !== "object") return false;
   const data = result.data as Record<string, unknown>;
+  const mutationRecords = Array.isArray(data.mutationRecords) ? data.mutationRecords.length : 0;
+  if (mutationRecords > 0) return true;
   const changedFiles = Array.isArray(data.changedFiles)
     ? data.changedFiles.filter((file): file is string => typeof file === "string")
     : [];
-  if (changedFiles.length === 0 && typeof data.path !== "string") return false;
+  if (changedFiles.length === 0) return false;
 
   const insertions = typeof data.insertions === "number" ? data.insertions : 0;
   const deletions = typeof data.deletions === "number" ? data.deletions : 0;

@@ -11,9 +11,46 @@ export function createProjectGetDiffTool(service = new ProjectPatchService()): C
     parametersJsonSchema: { type: "object", properties: { includePatch: { type: "boolean" }, maxBytes: { type: "number" } }, required: ["includePatch", "maxBytes"], additionalProperties: false },
     handler: async ({ context, args }) => {
       const startedAt = Date.now();
-      const changedFiles = (context as unknown as { __codeToolChangedFiles?: string[] }).__codeToolChangedFiles;
-      const data = changedFiles ? { changedFiles, patch: args.includePatch ? "" : undefined, truncated: false } : await service.getDiff({ workspaceRoot: context.workspaceRoot, includePatch: args.includePatch, maxBytes: args.maxBytes });
+      const records = (context as unknown as {
+        __codeToolMutationRecords?: Array<{
+          path: string;
+          operation: "created" | "modified" | "deleted";
+          beforeBytes: number;
+          afterBytes: number;
+        }>;
+      }).__codeToolMutationRecords;
+      const data = records?.length
+        ? buildMutationDiff(records, args.includePatch, args.maxBytes)
+        : await service.getDiff({ workspaceRoot: context.workspaceRoot, includePatch: args.includePatch, maxBytes: args.maxBytes });
       return toolSuccess({ context, toolName: "project_get_diff", category: "inspect", startedAt, data });
     },
   };
+}
+
+function buildMutationDiff(
+  records: Array<{
+    path: string;
+    operation: "created" | "modified" | "deleted";
+    beforeBytes: number;
+    afterBytes: number;
+  }>,
+  includePatch?: boolean,
+  maxBytes = 20_000,
+) {
+  const changedFiles = Array.from(new Set(records.map((record) => record.path)));
+  if (!includePatch) return { changedFiles, patch: undefined, truncated: false };
+
+  const patch = records
+    .map((record) => [
+      `diff -- ${record.path}`,
+      `operation: ${record.operation}`,
+      `bytes: ${record.beforeBytes} -> ${record.afterBytes}`,
+    ].join("\n"))
+    .join("\n");
+
+  if (Buffer.byteLength(patch, "utf8") > maxBytes) {
+    return { changedFiles, patch: patch.slice(0, maxBytes), truncated: true };
+  }
+
+  return { changedFiles, patch, truncated: false };
 }
