@@ -97,9 +97,9 @@ export function createHeuristicThinkingResult(
       ],
       targetScope: {
         pages: isInit ? [] : ["/"],
-        sections: [],
+        sections: isInit ? [] : ["homepage"],
         features: [],
-        filesHint: [],
+        filesHint: isInit ? [] : ["src/routes/index.tsx", "src/components/store/*"],
         dataModels: [],
       },
       executionPolicy: {

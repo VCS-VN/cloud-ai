@@ -43,6 +43,7 @@ export async function* runAgenticLoop(
   let totalToolCalls = 0;
   let consecutiveErrors = 0;
   let consecutiveTextOnlyTurns = 0;
+  let mutationToolSucceeded = false;
   const MAX_TEXT_ONLY_TURNS = 3;
   const TEXT_ONLY_COMPLETION_THRESHOLD = 2;
 
@@ -325,6 +326,7 @@ export async function* runAgenticLoop(
 
         if (result.ok) {
           consecutiveErrors = 0;
+          if (toolDef?.category === "mutate") mutationToolSucceeded = true;
           trackChangedFiles(toolCall, result, changedFiles, toolDef?.category);
         } else {
           consecutiveErrors++;
@@ -362,6 +364,28 @@ export async function* runAgenticLoop(
       });
 
       if (totalToolCalls > 0 && consecutiveTextOnlyTurns >= TEXT_ONLY_COMPLETION_THRESHOLD) {
+        if (input.requireMutationBeforeCompletion === true && !mutationToolSucceeded) {
+          logAgenticLoop("blocked_text_only_completion_missing_mutation", {
+            projectId: input.projectId,
+            iteration,
+            totalToolCalls,
+          });
+          consecutiveTextOnlyTurns = 0;
+          messages.push({
+            role: "developer",
+            content:
+              input.mutationCompletionHint ??
+              "This storefront request requires a code mutation, but no project files have been changed yet. Inspect the current source, then use edit or write to update the relevant route/component files. Do not finish with text-only replies until at least one project file is changed.",
+          });
+          if (hasText) {
+            messages.push({
+              role: "assistant",
+              content: modelResult.outputText,
+            });
+          }
+          continue;
+        }
+
         const presentPaths = collectPresentInitPaths(
           input.pathsSatisfiedAtRunStart ?? new Set(),
           [...changedFiles],

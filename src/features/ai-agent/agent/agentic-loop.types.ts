@@ -27,6 +27,10 @@ export type AgenticLoopInput = {
   pathsSatisfiedAtRunStart?: ReadonlySet<string>;
   /** All of these paths must be present (in start set or changedFiles) before text-only completion. */
   requiredPathsBeforeCompletion?: readonly string[];
+  /** Block early text-only completion when a patch/apply request has not mutated any file. */
+  requireMutationBeforeCompletion?: boolean;
+  /** User-facing-internal hint for the model when mutation is still missing. */
+  mutationCompletionHint?: string;
   /** Do not stream raw model text to the user (init uses skeleton + status events only). */
   suppressAssistantStreaming?: boolean;
   signal?: AbortSignal;

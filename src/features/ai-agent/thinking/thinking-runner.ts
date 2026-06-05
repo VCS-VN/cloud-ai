@@ -269,7 +269,12 @@ function structuredThinkingToLegacyResult(
         pages: result.ecommerceContext.affectedPages,
         sections: result.ecommerceContext.affectedSections,
         features: result.ecommerceContext.affectedFeatures,
-        filesHint: [],
+        filesHint: inferLikelyFilesFromScope({
+          pages: result.ecommerceContext.affectedPages,
+          sections: result.ecommerceContext.affectedSections,
+          features: result.ecommerceContext.affectedFeatures,
+          prompt: input.userPrompt,
+        }),
         dataModels: result.ecommerceContext.affectedEntities,
       },
       executionPolicy: {
@@ -498,6 +503,66 @@ function mapConversionGoal(
   return "conversion";
 }
 
+function inferLikelyFilesFromScope(input: {
+  pages: readonly string[];
+  sections: readonly string[];
+  features: readonly string[];
+  prompt: string;
+}): string[] {
+  const normalized = [
+    input.prompt,
+    ...input.pages,
+    ...input.sections,
+    ...input.features,
+  ]
+    .join(" ")
+    .toLocaleLowerCase();
+  const files = new Set<string>();
+
+  if (
+    input.pages.some((page) => page.trim() === "/") ||
+    includesAny(normalized, ["home", "homepage", "trang chủ", "hero", "banner"])
+  ) {
+    files.add("src/routes/index.tsx");
+    files.add("src/components/store/*");
+  }
+  if (includesAny(normalized, ["products", "product listing", "catalog", "sản phẩm", "/products"])) {
+    files.add("src/routes/products/index.tsx");
+    files.add("src/components/store/product-grid.tsx");
+    files.add("src/components/store/product-card.tsx");
+  }
+  if (includesAny(normalized, ["product detail", "chi tiết sản phẩm", "$productid"])) {
+    files.add("src/routes/products/$productId.tsx");
+  }
+  if (includesAny(normalized, ["cart", "giỏ hàng"])) {
+    files.add("src/routes/cart.tsx");
+    files.add("src/app/cart-provider.tsx");
+  }
+  if (includesAny(normalized, ["checkout", "thanh toán"])) {
+    files.add("src/routes/checkout.tsx");
+  }
+  if (includesAny(normalized, ["order", "orders", "đơn hàng"])) {
+    files.add("src/routes/orders/index.tsx");
+    files.add("src/routes/orders/$orderId.tsx");
+  }
+  if (includesAny(normalized, ["header", "navigation", "nav", "menu"])) {
+    files.add("src/components/layout/site-header.tsx");
+  }
+  if (includesAny(normalized, ["footer"])) {
+    files.add("src/components/layout/site-footer.tsx");
+  }
+  if (includesAny(normalized, ["style", "theme", "đẹp", "xịn", "premium", "css"])) {
+    files.add("DESIGN.md");
+    files.add("src/styles/app.css");
+  }
+
+  if (files.size === 0) {
+    files.add("src/routes/index.tsx");
+    files.add("src/components/store/*");
+  }
+  return [...files];
+}
+
 function mapProjectStatus(
   status: ProjectState["status"] | undefined,
 ): ThinkingInput["projectContext"]["status"] {
@@ -537,4 +602,8 @@ function filterNonEmpty(values: ReadonlyArray<string | undefined | null>): strin
     if (typeof value === "string" && value.trim().length > 0) result.push(value);
   }
   return result;
+}
+
+function includesAny(value: string, needles: readonly string[]) {
+  return needles.some((needle) => value.includes(needle));
 }

@@ -7,6 +7,7 @@ Stack: TanStack Start, TanStack Router, TanStack Query, React, Tailwind CSS, Vit
 
 RULES:
 - Use tools to inspect before proposing or applying changes.
+- For normal storefront update/apply requests, inspection is not enough: after inspecting, mutate the relevant generated project file(s) with edit/write so the requested UI appears in the preview. Do not finish with a text-only response or validation-only run when the request asks to add, update, improve, or fix visible storefront UI.
 - Never assume file structure. Use project_get_context, project_get_file_tree, project_search_code, project_read_file.
 - Use only tool calls to access or change source code.
 - Prefer generic tools: read, write, edit, glob, grep. Old project_* tool names still work as aliases during transition.
@@ -26,6 +27,7 @@ RULES:
 - Preserve the root RouteLoadingBar before SiteHeader. Users may customize its UI, but it must follow DESIGN.md tokens/style, use TanStack Router pending state, and avoid fake timers.
 - Before modifying UI code (routes, components, pages, styles), call project_read_taste_skill (the design taste skill). That skill is REQUIRED before any UI create/edit; it is NOT needed for pure business/data/network changes (e.g. cart API, query params, providers) that do not touch visual UI.
 - DESIGN.md is a project-specific reference template (palette roles, typography, layout). Follow it when implementing UI, but UI quality and visual direction come primarily from the taste skill. Optionally call project_read_design_rules to load DESIGN.md when helpful.
+- Route ownership: homepage UI renders from `src/routes/index.tsx`; catalog UI from `src/routes/products/index.tsx` plus `src/components/store/product-grid.tsx` / `product-card.tsx`; product detail UI from `src/routes/products/$productId.tsx`; cart from `src/routes/cart.tsx`; checkout from `src/routes/checkout.tsx`; orders from `src/routes/orders/*`; header/footer from `src/components/layout/site-header.tsx` and `src/components/layout/site-footer.tsx`. Patch these generated project files directly or their imported components, not unrelated Builder app files.
 - DESIGN.md is generated once by the storefront-design-authoring skill and kept stable across update prompts. NEVER regenerate DESIGN.md to satisfy an update prompt; the orchestrator handles redesign and token-level patches before invoking you. When you receive a token-level patch note, only patch the files that read the affected roles; do not rewrite unrelated UI.
 - After mutation, run validation. If failed, repair with minimal patch.
 - Ask fallback clarification only after inspection discovers a new destructive request, conflict, risk, or blocking ambiguity that was not safely resolvable earlier. Do not ask generic clarification for low-risk edits.

@@ -1503,6 +1503,9 @@ export class AgentOrchestrator {
             context: args.toolExecutionContext,
             registry: args.registry,
             preloadedTasteSkill: args.preloadedTasteSkill,
+            requireMutationBeforeCompletion:
+              args.thinking.downstreamTask.executionPolicy.allowPatchSource,
+            mutationCompletionHint: buildMutationCompletionHint(args.thinking),
             signal: args.signal,
           },
           {
@@ -1988,6 +1991,22 @@ function buildStorefrontCompliancePrompt(
     "",
     "If violations are found, replace raw values with mapped token utilities from DESIGN.md.",
     "Call project_read_design_rules to load current design rules before patching.",
+  ].join("\n");
+}
+
+function buildMutationCompletionHint(thinking: ThinkingResult): string {
+  const filesHint = thinking.downstreamTask.targetScope.filesHint.length
+    ? thinking.downstreamTask.targetScope.filesHint.join(", ")
+    : "src/routes/index.tsx, src/components/store/*";
+  const sections = thinking.downstreamTask.targetScope.sections.length
+    ? thinking.downstreamTask.targetScope.sections.join(", ")
+    : "the requested storefront area";
+  return [
+    "This storefront request requires visible source changes, but no project files have been changed yet.",
+    `Target sections: ${sections}.`,
+    `Likely files to inspect and patch: ${filesHint}.`,
+    "Use project_read_design_rules if UI is involved, inspect the current files, then use edit or write to mutate the relevant route/component files.",
+    "Do not finish with text-only replies until at least one project file is changed and the requested UI can render in the preview.",
   ].join("\n");
 }
 
