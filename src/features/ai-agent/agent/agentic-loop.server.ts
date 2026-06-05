@@ -326,7 +326,9 @@ export async function* runAgenticLoop(
 
         if (result.ok) {
           consecutiveErrors = 0;
-          if (toolDef?.category === "mutate") mutationToolSucceeded = true;
+          if (toolDef?.category === "mutate" && resultHasActualFileMutation(result)) {
+            mutationToolSucceeded = true;
+          }
           trackChangedFiles(toolCall, result, changedFiles, toolDef?.category);
         } else {
           consecutiveErrors++;
@@ -511,4 +513,21 @@ function trackChangedFiles(
   if (toolCategory === "mutate" && typeof data.path === "string") {
     changedFiles.add(data.path);
   }
+}
+
+function resultHasActualFileMutation(result: ProjectToolResult) {
+  if (!result.ok || !result.data || typeof result.data !== "object") return false;
+  const data = result.data as Record<string, unknown>;
+  const changedFiles = Array.isArray(data.changedFiles)
+    ? data.changedFiles.filter((file): file is string => typeof file === "string")
+    : [];
+  if (changedFiles.length === 0 && typeof data.path !== "string") return false;
+
+  const insertions = typeof data.insertions === "number" ? data.insertions : 0;
+  const deletions = typeof data.deletions === "number" ? data.deletions : 0;
+  const createdFiles = Array.isArray(data.createdFiles) ? data.createdFiles.length : 0;
+  const modifiedFiles = Array.isArray(data.modifiedFiles) ? data.modifiedFiles.length : 0;
+  const deletedFiles = Array.isArray(data.deletedFiles) ? data.deletedFiles.length : 0;
+
+  return insertions > 0 || deletions > 0 || createdFiles > 0 || modifiedFiles > 0 || deletedFiles > 0;
 }

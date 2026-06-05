@@ -48,6 +48,12 @@ export class ProjectPatchService {
     }
 
     const changedFiles = extractPatchFiles(input.patch);
+    if (changedFiles.length === 0) {
+      throw new ProjectPatchPolicyError(
+        "PATCH_APPLY_FAILED",
+        "Patch must include valid unified diff file headers.",
+      );
+    }
     if (changedFiles.length > CODE_TOOL_LIMITS.maxFilesChangedWithoutReview) {
       throw new ProjectPatchPolicyError("TOO_MANY_CHANGED_FILES", "Patch changes too many files.");
     }
@@ -70,25 +76,49 @@ export class ProjectPatchService {
   async applyPatch(input: { workspaceRoot: string; patch: string; expectedChangedFiles?: string[] }): Promise<PatchResult> {
     const { changedFiles } = this.validatePatch(input);
     const filePatches = parseUnifiedPatch(input.patch);
+    if (filePatches.length === 0) {
+      throw new ProjectPatchPolicyError(
+        "PATCH_APPLY_FAILED",
+        "Patch did not contain any valid file changes.",
+      );
+    }
     const modifiedFiles: string[] = [];
     const createdFiles: string[] = [];
     const deletedFiles: string[] = [];
     let insertions = 0;
     let deletions = 0;
+    let actualChangedFiles = 0;
 
     for (const filePatch of filePatches) {
+      if (filePatch.hunks.length === 0) {
+        throw new ProjectPatchPolicyError(
+          "PATCH_APPLY_FAILED",
+          `Patch for ${filePatch.path} did not contain any hunks.`,
+        );
+      }
       const targetPath = path.join(input.workspaceRoot, filePatch.path);
       const exists = await fileExists(targetPath);
       const oldContent = exists ? await readFile(targetPath, "utf8") : "";
       const nextContent = applyHunks(oldContent, filePatch.hunks);
+      if (exists && nextContent === oldContent) {
+        continue;
+      }
 
       await mkdir(path.dirname(targetPath), { recursive: true });
       await writeFile(targetPath, nextContent, "utf8");
+      actualChangedFiles += 1;
 
       insertions += filePatch.insertions;
       deletions += filePatch.deletions;
       if (!exists) createdFiles.push(filePatch.path);
       else modifiedFiles.push(filePatch.path);
+    }
+
+    if (actualChangedFiles === 0) {
+      throw new ProjectPatchPolicyError(
+        "PATCH_APPLY_FAILED",
+        "Patch applied no changes to target files.",
+      );
     }
 
     const previewRestart = getPreviewRestartRequirement(changedFiles);

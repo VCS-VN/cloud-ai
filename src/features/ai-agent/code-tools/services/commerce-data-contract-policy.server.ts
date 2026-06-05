@@ -39,6 +39,10 @@ const CONTRACTS: ReadonlyArray<{
       "getItemQuantity",
       "addItem",
       "updateItemQuantity",
+      "decreaseQuantity",
+      "increaseQuantity",
+      "Minus",
+      "Plus",
     ],
   },
   {

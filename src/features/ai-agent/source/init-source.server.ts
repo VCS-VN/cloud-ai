@@ -2189,6 +2189,7 @@ function productDetailRouteSource() {
   return `import { useMemo, useState } from 'react'
 import DOMPurify from 'dompurify'
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { Minus, Plus } from 'lucide-react'
 import { useCart } from '@/app/cart-provider'
 import { useProductDetail } from '@/services/store/use-product-detail'
 import type { ProductModel } from '@/services/store/use-products-list'
@@ -2232,6 +2233,19 @@ function ProductDetailPage() {
     return typeof window !== 'undefined' ? DOMPurify.sanitize(html) : escapeHtml(html)
   }, [product?.descriptions])
   const canMutateCart = Boolean(product && selectedModel && selectedModelId)
+  const canSubmitCart = canMutateCart && (quantity > 0 || existingQuantity > 0)
+
+  function decreaseQuantity() {
+    setQuantity((value) => Math.max(0, value - 1))
+  }
+
+  function increaseQuantity() {
+    setQuantity((value) => value + 1)
+  }
+
+  function handleQuantityInput(value: string) {
+    setQuantity(Math.max(0, Number(value.replace(/\\D/g, '')) || 0))
+  }
 
   function handleCartAction() {
     if (!product || !selectedModel || !selectedModelId) return
@@ -2298,21 +2312,40 @@ function ProductDetailPage() {
                 <label className='text-sm font-medium text-muted-foreground' htmlFor='product-quantity'>
                   Quantity
                 </label>
-                <input
-                  id='product-quantity'
-                  type='number'
-                  min='0'
-                  value={quantity}
-                  onChange={(event) => setQuantity(Math.max(0, Number(event.target.value) || 0))}
-                  className='h-10 w-24 rounded-md border border-input bg-background px-3 text-sm'
-                />
+                <div className='inline-flex h-11 items-center overflow-hidden rounded-full border border-input bg-background shadow-sm'>
+                  <button
+                    type='button'
+                    aria-label='Decrease quantity'
+                    onClick={decreaseQuantity}
+                    disabled={quantity <= 0}
+                    className='flex h-11 w-11 items-center justify-center text-muted-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40'
+                  >
+                    <Minus className='h-4 w-4' />
+                  </button>
+                  <input
+                    id='product-quantity'
+                    inputMode='numeric'
+                    value={quantity}
+                    onChange={(event) => handleQuantityInput(event.target.value)}
+                    className='h-11 w-14 border-x border-input bg-transparent text-center text-sm font-semibold text-foreground outline-none'
+                    aria-label='Quantity'
+                  />
+                  <button
+                    type='button'
+                    aria-label='Increase quantity'
+                    onClick={increaseQuantity}
+                    className='flex h-11 w-11 items-center justify-center text-muted-foreground transition hover:bg-muted'
+                  >
+                    <Plus className='h-4 w-4' />
+                  </button>
+                </div>
                 {selectedModelId ? (
                   <p className='text-sm text-muted-foreground'>In cart: {existingQuantity}</p>
                 ) : null}
               </div>
               <button
                 type='button'
-                disabled={!canMutateCart}
+                disabled={!canSubmitCart}
                 onClick={handleCartAction}
                 className='inline-flex h-11 items-center justify-center rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50'
               >
