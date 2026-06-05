@@ -1,5 +1,6 @@
 Write a 1-2 sentence user-facing confirmation in the SAME LANGUAGE as the user prompt.
 Refer to the storefront in product terms only ("your shop", "the homepage", "the products page").
 Describe the OUTCOME and behavior change, NOT which files changed - the list of changed files is shown separately, so do not enumerate or name files.
+If `ok` is false or `changedFiles` is empty for a requested website update, say clearly that the change was not applied and the preview is unchanged. Do not claim the requested UI exists.
 NEVER mention: file paths, environment variable names, schema names, tool names, model names, internal status codes, or technical taxonomy.
 Do not echo this instruction.

@@ -429,6 +429,8 @@ export class AgentOrchestrator {
         signal: input.signal,
       });
 
+      loopResult = enforceRequiredMutationCompletion(loopResult, thinking);
+
       const nextProjectState = await this.deps.projectStateStore.patch(
         input.projectId,
         {
@@ -1677,6 +1679,8 @@ export class AgentOrchestrator {
         input: {
           prompt: args.input.prompt,
           ok: args.validation.ok,
+          changedFiles: args.changedFiles,
+          validationSummary: args.validation.summary,
         },
       })) {
         if (event.type === "delta" && event.text) {
@@ -1736,6 +1740,28 @@ function builderIntentFromThinking(thinking: ThinkingResult): BuilderIntent {
     clarificationQuestion: clarification?.question ?? null,
     clarificationOptions: clarification?.options,
     riskLevel: thinking.riskAssessment.level,
+  };
+}
+
+function enforceRequiredMutationCompletion(
+  loopResult: AgenticLoopResult,
+  thinking: ThinkingResult,
+): AgenticLoopResult {
+  const requiresMutation =
+    thinking.downstreamTask.executionPolicy.allowPatchSource === true;
+  if (
+    !requiresMutation ||
+    loopResult.status !== "completed" ||
+    loopResult.changedFiles.length > 0
+  ) {
+    return loopResult;
+  }
+
+  return {
+    ...loopResult,
+    status: "failed",
+    summary:
+      "Không thể áp dụng thay đổi vì agent không ghi được file nào trong project. Preview chưa được cập nhật.",
   };
 }
 
