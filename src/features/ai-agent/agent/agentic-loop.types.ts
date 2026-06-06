@@ -1,6 +1,6 @@
 import type { CodeToolDefinition, ProjectToolResult, ProviderFunctionToolCall, ToolExecutionContext } from "../code-tools/code-agent-types";
 import type { CodeToolRegistry } from "../code-tools/code-tool-registry.server";
-import type { ProjectState } from "../project/project-state.schema";
+import type { ProjectState } from "@/features/projects/legacy/project-state.schema";
 import type { ThinkingResult } from "../thinking/thinking.schema";
 
 export type PreloadedTasteSkill = {

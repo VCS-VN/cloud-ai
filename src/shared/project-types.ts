@@ -1,5 +1,5 @@
-import type { DevRuntime } from "@/features/ai-agent/project/project-state.schema";
-import type { DevRuntimeEvent } from "@/features/ai-agent/runtime/runtime-events";
+import type { DevRuntime } from "@/features/projects/legacy/project-state.schema";
+import type { DevRuntimeEvent } from "@/features/runtime/legacy/runtime-events";
 
 export type RecordStatus = 0 | 1
 export type ProjectStatus = 0 | 'draft' | 'generating' | 'ready' | 'failed'

@@ -14,10 +14,10 @@ export type {
   ProjectStateStatus,
   ValidationResult,
   WebsiteSpec,
-} from "../project/project-state.schema";
+} from "@/features/projects/legacy/project-state.schema";
 
-import type { AgentStreamEvent as BaseAgentStreamEvent } from "../project/project-state.schema";
-import type { DevRuntimeEvent } from "../runtime/runtime-events";
+import type { AgentStreamEvent as BaseAgentStreamEvent } from "@/features/projects/legacy/project-state.schema";
+import type { DevRuntimeEvent } from "@/features/runtime/legacy/runtime-events";
 
 export type CodeToolAgentStreamEvent =
   | { type: "code_tool_loop_started"; projectId: string; messageId: string; taskTitle: string; message?: string }

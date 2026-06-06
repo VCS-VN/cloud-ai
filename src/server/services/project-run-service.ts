@@ -1,6 +1,6 @@
 import type { ListProjectRunsOptions } from "@/server/repositories/agent-run-repository";
 import type { ProjectRepository } from "@/shared/project-types";
-import type { ProjectRunStore } from "@/features/ai-agent/project/project-run-store.server";
+import type { ProjectRunStore } from "@/features/projects/legacy/project-run-store.server";
 
 export class ProjectRunService {
   constructor(

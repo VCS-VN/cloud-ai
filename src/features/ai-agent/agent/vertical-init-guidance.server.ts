@@ -3,7 +3,7 @@ import { formatVerticalLayoutSummary } from "../design/vertical-layout-spec.serv
 import { renderPromptDoc } from "./prompt-template-store.server";
 
 const VERTICAL_INIT_GUIDANCE_PROMPT =
-  "templates/init-recovery/vertical-guidance.md";
+  "templates/codex-builder/recovery/vertical-guidance.md";
 
 /**
  * Injects vertical-specific layout guidance into the retail init prompt so the

@@ -1,7 +1,7 @@
 import type { AgentOrchestrator } from "@/features/ai-agent/agent/agent-orchestrator.server";
 import type { AgentStreamEvent } from "@/features/ai-agent/agent/agent-events";
-import type { ProjectRunStore } from "@/features/ai-agent/project/project-run-store.server";
-import type { DevRuntimeEvent } from "@/features/ai-agent/runtime/runtime-events";
+import type { ProjectRunStore } from "@/features/projects/legacy/project-run-store.server";
+import type { DevRuntimeEvent } from "@/features/runtime/legacy/runtime-events";
 import {
   sanitizeForUser,
   filterAssistantDeltaForUser,

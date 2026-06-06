@@ -1,8 +1,8 @@
-import type { WebsiteSpec } from "../project/project-state.schema";
+import type { WebsiteSpec } from "@/features/projects/legacy/project-state.schema";
 import {
   normalizeStoreTypeForTemplate,
   type StoreVertical,
-} from "../source/template-registry.server";
+} from "@/features/generated-projects/legacy/template-registry.server";
 
 export type InitDesignPipelineSignal = {
   primaryCategoryId: string;

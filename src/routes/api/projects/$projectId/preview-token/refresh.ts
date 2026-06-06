@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PREVIEW_TOKEN_COOKIE_NAME } from "@/features/ai-agent/runtime/preview-token-service.server";
+import { PREVIEW_TOKEN_COOKIE_NAME } from "@/features/runtime/legacy/preview-token-service.server";
 import { requireServerUser } from "@/server/functions/auth";
 
 export const Route = createFileRoute(
@@ -24,7 +24,7 @@ export const Route = createFileRoute(
   },
 });
 
-function serializeCookie(name: string, value: string, options: ReturnType<import("@/features/ai-agent/runtime/preview-token-service.server").PreviewTokenService["getCookieOptions"]>) {
+function serializeCookie(name: string, value: string, options: ReturnType<import("@/features/runtime/legacy/preview-token-service.server").PreviewTokenService["getCookieOptions"]>) {
   const parts = [`${name}=${value}`, `Path=${options.path}`, `Max-Age=${options.maxAge}`, `SameSite=${options.sameSite}`];
   if (options.domain) parts.push(`Domain=${options.domain}`);
   if (options.httpOnly) parts.push("HttpOnly");

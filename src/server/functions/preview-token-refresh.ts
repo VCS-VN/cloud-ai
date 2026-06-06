@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { setCookie } from "@tanstack/react-start/server";
-import { PREVIEW_TOKEN_COOKIE_NAME } from "@/features/ai-agent/runtime/preview-token-service.server";
+import { PREVIEW_TOKEN_COOKIE_NAME } from "@/features/runtime/legacy/preview-token-service.server";
 import { requireServerUser } from "./auth";
 
 function validateInput(data: { projectId?: string }) {

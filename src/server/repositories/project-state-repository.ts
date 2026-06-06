@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { projectStates } from "@/db/schema";
 import type * as schema from "@/db/schema";
-import type { ProjectState, ProjectStateStatus, DevRuntime } from "@/features/ai-agent/project/project-state.schema";
+import type { ProjectState, ProjectStateStatus, DevRuntime } from "@/features/projects/legacy/project-state.schema";
 
 type ProjectStateDatabase = PostgresJsDatabase<typeof schema>;
 type ProjectStateRow = typeof projectStates.$inferSelect;

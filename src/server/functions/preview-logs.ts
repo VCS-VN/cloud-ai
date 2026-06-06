@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { tailPm2PreviewLog } from "@/features/ai-agent/runtime/runtime-logs.server";
+import { tailPm2PreviewLog } from "@/features/runtime/legacy/runtime-logs.server";
 import { requireServerUser } from "./auth";
 
 function validateInput(data: { projectId?: string; tail?: number }) {

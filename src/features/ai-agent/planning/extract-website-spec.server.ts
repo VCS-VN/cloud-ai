@@ -1,7 +1,7 @@
 import type { ChatCompletionsProvider } from "../openai/chat-completions-provider.server";
 import { ECOMMERCE_AGENT_SYSTEM_PROMPT } from "../openai/prompts";
 import { websiteSpecProviderSchema } from "../openai/schemas";
-import type { WebsiteSpec } from "../project/project-state.schema";
+import type { WebsiteSpec } from "@/features/projects/legacy/project-state.schema";
 import { AgentError } from "../agent/agent-errors";
 import { loadPromptDoc } from "../agent/prompt-template-store.server";
 

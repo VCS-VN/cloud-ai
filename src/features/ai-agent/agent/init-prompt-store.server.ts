@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { WebsiteSpec } from "../project/project-state.schema";
+import type { WebsiteSpec } from "@/features/projects/legacy/project-state.schema";
 import { loadPromptDoc } from "./prompt-template-store.server";
 
-const INIT_PROMPT_LAYERS_RELATIVE_PATH = "templates/init-prompt";
+const INIT_PROMPT_LAYERS_RELATIVE_PATH = "templates/codex-builder/init";
 const MANIFEST_FILE = "manifest.json";
 
 type ManifestEntry = {
@@ -26,7 +26,7 @@ function resolveLayersDir(): string {
 }
 
 /**
- * Loads the layered init-prompt templates from templates/init-prompt/ once at
+ * Loads the layered init-prompt templates from templates/codex-builder/init/ once at
  * boot and caches them for the whole process. Editing the .md files requires a
  * restart to take effect.
  *

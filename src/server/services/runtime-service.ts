@@ -1,5 +1,5 @@
 import type { RuntimeStreamEvent } from "@/shared/project-types";
-import type { DevRuntimeEvent } from "@/features/ai-agent/runtime/runtime-events";
+import type { DevRuntimeEvent } from "@/features/runtime/legacy/runtime-events";
 import {
   publishRuntimeEvent,
   subscribeRuntime,

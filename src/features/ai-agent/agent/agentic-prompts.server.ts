@@ -1,14 +1,14 @@
 import { buildStoreRuntimeInstructions, buildStoreRuntimePromptContext } from "../store-runtime/store-runtime-prompt";
 import type { AgenticLoopInput } from "./agentic-loop.types";
-import type { ProjectState } from "../project/project-state.schema";
+import type { ProjectState } from "@/features/projects/legacy/project-state.schema";
 import { isProtectedProjectEnvPath } from "../code-tools/services/project-path-guard.server";
 import { loadProjectRuleDocsForPrompt } from "./project-rule-docs.server";
 import { renderPromptDoc } from "./prompt-template-store.server";
 
-const AGENT_SYSTEM_EDIT_PROMPT = "templates/agent-system/edit-system.md";
-const AGENT_SYSTEM_RETAIL_CONSTRAINTS_PROMPT = "templates/agent-system/retail-constraints.md";
-const AGENT_SYSTEM_REASONING_WORKFLOW_PROMPT = "templates/agent-system/reasoning-workflow.md";
-const AGENT_SYSTEM_INIT_MODE_PROMPT = "templates/agent-system/init-mode.md";
+const AGENT_SYSTEM_EDIT_PROMPT = "templates/codex-builder/foundation/edit-system.md";
+const AGENT_SYSTEM_RETAIL_CONSTRAINTS_PROMPT = "templates/codex-builder/foundation/retail-constraints.md";
+const AGENT_SYSTEM_REASONING_WORKFLOW_PROMPT = "templates/codex-builder/foundation/reasoning-workflow.md";
+const AGENT_SYSTEM_INIT_MODE_PROMPT = "templates/codex-builder/init/init-mode.md";
 
 export function buildAgenticSystemPrompt(input: AgenticLoopInput): string {
   const projectRuleDocs = loadProjectRuleDocsForPrompt();

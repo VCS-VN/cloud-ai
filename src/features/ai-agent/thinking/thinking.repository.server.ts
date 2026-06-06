@@ -1,5 +1,5 @@
-import type { ProjectRunStore } from "../project/project-run-store.server";
-import type { AgentRun } from "../project/project-state.schema";
+import type { ProjectRunStore } from "@/features/projects/legacy/project-run-store.server";
+import type { AgentRun } from "@/features/projects/legacy/project-state.schema";
 import type { ThinkingResult, ThinkingRunSummary } from "./thinking.schema";
 
 export function toThinkingRunSummary(result: ThinkingResult, createdAt = new Date().toISOString()): ThinkingRunSummary {

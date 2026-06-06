@@ -1,6 +1,6 @@
 import type { AgentConfig } from "../agent/agent-config";
 import type { ChatCompletionsProvider } from "../openai/chat-completions-provider.server";
-import type { AgentRun, ProjectState } from "../project/project-state.schema";
+import type { AgentRun, ProjectState } from "@/features/projects/legacy/project-state.schema";
 import {
   createClarificationStructuredThinkingResult,
   createDefaultClarificationOptions,

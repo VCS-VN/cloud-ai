@@ -1,0 +1,1011 @@
+import path from "node:path";
+import fs from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import {
+  classifyProjectPath,
+  ALLOWED_AUDIT_PROJECT_PATH_PATTERNS,
+  BLOCKED_PROJECT_PATHS,
+} from "@/features/agents/codex/boundary/protected-paths";
+import {
+  takeSnapshot,
+  diffSnapshots,
+  type FilesystemSnapshot,
+} from "@/features/agents/codex/boundary/filesystem-audit.server";
+import { runDiffGate } from "@/features/agents/codex/boundary/diff-gate.server";
+import { scanDraftForSymlinks } from "@/features/agents/codex/boundary/symlink-check.server";
+import {
+  runPromotionGate,
+} from "@/features/agents/codex/boundary/promotion-gate.server";
+import { runTypecheck } from "@/features/agents/codex/validation/typecheck.server";
+import { runBuild } from "@/features/agents/codex/validation/build.server";
+import { runPreviewHealth } from "@/features/agents/codex/validation/preview-health.server";
+import { parseProductsSample } from "@/features/agents/codex/validation/product-sample-parser.server";
+import {
+  buildContextBundle,
+  type LoadedInstruction,
+  loadInstruction,
+  type ProjectSummary,
+} from "@/features/agents/codex/context";
+import {
+  createBoundedCodexThread,
+  type BoundedCodexThread,
+} from "./codex-thread.server";
+import {
+  planInitBatches,
+  validatePlan,
+  stripBlockedFromBatches,
+  type InitBatchPlan,
+} from "./init-batch-planner.server";
+import { runRepairLoop } from "./repair-loop.server";
+import { recordBoundaryViolation, type ViolationLayer } from "./violation-counter.server";
+import { SMALL_UPDATE_FILE_CAP } from "./update-classifier.server";
+import type {
+  BuilderRunEvent,
+  BuilderRunFailureCode,
+  BuilderRunMilestone,
+} from "@/features/agents/ui/builder-events";
+import type { BuilderRunKind, BuilderRunStatus } from "@/features/agents/ui/builder-run-status";
+import type { CodexEnvAvailable } from "@/server/env/codex";
+import { getProjectWorkspaceRoot } from "@/server/config/paths.server";
+
+export type BuilderRunContext = {
+  projectId: string;
+  userId: string | undefined;
+  runId: string;
+  kind: BuilderRunKind;
+  userPrompt: string;
+  locale: string;
+  env: CodexEnvAvailable;
+  projectSummary: ProjectSummary | null;
+  signal?: AbortSignal;
+};
+
+export type BuilderRunOutcome = {
+  runId: string;
+  status: BuilderRunStatus;
+  failureCode?: BuilderRunFailureCode;
+  changedFiles: string[];
+  draftWorkspacePath: string;
+  selectedInstructionMeta: ReturnType<typeof buildContextBundle>["selectedInstructionMeta"];
+  optionalRouteWarnings: string[];
+};
+
+export type EmitFn = (event: BuilderRunEvent) => void;
+
+const FOUNDATION_INSTRUCTIONS: { name: string; relativePath: string }[] = [
+  { name: "retail-constraints", relativePath: "foundation/retail-constraints.md" },
+  { name: "reasoning-workflow", relativePath: "foundation/reasoning-workflow.md" },
+  { name: "edit-system", relativePath: "foundation/edit-system.md" },
+];
+
+async function loadFoundationInstructions(): Promise<LoadedInstruction[]> {
+  const out: LoadedInstruction[] = [];
+  for (const entry of FOUNDATION_INSTRUCTIONS) {
+    out.push(
+      await loadInstruction({
+        name: entry.name,
+        relativePath: entry.relativePath,
+        source: "template_required",
+      }),
+    );
+  }
+  return out;
+}
+
+async function loadInitInstruction(): Promise<LoadedInstruction> {
+  return loadInstruction({
+    name: "init-mode",
+    relativePath: "init/init-mode.md",
+    source: "template_required",
+  });
+}
+
+function emitMilestoneInternal(
+  emit: EmitFn,
+  runId: string,
+  milestone: BuilderRunMilestone,
+): void {
+  emit({ type: "milestone", runId, milestone, at: Date.now() });
+}
+
+function emitFailure(
+  emit: EmitFn,
+  runId: string,
+  failureCode: BuilderRunFailureCode,
+  message: string,
+): void {
+  emit({
+    type: "failed",
+    runId,
+    milestone: "failed",
+    failureCode,
+    message,
+    at: Date.now(),
+  });
+}
+
+function emitBoundaryViolation(
+  emit: EmitFn,
+  ctx: { projectId: string; userId: string | undefined; runId: string },
+  layer: ViolationLayer,
+  productSafeMessage: string,
+): void {
+  recordBoundaryViolation({
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    layer,
+  });
+  emit({
+    type: "failed",
+    runId: ctx.runId,
+    milestone: "failed",
+    failureCode: "boundary_violation",
+    message: productSafeMessage,
+    at: Date.now(),
+  });
+}
+
+async function listFiles(root: string): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(dir: string, base: string): Promise<void> {
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      const full = path.join(dir, entry.name);
+      const rel = path.relative(base, full);
+      if (entry.isDirectory()) {
+        await walk(full, base);
+      } else if (entry.isFile()) {
+        out.push(rel);
+      }
+    }
+  }
+  await walk(root, root);
+  return out.sort();
+}
+
+async function ensureDraftWorkspace(input: {
+  projectId: string;
+  runId: string;
+}): Promise<string> {
+  const projectsRoot = getProjectWorkspaceRoot(input.projectId);
+  const draftRoot = path.join(projectsRoot, "drafts", input.runId);
+  await fs.mkdir(draftRoot, { recursive: true });
+  const publishedRoot = path.join(projectsRoot, "published");
+  try {
+    await fs.cp(publishedRoot, draftRoot, { recursive: true });
+  } catch {
+    // empty published — start from blank draft
+  }
+  return draftRoot;
+}
+
+async function syncDraftToPublished(
+  draftPath: string,
+  publishedPath: string,
+): Promise<void> {
+  await fs.rm(publishedPath, { recursive: true, force: true });
+  await fs.mkdir(path.dirname(publishedPath), { recursive: true });
+  await fs.cp(draftPath, publishedPath, { recursive: true });
+}
+
+export async function runInitBuilderRun(
+  ctx: BuilderRunContext,
+  emit: EmitFn,
+): Promise<BuilderRunOutcome> {
+  const { runId } = ctx;
+  emitMilestoneInternal(emit, runId, "loading_context");
+
+  const draftWorkspacePath = await ensureDraftWorkspace({
+    projectId: ctx.projectId,
+    runId,
+  });
+
+  const fileManifest = await listFiles(draftWorkspacePath);
+  const foundationInstructions = await loadFoundationInstructions();
+  const initInstruction = await loadInitInstruction();
+  const allInstructions = [...foundationInstructions, initInstruction];
+
+  const bundle = buildContextBundle({
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    draftWorkspacePath,
+    userPrompt: ctx.userPrompt,
+    locale: ctx.locale,
+    projectSummary: ctx.projectSummary,
+    fileManifest,
+    protectedPaths: {
+      blocked: BLOCKED_PROJECT_PATHS,
+      allowedAudit: ALLOWED_AUDIT_PROJECT_PATH_PATTERNS.map((p) => p.source),
+    },
+    validationRules: { typecheck: true, build: true, previewHealth: true },
+    selectedInstructions: allInstructions,
+  });
+
+  const symlinkScan = await scanDraftForSymlinks(draftWorkspacePath);
+  if (!symlinkScan.ok) {
+    emitFailure(
+      emit,
+      runId,
+      "boundary_violation",
+      "draft contains disallowed symlinks",
+    );
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "boundary_violation",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "planning");
+  let plan: InitBatchPlan;
+  try {
+    plan = await planInitBatches();
+  } catch (error) {
+    emitFailure(
+      emit,
+      runId,
+      "codex_runtime_failed",
+      "failed to read init manifest",
+    );
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "codex_runtime_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  let planValidation = validatePlan(plan);
+  if (!planValidation.ok && planValidation.reason === "blocked_path") {
+    plan = stripBlockedFromBatches(plan);
+    planValidation = validatePlan(plan);
+  }
+  if (!planValidation.ok) {
+    emitFailure(
+      emit,
+      runId,
+      "blocked_request",
+      planValidation.reason === "batch_too_large"
+        ? "init plan exceeded the per-batch file cap"
+        : "init plan touched a protected path",
+    );
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "blocked_request",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "creating_draft");
+  const beforeSnapshot = await takeSnapshot(draftWorkspacePath);
+
+  let thread: BoundedCodexThread;
+  try {
+    thread = createBoundedCodexThread({
+      env: ctx.env,
+      draftWorkspacePath,
+    });
+  } catch {
+    emitFailure(emit, runId, "codex_runtime_failed", "failed to start codex thread");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "codex_runtime_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "building_pages");
+  try {
+    await thread.runTurn({
+      prompt:
+        bundle.prompt +
+        "\n\n<plan>\n" +
+        plan.batches
+          .map((b) => `- ${b.kind}:${b.marker} → ${b.files.join(", ")}`)
+          .join("\n") +
+        "\n</plan>",
+      signal: ctx.signal,
+    });
+    for (const batch of plan.batches) {
+      await thread.runTurn({
+        prompt: `Now build batch ${batch.marker} (${batch.kind}). Files in scope: ${batch.files.join(", ")}.`,
+        signal: ctx.signal,
+      });
+    }
+  } catch (error) {
+    if (ctx.signal?.aborted) {
+      emit({ type: "cancelled", runId, milestone: "cancelled", at: Date.now() });
+      return finalize({
+        runId,
+        status: "cancelled",
+        failureCode: "cancelled",
+        changedFiles: [],
+        draftWorkspacePath,
+        selectedInstructionMeta: bundle.selectedInstructionMeta,
+        optionalRouteWarnings: [],
+      });
+    }
+    emitFailure(
+      emit,
+      runId,
+      "codex_runtime_failed",
+      "codex turn ended unexpectedly",
+    );
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "codex_runtime_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  const afterSnapshot = await takeSnapshot(draftWorkspacePath);
+  const diff = diffSnapshots(beforeSnapshot, afterSnapshot);
+  const diffGate = runDiffGate({ draftWorkspacePath, diff });
+  if (!diffGate.ok) {
+    const code: BuilderRunFailureCode = diffGate.violations.some(
+      (v) => v.reason === "outside_draft_workspace",
+    )
+      ? "boundary_violation"
+      : "blocked_request";
+    if (code === "boundary_violation") {
+      emitBoundaryViolation(emit, ctx, "diff_gate", "request blocked by safety check");
+    } else {
+      emitFailure(emit, runId, code, "request touched a protected file");
+    }
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+  if (diffGate.changedFiles.length === 0) {
+    emitFailure(emit, runId, "validation_failed", "no changes produced");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "validation_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "checking_preview");
+  const typecheckRepair = await runRepairLoop({
+    thread,
+    validate: () => runTypecheck(draftWorkspacePath, { signal: ctx.signal }),
+    signal: ctx.signal,
+    onCycleStart: () => emitMilestoneInternal(emit, runId, "repairing"),
+  });
+  const typecheck = typecheckRepair.finalOutcome;
+  if (!typecheck.ok) {
+    const code: BuilderRunFailureCode =
+      typecheckRepair.cyclesUsed >= 2 ? "repair_exhausted" : "validation_failed";
+    emitFailure(emit, runId, code, "typecheck failed");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+  const build = await runBuild(draftWorkspacePath, { signal: ctx.signal });
+  if (!build.ok) {
+    emitFailure(emit, runId, "validation_failed", "build failed");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "validation_failed",
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  const sampleParse = await parseProductsSample(draftWorkspacePath);
+  if (!sampleParse.ok) {
+    emitFailure(
+      emit,
+      runId,
+      "validation_failed",
+      `product sample parse failed: ${sampleParse.reason}`,
+    );
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "validation_failed",
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+  const sampleProductId = sampleParse.productId ?? undefined;
+
+  const previewHealth = await runPreviewHealth({
+    baseUrl: `http://127.0.0.1:0`,
+    pm2Name: `proj-${ctx.projectId}`,
+    sampleProductId,
+  });
+  if (!previewHealth.ok) {
+    emitFailure(emit, runId, "preview_failed", previewHealth.failureReason ?? "preview health failed");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "preview_failed",
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "publishing");
+  const promotion = runPromotionGate({
+    expected: { projectId: ctx.projectId, userId: ctx.userId, draftWorkspacePath },
+    current: { projectId: ctx.projectId, userId: ctx.userId, draftWorkspacePath },
+  });
+  if (!promotion.ok) {
+    emitBoundaryViolation(emit, ctx, "promotion_gate", "request blocked by safety check");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "boundary_violation",
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  const publishedPath = path.join(getProjectWorkspaceRoot(ctx.projectId), "published");
+  await syncDraftToPublished(draftWorkspacePath, publishedPath);
+  await fs.rm(draftWorkspacePath, { recursive: true, force: true });
+  emit({ type: "done", runId, milestone: "done", at: Date.now() });
+  return finalize({
+    runId,
+    status: "done",
+    changedFiles: diffGate.changedFiles,
+    draftWorkspacePath,
+    selectedInstructionMeta: bundle.selectedInstructionMeta,
+    optionalRouteWarnings: previewHealth.optionalFailures,
+  });
+}
+
+function finalize(outcome: BuilderRunOutcome): BuilderRunOutcome {
+  return outcome;
+}
+
+export function newRunId(): string {
+  return randomUUID();
+}
+
+export type { FilesystemSnapshot };
+
+const NEW_ROUTE_FILE_RE = /^src\/routes\/(.+)\.tsx$/;
+
+function deriveAddedRouteUrls(addedFiles: string[]): string[] {
+  const urls: string[] = [];
+  for (const file of addedFiles) {
+    const match = file.match(NEW_ROUTE_FILE_RE);
+    if (!match) continue;
+    let routePath = match[1];
+    if (routePath === "__root") continue;
+    if (routePath.endsWith("/index")) routePath = routePath.slice(0, -"/index".length);
+    if (routePath === "index") {
+      urls.push("/");
+      continue;
+    }
+    routePath = routePath.replace(/\$([A-Za-z0-9_]+)/g, ":$1");
+    urls.push("/" + routePath);
+  }
+  return urls;
+}
+
+export async function runNewRouteBuilderRun(
+  ctx: BuilderRunContext,
+  emit: EmitFn,
+): Promise<BuilderRunOutcome> {
+  const { runId } = ctx;
+  emitMilestoneInternal(emit, runId, "loading_context");
+
+  const draftWorkspacePath = await ensureDraftWorkspace({
+    projectId: ctx.projectId,
+    runId,
+  });
+  const fileManifest = await listFiles(draftWorkspacePath);
+  const foundationInstructions = await loadFoundationInstructions();
+
+  const bundle = buildContextBundle({
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    draftWorkspacePath,
+    userPrompt: ctx.userPrompt,
+    locale: ctx.locale,
+    projectSummary: ctx.projectSummary,
+    fileManifest,
+    protectedPaths: {
+      blocked: BLOCKED_PROJECT_PATHS,
+      allowedAudit: ALLOWED_AUDIT_PROJECT_PATH_PATTERNS.map((p) => p.source),
+    },
+    validationRules: { typecheck: true, build: true, previewHealth: true },
+    selectedInstructions: foundationInstructions,
+  });
+
+  const symlinkScan = await scanDraftForSymlinks(draftWorkspacePath);
+  if (!symlinkScan.ok) {
+    emitBoundaryViolation(emit, ctx, "symlink", "request blocked by safety check");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "boundary_violation",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "planning");
+  let thread: BoundedCodexThread;
+  try {
+    thread = createBoundedCodexThread({ env: ctx.env, draftWorkspacePath });
+  } catch {
+    emitFailure(emit, runId, "codex_runtime_failed", "failed to start codex thread");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "codex_runtime_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+  try {
+    await thread.runTurn({
+      prompt: bundle.prompt + "\n\n<plan_request>Plan the new route changes before mutating any files.</plan_request>",
+      signal: ctx.signal,
+    });
+  } catch (error) {
+    if (ctx.signal?.aborted) {
+      emit({ type: "cancelled", runId, milestone: "cancelled", at: Date.now() });
+      return finalize({
+        runId,
+        status: "cancelled",
+        failureCode: "cancelled",
+        changedFiles: [],
+        draftWorkspacePath,
+        selectedInstructionMeta: bundle.selectedInstructionMeta,
+        optionalRouteWarnings: [],
+      });
+    }
+    emitFailure(emit, runId, "codex_runtime_failed", "planning turn ended unexpectedly");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "codex_runtime_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "creating_draft");
+  const beforeSnapshot = await takeSnapshot(draftWorkspacePath);
+
+  emitMilestoneInternal(emit, runId, "building_pages");
+  try {
+    await thread.runTurn({
+      prompt: "Now apply the planned new-route changes inside the draft workspace.",
+      signal: ctx.signal,
+    });
+  } catch (error) {
+    if (ctx.signal?.aborted) {
+      emit({ type: "cancelled", runId, milestone: "cancelled", at: Date.now() });
+      return finalize({
+        runId,
+        status: "cancelled",
+        failureCode: "cancelled",
+        changedFiles: [],
+        draftWorkspacePath,
+        selectedInstructionMeta: bundle.selectedInstructionMeta,
+        optionalRouteWarnings: [],
+      });
+    }
+    emitFailure(emit, runId, "codex_runtime_failed", "mutation turn ended unexpectedly");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "codex_runtime_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  const afterSnapshot = await takeSnapshot(draftWorkspacePath);
+  const diff = diffSnapshots(beforeSnapshot, afterSnapshot);
+  const diffGate = runDiffGate({ draftWorkspacePath, diff });
+  if (!diffGate.ok) {
+    const code: BuilderRunFailureCode = diffGate.violations.some(
+      (v) => v.reason === "outside_draft_workspace",
+    )
+      ? "boundary_violation"
+      : "blocked_request";
+    if (code === "boundary_violation") {
+      emitBoundaryViolation(emit, ctx, "diff_gate", "request blocked by safety check");
+    } else {
+      emitFailure(emit, runId, code, "request touched a protected file");
+    }
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+  if (diffGate.changedFiles.length === 0) {
+    emitFailure(emit, runId, "validation_failed", "no changes produced");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "validation_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "checking_preview");
+  const typecheckRepair = await runRepairLoop({
+    thread,
+    validate: () => runTypecheck(draftWorkspacePath, { signal: ctx.signal }),
+    signal: ctx.signal,
+    onCycleStart: () => emitMilestoneInternal(emit, runId, "repairing"),
+  });
+  const typecheck = typecheckRepair.finalOutcome;
+  if (!typecheck.ok) {
+    const code: BuilderRunFailureCode =
+      typecheckRepair.cyclesUsed >= 2 ? "repair_exhausted" : "validation_failed";
+    emitFailure(emit, runId, code, "typecheck failed");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+  const build = await runBuild(draftWorkspacePath, { signal: ctx.signal });
+  if (!build.ok) {
+    emitFailure(emit, runId, "validation_failed", "build failed");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "validation_failed",
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  const sampleParse = await parseProductsSample(draftWorkspacePath);
+  const sampleProductId =
+    sampleParse.ok && sampleParse.productId ? sampleParse.productId : undefined;
+  const extraRoutes = deriveAddedRouteUrls(diff.added);
+  const previewHealth = await runPreviewHealth({
+    baseUrl: `http://127.0.0.1:0`,
+    pm2Name: `proj-${ctx.projectId}`,
+    sampleProductId,
+    extraRoutes,
+  });
+  if (!previewHealth.ok) {
+    emitFailure(emit, runId, "preview_failed", previewHealth.failureReason ?? "preview health failed");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "preview_failed",
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "publishing");
+  const promotion = runPromotionGate({
+    expected: { projectId: ctx.projectId, userId: ctx.userId, draftWorkspacePath },
+    current: { projectId: ctx.projectId, userId: ctx.userId, draftWorkspacePath },
+  });
+  if (!promotion.ok) {
+    emitBoundaryViolation(emit, ctx, "promotion_gate", "request blocked by safety check");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "boundary_violation",
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  const publishedPath = path.join(getProjectWorkspaceRoot(ctx.projectId), "published");
+  await syncDraftToPublished(draftWorkspacePath, publishedPath);
+  await fs.rm(draftWorkspacePath, { recursive: true, force: true });
+  emit({ type: "done", runId, milestone: "done", at: Date.now() });
+  return finalize({
+    runId,
+    status: "done",
+    changedFiles: diffGate.changedFiles,
+    draftWorkspacePath,
+    selectedInstructionMeta: bundle.selectedInstructionMeta,
+    optionalRouteWarnings: previewHealth.optionalFailures,
+  });
+}
+
+export async function runSmallUpdateBuilderRun(
+  ctx: BuilderRunContext,
+  emit: EmitFn,
+): Promise<BuilderRunOutcome> {
+  const { runId } = ctx;
+  emitMilestoneInternal(emit, runId, "loading_context");
+
+  const draftWorkspacePath = await ensureDraftWorkspace({
+    projectId: ctx.projectId,
+    runId,
+  });
+  const fileManifest = await listFiles(draftWorkspacePath);
+  const foundationInstructions = await loadFoundationInstructions();
+
+  const bundle = buildContextBundle({
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    draftWorkspacePath,
+    userPrompt: ctx.userPrompt,
+    locale: ctx.locale,
+    projectSummary: ctx.projectSummary,
+    fileManifest,
+    protectedPaths: {
+      blocked: BLOCKED_PROJECT_PATHS,
+      allowedAudit: ALLOWED_AUDIT_PROJECT_PATH_PATTERNS.map((p) => p.source),
+    },
+    validationRules: { typecheck: true, build: false, previewHealth: true },
+    selectedInstructions: foundationInstructions,
+  });
+
+  const symlinkScan = await scanDraftForSymlinks(draftWorkspacePath);
+  if (!symlinkScan.ok) {
+    emitBoundaryViolation(emit, ctx, "symlink", "request blocked by safety check");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "boundary_violation",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "creating_draft");
+  const beforeSnapshot = await takeSnapshot(draftWorkspacePath);
+
+  let thread: BoundedCodexThread;
+  try {
+    thread = createBoundedCodexThread({ env: ctx.env, draftWorkspacePath });
+  } catch {
+    emitFailure(emit, runId, "codex_runtime_failed", "failed to start codex thread");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "codex_runtime_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "building_pages");
+  try {
+    await thread.runTurn({ prompt: bundle.prompt, signal: ctx.signal });
+  } catch (error) {
+    if (ctx.signal?.aborted) {
+      emit({ type: "cancelled", runId, milestone: "cancelled", at: Date.now() });
+      return finalize({
+        runId,
+        status: "cancelled",
+        failureCode: "cancelled",
+        changedFiles: [],
+        draftWorkspacePath,
+        selectedInstructionMeta: bundle.selectedInstructionMeta,
+        optionalRouteWarnings: [],
+      });
+    }
+    emitFailure(emit, runId, "codex_runtime_failed", "codex turn ended unexpectedly");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "codex_runtime_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  const afterSnapshot = await takeSnapshot(draftWorkspacePath);
+  const diff = diffSnapshots(beforeSnapshot, afterSnapshot);
+  const diffGate = runDiffGate({ draftWorkspacePath, diff });
+  if (!diffGate.ok) {
+    const code: BuilderRunFailureCode = diffGate.violations.some(
+      (v) => v.reason === "outside_draft_workspace",
+    )
+      ? "boundary_violation"
+      : "blocked_request";
+    if (code === "boundary_violation") {
+      emitBoundaryViolation(emit, ctx, "diff_gate", "request blocked by safety check");
+    } else {
+      emitFailure(emit, runId, code, "request touched a protected file");
+    }
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+  if (diffGate.changedFiles.length === 0) {
+    emitFailure(emit, runId, "validation_failed", "no changes produced");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "validation_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+  if (diffGate.changedFiles.length > SMALL_UPDATE_FILE_CAP) {
+    emitFailure(
+      emit,
+      runId,
+      "validation_failed",
+      `small update changed ${diffGate.changedFiles.length} files (cap ${SMALL_UPDATE_FILE_CAP})`,
+    );
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "validation_failed",
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "checking_preview");
+  const typecheckRepair = await runRepairLoop({
+    thread,
+    validate: () => runTypecheck(draftWorkspacePath, { signal: ctx.signal }),
+    signal: ctx.signal,
+    onCycleStart: () => emitMilestoneInternal(emit, runId, "repairing"),
+  });
+  const typecheck = typecheckRepair.finalOutcome;
+  if (!typecheck.ok) {
+    const code: BuilderRunFailureCode =
+      typecheckRepair.cyclesUsed >= 2 ? "repair_exhausted" : "validation_failed";
+    emitFailure(emit, runId, code, "typecheck failed");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  const sampleParse = await parseProductsSample(draftWorkspacePath);
+  const sampleProductId =
+    sampleParse.ok && sampleParse.productId ? sampleParse.productId : undefined;
+  const previewHealth = await runPreviewHealth({
+    baseUrl: `http://127.0.0.1:0`,
+    pm2Name: `proj-${ctx.projectId}`,
+    sampleProductId,
+  });
+  if (!previewHealth.ok) {
+    emitFailure(emit, runId, "preview_failed", previewHealth.failureReason ?? "preview health failed");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "preview_failed",
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "publishing");
+  const promotion = runPromotionGate({
+    expected: { projectId: ctx.projectId, userId: ctx.userId, draftWorkspacePath },
+    current: { projectId: ctx.projectId, userId: ctx.userId, draftWorkspacePath },
+  });
+  if (!promotion.ok) {
+    emitBoundaryViolation(emit, ctx, "promotion_gate", "request blocked by safety check");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "boundary_violation",
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  const publishedPath = path.join(getProjectWorkspaceRoot(ctx.projectId), "published");
+  await syncDraftToPublished(draftWorkspacePath, publishedPath);
+  await fs.rm(draftWorkspacePath, { recursive: true, force: true });
+  emit({ type: "done", runId, milestone: "done", at: Date.now() });
+  return finalize({
+    runId,
+    status: "done",
+    changedFiles: diffGate.changedFiles,
+    draftWorkspacePath,
+    selectedInstructionMeta: bundle.selectedInstructionMeta,
+    optionalRouteWarnings: previewHealth.optionalFailures,
+  });
+}
+

@@ -8,7 +8,7 @@ import { VerticalLayoutSpecSchema, type VerticalLayoutSpec } from "./vertical-la
 
 export type { VerticalLayoutSpec, VerticalBlockConfig } from "./vertical-layout-spec.schema";
 import type { LoaderOverrides } from "./library-loader.server";
-import type { TemplateId } from "../source/template-registry.server";
+import type { TemplateId } from "@/features/generated-projects/legacy/template-registry.server";
 
 function moduleDirectory() {
   if (typeof __dirname !== "undefined") return __dirname;

@@ -1,5 +1,5 @@
 import type { AgentStreamEvent } from "./agent-events";
-import type { ChangePlan } from "../project/project-state.schema";
+import type { ChangePlan } from "@/features/projects/legacy/project-state.schema";
 import type { AgentMessageKind, AgentQuestionMetadata } from "@/shared/project-types";
 import { sanitizeForUser } from "./user-facing-presenter";
 

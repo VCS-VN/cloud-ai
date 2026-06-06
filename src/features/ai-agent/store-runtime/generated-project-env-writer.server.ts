@@ -1,4 +1,4 @@
-import type { ProjectFileStore } from "../project/project-file-store.server";
+import type { ProjectFileStore } from "@/features/projects/legacy/project-file-store.server";
 import { applyStoreSlugToEnv } from "./generated-project-env";
 export { applyStoreSlugToEnv } from "./generated-project-env";
 

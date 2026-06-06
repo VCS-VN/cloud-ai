@@ -1,9 +1,9 @@
-import type { WebsiteSpec } from "../project/project-state.schema";
-import { REQUIRED_INIT_COMMERCE_ROUTE_FILES } from "../source/generated-project-layout";
+import type { WebsiteSpec } from "@/features/projects/legacy/project-state.schema";
+import { REQUIRED_INIT_COMMERCE_ROUTE_FILES } from "@/features/generated-projects/legacy/generated-project-layout";
 import { loadProjectRuleDocsForPrompt } from "./project-rule-docs.server";
 import { renderPromptDoc } from "./prompt-template-store.server";
 
-const INIT_RECOVERY_PROMPT = "templates/init-recovery/recovery.md";
+const INIT_RECOVERY_PROMPT = "templates/codex-builder/recovery/recovery.md";
 
 export function buildInitStorefrontRecoveryPrompt(input: {
   missingPaths: string[];

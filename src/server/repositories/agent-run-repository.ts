@@ -2,7 +2,7 @@ import { and, asc, desc, eq, or } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { agentRuns, projectToolExecutionLogs } from "@/db/schema";
 import type * as schema from "@/db/schema";
-import type { AgentRun, AgentRunStatus, BuilderIntent, ChangePlan, ProjectToolExecutionLog, ValidationResult } from "@/features/ai-agent/project/project-state.schema";
+import type { AgentRun, AgentRunStatus, BuilderIntent, ChangePlan, ProjectToolExecutionLog, ValidationResult } from "@/features/projects/legacy/project-state.schema";
 
 type AgentRunDatabase = PostgresJsDatabase<typeof schema>;
 type AgentRunRow = typeof agentRuns.$inferSelect;

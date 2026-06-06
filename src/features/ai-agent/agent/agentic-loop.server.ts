@@ -15,12 +15,12 @@ import {
   initCommerceRoutesStillMissing,
   loopProducedInitUiFiles,
   missingRequiredInitPaths,
-} from "../source/init-backfill-policy.server";
-import { REQUIRED_INIT_COMMERCE_ROUTE_FILES } from "../source/generated-project-layout";
+} from "@/features/generated-projects/legacy/init-backfill-policy.server";
+import { REQUIRED_INIT_COMMERCE_ROUTE_FILES } from "@/features/generated-projects/legacy/generated-project-layout";
 import {
   assessInitStorefrontCompletion,
   buildInitCompletionBlockedMessage,
-} from "../source/init-completion-gate.server";
+} from "@/features/generated-projects/legacy/init-completion-gate.server";
 import { compactConversation, estimateTokenCount } from "./context-compaction";
 import { withRetry } from "./retry";
 import { classifyError, describeError } from "./error-classifier";

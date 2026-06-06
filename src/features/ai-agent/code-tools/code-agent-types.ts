@@ -1,4 +1,4 @@
-import type { ProjectState } from "../project/project-state.schema";
+import type { ProjectState } from "@/features/projects/legacy/project-state.schema";
 
 export type CodeToolCategory = "inspect" | "mutate" | "validate" | "snapshot" | "preview";
 

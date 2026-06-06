@@ -1,4 +1,4 @@
-import type { BuilderIntent, ProjectState } from "../project/project-state.schema";
+import type { BuilderIntent, ProjectState } from "@/features/projects/legacy/project-state.schema";
 import { classifyDesignIntent, type DesignIntentLabel } from "./design-intent-heuristic";
 
 export type DesignChangeClassification =

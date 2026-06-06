@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { ProjectState } from "../project/project-state.schema";
+import type { ProjectState } from "@/features/projects/legacy/project-state.schema";
 import type { ToolExecutionContext } from "./code-agent-types";
 
 export function createTestProjectState(overrides: Partial<ProjectState> = {}): ProjectState {

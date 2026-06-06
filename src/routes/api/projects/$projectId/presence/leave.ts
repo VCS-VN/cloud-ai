@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { requireServerUser } from "@/server/functions/auth";
-import { presenceService, type PresenceLeaveReason } from "@/features/ai-agent/runtime/presence-service.server";
+import { presenceService, type PresenceLeaveReason } from "@/features/runtime/legacy/presence-service.server";
 
 const LEAVE_REASONS = new Set<PresenceLeaveReason>([
   "leave",

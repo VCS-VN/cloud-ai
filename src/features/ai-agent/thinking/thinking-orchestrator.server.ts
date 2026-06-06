@@ -1,4 +1,4 @@
-import type { ProjectRunStore } from "../project/project-run-store.server";
+import type { ProjectRunStore } from "@/features/projects/legacy/project-run-store.server";
 import { redactSecrets } from "../security/secret-redactor";
 import { runThinkingLayer as runThinkingLayerCore, type RunThinkingLayerInput as RunThinkingLayerCoreInput } from "./thinking-runner";
 import { saveThinkingResultSummary } from "./thinking.repository.server";

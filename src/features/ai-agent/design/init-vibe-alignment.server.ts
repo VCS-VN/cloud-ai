@@ -1,5 +1,5 @@
 import type { Vibe } from "./blocks-manifest";
-import type { TemplateId } from "../source/template-registry.server";
+import type { TemplateId } from "@/features/generated-projects/legacy/template-registry.server";
 
 /**
  * Init-time vibe anchors aligned with vertical layout-spec allowed variants.

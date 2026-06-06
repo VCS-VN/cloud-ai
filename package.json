@@ -19,6 +19,7 @@
     "validate-assets": "tsx scripts/validate-storefront-assets.ts"
   },
   "dependencies": {
+    "@openai/codex-sdk": "^0.137.0",
     "@radix-ui/react-popover": "^1.1.15",
     "@tanstack/react-query": "^5.100.9",
     "@tanstack/react-router": "^1.169.1",

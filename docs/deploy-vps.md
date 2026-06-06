@@ -60,11 +60,29 @@ sudo npm install -g pm2
 Create runtime folders for user `builder`:
 
 ```bash
-sudo mkdir -p /var/bin/projects /var/log/cloud-ai/previews /etc/cloud-ai
-sudo chown -R builder:builder /var/bin/projects /var/log/cloud-ai/previews /etc/cloud-ai
-sudo chmod 750 /var/bin/projects /var/log/cloud-ai/previews
-sudo chmod 700 /etc/cloud-ai
+sudo mkdir -p \
+  /var/bin/projects \
+  /var/bin/cloud-ai/codex-home \
+  /var/bin/skills \
+  /var/log/cloud-ai/previews \
+  /etc/cloud-ai
+sudo chown -R builder:builder \
+  /var/bin/projects \
+  /var/bin/cloud-ai \
+  /var/bin/skills \
+  /var/log/cloud-ai/previews \
+  /etc/cloud-ai
+sudo chmod 750 /var/bin/projects /var/log/cloud-ai/previews /var/bin/skills
+sudo chmod 700 /etc/cloud-ai /var/bin/cloud-ai/codex-home
 ```
+
+Folder roles:
+
+- `/var/bin/projects` — generated project workspaces (existing).
+- `/var/bin/cloud-ai/codex-home` — app-owned `CODEX_HOME` for Codex SDK profiles. The app generates `config.toml` here at startup; do not edit by hand. Contents may be wiped on redeploy.
+- `/var/bin/skills` — production `SKILLS_ROOT`. Phase 1 of the Codex SDK migration does not load skills, but the directory is provisioned now so phase 2 can drop in `<skill-name>/SKILL.md` without further ops work.
+- `/var/log/cloud-ai/previews` — preview PM2 logs (existing).
+- `/etc/cloud-ai` — secrets and ecosystem config (existing).
 
 ## Clone And Build
 
@@ -112,6 +130,15 @@ OPENAI_API_KEY=...
 # Project workspace storage
 PROJECTS_ROOT=/var/bin/projects
 
+# Codex SDK builder (replaces the legacy AI Agent runtime)
+CODEX_HOME=/var/bin/cloud-ai/codex-home
+CODEX_API_KEY=<provider-api-key>
+CODEX_MODEL=<provider-model-id>
+# CODEX_BASE_URL=https://api.openai.com/v1   # set only if your provider needs a non-default endpoint
+
+# Skill runtime (deferred from phase 1; folder must exist for phase 2)
+SKILLS_ROOT=/var/bin/skills
+
 # Production preview mode
 PREVIEW_PUBLIC_HOST=myepis.cloud
 PREVIEW_ROUTER_HOST=127.0.0.1
@@ -138,6 +165,9 @@ Notes:
 - If `PREVIEW_PUBLIC_HOST` is unset, app stays in local preview mode and does not call Cloudflare DNS APIs.
 - `CLOUDFLARE_TUNNEL_ID` must be the preview tunnel id, not the builder tunnel id.
 - App reads `PREVIEW_TOKEN_SECRET`; if unset, it falls back to `SESSION_SECRET`.
+- `CODEX_API_KEY` and `CODEX_MODEL` are required for the Codex SDK builder. If either is missing or invalid at startup, the builder feature is disabled (UI shows the unavailable banner) but the rest of the app keeps running. The app does not silently fall back to a different provider.
+- The app generates `$CODEX_HOME/config.toml` at startup using `env_key` references. Do not put literal API keys in that file. Treat the directory as app-owned: ops provisions it (mode `700`, owned by `builder`); the app writes/rewrites contents on each start.
+- `SKILLS_ROOT` is read by phase 2; phase 1 only requires the directory to exist. Phase 2 will load `$SKILLS_ROOT/<skill-name>/SKILL.md`. Keep mode `750`.
 
 ## PM2 Builder App
 
@@ -287,6 +317,46 @@ Expected PM2 names:
 
 - Main app: `cloud-ai-builder`
 - Preview apps: `proj-<projectId>`
+
+## Codex SDK Builder
+
+The Codex SDK builder replaces the legacy AI Agent runtime. It runs in-process inside the `cloud-ai-builder` PM2 app — there is no separate Codex process. Each builder run:
+
+- Creates a per-project draft workspace under `/var/bin/projects/<projectId>/drafts/<runId>/`.
+- Spawns a Codex SDK thread with `cwd` pinned to that draft and sandbox `workspace-write`.
+- Promotes the draft into the published workspace only after gates (typecheck → build when required → preview health → core route check → product-sample parser) pass.
+
+Operational expectations:
+
+- The app owns `$CODEX_HOME` and rewrites `$CODEX_HOME/config.toml` on every start. Do not edit it by hand; ops changes go through env vars.
+- Codex SDK never receives literal API keys in the config file — only `env_key = "CODEX_API_KEY"` references that resolve from process env.
+- One builder run per project at a time. Concurrent prompts on the same project are rejected with a friendly message; they are not queued.
+- Cancelled / failed / boundary-violation drafts are retained 12h for debug, then garbage-collected. Successful promotes delete the full draft copy immediately.
+- The builder UI consumes only product-safe milestone events. Logs and persisted metadata never include the raw user prompt, raw diff, or full file content.
+
+Verify Codex builder status after deploy:
+
+```bash
+# Confirm app picked up Codex env (no values printed)
+pm2 env cloud-ai-builder | grep -E '^(CODEX_HOME|CODEX_MODEL|SKILLS_ROOT)='
+
+# Confirm CODEX_HOME is writable by the builder user
+sudo -u builder test -w /var/bin/cloud-ai/codex-home && echo OK
+
+# Confirm app generated the Codex profile on startup
+sudo -u builder ls -lah /var/bin/cloud-ai/codex-home/
+
+# Confirm SKILLS_ROOT exists (phase 2 readiness)
+sudo -u builder ls -lah /var/bin/skills
+```
+
+If `CODEX_API_KEY` or `CODEX_MODEL` is missing/invalid at startup, the builder UI will show:
+
+```text
+Trinh tao AI hien tam thoi khong kha dung. Vui long lien he quan tri vien hoac thu lai sau.
+```
+
+(English: `AI builder is temporarily unavailable. Please contact an administrator or try again later.`) The rest of the app continues to serve.
 
 ## Failure Modes
 

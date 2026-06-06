@@ -8,21 +8,21 @@ import type {
   ProjectState,
   ValidationResult,
 } from "./agent-events";
-import type { ProjectRunStore } from "../project/project-run-store.server";
-import type { ProjectStateStore } from "../project/project-state-store.server";
-import type { ProjectFileStore } from "../project/project-file-store.server";
-import type { SnapshotService } from "../project/snapshot-service.server";
+import type { ProjectRunStore } from "@/features/projects/legacy/project-run-store.server";
+import type { ProjectStateStore } from "@/features/projects/legacy/project-state-store.server";
+import type { ProjectFileStore } from "@/features/projects/legacy/project-file-store.server";
+import type { SnapshotService } from "@/features/projects/legacy/snapshot-service.server";
 import type { AgentConfig } from "./agent-config";
 import type { ChatCompletionsProvider } from "../openai/chat-completions-provider.server";
-import type { RuntimeService } from "../runtime/runtime-service.server";
-import type { RuntimeOrchestrator } from "../runtime/runtime-orchestrator.server";
+import type { RuntimeService } from "@/features/runtime/legacy/runtime-service.server";
+import type { RuntimeOrchestrator } from "@/features/runtime/legacy/runtime-orchestrator.server";
 import {
   filterAssistantDeltaForUser,
   sanitizeForUser,
   redactTechnicalText,
 } from "./user-facing-presenter";
 import { extractWebsiteSpec } from "../planning/extract-website-spec.server";
-import { buildFileManifest } from "../source/code-index-service.server";
+import { buildFileManifest } from "@/features/generated-projects/legacy/code-index-service.server";
 import {
   ensureRootRouteLoadingBarContract,
   initInfrastructureSource,
@@ -32,15 +32,15 @@ import {
   renderEnvSource,
   routeLoadingBarSource,
   siteHeaderShellSource,
-} from "../source/init-source.server";
+} from "@/features/generated-projects/legacy/init-source.server";
 import {
   REQUIRED_GENERATED_STOREFRONT_FILES,
   REQUIRED_INIT_COMMERCE_ROUTE_FILES,
-} from "../source/generated-project-layout";
+} from "@/features/generated-projects/legacy/generated-project-layout";
 import {
   formatInitIntegrityViolations,
   validateInitIntegrity,
-} from "../source/init-integrity-service.server";
+} from "@/features/generated-projects/legacy/init-integrity-service.server";
 import { applyStoreSlugToEnv } from "../store-runtime/generated-project-env";
 import {
   buildInitStorefrontRecoveryPrompt,
@@ -58,15 +58,15 @@ import {
   isDeterministicInitBackfillAllowed,
   isInitUiStorefrontPath,
   loopProducedInitUiFiles,
-} from "../source/init-backfill-policy.server";
+} from "@/features/generated-projects/legacy/init-backfill-policy.server";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { PromptLayerStore } from "./init-prompt-store.server";
 import {
   selectTemplate,
   slugifyProjectName,
-} from "../source/template-registry.server";
-import { ValidationService } from "../source/validation-service.server";
+} from "@/features/generated-projects/legacy/template-registry.server";
+import { ValidationService } from "@/features/generated-projects/legacy/validation-service.server";
 import { toSafeAgentError } from "./agent-errors";
 import { runThinkingLayer } from "../thinking/thinking-orchestrator.server";
 import { createDefaultClarificationOptions, createHeuristicThinkingResult } from "../thinking/thinking-fallback";
@@ -674,7 +674,7 @@ export class AgentOrchestrator {
       }
       serverDesignGuidance =
         "\n\n" +
-        loadPromptDoc("templates/init-recovery/server-design-guidance.md");
+        loadPromptDoc("templates/codex-builder/recovery/server-design-guidance.md");
     } else {
       console.warn(
         JSON.stringify({
@@ -1801,9 +1801,9 @@ const CORE_STOREFRONT_FILES = [
   "src/routes/index.tsx",
 ] as const;
 
-const REDESIGN_REWRITE_PROMPT = "templates/redesign/redesign-rewrite.md";
-const TOKEN_PATCH_REWRITE_PROMPT = "templates/redesign/token-patch-rewrite.md";
-const ANTI_SLOP_REPAIR_PROMPT = "templates/redesign/anti-slop-repair.md";
+const REDESIGN_REWRITE_PROMPT = "templates/codex-builder/redesign/redesign-rewrite.md";
+const TOKEN_PATCH_REWRITE_PROMPT = "templates/codex-builder/redesign/token-patch-rewrite.md";
+const ANTI_SLOP_REPAIR_PROMPT = "templates/codex-builder/redesign/anti-slop-repair.md";
 
 function shouldInitializeProject(
   projectState: ProjectState,

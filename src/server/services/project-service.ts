@@ -1,15 +1,15 @@
 import { ProjectWorkspaceService } from "@/agent/project-workspace-service";
-import type { ProcessManager } from "@/features/ai-agent/runtime/process-manager.server";
-import type { ProjectStateStore } from "@/features/ai-agent/project/project-state-store.server";
+import type { ProcessManager } from "@/features/runtime/legacy/process-manager.server";
+import type { ProjectStateStore } from "@/features/projects/legacy/project-state-store.server";
 import type { GeneratedProjectEnvWriter } from "@/features/ai-agent/store-runtime/generated-project-env-writer.server";
-import { waitForPreviewHealthy } from "@/features/ai-agent/runtime/preview-health.server";
+import { waitForPreviewHealthy } from "@/features/runtime/legacy/preview-health.server";
 import {
   EMPTY_DEV_RUNTIME,
   type DevRuntime,
-} from "@/features/ai-agent/project/project-state.schema";
-import type { RuntimeService } from "@/features/ai-agent/runtime/runtime-service.server";
-import type { RuntimeOrchestrator } from "@/features/ai-agent/runtime/runtime-orchestrator.server";
-import type { ProjectRunStore } from "@/features/ai-agent/project/project-run-store.server";
+} from "@/features/projects/legacy/project-state.schema";
+import type { RuntimeService } from "@/features/runtime/legacy/runtime-service.server";
+import type { RuntimeOrchestrator } from "@/features/runtime/legacy/runtime-orchestrator.server";
+import type { ProjectRunStore } from "@/features/projects/legacy/project-run-store.server";
 import { reserveRunProducer } from "@/server/functions/project-message-stream";
 import type {
   Project,

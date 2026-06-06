@@ -3,26 +3,26 @@ import { PromptLayerStore } from "@/features/ai-agent/agent/init-prompt-store.se
 import { loadAgentConfig } from "@/features/ai-agent/agent/agent-config";
 import { createOpenAIClient } from "@/features/ai-agent/openai/openai-client.server";
 import { ChatCompletionsProvider } from "@/features/ai-agent/openai/chat-completions-provider.server";
-import { ProjectRunStore } from "@/features/ai-agent/project/project-run-store.server";
-import { ProjectFileStore } from "@/features/ai-agent/project/project-file-store.server";
-import { SnapshotService } from "@/features/ai-agent/project/snapshot-service.server";
-import { ProjectStateStore } from "@/features/ai-agent/project/project-state-store.server";
-import { ProcessManager } from "@/features/ai-agent/runtime/process-manager.server";
-import { RuntimeService } from "@/features/ai-agent/runtime/runtime-service.server";
-import { RuntimeOrchestrator } from "@/features/ai-agent/runtime/runtime-orchestrator.server";
-import { RuntimeReconciler } from "@/features/ai-agent/runtime/runtime-reconciler.server";
-import { CloudflareDnsClient } from "@/features/ai-agent/runtime/cloudflare-dns.server";
-import { Pm2Driver } from "@/features/ai-agent/runtime/pm2-driver.server";
-import { InMemoryPortAllocator } from "@/features/ai-agent/runtime/port-allocator.server";
-import { getPreviewRuntimeConfig, isProductionPreviewEnabled } from "@/features/ai-agent/runtime/preview-runtime-config.server";
-import { startPreviewRouterOnce } from "@/features/ai-agent/runtime/preview-router.server";
-import { PreviewTokenService } from "@/features/ai-agent/runtime/preview-token-service.server";
-import { presenceService } from "@/features/ai-agent/runtime/presence-service.server";
+import { ProjectRunStore } from "@/features/projects/legacy/project-run-store.server";
+import { ProjectFileStore } from "@/features/projects/legacy/project-file-store.server";
+import { SnapshotService } from "@/features/projects/legacy/snapshot-service.server";
+import { ProjectStateStore } from "@/features/projects/legacy/project-state-store.server";
+import { ProcessManager } from "@/features/runtime/legacy/process-manager.server";
+import { RuntimeService } from "@/features/runtime/legacy/runtime-service.server";
+import { RuntimeOrchestrator } from "@/features/runtime/legacy/runtime-orchestrator.server";
+import { RuntimeReconciler } from "@/features/runtime/legacy/runtime-reconciler.server";
+import { CloudflareDnsClient } from "@/features/runtime/legacy/cloudflare-dns.server";
+import { Pm2Driver } from "@/features/runtime/legacy/pm2-driver.server";
+import { InMemoryPortAllocator } from "@/features/runtime/legacy/port-allocator.server";
+import { getPreviewRuntimeConfig, isProductionPreviewEnabled } from "@/features/runtime/legacy/preview-runtime-config.server";
+import { startPreviewRouterOnce } from "@/features/runtime/legacy/preview-router.server";
+import { PreviewTokenService } from "@/features/runtime/legacy/preview-token-service.server";
+import { presenceService } from "@/features/runtime/legacy/presence-service.server";
 import {
   startPresenceSweeper,
   stopPresenceSweeper,
-} from "@/features/ai-agent/runtime/presence-sweeper.server";
-import { ErrorFixer } from "@/features/ai-agent/runtime/error-analyzer.server";
+} from "@/features/runtime/legacy/presence-sweeper.server";
+import { ErrorFixer } from "@/features/runtime/legacy/error-analyzer.server";
 import { GeneratedProjectEnvWriter } from "@/features/ai-agent/store-runtime/generated-project-env-writer.server";
 import { ProjectFileTreeService } from "@/server/services/file-tree-service";
 import { MessageService } from "@/server/services/message-service";

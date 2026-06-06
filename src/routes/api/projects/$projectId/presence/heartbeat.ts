@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { requireServerUser } from "@/server/functions/auth";
-import { presenceService } from "@/features/ai-agent/runtime/presence-service.server";
+import { presenceService } from "@/features/runtime/legacy/presence-service.server";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 

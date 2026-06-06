@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ProjectState } from "../project/project-state.schema";
+import type { ProjectState } from "@/features/projects/legacy/project-state.schema";
 
 const nonEmptyString = z.string().trim().min(1);
 const confidenceSchema = z.number().min(0).max(1);

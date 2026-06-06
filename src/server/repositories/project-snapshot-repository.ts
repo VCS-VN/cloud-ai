@@ -2,7 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { projectSnapshots } from "@/db/schema";
 import type * as schema from "@/db/schema";
-import type { ProjectSnapshot, ProjectState } from "@/features/ai-agent/project/project-state.schema";
+import type { ProjectSnapshot, ProjectState } from "@/features/projects/legacy/project-state.schema";
 
 type SnapshotDatabase = PostgresJsDatabase<typeof schema>;
 type SnapshotRow = typeof projectSnapshots.$inferSelect;

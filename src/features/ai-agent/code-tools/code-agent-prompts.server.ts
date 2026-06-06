@@ -1,5 +1,5 @@
 import { buildStoreRuntimeInstructions, buildStoreRuntimePromptContext } from "../store-runtime/store-runtime-prompt";
-import type { ProjectState } from "../project/project-state.schema";
+import type { ProjectState } from "@/features/projects/legacy/project-state.schema";
 import { loadPromptDoc } from "../agent/prompt-template-store.server";
 import { isProtectedProjectEnvPath } from "./services/project-path-guard.server";
 

@@ -7,7 +7,7 @@ import type {
   SkeletonPhase,
   StreamError,
 } from "@/shared/project-types";
-import type { DevRuntimeEvent } from "../runtime/runtime-events";
+import type { DevRuntimeEvent } from "@/features/runtime/legacy/runtime-events";
 
 export type DevRuntimeUIState = {
   status: "idle" | "installing" | "installed" | "starting" | "running" | "stopped" | "error" | "fixing";
