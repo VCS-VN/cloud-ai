@@ -12,6 +12,7 @@ export const BUILDER_RUN_LOCALE_VI = {
     checking_preview: "Đang kiểm tra preview",
     repairing: "Đang sửa lỗi",
     publishing: "Đang xuất bản",
+    awaiting_clarification: "Cần thêm thông tin từ bạn",
     done: "Hoàn tất",
     failed: "Thất bại",
     cancelled: "Đã huỷ",
@@ -26,7 +27,21 @@ export const BUILDER_RUN_LOCALE_VI = {
     codex_runtime_failed: "Trình tạo AI gặp lỗi tạm thời.",
     blocked_request: "Yêu cầu chạm vào tệp được bảo vệ.",
     repair_exhausted: "Đã thử sửa lỗi tối đa và vẫn chưa pass.",
+    required_skill_unavailable:
+      "Không thể tiếp tục vì thiếu hướng dẫn bắt buộc cho agent.",
+    skill_unavailable: "Skill được yêu cầu hiện chưa có sẵn.",
   } as Record<BuilderRunFailureCode, string>,
+  clarification: {
+    questionScaffold: "Bạn muốn ưu tiên hướng tiếp cận nào cho yêu cầu này?",
+    submitButton: "Tiếp tục",
+    cancelHint: "Hoặc bấm Huỷ để dừng phiên.",
+    freeTextLabel: "Hoặc mô tả ngắn gọn lựa chọn của bạn",
+  },
+  apiErrors: {
+    not_paused: "Phiên không đang chờ phản hồi.",
+    empty_answer: "Vui lòng chọn một phương án hoặc nhập câu trả lời.",
+    invalid_option: "Tuỳ chọn vừa chọn không hợp lệ cho phiên này.",
+  },
   commerceValidationSkippedWarning:
     "Việc xác thực luồng giỏ/thanh toán chưa được thực hiện đầy đủ ở phase 1.",
 };
@@ -40,6 +55,7 @@ export const BUILDER_RUN_LOCALE_EN = {
     checking_preview: "Checking preview",
     repairing: "Repairing",
     publishing: "Publishing",
+    awaiting_clarification: "Waiting for your input",
     done: "Done",
     failed: "Failed",
     cancelled: "Cancelled",
@@ -55,7 +71,21 @@ export const BUILDER_RUN_LOCALE_EN = {
     blocked_request: "The request touched a protected file.",
     repair_exhausted:
       "Repair was attempted the maximum number of times and still failed.",
+    required_skill_unavailable:
+      "Cannot continue because a required agent instruction is unavailable.",
+    skill_unavailable: "The requested skill is not available.",
   } as Record<BuilderRunFailureCode, string>,
+  clarification: {
+    questionScaffold: "Which approach should we take for this request?",
+    submitButton: "Continue",
+    cancelHint: "Or cancel to end the run.",
+    freeTextLabel: "Or briefly describe your preference",
+  },
+  apiErrors: {
+    not_paused: "Run is not awaiting clarification.",
+    empty_answer: "Answer cannot be empty.",
+    invalid_option: "Selected option is not valid for this run.",
+  },
   commerceValidationSkippedWarning:
     "Cart and checkout flows were not fully validated in phase 1.",
 };

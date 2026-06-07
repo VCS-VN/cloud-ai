@@ -7,7 +7,14 @@ const codexSchema = z.object({
   CODEX_MODEL: z.string().min(1).optional(),
   CODEX_BASE_URL: z.string().url().optional(),
   SKILLS_ROOT: z.string().min(1).optional(),
+  MAX_SKILL_CHARS: z.coerce.number().int().positive().optional(),
+  LLM_TIE_BREAK_GAP: z.coerce.number().int().nonnegative().optional(),
+  MAX_SELECTED_SKILLS: z.coerce.number().int().positive().optional(),
 });
+
+export const DEFAULT_MAX_SKILL_CHARS = 32000;
+export const DEFAULT_LLM_TIE_BREAK_GAP = 10;
+export const DEFAULT_MAX_SELECTED_SKILLS = 3;
 
 export type CodexEnvAvailable = {
   available: true;
@@ -16,6 +23,9 @@ export type CodexEnvAvailable = {
   model: string;
   baseUrl: string | undefined;
   skillsRoot: string;
+  maxSkillChars: number;
+  llmTieBreakGap: number;
+  maxSelectedSkills: number;
 };
 
 export type CodexEnvUnavailable = {
@@ -61,6 +71,9 @@ export function loadCodexEnv(env: NodeJS.ProcessEnv = process.env): CodexEnv {
     model: v.CODEX_MODEL!,
     baseUrl: v.CODEX_BASE_URL,
     skillsRoot: v.SKILLS_ROOT ?? defaultSkillsRoot(),
+    maxSkillChars: v.MAX_SKILL_CHARS ?? DEFAULT_MAX_SKILL_CHARS,
+    llmTieBreakGap: v.LLM_TIE_BREAK_GAP ?? DEFAULT_LLM_TIE_BREAK_GAP,
+    maxSelectedSkills: v.MAX_SELECTED_SKILLS ?? DEFAULT_MAX_SELECTED_SKILLS,
   };
 }
 
@@ -72,6 +85,9 @@ export function redactCodexEnv(env: CodexEnv): Record<string, unknown> {
     model: env.model,
     baseUrl: env.baseUrl,
     skillsRoot: env.skillsRoot,
+    maxSkillChars: env.maxSkillChars,
+    llmTieBreakGap: env.llmTieBreakGap,
+    maxSelectedSkills: env.maxSelectedSkills,
     apiKey: "[REDACTED]",
   };
 }

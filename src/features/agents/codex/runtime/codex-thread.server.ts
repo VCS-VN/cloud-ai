@@ -1,9 +1,16 @@
 import { Codex, type Thread, type ThreadEvent, type Usage } from "@openai/codex-sdk";
 import type { CodexEnvAvailable } from "@/server/env/codex";
+import {
+  PROJECT_READ_SKILL_TOOL_NAME,
+  projectReadSkill,
+  type ProjectReadSkillCallbacks,
+  type ProjectReadSkillResult,
+} from "@/features/agents/codex/skills/project-read-skill.tool.server";
 
 export type CodexThreadInput = {
   env: CodexEnvAvailable;
   draftWorkspacePath: string;
+  skillToolCallbacks?: ProjectReadSkillCallbacks;
 };
 
 export type CodexTurnInput = {
@@ -15,27 +22,40 @@ export type CodexTurnSummary = {
   finalResponse: string;
   usage: Usage | null;
   fileChanges: string[];
+  skillToolCalls: { name: string; result: ProjectReadSkillResult }[];
 };
 
 export class BoundedCodexThread {
   private readonly thread: Thread;
+  private readonly skillToolCallbacks?: ProjectReadSkillCallbacks;
 
-  constructor(thread: Thread) {
+  constructor(thread: Thread, skillToolCallbacks?: ProjectReadSkillCallbacks) {
     this.thread = thread;
+    this.skillToolCallbacks = skillToolCallbacks;
   }
 
   async runTurn(input: CodexTurnInput): Promise<CodexTurnSummary> {
     const turn = await this.thread.run(input.prompt, { signal: input.signal });
     const fileChanges: string[] = [];
+    const skillToolCalls: { name: string; result: ProjectReadSkillResult }[] = [];
     for (const item of turn.items) {
       if (item.type === "file_change") {
         for (const change of item.changes) fileChanges.push(change.path);
+      }
+      if (item.type === "mcp_tool_call" && item.tool === PROJECT_READ_SKILL_TOOL_NAME) {
+        const args = (item.arguments ?? {}) as { name?: unknown };
+        const result = projectReadSkill({ name: args.name }, this.skillToolCallbacks);
+        skillToolCalls.push({
+          name: typeof args.name === "string" ? args.name : "<invalid>",
+          result,
+        });
       }
     }
     return {
       finalResponse: turn.finalResponse,
       usage: turn.usage,
       fileChanges,
+      skillToolCalls,
     };
   }
 
@@ -75,7 +95,7 @@ export function createBoundedCodexThread(
     approvalPolicy: "never",
     additionalDirectories: [],
   });
-  return new BoundedCodexThread(thread);
+  return new BoundedCodexThread(thread, input.skillToolCallbacks);
 }
 
 export function summarizeUsage(usage: Usage | null): {

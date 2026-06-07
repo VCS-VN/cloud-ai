@@ -7,6 +7,11 @@ import {
   type LoadedInstruction,
   type SelectedInstruction,
 } from "./instruction-loader.server";
+import {
+  buildSelectedSkillBlocks,
+  type SelectedSkillForInjection,
+} from "@/features/agents/codex/skills/injection.server";
+import type { LoadedSkill } from "@/features/agents/codex/skills/skill-loader.server";
 
 export type ContextBundleInput = {
   projectId: string;
@@ -19,6 +24,8 @@ export type ContextBundleInput = {
   protectedPaths: { blocked: readonly string[]; allowedAudit: readonly string[] };
   validationRules: { typecheck: boolean; build: boolean; previewHealth: boolean };
   selectedInstructions: LoadedInstruction[];
+  selectedSkills?: SelectedSkillForInjection[];
+  skillRegistry?: LoadedSkill[];
 };
 
 export type ContextBundleOutput = {
@@ -65,6 +72,17 @@ export function buildContextBundle(input: ContextBundleInput): ContextBundleOutp
   for (const instruction of input.selectedInstructions) {
     lines.push("");
     lines.push(wrapSelectedInstruction(instruction));
+  }
+
+  if (input.selectedSkills && input.selectedSkills.length > 0 && input.skillRegistry) {
+    const skillBlocks = buildSelectedSkillBlocks({
+      selected: input.selectedSkills,
+      registry: input.skillRegistry,
+    });
+    for (const block of skillBlocks) {
+      lines.push("");
+      lines.push(block);
+    }
   }
 
   return {

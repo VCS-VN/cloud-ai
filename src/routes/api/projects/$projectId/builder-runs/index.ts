@@ -12,6 +12,23 @@ import {
 } from "@/features/agents/codex/runtime";
 import { getCodexEnv, isCodexFeatureAvailable } from "@/features/agents/codex/runtime/feature-flag.server";
 import type { BuilderRunKind } from "@/features/agents/ui/builder-run-status";
+import {
+  getRegistryStatus,
+  getSkill,
+} from "@/features/agents/codex/skills/registry.server";
+
+const SKILL_REFERENCE_PATTERN = /\bskill[:\s]+([a-z][a-z0-9-]*)\b/gi;
+
+function findExplicitUserMissingSkills(prompt: string): string[] {
+  const status = getRegistryStatus();
+  if (!status.loaded) return [];
+  const missing = new Set<string>();
+  for (const match of prompt.matchAll(SKILL_REFERENCE_PATTERN)) {
+    const candidate = match[1].toLowerCase();
+    if (!getSkill(candidate)) missing.add(candidate);
+  }
+  return Array.from(missing);
+}
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -79,6 +96,17 @@ export const Route = createFileRoute(
           }
           resolvedKind = classification.kind === "new_route" ? "new_route" : "update";
         }
+
+        const explicitMissing = findExplicitUserMissingSkills(prompt);
+        if (explicitMissing.length > 0) {
+          return jsonResponse(400, {
+            ok: false,
+            code: "skill_unavailable",
+            message: `Skill ${explicitMissing.join(", ")} hiện chưa có sẵn.`,
+            missing: explicitMissing,
+          });
+        }
+
         const runId = newRunId();
         let handle;
         try {

@@ -30,6 +30,15 @@ vi.mock("@openai/codex-sdk", async () => ({
   },
 }));
 
+vi.mock("@/features/agents/codex/skills/template-scanner.server", () => ({
+  scanActiveTemplates: vi.fn(async () => []),
+  aggregateTemplateScans: vi.fn(() => ({
+    required: new Set(),
+    recommended: new Set(),
+  })),
+}));
+
+
 vi.mock("@/server/config/paths.server", async () => {
   const real = await vi.importActual<typeof import("@/server/config/paths.server")>(
     "@/server/config/paths.server",
@@ -96,6 +105,9 @@ describe("repair cycle", () => {
       model: "m",
       baseUrl: undefined,
       skillsRoot: path.join(tmpRoot, "skills"),
+      maxSkillChars: 32000,
+      llmTieBreakGap: 10,
+      maxSelectedSkills: 3,
     };
     const ctx = {
       projectId,
@@ -137,6 +149,9 @@ describe("repair cycle", () => {
       model: "m",
       baseUrl: undefined,
       skillsRoot: path.join(tmpRoot, "skills"),
+      maxSkillChars: 32000,
+      llmTieBreakGap: 10,
+      maxSelectedSkills: 3,
     };
     const ctx = {
       projectId,

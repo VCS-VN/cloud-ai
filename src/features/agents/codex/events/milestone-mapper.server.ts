@@ -33,6 +33,7 @@ const MILESTONE_MAP: Record<string, BuilderRunMilestone> = {
   promote_started: "publishing",
   promote_done: "done",
   cancelled: "cancelled",
+  awaiting_clarification: "awaiting_clarification",
 };
 
 export function mapCodexEventToMilestone(

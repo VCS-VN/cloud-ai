@@ -54,6 +54,15 @@ vi.mock("@/features/agents/codex/validation/typecheck.server", () => ({
   countErrors: vi.fn(),
 }));
 
+vi.mock("@/features/agents/codex/skills/template-scanner.server", () => ({
+  scanActiveTemplates: vi.fn(async () => []),
+  aggregateTemplateScans: vi.fn(() => ({
+    required: new Set(),
+    recommended: new Set(),
+  })),
+}));
+
+
 const buildSpy = vi.fn(async () => ({ ok: true, durationMs: 5 }));
 vi.mock("@/features/agents/codex/validation/build.server", () => ({
   runBuild: buildSpy,
@@ -102,6 +111,9 @@ describe("new-route builder run", () => {
       model: "m",
       baseUrl: undefined,
       skillsRoot: path.join(tmpRoot, "skills"),
+      maxSkillChars: 32000,
+      llmTieBreakGap: 10,
+      maxSelectedSkills: 3,
     };
 
     const ctx = {

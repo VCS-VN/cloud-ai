@@ -27,6 +27,23 @@ import {
   type ProjectSummary,
 } from "@/features/agents/codex/context";
 import {
+  aggregateTemplateScans,
+  scanActiveTemplates,
+} from "@/features/agents/codex/skills/template-scanner.server";
+import { listSkills } from "@/features/agents/codex/skills/registry.server";
+import {
+  selectSkills,
+  type SelectionOutcome,
+  type SelectionPicked,
+} from "@/features/agents/codex/skills/selection.server";
+import type { LoadedSkill } from "@/features/agents/codex/skills/skill-loader.server";
+import type { SelectedSkillForInjection } from "@/features/agents/codex/skills/injection.server";
+import { buildClarificationPrompt } from "@/features/agents/codex/skills/clarification.server";
+import {
+  getBuilderRunHandle,
+  publishBuilderRunEvent,
+} from "./builder-run-registry.server";
+import {
   createBoundedCodexThread,
   type BoundedCodexThread,
 } from "./codex-thread.server";
@@ -201,6 +218,21 @@ export async function runInitBuilderRun(
   const { runId } = ctx;
   emitMilestoneInternal(emit, runId, "loading_context");
 
+  const skillSelection = await runSkillSelection(
+    ctx,
+    ["init_project"],
+    emit,
+    async (rerunPrompt) => {
+      await runInitBuilderRun({ ...ctx, userPrompt: rerunPrompt }, emit);
+    },
+  );
+  if (skillSelection.kind === "required_unavailable") {
+    return requiredUnavailableOutcome(ctx, emit, skillSelection.missing);
+  }
+  if (skillSelection.kind === "paused") {
+    return pausedOutcome(ctx, skillSelection);
+  }
+
   const draftWorkspacePath = await ensureDraftWorkspace({
     projectId: ctx.projectId,
     runId,
@@ -225,6 +257,8 @@ export async function runInitBuilderRun(
     },
     validationRules: { typecheck: true, build: true, previewHealth: true },
     selectedInstructions: allInstructions,
+    selectedSkills: skillSelection.selected,
+    skillRegistry: skillSelection.registry,
   });
 
   const symlinkScan = await scanDraftForSymlinks(draftWorkspacePath);
@@ -301,6 +335,7 @@ export async function runInitBuilderRun(
     thread = createBoundedCodexThread({
       env: ctx.env,
       draftWorkspacePath,
+      skillToolCallbacks: buildSkillToolCallbacks(runId),
     });
   } catch {
     emitFailure(emit, runId, "codex_runtime_failed", "failed to start codex thread");
@@ -510,6 +545,142 @@ function finalize(outcome: BuilderRunOutcome): BuilderRunOutcome {
   return outcome;
 }
 
+function buildSkillToolCallbacks(runId: string) {
+  return {
+    onSuccess: (entry: { name: string; at: number }) => {
+      const handle = getBuilderRunHandle(runId);
+      if (handle) handle.loadedSkills.push(entry);
+    },
+  };
+}
+
+function pickedToInjection(picked: SelectionPicked[]): SelectedSkillForInjection[] {
+  return picked.map((p) => ({ name: p.name, score: p.score, source: p.source }));
+}
+
+
+
+export type SkillSelectionResult =
+  | {
+      kind: "ready";
+      outcome: SelectionOutcome;
+      selected: SelectedSkillForInjection[];
+      registry: LoadedSkill[];
+    }
+  | {
+      kind: "paused";
+      outcome: SelectionOutcome;
+      registry: LoadedSkill[];
+    }
+  | {
+      kind: "required_unavailable";
+      missing: string[];
+      registry: LoadedSkill[];
+    };
+
+async function runSkillSelection(
+  ctx: BuilderRunContext,
+  contextLabels: string[],
+  emit: EmitFn,
+  resumeFnFactory?: (rerunPrompt: string) => Promise<void>,
+): Promise<SkillSelectionResult> {
+  const registry = listSkills();
+  const scans = await scanActiveTemplates();
+  const aggregated = aggregateTemplateScans(scans);
+  const outcome = await selectSkills({
+    prompt: ctx.userPrompt,
+    registry,
+    templateRequired: aggregated.required,
+    templateRecommended: aggregated.recommended,
+    contextLabels,
+    env: ctx.env,
+  });
+
+  if (outcome.requiredUnavailable.length > 0) {
+    return {
+      kind: "required_unavailable",
+      missing: outcome.requiredUnavailable,
+      registry,
+    };
+  }
+
+  if (outcome.clarificationRequired) {
+    const prompt = buildClarificationPrompt({
+      candidates: outcome.pending,
+      registry,
+    });
+    const handle = getBuilderRunHandle(ctx.runId);
+    if (handle) {
+      handle.pendingSkills = outcome.pending;
+      handle.clarificationPrompt = prompt;
+      handle.userPrompt = ctx.userPrompt;
+      if (resumeFnFactory) {
+        handle.resumeFn = async (answer) => {
+          const augmentedPrompt = answer.optionId
+            ? `${ctx.userPrompt}\n\n[user clarification: prefer skill ${answer.optionId}]`
+            : `${ctx.userPrompt}\n\n[user clarification: ${answer.freeText ?? ""}]`;
+          handle.pendingSkills = [];
+          handle.clarificationPrompt = null;
+          handle.resumeFn = null;
+          await resumeFnFactory(augmentedPrompt);
+        };
+      }
+    }
+    publishBuilderRunEvent(handle ?? ({} as never), {
+      type: "awaiting_clarification",
+      runId: ctx.runId,
+      milestone: "awaiting_clarification",
+      question: prompt.question,
+      options: prompt.options,
+      at: Date.now(),
+    });
+    return { kind: "paused", outcome, registry };
+  }
+
+  return {
+    kind: "ready",
+    outcome,
+    selected: pickedToInjection(outcome.picked),
+    registry,
+  };
+}
+
+function pausedOutcome(
+  ctx: BuilderRunContext,
+  result: SkillSelectionResult,
+): BuilderRunOutcome {
+  return {
+    runId: ctx.runId,
+    status: "awaiting_clarification",
+    changedFiles: [],
+    draftWorkspacePath: "",
+    selectedInstructionMeta: [],
+    optionalRouteWarnings: [],
+  };
+}
+
+function requiredUnavailableOutcome(
+  ctx: BuilderRunContext,
+  emit: EmitFn,
+  missing: string[],
+): BuilderRunOutcome {
+  emitFailure(
+    emit,
+    ctx.runId,
+    "required_skill_unavailable",
+    `missing required skills: ${missing.join(", ")}`,
+  );
+  return {
+    runId: ctx.runId,
+    status: "failed",
+    failureCode: "required_skill_unavailable",
+    changedFiles: [],
+    draftWorkspacePath: "",
+    selectedInstructionMeta: [],
+    optionalRouteWarnings: [],
+  };
+}
+
 export function newRunId(): string {
   return randomUUID();
 }
@@ -543,6 +714,21 @@ export async function runNewRouteBuilderRun(
   const { runId } = ctx;
   emitMilestoneInternal(emit, runId, "loading_context");
 
+  const skillSelection = await runSkillSelection(
+    ctx,
+    ["ui_mutation"],
+    emit,
+    async (rerunPrompt) => {
+      await runNewRouteBuilderRun({ ...ctx, userPrompt: rerunPrompt }, emit);
+    },
+  );
+  if (skillSelection.kind === "required_unavailable") {
+    return requiredUnavailableOutcome(ctx, emit, skillSelection.missing);
+  }
+  if (skillSelection.kind === "paused") {
+    return pausedOutcome(ctx, skillSelection);
+  }
+
   const draftWorkspacePath = await ensureDraftWorkspace({
     projectId: ctx.projectId,
     runId,
@@ -564,6 +750,8 @@ export async function runNewRouteBuilderRun(
     },
     validationRules: { typecheck: true, build: true, previewHealth: true },
     selectedInstructions: foundationInstructions,
+    selectedSkills: skillSelection.selected,
+    skillRegistry: skillSelection.registry,
   });
 
   const symlinkScan = await scanDraftForSymlinks(draftWorkspacePath);
@@ -583,7 +771,11 @@ export async function runNewRouteBuilderRun(
   emitMilestoneInternal(emit, runId, "planning");
   let thread: BoundedCodexThread;
   try {
-    thread = createBoundedCodexThread({ env: ctx.env, draftWorkspacePath });
+    thread = createBoundedCodexThread({
+      env: ctx.env,
+      draftWorkspacePath,
+      skillToolCallbacks: buildSkillToolCallbacks(runId),
+    });
   } catch {
     emitFailure(emit, runId, "codex_runtime_failed", "failed to start codex thread");
     return finalize({
@@ -795,6 +987,21 @@ export async function runSmallUpdateBuilderRun(
   const { runId } = ctx;
   emitMilestoneInternal(emit, runId, "loading_context");
 
+  const skillSelection = await runSkillSelection(
+    ctx,
+    ["ui_mutation"],
+    emit,
+    async (rerunPrompt) => {
+      await runSmallUpdateBuilderRun({ ...ctx, userPrompt: rerunPrompt }, emit);
+    },
+  );
+  if (skillSelection.kind === "required_unavailable") {
+    return requiredUnavailableOutcome(ctx, emit, skillSelection.missing);
+  }
+  if (skillSelection.kind === "paused") {
+    return pausedOutcome(ctx, skillSelection);
+  }
+
   const draftWorkspacePath = await ensureDraftWorkspace({
     projectId: ctx.projectId,
     runId,
@@ -816,6 +1023,8 @@ export async function runSmallUpdateBuilderRun(
     },
     validationRules: { typecheck: true, build: false, previewHealth: true },
     selectedInstructions: foundationInstructions,
+    selectedSkills: skillSelection.selected,
+    skillRegistry: skillSelection.registry,
   });
 
   const symlinkScan = await scanDraftForSymlinks(draftWorkspacePath);
@@ -837,7 +1046,11 @@ export async function runSmallUpdateBuilderRun(
 
   let thread: BoundedCodexThread;
   try {
-    thread = createBoundedCodexThread({ env: ctx.env, draftWorkspacePath });
+    thread = createBoundedCodexThread({
+      env: ctx.env,
+      draftWorkspacePath,
+      skillToolCallbacks: buildSkillToolCallbacks(runId),
+    });
   } catch {
     emitFailure(emit, runId, "codex_runtime_failed", "failed to start codex thread");
     return finalize({

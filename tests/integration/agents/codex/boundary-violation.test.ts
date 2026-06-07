@@ -18,6 +18,15 @@ vi.mock("@openai/codex-sdk", async () => ({
   },
 }));
 
+vi.mock("@/features/agents/codex/skills/template-scanner.server", () => ({
+  scanActiveTemplates: vi.fn(async () => []),
+  aggregateTemplateScans: vi.fn(() => ({
+    required: new Set(),
+    recommended: new Set(),
+  })),
+}));
+
+
 async function seedSymlinkLeak(projectId: string, tmpRoot: string): Promise<void> {
   const draftDir = path.join(tmpRoot, projectId, "drafts");
   // poll until the orchestrator has created a draft directory
@@ -90,6 +99,9 @@ async function makeEnv(): Promise<CodexEnvAvailable> {
     model: "m",
     baseUrl: undefined,
     skillsRoot: path.join(tmpRoot, "skills"),
+      maxSkillChars: 32000,
+      llmTieBreakGap: 10,
+      maxSelectedSkills: 3,
   };
 }
 

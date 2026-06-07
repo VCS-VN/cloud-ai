@@ -1,5 +1,6 @@
-import type { BuilderRunEvent } from "@/features/agents/ui/builder-events";
+import type { BuilderRunEvent, BuilderRunClarificationOption } from "@/features/agents/ui/builder-events";
 import type { BuilderRunStatus } from "@/features/agents/ui/builder-run-status";
+import type { SelectionPending } from "@/features/agents/codex/skills/selection.server";
 
 export type BuilderRunHandle = {
   runId: string;
@@ -11,6 +12,11 @@ export type BuilderRunHandle = {
   subscribers: Set<(event: BuilderRunEvent) => void>;
   startedAt: number;
   completedAt?: number;
+  pendingSkills: SelectionPending[];
+  clarificationPrompt: { question: string; options: BuilderRunClarificationOption[] } | null;
+  userPrompt: string | null;
+  resumeFn: ((answer: { optionId?: string; freeText?: string }) => Promise<void>) | null;
+  loadedSkills: { name: string; at: number }[];
 };
 
 const registry = new Map<string, BuilderRunHandle>();
@@ -39,6 +45,11 @@ export function createBuilderRunHandle(input: {
     events: [],
     subscribers: new Set(),
     startedAt: Date.now(),
+    pendingSkills: [],
+    clarificationPrompt: null,
+    userPrompt: null,
+    resumeFn: null,
+    loadedSkills: [],
   };
   registry.set(input.runId, handle);
   activeByProject.set(input.projectId, input.runId);
@@ -56,6 +67,9 @@ export function getActiveRunForProject(projectId: string): string | undefined {
 export function publishBuilderRunEvent(handle: BuilderRunHandle, event: BuilderRunEvent): void {
   handle.events.push(event);
   if (event.type === "milestone") handle.status = event.milestone;
+  if (event.type === "awaiting_clarification") {
+    handle.status = "awaiting_clarification";
+  }
   if (event.type === "done") {
     handle.status = "done";
     handle.completedAt = event.at;

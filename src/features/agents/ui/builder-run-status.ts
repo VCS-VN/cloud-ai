@@ -9,6 +9,7 @@ export type BuilderRunStatus =
   | "checking_preview"
   | "repairing"
   | "publishing"
+  | "awaiting_clarification"
   | "done"
   | "failed"
   | "cancelled";

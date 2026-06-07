@@ -30,6 +30,14 @@ vi.mock("@openai/codex-sdk", async () => {
   };
 });
 
+vi.mock("@/features/agents/codex/skills/template-scanner.server", () => ({
+  scanActiveTemplates: vi.fn(async () => []),
+  aggregateTemplateScans: vi.fn(() => ({
+    required: new Set(),
+    recommended: new Set(),
+  })),
+}));
+
 vi.mock("@/server/config/paths.server", async () => {
   const real = await vi.importActual<typeof import("@/server/config/paths.server")>(
     "@/server/config/paths.server",
@@ -95,6 +103,9 @@ describe("init builder run integration", () => {
       model: "gpt-5",
       baseUrl: undefined,
       skillsRoot: path.join(tmpRoot, "skills"),
+      maxSkillChars: 32000,
+      llmTieBreakGap: 10,
+      maxSelectedSkills: 3,
     };
 
     const projectId = "proj-1";
@@ -102,19 +113,29 @@ describe("init builder run integration", () => {
     await fs.mkdir(path.join(projectDir, "published"), { recursive: true });
     const seedDraftAfterCreate = async () => {
       const draftDir = path.join(projectDir, "drafts");
-      const dirs = await fs.readdir(draftDir);
-      const target = path.join(draftDir, dirs[0]);
-      await fs.mkdir(path.join(target, "src/shared/sample-data"), {
-        recursive: true,
-      });
-      await fs.writeFile(
-        path.join(target, "src/shared/sample-data/products.ts"),
-        `export const productsListSample = { total: 1, data: [{ id: "p1", store: { slug: "s1" } }] };`,
-      );
-      await fs.writeFile(
-        path.join(target, "src/components/SiteHeader.tsx"),
-        "export {};",
-      );
+      for (let i = 0; i < 50; i++) {
+        try {
+          const dirs = await fs.readdir(draftDir);
+          if (dirs.length > 0) {
+            const target = path.join(draftDir, dirs[0]);
+            await fs.mkdir(path.join(target, "src/shared/sample-data"), {
+              recursive: true,
+            });
+            await fs.writeFile(
+              path.join(target, "src/shared/sample-data/products.ts"),
+              `export const productsListSample = { total: 1, data: [{ id: "p1", store: { slug: "s1" } }] };`,
+            );
+            await fs.writeFile(
+              path.join(target, "src/components/SiteHeader.tsx"),
+              "export {};",
+            );
+            return;
+          }
+        } catch {
+          // draft dir not created yet
+        }
+        await new Promise((r) => setTimeout(r, 5));
+      }
     };
 
     const ctx = {
@@ -131,10 +152,10 @@ describe("init builder run integration", () => {
     const events: any[] = [];
     const emit = (event: any) => events.push(event);
 
-    const seedTimer = setTimeout(seedDraftAfterCreate, 10);
+    const seedPromise = seedDraftAfterCreate();
 
     const outcome = await runInitBuilderRun(ctx, emit);
-    clearTimeout(seedTimer);
+    await seedPromise;
 
     expect(outcome.status === "done" || outcome.status === "failed").toBe(true);
     expect(events.length).toBeGreaterThan(0);

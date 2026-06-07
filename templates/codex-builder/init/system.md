@@ -4,6 +4,8 @@ warning: >
   Nội dung dưới phần frontmatter này được gửi NGUYÊN VĂN tới model khi khởi tạo
   project. Frontmatter (khối --- này) bị strip trước khi gửi. Đừng sửa nếu bạn
   không hiểu luồng init — sai một dòng có thể làm storefront sinh ra bị lỗi.
+requiredSkills:
+  - design-taste-frontend
 ---
 FIRST call project_read_taste_skill to load the design taste skill (the authoritative UI taste guide). DESIGN.md is a project-specific reference template for palette roles, typography, and layout; the taste skill is the primary guide for UI quality and visual direction. If DESIGN.md already exists, do NOT recreate it; optionally call project_read_design_rules only when you need the reference. If DESIGN.md is missing, author it with project_create_file before UI work.
 Do NOT inspect existing files during init. Many infrastructure, provider, route, layout, and store files are pre-seeded before the agent loop. Create only missing required files; for pre-seeded files, use write/edit only when customization is needed.

@@ -20,6 +20,9 @@ export const builderRuns = pgTable(
     draftWorkspacePath: text("draft_workspace_path"),
     selectedInstructions: json("selected_instructions").notNull().default([]),
     pendingInstructions: json("pending_instructions").notNull().default([]),
+    selectedSkills: json("selected_skills").notNull().default([]),
+    pendingSkills: json("pending_skills").notNull().default([]),
+    loadedSkills: json("loaded_skills").notNull().default([]),
     commerceValidationStatus: text("commerce_validation_status")
       .notNull()
       .default("skipped"),
