@@ -16,8 +16,8 @@ export const listProjectMessages = createServerFn({ method: "GET" })
   )
   .handler(async ({ data }) => {
     const user = await requireServerUser();
-    const { messageService } = await loadProjectServices();
-    return messageService.getProjectMessages(data.projectId, user.id, {
+    const { chatHistoryService } = await loadProjectServices();
+    return chatHistoryService.getProjectMessages(data.projectId, user.id, {
       beforeCreatedAt: data.beforeCreatedAt,
       beforeId: data.beforeId,
       limit: data.limit,

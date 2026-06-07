@@ -1,17 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { requireServerUser } from "@/server/functions/auth";
+import { getBuilderRunHandle } from "@/features/agents/codex/runtime";
 import {
-  getBuilderRunHandle,
-  type BuilderRunHandle,
-} from "@/features/agents/codex/runtime";
-import type { BuilderRunEvent } from "@/features/agents/ui/builder-events";
+  subscribeChatEvents,
+  getChatChannelStatus,
+} from "@/server/services/chat-event-channel.server";
+import { getProjectServices } from "@/server/services/project-services";
+import type { RunStreamEvent } from "@/shared/project-types";
 
-function isTerminal(event: BuilderRunEvent): boolean {
-  return event.type === "done" || event.type === "failed" || event.type === "cancelled";
+function formatSse(event: RunStreamEvent): string {
+  return `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
 }
 
-function formatSse(event: BuilderRunEvent): string {
-  return `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
+function isTerminal(event: RunStreamEvent): boolean {
+  return (
+    event.type === "run.completed" ||
+    event.type === "run.failed" ||
+    event.type === "run.stopped"
+  );
 }
 
 export const Route = createFileRoute(
@@ -22,22 +28,43 @@ export const Route = createFileRoute(
     handlers: {
       GET: async ({ params }) => {
         const user = await requireServerUser();
-        const { runId } = params as { runId: string };
+        const { runId } = params as unknown as { runId: string };
+
         const handle = getBuilderRunHandle(runId);
-        if (!handle) {
-          return new Response(
-            JSON.stringify({ ok: false, code: "not_found", message: "run not found" }),
-            { status: 404, headers: { "Content-Type": "application/json" } },
-          );
-        }
-        if (handle.userId && handle.userId !== user.id) {
+        if (handle && handle.userId && handle.userId !== user.id) {
           return new Response(
             JSON.stringify({ ok: false, code: "forbidden", message: "forbidden" }),
             { status: 403, headers: { "Content-Type": "application/json" } },
           );
         }
-        const stream = openSseStream(handle);
-        return new Response(stream, {
+
+        // Phase 5 SSE: chat channel is the source of truth for translated
+        // RunStreamEvents. If the channel exists (live or just-terminated), the
+        // SSE consumer subscribes to it. If neither channel nor handle exists,
+        // fall back to a one-shot replay synthesized from agent_runs persisted
+        // state (post-restart / archived run).
+        const channelStatus = getChatChannelStatus(runId);
+        if (channelStatus.exists) {
+          return new Response(openChannelStream(runId), {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache, no-transform",
+              Connection: "keep-alive",
+            },
+          });
+        }
+
+        const services = await getProjectServices();
+        const run = await services.chatHistoryService.runStore
+          .load(runId, user.id)
+          .catch(() => undefined);
+        if (!run) {
+          return new Response(
+            JSON.stringify({ ok: false, code: "not_found", message: "run not found" }),
+            { status: 404, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response(buildArchivedReplay(runId, run), {
           headers: {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache, no-transform",
@@ -49,18 +76,22 @@ export const Route = createFileRoute(
   },
 });
 
-function openSseStream(handle: BuilderRunHandle): ReadableStream<Uint8Array> {
+function openChannelStream(runId: string): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      const send = (event: BuilderRunEvent) => {
+      let closed = false;
+      const send = (event: RunStreamEvent) => {
+        if (closed) return;
         try {
           controller.enqueue(encoder.encode(formatSse(event)));
         } catch {
-          // controller already closed
+          closed = true;
+          return;
         }
         if (isTerminal(event)) {
-          handle.subscribers.delete(send);
+          closed = true;
+          subscription.unsubscribe();
           try {
             controller.close();
           } catch {
@@ -68,14 +99,94 @@ function openSseStream(handle: BuilderRunHandle): ReadableStream<Uint8Array> {
           }
         }
       };
-      for (const buffered of handle.events) {
-        send(buffered);
-        if (isTerminal(buffered)) return;
+      const subscription = subscribeChatEvents(runId, send);
+      // If the channel was already terminal at subscribe time, every buffered
+      // event has been delivered; close the stream now.
+      if (subscription.terminal) {
+        try {
+          controller.close();
+        } catch {
+          // already closed
+        }
       }
-      handle.subscribers.add(send);
     },
     cancel() {
-      // listener cleanup handled in send()
+      // listener unsubscribes itself on terminal event; nothing to do here
+    },
+  });
+}
+
+type RunForReplay = {
+  status: string;
+  failureCode?: string;
+  progressTimeline?: Array<
+    | { at: number; kind: "milestone"; milestone: string }
+    | { at: number; kind: "section"; section: string; locale: string }
+    | { at: number; kind: "summary"; text: string }
+    | { at: number; kind: "error"; failureCode: string }
+  >;
+};
+
+function buildArchivedReplay(runId: string, run: RunForReplay): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      const enqueue = (event: RunStreamEvent) => {
+        try {
+          controller.enqueue(encoder.encode(formatSse(event)));
+        } catch {
+          // closed
+        }
+      };
+      const projectId = (run as { projectId?: string }).projectId ?? "";
+      enqueue({ type: "run.started", runId, projectId });
+      const timeline = run.progressTimeline ?? [];
+      for (const item of timeline) {
+        if (item.kind === "summary") {
+          const messageId = `replay-${runId}-summary`;
+          enqueue({
+            type: "message.created",
+            runId,
+            messageId,
+            kind: "answer",
+            content: item.text,
+            processingStatus: "completed",
+            createdAt: new Date(item.at).toISOString(),
+            metadata: null,
+          });
+          enqueue({
+            type: "message.completed",
+            runId,
+            messageId,
+            content: item.text,
+          });
+        }
+        // milestone/section/error are decorative for archived runs; the
+        // status terminal below is what the UI cares about.
+      }
+      if (run.status === "completed") {
+        enqueue({ type: "run.completed", runId, projectProcessingStatus: "idle" });
+      } else if (run.status === "failed" || run.status === "interrupted") {
+        enqueue({
+          type: "run.failed",
+          runId,
+          projectProcessingStatus: "idle",
+          error: {
+            code: "PROVIDER_STREAM_FAILED",
+            message:
+              run.status === "interrupted"
+                ? "Phiên xử lý bị gián đoạn. Bạn có thể thử lại an toàn."
+                : "Đã xảy ra lỗi.",
+          },
+        });
+      } else if (run.status === "stopped") {
+        enqueue({ type: "run.stopped", runId, projectProcessingStatus: "idle" });
+      }
+      try {
+        controller.close();
+      } catch {
+        // already closed
+      }
     },
   });
 }

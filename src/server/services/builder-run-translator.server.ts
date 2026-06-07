@@ -1,0 +1,273 @@
+import {
+  extractSummary,
+  fileChangeToSection,
+  isPrivacySafe,
+  phaseLabel,
+  sectionFraming,
+  type ProgressLocale,
+} from "@/server/functions/progress-mapper.server";
+import { friendlyFailureMessage as friendlyFailureFromModule } from "@/server/functions/friendly-errors.server";
+import type {
+  BuilderRunEvent,
+  BuilderRunFailureCode,
+  BuilderRunMilestone,
+} from "@/features/agents/ui/builder-events";
+import type {
+  RunStreamEvent,
+  SkeletonPhase,
+} from "@/shared/project-types";
+
+export type BuilderTranslatorContext = {
+  runId: string;
+  projectId: string;
+  locale: ProgressLocale;
+};
+
+export type BuilderTranslationOutcome = {
+  events: RunStreamEvent[];
+  persist: PersistDirective | null;
+  timeline: ProgressTimelineDirective | null;
+  terminal: TerminalKind | null;
+};
+
+export type TerminalKind = "completed" | "failed" | "stopped" | "awaiting_input";
+
+export type PersistDirective =
+  | {
+      kind: "answer";
+      content: string;
+      processingStatus: "completed";
+    }
+  | {
+      kind: "error";
+      content: string;
+      failureCode: BuilderRunFailureCode;
+    }
+  | {
+      kind: "agent_question";
+      question: string;
+      options: { id: string; label: string }[];
+    }
+  | {
+      kind: "plan";
+      content: string;
+    };
+
+export type ProgressTimelineDirective =
+  | { kind: "milestone"; milestone: string }
+  | { kind: "section"; section: string; locale: ProgressLocale }
+  | { kind: "summary"; text: string }
+  | { kind: "error"; failureCode: BuilderRunFailureCode };
+
+export function friendlyFailureMessage(
+  code: BuilderRunFailureCode,
+  locale: ProgressLocale,
+): string {
+  return friendlyFailureFromModule(code, locale);
+}
+
+const MILESTONE_TO_SKELETON: Record<
+  BuilderRunMilestone,
+  Exclude<SkeletonPhase, "starting"> | null
+> = {
+  loading_context: "understanding",
+  planning: "planning",
+  creating_draft: "editing",
+  building_pages: "editing",
+  checking_preview: "validating",
+  repairing: "repairing",
+  publishing: "responding",
+  awaiting_clarification: "responding",
+  done: "responding",
+  failed: "responding",
+  cancelled: "responding",
+};
+
+/**
+ * Translator: BuilderRunEvent → RunStreamEvent + persistence + progress-timeline directives.
+ * Pure function. Privacy filter is applied to every user-visible string before emission.
+ */
+export function translateBuilderEventToRunStreamEvent(
+  event: BuilderRunEvent,
+  ctx: BuilderTranslatorContext,
+): BuilderTranslationOutcome {
+  const { runId, locale } = ctx;
+  switch (event.type) {
+    case "milestone": {
+      const phase = MILESTONE_TO_SKELETON[event.milestone];
+      const label = phaseLabel(event.milestone, locale);
+      const events: RunStreamEvent[] = phase
+        ? [{ type: "skeleton.update", runId, phase, label }]
+        : [];
+      return {
+        events,
+        persist: null,
+        timeline: { kind: "milestone", milestone: event.milestone },
+        terminal: null,
+      };
+    }
+    case "file_change": {
+      const section = fileChangeToSection(event.path, locale);
+      if (!section) {
+        return { events: [], persist: null, timeline: null, terminal: null };
+      }
+      const label = sectionFraming(section, locale);
+      if (!isPrivacySafe(label)) {
+        return { events: [], persist: null, timeline: null, terminal: null };
+      }
+      return {
+        events: [
+          {
+            type: "skeleton.update",
+            runId,
+            phase: "editing",
+            label,
+          },
+        ],
+        persist: null,
+        timeline: { kind: "section", section, locale },
+        terminal: null,
+      };
+    }
+    case "turn_completed": {
+      const summary = extractSummary(event.finalResponse, locale);
+      const safe = isPrivacySafe(summary)
+        ? summary
+        : locale === "vi"
+          ? "Đã hoàn tất yêu cầu của bạn."
+          : "Done with your request.";
+      const messageId = `msg-${runId}-answer`;
+      const events: RunStreamEvent[] = [
+        {
+          type: "message.created",
+          runId,
+          messageId,
+          kind: "answer",
+          content: safe,
+          processingStatus: "completed",
+          createdAt: new Date(event.at).toISOString(),
+          metadata: null,
+        },
+        {
+          type: "message.completed",
+          runId,
+          messageId,
+          content: safe,
+        },
+      ];
+      return {
+        events,
+        persist: { kind: "answer", content: safe, processingStatus: "completed" },
+        timeline: { kind: "summary", text: safe },
+        terminal: null,
+      };
+    }
+    case "awaiting_clarification": {
+      const messageId = `msg-${runId}-question`;
+      // Plan-mode review: surface the plan markdown as kind=plan so the chat
+      // history retains the plan even after Approve/Reject.
+      const isPlanReview =
+        event.metadata?.questionType === "plan_review" &&
+        typeof (event.metadata as { planMarkdown?: unknown }).planMarkdown === "string";
+      if (isPlanReview) {
+        const planMarkdown = (event.metadata as { planMarkdown: string }).planMarkdown;
+        const planMessageId = `msg-${runId}-plan`;
+        return {
+          events: [
+            {
+              type: "message.created",
+              runId,
+              messageId: planMessageId,
+              kind: "plan",
+              content: planMarkdown,
+              processingStatus: "completed",
+              createdAt: new Date(event.at).toISOString(),
+              metadata: null,
+            },
+            { type: "run.awaiting_input", runId },
+          ],
+          persist: {
+            kind: "plan",
+            content: planMarkdown,
+          },
+          timeline: null,
+          terminal: "awaiting_input",
+        };
+      }
+      return {
+        events: [
+          {
+            type: "message.created",
+            runId,
+            messageId,
+            kind: "agent_question",
+            content: event.question,
+            processingStatus: "completed",
+            createdAt: new Date(event.at).toISOString(),
+            metadata: null,
+          },
+          { type: "run.awaiting_input", runId },
+        ],
+        persist: {
+          kind: "agent_question",
+          question: event.question,
+          options: event.options,
+        },
+        timeline: null,
+        terminal: "awaiting_input",
+      };
+    }
+    case "done": {
+      return {
+        events: [
+          { type: "run.completed", runId, projectProcessingStatus: "idle" },
+        ],
+        persist: null,
+        timeline: null,
+        terminal: "completed",
+      };
+    }
+    case "failed": {
+      // Audit: log raw cause for internal observability before redacting it.
+      // The user-visible payload uses ONLY the friendly mapping; raw event.message
+      // never reaches the chat (FR-007 / SC-002).
+      if (event.message) {
+        console.error(
+          JSON.stringify({
+            event: "builder_run_failed_internal",
+            runId,
+            projectId: ctx.projectId,
+            failureCode: event.failureCode,
+            rawMessage: event.message,
+          }),
+        );
+      }
+      const friendly = friendlyFailureMessage(event.failureCode, locale);
+      return {
+        events: [
+          {
+            type: "run.failed",
+            runId,
+            projectProcessingStatus: "idle",
+            error: { code: "PROVIDER_STREAM_FAILED", message: friendly },
+          },
+        ],
+        persist: { kind: "error", content: friendly, failureCode: event.failureCode },
+        timeline: { kind: "error", failureCode: event.failureCode },
+        terminal: "failed",
+      };
+    }
+    case "cancelled": {
+      return {
+        events: [{ type: "run.stopped", runId, projectProcessingStatus: "idle" }],
+        persist: null,
+        timeline: null,
+        terminal: "stopped",
+      };
+    }
+  }
+}
+
+export function emitRunStarted(ctx: BuilderTranslatorContext): RunStreamEvent {
+  return { type: "run.started", runId: ctx.runId, projectId: ctx.projectId };
+}

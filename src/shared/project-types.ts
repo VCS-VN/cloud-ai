@@ -8,7 +8,8 @@ export type MessageStatus = 0 | 'pending' | 'completed' | 'failed'
 export type ProjectProcessingStatus = 'idle' | 'processing'
 export type MessageProcessingStatus = 'pending' | 'streaming' | 'completed' | 'failed' | 'stopped'
 export type AgentMessageKind = 'plan' | 'answer' | 'clarification' | 'error' | 'review_required' | 'agent_question'
-export type AgentRunStatus = 'streaming' | 'awaiting_input' | 'completed' | 'failed' | 'stopped'
+export type AgentRunStatus = 'streaming' | 'awaiting_input' | 'completed' | 'failed' | 'stopped' | 'interrupted'
+export type BuilderRunKind = 'init' | 'update' | 'new_route'
 export type SkeletonPhase =
   | 'starting'
   | 'understanding'
@@ -49,6 +50,54 @@ export type DesignVariant = {
     density?: number
   }
 }
+
+export type ProgressTimelineEvent =
+  | { at: number; kind: 'milestone'; milestone: string }
+  | { at: number; kind: 'section'; section: string; locale: 'vi' | 'en' }
+  | { at: number; kind: 'summary'; text: string }
+  | { at: number; kind: 'error'; failureCode: string }
+
+export type PlanPhase =
+  | { stage: 'plan_pending' }
+  | {
+      stage: 'plan_ready'
+      planMarkdown: string
+      planTurnDoneAt: number
+      planThreadId: string
+    }
+  | {
+      stage: 'plan_rejected'
+      planMarkdown: string
+      rejectedAt: number
+    }
+  | {
+      stage: 'executing'
+      planMarkdown: string
+      executeThreadId: string
+      approvedAt: number
+    }
+
+export type ClarificationSnapshot =
+  | {
+      questionType: 'design_variant'
+      options: DesignVariant[]
+      selectedOptionId: string | null
+      customAnswerAllowed: true
+      originalRunPrompt: string
+    }
+  | {
+      questionType: 'skill_clarification'
+      options: { id: string; label: string }[]
+      selectedOptionId: string | null
+      customAnswerAllowed: boolean
+      originalRunPrompt: string
+    }
+  | {
+      questionType: 'plan_review'
+      planMarkdown: string
+      selectedAction: 'approve' | 'reject' | null
+      originalRunPrompt: string
+    }
 
 export type ClarificationOption = {
   id: string

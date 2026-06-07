@@ -6,7 +6,7 @@ warning: >
 ---
 CATALOG DATA (PRE-SEEDED — mandatory display):
 
-- `src/data/products.ts` and `src/data/categories.ts` are already written by the Builder from the website spec before the agent loop. Do NOT call project_create_file for them and do NOT rewrite them unless the user explicitly asks.
+- `src/data/products.ts` and `src/data/categories.ts` are already written by the Builder from the website spec before the agent loop. Do NOT recreate them with apply_patch and do NOT rewrite them unless the user explicitly asks.
 - Routes and store components MUST NOT import `@/data/products` or `@/data/categories` directly. Always consume catalog through hooks (`useProductsList`, `useProductDetail`, `useCategoriesList`) per the data contract.
 - Before finishing init, the storefront MUST show a real product catalog:
   - Create `src/components/store/product-card.tsx` and `src/components/store/product-grid.tsx` (recommended), or keep an inline grid in routes if minimal.

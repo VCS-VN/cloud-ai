@@ -7,10 +7,15 @@ import {
   type ProjectReadSkillResult,
 } from "@/features/agents/codex/skills/project-read-skill.tool.server";
 
+export type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
+
 export type CodexThreadInput = {
   env: CodexEnvAvailable;
   draftWorkspacePath: string;
   skillToolCallbacks?: ProjectReadSkillCallbacks;
+  sandboxMode?: CodexSandboxMode;
+  modelReasoningEffort?: CodexReasoningEffort;
 };
 
 export type CodexTurnInput = {
@@ -38,7 +43,9 @@ export class BoundedCodexThread {
     const turn = await this.thread.run(input.prompt, { signal: input.signal });
     const fileChanges: string[] = [];
     const skillToolCalls: { name: string; result: ProjectReadSkillResult }[] = [];
+    const itemTypeCounts: Record<string, number> = {};
     for (const item of turn.items) {
+      itemTypeCounts[item.type] = (itemTypeCounts[item.type] ?? 0) + 1;
       if (item.type === "file_change") {
         for (const change of item.changes) fileChanges.push(change.path);
       }
@@ -51,6 +58,19 @@ export class BoundedCodexThread {
         });
       }
     }
+    console.log(
+      JSON.stringify({
+        event: "codex_turn_completed",
+        promptLength: input.prompt.length,
+        finalResponseLength: turn.finalResponse?.length ?? 0,
+        finalResponsePreview: (turn.finalResponse ?? "").slice(0, 240),
+        itemCount: turn.items.length,
+        itemTypeCounts,
+        fileChangesCount: fileChanges.length,
+        fileChangesPreview: fileChanges.slice(0, 5),
+        skillToolCallsCount: skillToolCalls.length,
+      }),
+    );
     return {
       finalResponse: turn.finalResponse,
       usage: turn.usage,
@@ -89,7 +109,8 @@ export function createBoundedCodexThread(
   const thread = codex.startThread({
     model: input.env.model,
     workingDirectory: input.draftWorkspacePath,
-    sandboxMode: "workspace-write",
+    sandboxMode: input.sandboxMode ?? "workspace-write",
+    modelReasoningEffort: input.modelReasoningEffort,
     skipGitRepoCheck: true,
     networkAccessEnabled: false,
     approvalPolicy: "never",

@@ -198,7 +198,71 @@ export type AgentRunStatus =
   | "awaiting_input"
   | "completed"
   | "failed"
-  | "stopped";
+  | "stopped"
+  | "interrupted";
+
+export type AgentRunFailureCode =
+  | "validation_failed"
+  | "boundary_violation"
+  | "config_unavailable"
+  | "cancelled"
+  | "preview_failed"
+  | "codex_runtime_failed"
+  | "blocked_request"
+  | "repair_exhausted"
+  | "required_skill_unavailable"
+  | "skill_unavailable"
+  | "interrupted_by_restart";
+
+export type AgentRunKind = "init" | "update" | "new_route";
+
+export type AgentRunProgressTimelineEvent =
+  | { at: number; kind: "milestone"; milestone: string }
+  | { at: number; kind: "section"; section: string; locale: "vi" | "en" }
+  | { at: number; kind: "summary"; text: string }
+  | { at: number; kind: "error"; failureCode: AgentRunFailureCode };
+
+export type AgentRunPlanPhase =
+  | { stage: "plan_pending" }
+  | {
+      stage: "plan_ready";
+      planMarkdown: string;
+      planTurnDoneAt: number;
+      planThreadId: string;
+    }
+  | {
+      stage: "plan_rejected";
+      planMarkdown: string;
+      rejectedAt: number;
+    }
+  | {
+      stage: "executing";
+      planMarkdown: string;
+      executeThreadId: string;
+      approvedAt: number;
+    };
+
+export type AgentRunClarificationSnapshot =
+  | {
+      questionType: "design_variant";
+      options: unknown[];
+      selectedOptionId: string | null;
+      customAnswerAllowed: true;
+      originalRunPrompt: string;
+    }
+  | {
+      questionType: "skill_clarification";
+      options: { id: string; label: string }[];
+      selectedOptionId: string | null;
+      customAnswerAllowed: boolean;
+      originalRunPrompt: string;
+    }
+  | {
+      questionType: "plan_review";
+      planMarkdown: string;
+      selectedAction: "approve" | "reject" | null;
+      originalRunPrompt: string;
+    };
 
 export type AgentRun = {
   id: string;
@@ -209,9 +273,11 @@ export type AgentRun = {
   userPrompt: string;
   reasoningEffort?: "low" | "medium" | "high" | "xhigh";
   planMode: boolean;
+  kind?: AgentRunKind;
   intent?: BuilderIntent;
   plan?: ChangePlan;
   status: AgentRunStatus;
+  failureCode?: AgentRunFailureCode;
   modelUsage?: Record<string, unknown>;
   thinking?: {
     thinkingResultId: string;
@@ -227,6 +293,9 @@ export type AgentRun = {
   affectedFiles: string[];
   validationResult?: ValidationResult;
   codeToolRunState?: ProjectMessageRunState;
+  progressTimeline?: AgentRunProgressTimelineEvent[];
+  planPhase?: AgentRunPlanPhase | null;
+  clarificationSnapshot?: AgentRunClarificationSnapshot | null;
   startedAt: string;
   completedAt?: string;
   createdAt: string;

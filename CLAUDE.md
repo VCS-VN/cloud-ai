@@ -61,7 +61,18 @@ For multi-step tasks, state a brief plan:
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
 <!-- SPECKIT START -->
-**Current feature**: `026-skill-runtime`
-**Plan**: `specs/026-skill-runtime-phase/plan.md`
-**Spec**: `specs/026-skill-runtime-phase/spec.md`
+**Current feature**: `027-codex-sdk-chat-migration` (status: completed 2026-06-07)
+**Plan**: `specs/027-codex-sdk-chat-migration/plan.md`
+**Spec**: `specs/027-codex-sdk-chat-migration/spec.md`
+
+Chat now flows through `src/features/agents/codex/runtime/**` (codex SDK builder
+runs) and the `/api/projects/$projectId/builder-runs/**` route tree. The legacy
+chat orchestrator under `src/features/ai-agent/agent/**` was removed; the few
+remaining files there (`agent-events.ts`, `agent-errors.ts`, `agentic-loop.types.ts`,
+`error-classifier.ts`, `prompt-template-store.server.ts`) are kept because
+non-chat production code (init backfill, error analyzer, code-tools events)
+imports them. Do NOT add new code paths to `@/features/ai-agent/agent/`. Do NOT
+recreate `@/server/services/message-service.ts` or the `/api/projects/$projectId/runs/`
+route tree — `tests/contract/no-legacy-chat-path.contract.test.ts` will fail
+the build if either reappears.
 <!-- SPECKIT END -->

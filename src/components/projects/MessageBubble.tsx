@@ -9,15 +9,21 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { dumprify } from "@/lib/dumprify";
-import type { AgentMessageKind, Message } from "@/shared/project-types";
+import type { AgentMessageKind, DesignVariant, Message } from "@/shared/project-types";
 import { PlanMessageContent } from "./PlanMessageContent";
 import { AgentQuestionBubble } from "./AgentQuestionBubble";
 import { ClarificationBubble } from "./ClarificationBubble";
+import { PlanReview } from "@/features/agents/ui/PlanReview";
+import { DesignVariantPicker } from "@/features/agents/ui/DesignVariantPicker";
+import { SkillClarificationList } from "@/features/agents/ui/SkillClarificationList";
 
 type MessageBubbleProps = {
   message: Message;
   onRetry?: (message: Message) => void;
   onSelectOption?: (messageId: string, optionId: string) => Promise<void>;
+  onPlanAction?: (message: Message, action: "approve" | "reject") => Promise<void>;
+  planAwaitingReview?: boolean;
+  onSubmitFreeText?: (message: Message, freeText: string) => Promise<void>;
 };
 
 const MARKDOWN_CLASS =
@@ -53,14 +59,83 @@ const KIND_META: Partial<Record<AgentMessageKind, KindMeta>> = {
   },
 };
 
-function AgentBody({ message, onSelectOption }: { message: Message; onSelectOption?: (messageId: string, optionId: string) => Promise<void> }) {
-  if (message.kind === "plan") return <PlanMessageContent content={message.content} />;
-  if (message.kind === "agent_question") return <AgentQuestionBubble message={message} onSelectOption={onSelectOption} />;
+function AgentBody({
+  message,
+  onSelectOption,
+  onPlanAction,
+  planAwaitingReview,
+  onSubmitFreeText,
+}: {
+  message: Message;
+  onSelectOption?: (messageId: string, optionId: string) => Promise<void>;
+  onPlanAction?: (message: Message, action: "approve" | "reject") => Promise<void>;
+  planAwaitingReview?: boolean;
+  onSubmitFreeText?: (message: Message, freeText: string) => Promise<void>;
+}) {
+  if (message.kind === "plan") {
+    if (planAwaitingReview && onPlanAction) {
+      return (
+        <PlanReview
+          planMarkdown={message.content}
+          onApprove={() => onPlanAction(message, "approve")}
+          onReject={() => onPlanAction(message, "reject")}
+        />
+      );
+    }
+    return <PlanMessageContent content={message.content} />;
+  }
+  if (message.kind === "agent_question") {
+    const questionType = (message.metadata as { questionType?: string } | null)?.questionType;
+    if (questionType === "design_variant" && onSelectOption) {
+      const variants = (message.metadata?.options as DesignVariant[] | undefined) ?? [];
+      const selected = (message.metadata as { selectedOptionId?: string | null } | null)
+        ?.selectedOptionId;
+      if (selected) {
+        // already chosen — keep render minimal; existing bubble shows confirmation.
+        return <AgentQuestionBubble message={message} onSelectOption={onSelectOption} />;
+      }
+      return (
+        <DesignVariantPicker
+          variants={variants}
+          onSelect={(optionId) => onSelectOption(message.id, optionId)}
+          onCustom={
+            onSubmitFreeText
+              ? (freeText) => onSubmitFreeText(message, freeText)
+              : undefined
+          }
+        />
+      );
+    }
+    if (questionType === "skill_clarification" && onSelectOption) {
+      const options = ((message.metadata as { options?: { id: string; label: string }[] } | null)
+        ?.options ?? []) as { id: string; label: string }[];
+      const selected = (message.metadata as { selectedOptionId?: string | null } | null)
+        ?.selectedOptionId;
+      if (selected) {
+        return <AgentQuestionBubble message={message} onSelectOption={onSelectOption} />;
+      }
+      return (
+        <SkillClarificationList
+          question={message.content}
+          options={options}
+          onSelect={(optionId) => onSelectOption(message.id, optionId)}
+        />
+      );
+    }
+    return <AgentQuestionBubble message={message} onSelectOption={onSelectOption} />;
+  }
   if (message.kind === "clarification") return <ClarificationBubble message={message} onSelectOption={onSelectOption} />;
   return <MarkdownContent content={message.content} />;
 }
 
-export function MessageBubble({ message, onRetry, onSelectOption }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  onRetry,
+  onSelectOption,
+  onPlanAction,
+  planAwaitingReview,
+  onSubmitFreeText,
+}: MessageBubbleProps) {
   const isUser = message.role === "user";
 
   if (isUser) {
@@ -117,7 +192,13 @@ export function MessageBubble({ message, onRetry, onSelectOption }: MessageBubbl
           {headerLabel}
         </div>
 
-        <AgentBody message={message} onSelectOption={onSelectOption} />
+        <AgentBody
+          message={message}
+          onSelectOption={onSelectOption}
+          onPlanAction={onPlanAction}
+          planAwaitingReview={planAwaitingReview}
+          onSubmitFreeText={onSubmitFreeText}
+        />
 
         {canRetry ? (
           <div className="mt-sm flex justify-end">

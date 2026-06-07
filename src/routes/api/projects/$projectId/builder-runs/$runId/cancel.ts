@@ -17,7 +17,7 @@ export const Route = createFileRoute(
     handlers: {
       POST: async ({ params }) => {
         const user = await requireServerUser();
-        const { runId } = params as { runId: string };
+        const { runId } = params as unknown as { runId: string };
         const result = cancelBuilderRun({ runId, userId: user.id });
         if (!result.ok) {
           if (result.reason === "not_found") {

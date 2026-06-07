@@ -41,10 +41,10 @@ import { PreviewInitPanel } from "@/components/projects/PreviewInitPanel";
 import {
   createInitialChatState,
   type DevRuntimeUIState,
-} from "@/features/ai-agent/ui/agent-event-reducer";
-import { useAgentStream } from "@/features/ai-agent/ui/use-agent-stream";
-import { isProjectPreviewStartAvailable, isProjectPreviewTemporarilyUnavailable } from "@/features/ai-agent/ui/preview-availability";
-import { buildPreviewUrl, normalizePreviewPath } from "@/features/ai-agent/ui/preview-path";
+} from "@/features/agents/ui/agent-event-reducer";
+import { useChatStream as useAgentStream } from "@/features/agents/ui/use-chat-stream";
+import { isProjectPreviewStartAvailable, isProjectPreviewTemporarilyUnavailable } from "@/features/agents/ui/preview-availability";
+import { buildPreviewUrl, normalizePreviewPath } from "@/features/agents/ui/preview-path";
 import { useUserPresence } from "@/hooks/useUserPresence";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { MessageComposer } from "@/components/projects/MessageComposer";
@@ -54,12 +54,6 @@ import { ProjectDeleteConfirmDialog } from "@/components/projects/ProjectDeleteC
 import { ProjectSettingsDrawer } from "@/components/projects/ProjectSettingsDrawer";
 import { getCurrentUser } from "@/server/functions/auth";
 import { listProjectMessages } from "@/server/functions/project-messages";
-import {
-  createProjectRun,
-  retryProjectRun,
-  selectRunOption,
-  stopProjectRun,
-} from "@/server/functions/project-runs";
 import {
   deleteProject,
   getProjectWorkspace,
@@ -123,9 +117,6 @@ function ProjectDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const listMessages = useServerFn(listProjectMessages);
-  const createRun = useServerFn(createProjectRun);
-  const retryRun = useServerFn(retryProjectRun);
-  const stopRun = useServerFn(stopProjectRun);
   const removeProject = useServerFn(deleteProject);
   const saveProjectSettings = useServerFn(updateProjectSettings);
   const getRuntimeState = useServerFn(getDevRuntimeState);
@@ -544,31 +535,21 @@ function ProjectDetailPage() {
   async function handleRetryMessage(message: Message) {
     if (!project || !message.runId) return;
     setSendError(undefined);
-    try {
-      const result = await retryRun({
-        data: {
-          projectId: project.id,
-          runId: message.runId,
-          reasoningEffort,
-          planMode: planModeEnabled,
-        },
-      });
-      setProject((currentProject) =>
-        currentProject
-          ? {
-              ...currentProject,
-              processingStatus: "processing",
-              activeRunId: result.newRunId,
-              processingStartedAt: new Date().toISOString(),
-            }
-          : currentProject,
-      );
-      agentStream.beginRun(result.newRunId);
-    } catch (cause) {
-      setSendError(
-        cause instanceof Error ? cause.message : "Unable to retry. Please try again.",
-      );
+    const result = await agentStream.retryRun(message.runId);
+    if (!result.ok) {
+      setSendError(result.message);
+      return;
     }
+    setProject((currentProject) =>
+      currentProject
+        ? {
+            ...currentProject,
+            processingStatus: "processing",
+            activeRunId: result.runId,
+            processingStartedAt: new Date().toISOString(),
+          }
+        : currentProject,
+    );
   }
 
   async function handleSendMessage(content: string) {
@@ -577,50 +558,28 @@ function ProjectDetailPage() {
     setSendError(undefined);
     setDraft("");
 
-    const tempId = `temp_${crypto.randomUUID()}`;
-    const now = new Date().toISOString();
-    agentStream.startOptimistic({
-      id: tempId,
-      projectId: project.id,
-      role: "user",
-      content,
-      status: "completed",
-      processingStatus: "completed",
-      createdAt: now,
-      updatedAt: now,
+    const result = await agentStream.sendPrompt({
+      prompt: content,
+      reasoningEffort,
+      planMode: planModeEnabled,
     });
-
-    try {
-      const created = await createRun({
-        data: {
-          projectId: project.id,
-          content,
-          reasoningEffort,
-          planMode: planModeEnabled,
-        },
-      });
-      setProject((currentProject) =>
-        currentProject
-          ? {
-              ...currentProject,
-              processingStatus: created.project.processingStatus,
-              activeRunId: created.project.activeRunId,
-              processingStartedAt: new Date().toISOString(),
-            }
-          : currentProject,
-      );
-      agentStream.beginRun(created.runId, created.userMessage, tempId);
-    } catch (cause) {
-      agentStream.rollbackOptimistic(tempId);
+    if (!result.ok) {
       setDraft(content);
-      setSendError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to send message. Please try again.",
-      );
-    } finally {
+      setSendError(result.message);
       setSending(false);
+      return;
     }
+    setProject((currentProject) =>
+      currentProject
+        ? {
+            ...currentProject,
+            processingStatus: "processing",
+            activeRunId: result.runId,
+            processingStartedAt: new Date().toISOString(),
+          }
+        : currentProject,
+    );
+    setSending(false);
   }
 
   async function handleSelectOption(messageId: string, optionId: string) {
@@ -628,33 +587,21 @@ function ProjectDetailPage() {
     const message = messages.find((item) => item.id === messageId);
     if (!message?.runId) return;
     setSendError(undefined);
-    try {
-      const result = await selectRunOption({
-        data: {
-          projectId: project.id,
-          runId: message.runId,
-          optionId,
-        },
-      });
-      setProject((currentProject) =>
-        currentProject
-          ? {
-              ...currentProject,
-              processingStatus: "processing",
-              activeRunId: result.runId,
-              processingStartedAt: new Date().toISOString(),
-            }
-          : currentProject,
-      );
-      agentStream.beginRun(result.runId, result.userMessage);
-    } catch (cause) {
-      setSendError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to select that option. Please try again.",
-      );
-      throw cause;
+    const ok = await agentStream.submitAnswer(message.runId, { optionId });
+    if (!ok) {
+      setSendError("Unable to select that option. Please try again.");
+      return;
     }
+    setProject((currentProject) =>
+      currentProject
+        ? {
+            ...currentProject,
+            processingStatus: "processing",
+            activeRunId: message.runId ?? currentProject.activeRunId,
+            processingStartedAt: new Date().toISOString(),
+          }
+        : currentProject,
+    );
   }
 
   function handleStopGeneration() {
@@ -668,7 +615,7 @@ function ProjectDetailPage() {
         : currentProject,
     );
     // Fire-and-forget; the run.stopped event will clear the skeleton.
-    void stopRun({ data: { projectId: project.id, runId } }).catch(() => {
+    void agentStream.stopRun(runId).catch(() => {
       // ignore — the SSE terminal event reconciles UI state
     });
   }
@@ -766,6 +713,33 @@ function ProjectDetailPage() {
                     onLoadOlder={loadOlderMessages}
                     onRetryMessage={handleRetryMessage}
                     onSelectOption={handleSelectOption}
+                    onPlanAction={async (message, action) => {
+                      if (!message.runId) return;
+                      const ok = await agentStream.submitAnswer(message.runId, {
+                        planAction: action,
+                      });
+                      if (!ok) {
+                        setSendError(
+                          action === "approve"
+                            ? "Không thể áp dụng kế hoạch. Vui lòng thử lại."
+                            : "Không thể từ chối kế hoạch. Vui lòng thử lại.",
+                        );
+                      }
+                    }}
+                    awaitingPlanReviewRunId={
+                      chatState.activeRun?.status === "awaiting_input"
+                        ? chatState.activeRun.runId
+                        : null
+                    }
+                    onSubmitFreeText={async (message, freeText) => {
+                      if (!message.runId) return;
+                      const ok = await agentStream.submitAnswer(message.runId, {
+                        freeText,
+                      });
+                      if (!ok) {
+                        setSendError("Không thể gửi mô tả. Vui lòng thử lại.");
+                      }
+                    }}
                   />
                 </div>
               </div>

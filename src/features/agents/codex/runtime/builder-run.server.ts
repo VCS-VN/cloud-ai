@@ -75,6 +75,8 @@ export type BuilderRunContext = {
   env: CodexEnvAvailable;
   projectSummary: ProjectSummary | null;
   signal?: AbortSignal;
+  reasoningEffort?: "low" | "medium" | "high" | "xhigh" | null;
+  planMode?: boolean;
 };
 
 export type BuilderRunOutcome = {
@@ -123,6 +125,27 @@ function emitMilestoneInternal(
   milestone: BuilderRunMilestone,
 ): void {
   emit({ type: "milestone", runId, milestone, at: Date.now() });
+}
+
+async function runTurnAndBridge(
+  thread: BoundedCodexThread,
+  runId: string,
+  emit: EmitFn,
+  input: { prompt: string; signal?: AbortSignal },
+): Promise<{ finalResponse: string; fileChanges: string[] }> {
+  const summary = await thread.runTurn(input);
+  for (const path of summary.fileChanges) {
+    emit({ type: "file_change", runId, path, at: Date.now() });
+  }
+  if (summary.finalResponse) {
+    emit({
+      type: "turn_completed",
+      runId,
+      finalResponse: summary.finalResponse,
+      at: Date.now(),
+    });
+  }
+  return { finalResponse: summary.finalResponse, fileChanges: summary.fileChanges };
 }
 
 function emitFailure(
@@ -200,6 +223,85 @@ async function ensureDraftWorkspace(input: {
     // empty published — start from blank draft
   }
   return draftRoot;
+}
+
+/**
+ * Phase 6 plan-mode wrapper. When ctx.planMode is true and the kind is not init,
+ * run the plan turn (read-only) before delegating to the execute driver. The
+ * driver pauses on awaiting_clarification(plan_review) — a separate /answer call
+ * resumes via handle.resumeFn with planAction approve|reject.
+ */
+export async function runWithPlanModeIfRequested(
+  ctx: BuilderRunContext,
+  emit: EmitFn,
+  executeDriver: (ctx: BuilderRunContext, emit: EmitFn) => Promise<BuilderRunOutcome>,
+): Promise<BuilderRunOutcome> {
+  if (!ctx.planMode || ctx.kind === "init") {
+    return executeDriver(ctx, emit);
+  }
+
+  const { runPlanTurn, buildExecuteTurnPrompt } = await import("./plan-mode.server");
+  const draftWorkspacePath = await ensureDraftWorkspace({
+    projectId: ctx.projectId,
+    runId: ctx.runId,
+  });
+
+  emitMilestoneInternal(emit, ctx.runId, "planning");
+  const planResult = await runPlanTurn(ctx, { draftWorkspacePath });
+  if (!planResult.ok) {
+    emitFailure(emit, ctx.runId, planResult.reason, planResult.message);
+    return finalize({
+      runId: ctx.runId,
+      status: "failed",
+      failureCode: planResult.reason,
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: [],
+      optionalRouteWarnings: [],
+    });
+  }
+
+  // Wait for the user's approve/reject answer via handle.resumeFn.
+  const handle = getBuilderRunHandle(ctx.runId);
+  if (!handle) {
+    return finalize({
+      runId: ctx.runId,
+      status: "failed",
+      failureCode: "codex_runtime_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: [],
+      optionalRouteWarnings: [],
+    });
+  }
+
+  return await new Promise<BuilderRunOutcome>((resolve) => {
+    handle.resumeFn = async (answer) => {
+      handle.resumeFn = null;
+      handle.clarificationPrompt = null;
+      if (answer.planAction === "reject") {
+        emit({ type: "cancelled", runId: ctx.runId, milestone: "cancelled", at: Date.now() });
+        resolve(
+          finalize({
+            runId: ctx.runId,
+            status: "cancelled",
+            failureCode: "cancelled",
+            changedFiles: [],
+            draftWorkspacePath,
+            selectedInstructionMeta: [],
+            optionalRouteWarnings: [],
+          }),
+        );
+        return;
+      }
+      // approve — feed the original task + approved plan into a NEW execute thread
+      // by adjusting the user prompt for the existing execute driver.
+      const augmentedPrompt = buildExecuteTurnPrompt(ctx.userPrompt, planResult.planMarkdown);
+      const executeCtx: BuilderRunContext = { ...ctx, userPrompt: augmentedPrompt, planMode: false };
+      const outcome = await executeDriver(executeCtx, emit);
+      resolve(outcome);
+    };
+  });
 }
 
 async function syncDraftToPublished(
@@ -350,11 +452,79 @@ export async function runInitBuilderRun(
     });
   }
 
+  // US4: Before kicking off the build, generate four retail-vibe design variants
+  // and pause for user selection. The selected variant (or freeText guidance)
+  // is fed into the build prompt below.
+  let variantPromptAddendum = "";
+  try {
+    const { generateRetailVariants, buildVariantBuildPrompt } = await import(
+      "./design-variants.server"
+    );
+    const variantThread = createBoundedCodexThread({
+      env: ctx.env,
+      draftWorkspacePath,
+      sandboxMode: "read-only",
+      modelReasoningEffort: "high",
+    });
+    const result = await generateRetailVariants({
+      runTurn: async () => {
+        const summary = await variantThread.runTurn({
+          prompt:
+            "Emit exactly 4 retail-vibe design variants as STRICT JSON per the contract. " +
+            "Always cover minimalist retail / warm retail / luxury retail / playful retail. " +
+            "Description must be Vietnamese, ≤120 chars, NEVER mention file paths, framework tokens, or code.",
+          signal: ctx.signal,
+        });
+        return { finalResponse: summary.finalResponse };
+      },
+    });
+    if (result.ok) {
+      const handle = getBuilderRunHandle(runId);
+      const choice = await new Promise<{ optionId?: string; freeText?: string }>(
+        (resolveChoice) => {
+          if (handle) {
+            handle.resumeFn = async (answer) => {
+              handle.resumeFn = null;
+              handle.clarificationPrompt = null;
+              resolveChoice(answer);
+            };
+            publishBuilderRunEvent(handle, {
+              type: "awaiting_clarification",
+              runId,
+              milestone: "awaiting_clarification",
+              question: "Chọn phong cách thiết kế cho cửa hàng",
+              options: result.variants.map((v) => ({ id: v.id, label: v.label })),
+              metadata: {
+                questionType: "design_variant",
+                options: result.variants,
+                customAnswerAllowed: true,
+              },
+              at: Date.now(),
+            });
+          } else {
+            resolveChoice({});
+          }
+        },
+      );
+      const selectedVariant = result.variants.find((v) => v.id === choice.optionId);
+      variantPromptAddendum =
+        "\n\n" +
+        buildVariantBuildPrompt({
+          selectedVariant,
+          freeText: choice.freeText,
+        });
+    }
+  } catch {
+    // soft fall-through — init proceeds without variant guidance if generation fails.
+    variantPromptAddendum = "";
+  }
+
   emitMilestoneInternal(emit, runId, "building_pages");
   try {
-    await thread.runTurn({
+    await runTurnAndBridge(thread, runId, emit, {
       prompt:
         bundle.prompt +
+        variantPromptAddendum +
         "\n\n<plan>\n" +
         plan.batches
           .map((b) => `- ${b.kind}:${b.marker} → ${b.files.join(", ")}`)
@@ -363,7 +533,7 @@ export async function runInitBuilderRun(
       signal: ctx.signal,
     });
     for (const batch of plan.batches) {
-      await thread.runTurn({
+      await runTurnAndBridge(thread, runId, emit, {
         prompt: `Now build batch ${batch.marker} (${batch.kind}). Files in scope: ${batch.files.join(", ")}.`,
         signal: ctx.signal,
       });
@@ -632,6 +802,11 @@ async function runSkillSelection(
       milestone: "awaiting_clarification",
       question: prompt.question,
       options: prompt.options,
+      metadata: {
+        questionType: "skill_clarification",
+        options: prompt.options,
+        customAnswerAllowed: false,
+      },
       at: Date.now(),
     });
     return { kind: "paused", outcome, registry };
@@ -789,7 +964,7 @@ export async function runNewRouteBuilderRun(
     });
   }
   try {
-    await thread.runTurn({
+    await runTurnAndBridge(thread, runId, emit, {
       prompt: bundle.prompt + "\n\n<plan_request>Plan the new route changes before mutating any files.</plan_request>",
       signal: ctx.signal,
     });
@@ -823,7 +998,7 @@ export async function runNewRouteBuilderRun(
 
   emitMilestoneInternal(emit, runId, "building_pages");
   try {
-    await thread.runTurn({
+    await runTurnAndBridge(thread, runId, emit, {
       prompt: "Now apply the planned new-route changes inside the draft workspace.",
       signal: ctx.signal,
     });
@@ -1066,7 +1241,7 @@ export async function runSmallUpdateBuilderRun(
 
   emitMilestoneInternal(emit, runId, "building_pages");
   try {
-    await thread.runTurn({ prompt: bundle.prompt, signal: ctx.signal });
+    await runTurnAndBridge(thread, runId, emit, { prompt: bundle.prompt, signal: ctx.signal });
   } catch (error) {
     if (ctx.signal?.aborted) {
       emit({ type: "cancelled", runId, milestone: "cancelled", at: Date.now() });

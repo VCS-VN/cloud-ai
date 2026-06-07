@@ -161,6 +161,79 @@ export class ProjectService {
       now,
     );
 
+    // Kick off the codex builder run for this fresh project. Without this,
+    // the run row stays "streaming" forever and the agent never produces code.
+    if (agentRun) {
+      console.log(
+        JSON.stringify({
+          event: "create_project_dispatch_starting",
+          projectId: project.id,
+          runId: agentRun.id,
+          userId,
+          promptLength: initialPrompt.length,
+        }),
+      );
+      try {
+        const { startBuilderRunForChat } = await import(
+          "@/server/services/builder-run-dispatcher.server"
+        );
+        const dispatch = await startBuilderRunForChat({
+          projectId: project.id,
+          userId,
+          prompt: initialPrompt,
+          locale: "vi",
+          project: { status: "draft" },
+          runId: agentRun.id,
+          parentMessageId: userMessage.id,
+          persistence: this.runStore
+            ? {
+                messageRepository: this.messageRepository,
+                projectRepository: this.projectRepository,
+                runStore: this.runStore,
+              }
+            : undefined,
+        });
+        console.log(
+          JSON.stringify({
+            event: "create_project_dispatch_result",
+            projectId: project.id,
+            runId: agentRun.id,
+            ok: dispatch.ok,
+            code: dispatch.ok ? null : dispatch.code,
+          }),
+        );
+        if (!dispatch.ok) {
+          console.error(
+            JSON.stringify({
+              event: "create_project_dispatch_failed",
+              projectId: project.id,
+              runId: agentRun.id,
+              code: dispatch.code,
+              message: dispatch.message,
+            }),
+          );
+        }
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            event: "create_project_dispatch_threw",
+            projectId: project.id,
+            runId: agentRun.id,
+            error: error instanceof Error ? error.message : "unknown",
+            stack: error instanceof Error ? error.stack : undefined,
+          }),
+        );
+      }
+    } else {
+      console.warn(
+        JSON.stringify({
+          event: "create_project_no_run_store",
+          projectId: project.id,
+          message: "runStore is undefined; codex driver was NOT started",
+        }),
+      );
+    }
+
     return {
       project:
         nextProject ?? {

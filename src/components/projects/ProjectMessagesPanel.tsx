@@ -17,6 +17,9 @@ type ProjectMessagesPanelProps = {
   onLoadOlder?: () => void;
   onRetryMessage?: (message: Message) => void;
   onSelectOption?: (messageId: string, optionId: string) => Promise<void>;
+  onPlanAction?: (message: Message, action: "approve" | "reject") => Promise<void>;
+  awaitingPlanReviewRunId?: string | null;
+  onSubmitFreeText?: (message: Message, freeText: string) => Promise<void>;
 };
 
 const STICK_TO_BOTTOM_THRESHOLD = 72;
@@ -59,6 +62,9 @@ export function ProjectMessagesPanel({
   onLoadOlder,
   onRetryMessage,
   onSelectOption,
+  onPlanAction,
+  awaitingPlanReviewRunId,
+  onSubmitFreeText,
 }: ProjectMessagesPanelProps) {
   const viewportRef = useRef<HTMLElement | null>(null);
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -192,6 +198,13 @@ export function ProjectMessagesPanel({
                   message={item.message}
                   onRetry={onRetryMessage}
                   onSelectOption={onSelectOption}
+                  onPlanAction={onPlanAction}
+                  onSubmitFreeText={onSubmitFreeText}
+                  planAwaitingReview={
+                    item.message.kind === "plan" &&
+                    awaitingPlanReviewRunId !== undefined &&
+                    item.message.runId === awaitingPlanReviewRunId
+                  }
                 />
               </div>
             ) : (
@@ -206,6 +219,13 @@ export function ProjectMessagesPanel({
                       message={message}
                       onRetry={onRetryMessage}
                       onSelectOption={onSelectOption}
+                      onPlanAction={onPlanAction}
+                      onSubmitFreeText={onSubmitFreeText}
+                      planAwaitingReview={
+                        message.kind === "plan" &&
+                        awaitingPlanReviewRunId !== undefined &&
+                        item.runId === awaitingPlanReviewRunId
+                      }
                     />
                   </div>
                 ))}

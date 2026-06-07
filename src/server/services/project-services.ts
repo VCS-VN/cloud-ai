@@ -1,8 +1,3 @@
-import { AgentOrchestrator } from "@/features/ai-agent/agent/agent-orchestrator.server";
-import { PromptLayerStore } from "@/features/ai-agent/agent/init-prompt-store.server";
-import { loadAgentConfig } from "@/features/ai-agent/agent/agent-config";
-import { createOpenAIClient } from "@/features/ai-agent/openai/openai-client.server";
-import { ChatCompletionsProvider } from "@/features/ai-agent/openai/chat-completions-provider.server";
 import { ProjectRunStore } from "@/features/projects/legacy/project-run-store.server";
 import { ProjectFileStore } from "@/features/projects/legacy/project-file-store.server";
 import { SnapshotService } from "@/features/projects/legacy/snapshot-service.server";
@@ -25,7 +20,7 @@ import {
 import { ErrorFixer } from "@/features/runtime/legacy/error-analyzer.server";
 import { GeneratedProjectEnvWriter } from "@/features/ai-agent/store-runtime/generated-project-env-writer.server";
 import { ProjectFileTreeService } from "@/server/services/file-tree-service";
-import { MessageService } from "@/server/services/message-service";
+import { ChatHistoryService } from "@/server/services/chat-history-service";
 import { ProjectService } from "@/server/services/project-service";
 import { ProjectRunService } from "@/server/services/project-run-service";
 import { getDb } from "@/db/client";
@@ -42,6 +37,8 @@ const portAllocator = new InMemoryPortAllocator();
 
 let runtimeBootstrapped = false;
 let runtimeReconcileStarted = false;
+let agentRunReconcileStarted = false;
+let skillRegistryLoadStarted = false;
 
 function ensureRuntimeBootstrap() {
   if (runtimeBootstrapped) return;
@@ -54,6 +51,76 @@ function ensureRuntimeBootstrap() {
   };
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);
+}
+
+async function ensureAgentRunReconcileOnce(agentRunRepo: PgAgentRunRepository) {
+  if (agentRunReconcileStarted) return;
+  agentRunReconcileStarted = true;
+  try {
+    const { getBuilderRunHandle } = await import(
+      "@/features/agents/codex/runtime/builder-run-registry.server"
+    );
+    const result = await agentRunRepo.reconcileOrphanRuns({
+      isLiveHandle: (runId) => getBuilderRunHandle(runId) !== undefined,
+    });
+    if (result.interruptedRunIds.length > 0 || result.recoveredAwaitingClarificationRunIds.length > 0) {
+      console.log(
+        JSON.stringify({
+          event: "agent_run_boot_reconcile",
+          interrupted: result.interruptedRunIds.length,
+          recoveredAwaitingClarification: result.recoveredAwaitingClarificationRunIds.length,
+        }),
+      );
+    }
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "agent_run_boot_reconcile_failed",
+        error: error instanceof Error ? error.message : "unknown",
+      }),
+    );
+  }
+}
+
+async function ensureSkillRegistryLoadedOnce() {
+  if (skillRegistryLoadStarted) return;
+  skillRegistryLoadStarted = true;
+  try {
+    const { loadCodexEnv } = await import("@/server/env/codex");
+    const { loadRegistry } = await import(
+      "@/features/agents/codex/skills/registry.server"
+    );
+    const env = loadCodexEnv();
+    if (!env.available) {
+      console.warn(
+        JSON.stringify({
+          event: "skill_registry_load_skipped_codex_unavailable",
+          reason: env.reason,
+          missing: env.missing,
+        }),
+      );
+      return;
+    }
+    const status = await loadRegistry({
+      skillsRoot: env.skillsRoot,
+      maxSkillChars: env.maxSkillChars,
+    });
+    console.log(
+      JSON.stringify({
+        event: "skill_registry_boot_loaded",
+        skillsRoot: status.skillsRoot,
+        count: status.count,
+        failures: status.failures,
+      }),
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "skill_registry_load_failed",
+        error: error instanceof Error ? error.message : "unknown",
+      }),
+    );
+  }
 }
 
 export async function getProjectServices() {
@@ -80,12 +147,17 @@ export async function getProjectServices() {
   void pm2Driver;
   void portAllocator;
   const snapshotService = new SnapshotService(projectSnapshotRepo);
-  const agentConfig = loadAgentConfig();
-  const openAIClient = createOpenAIClient();
-  const openAIProvider = new ChatCompletionsProvider(openAIClient);
+  void snapshotService;
   presenceService.setProcessManager(processManager);
   ensureRuntimeBootstrap();
-  const errorFixer = new ErrorFixer({ openAIProvider, coderModel: agentConfig.coderModel });
+  void ensureAgentRunReconcileOnce(agentRunRepo);
+  void ensureSkillRegistryLoadedOnce();
+  // ErrorFixer is constructed without an OpenAI provider; non-chat callers
+  // that genuinely need LLM-driven fixes wire their own provider in.
+  const errorFixer = new ErrorFixer({
+    openAIProvider: null as never,
+    coderModel: process.env.AGENT_CODER_MODEL ?? "",
+  });
   const runtimeService = new RuntimeService({ processManager, projectStateStore, errorFixer });
   const previewTokenService = new PreviewTokenService({
     canAccessProject: async (projectId, userId) => Boolean(await projectRepo.getProject(projectId, userId)),
@@ -112,32 +184,12 @@ export async function getProjectServices() {
   }
   presenceService.setRuntimeStore(projectStateStore);
   const projectService = new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore, runtimeService, envWriter, runtimeOrchestrator, runStore);
-  const promptLayerStore = await PromptLayerStore.loadFromDisk();
-  const agentOrchestrator = new AgentOrchestrator({
-    projectStateStore,
-    runStore,
-    projectFileStore,
-    snapshotService,
-    openAIProvider,
-    agentConfig,
-    runtimeService,
-    runtimeOrchestrator,
-    promptLayerStore,
-    selectedStoreSlugResolver: (projectId, userId) => projectService.getSelectedStoreSlug(projectId, userId),
-  });
 
   return {
     projectService,
     previewTokenService,
     projectRunService: new ProjectRunService(projectRepo, runStore),
-
-    messageService: new MessageService(
-      projectRepo,
-      messageRepo,
-      agentOrchestrator,
-      runStore,
-    ),
-
+    chatHistoryService: new ChatHistoryService(projectRepo, messageRepo, runStore),
     fileTreeService: new ProjectFileTreeService(projectRepo, fileNodeRepo),
   };
 }

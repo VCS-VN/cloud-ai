@@ -21,12 +21,29 @@ export type BuilderRunFailureCode =
   | "blocked_request"
   | "repair_exhausted"
   | "required_skill_unavailable"
-  | "skill_unavailable";
+  | "skill_unavailable"
+  | "interrupted_by_restart";
 
 export type BuilderRunClarificationOption = {
   id: string;
   label: string;
 };
+
+export type BuilderRunClarificationMetadata =
+  | {
+      questionType: "skill_clarification";
+      options: BuilderRunClarificationOption[];
+      customAnswerAllowed: boolean;
+    }
+  | {
+      questionType: "design_variant";
+      options: unknown[];
+      customAnswerAllowed: true;
+    }
+  | {
+      questionType: "plan_review";
+      planMarkdown: string;
+    };
 
 export type BuilderRunEvent =
   | { type: "milestone"; runId: string; milestone: BuilderRunMilestone; at: number }
@@ -36,6 +53,7 @@ export type BuilderRunEvent =
       milestone: "awaiting_clarification";
       question: string;
       options: BuilderRunClarificationOption[];
+      metadata?: BuilderRunClarificationMetadata;
       at: number;
     }
   | {
@@ -47,4 +65,6 @@ export type BuilderRunEvent =
       at: number;
     }
   | { type: "done"; runId: string; milestone: "done"; at: number }
-  | { type: "cancelled"; runId: string; milestone: "cancelled"; at: number };
+  | { type: "cancelled"; runId: string; milestone: "cancelled"; at: number }
+  | { type: "file_change"; runId: string; path: string; at: number }
+  | { type: "turn_completed"; runId: string; finalResponse: string; at: number };

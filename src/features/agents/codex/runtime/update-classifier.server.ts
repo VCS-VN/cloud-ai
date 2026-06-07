@@ -1,4 +1,5 @@
 import { isBlockedProjectPath } from "@/features/agents/codex/boundary/protected-paths";
+import type { Project } from "@/shared/project-types";
 
 export type UpdateClassification = "small_update" | "new_route" | "unsupported";
 
@@ -74,3 +75,32 @@ export function classifyUpdatePrompt(
 }
 
 export const SMALL_UPDATE_FILE_CAP = 20;
+
+export type ResolvedBuilderRunKind = "init" | "update" | "new_route" | "unsupported";
+
+export type ResolveBuilderRunKindInput = {
+  project: Pick<Project, "status">;
+  workspaceFiles: string[];
+  prompt: string;
+};
+
+/**
+ * Server-side resolution of the agent run kind (R5).
+ * Empty workspace OR project.status === "draft" → init.
+ * Otherwise delegate to classifyUpdatePrompt for update vs new-route vs unsupported.
+ */
+export function resolveBuilderRunKind(
+  input: ResolveBuilderRunKindInput,
+): ResolvedBuilderRunKind {
+  const isEmptyWorkspace = input.workspaceFiles.length === 0;
+  const isDraft = input.project.status === "draft";
+  if (isEmptyWorkspace || isDraft) return "init";
+
+  const classification = classifyUpdatePrompt({
+    prompt: input.prompt,
+    fileManifest: input.workspaceFiles,
+  });
+  if (classification.kind === "unsupported") return "unsupported";
+  if (classification.kind === "new_route") return "new_route";
+  return "update";
+}

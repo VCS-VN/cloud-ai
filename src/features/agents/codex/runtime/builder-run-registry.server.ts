@@ -15,7 +15,13 @@ export type BuilderRunHandle = {
   pendingSkills: SelectionPending[];
   clarificationPrompt: { question: string; options: BuilderRunClarificationOption[] } | null;
   userPrompt: string | null;
-  resumeFn: ((answer: { optionId?: string; freeText?: string }) => Promise<void>) | null;
+  resumeFn:
+    | ((answer: {
+        optionId?: string;
+        freeText?: string;
+        planAction?: "approve" | "reject";
+      }) => Promise<void>)
+    | null;
   loadedSkills: { name: string; at: number }[];
 };
 

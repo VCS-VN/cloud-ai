@@ -28,6 +28,7 @@ const FAILURE_LABEL_VI: Record<BuilderRunFailureCode, string> = {
   repair_exhausted: "Đã thử sửa lỗi tối đa và vẫn chưa pass.",
   required_skill_unavailable: "Không thể tiếp tục vì thiếu hướng dẫn bắt buộc cho agent.",
   skill_unavailable: "Skill được yêu cầu hiện chưa có sẵn.",
+  interrupted_by_restart: "Phiên xử lý bị gián đoạn. Bạn có thể thử lại an toàn.",
 };
 
 const GENERIC_API_ERROR_VI = "Không thể gửi câu trả lời. Vui lòng thử lại.";

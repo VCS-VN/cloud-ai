@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { requireServerUser } from "@/server/functions/auth";
 import { getBuilderRunHandle } from "@/features/agents/codex/runtime/builder-run-registry.server";
 import { BUILDER_RUN_LOCALE_VI } from "@/features/agents/ui/builder-run-i18n";
+import { getProjectServices } from "@/server/services/project-services";
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -18,7 +19,7 @@ export const Route = createFileRoute(
     handlers: {
       POST: async ({ params, request }) => {
         const user = await requireServerUser();
-        const { runId } = params as { runId: string };
+        const { runId } = params as unknown as { runId: string };
 
         const handle = getBuilderRunHandle(runId);
         if (!handle) {
@@ -38,7 +39,7 @@ export const Route = createFileRoute(
         if (handle.status !== "awaiting_clarification") {
           return jsonResponse(409, {
             ok: false,
-            code: "not_paused",
+            code: "RUN_NOT_AWAITING_INPUT",
             message: BUILDER_RUN_LOCALE_VI.apiErrors.not_paused,
           });
         }
@@ -46,18 +47,40 @@ export const Route = createFileRoute(
         const body = (await request.json().catch(() => ({}))) as {
           optionId?: unknown;
           freeText?: unknown;
+          planAction?: unknown;
         };
         const optionId =
           typeof body.optionId === "string" ? body.optionId.trim() : "";
         const freeText =
           typeof body.freeText === "string" ? body.freeText.trim() : "";
+        const planAction =
+          body.planAction === "approve" || body.planAction === "reject"
+            ? (body.planAction as "approve" | "reject")
+            : "";
 
-        if (!optionId && !freeText) {
+        if (!optionId && !freeText && !planAction) {
           return jsonResponse(400, {
             ok: false,
             code: "empty_answer",
             message: BUILDER_RUN_LOCALE_VI.apiErrors.empty_answer,
           });
+        }
+
+        if (planAction) {
+          // planAction is only valid when the run is paused on plan_review.
+          // The runtime persists this on agent_runs.plan_phase.stage = "plan_ready".
+          const services = await getProjectServices();
+          const run = await services.chatHistoryService.runStore
+            .load(runId, user.id)
+            .catch(() => undefined);
+          const planStage = run?.planPhase?.stage;
+          if (planStage !== "plan_ready") {
+            return jsonResponse(409, {
+              ok: false,
+              code: "RUN_NOT_AWAITING_INPUT",
+              message: BUILDER_RUN_LOCALE_VI.apiErrors.not_paused,
+            });
+          }
         }
 
         if (optionId) {
@@ -66,7 +89,7 @@ export const Route = createFileRoute(
           if (!matched) {
             return jsonResponse(400, {
               ok: false,
-              code: "invalid_option",
+              code: "INVALID_OPTION",
               message: BUILDER_RUN_LOCALE_VI.apiErrors.invalid_option,
             });
           }
@@ -81,9 +104,10 @@ export const Route = createFileRoute(
           });
         }
 
-        const answer: { optionId?: string; freeText?: string } = {};
+        const answer: { optionId?: string; freeText?: string; planAction?: "approve" | "reject" } = {};
         if (optionId) answer.optionId = optionId;
         if (freeText) answer.freeText = freeText;
+        if (planAction) answer.planAction = planAction;
 
         try {
           await resumeFn(answer);
@@ -95,7 +119,7 @@ export const Route = createFileRoute(
           });
         }
 
-        return jsonResponse(200, { ok: true });
+        return new Response(null, { status: 204 });
       },
     },
   },

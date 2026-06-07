@@ -7,9 +7,15 @@ warning: >
 requiredSkills:
   - design-taste-frontend
 ---
-FIRST call project_read_taste_skill to load the design taste skill (the authoritative UI taste guide). DESIGN.md is a project-specific reference template for palette roles, typography, and layout; the taste skill is the primary guide for UI quality and visual direction. If DESIGN.md already exists, do NOT recreate it; optionally call project_read_design_rules only when you need the reference. If DESIGN.md is missing, author it with project_create_file before UI work.
-Do NOT inspect existing files during init. Many infrastructure, provider, route, layout, and store files are pre-seeded before the agent loop. Create only missing required files; for pre-seeded files, use write/edit only when customization is needed.
+FIRST read the design taste skill block embedded below in <design_taste_skill> — it is the authoritative UI taste guide. DESIGN.md is a project-specific reference template for palette roles, typography, and layout; the taste skill is the primary guide for UI quality and visual direction. If DESIGN.md already exists, do NOT recreate it; if you need the project rule reference, look at the embedded <project_rules> block. If DESIGN.md is missing, create it via apply_patch before any UI work.
+Do NOT inspect existing files during init. Many infrastructure, provider, route, layout, and store files are pre-seeded before the agent loop. Create only missing required files via apply_patch; for pre-seeded files, edit only when customization is needed.
 This is a retail e-commerce (online store) project. Every page and component must serve a storefront shopping experience.
+
+You have access to these built-in tools (codex CLI):
+- apply_patch — create/edit/delete files inside the working directory. THIS IS HOW YOU SHIP CHANGES. If you do not call apply_patch, no file is written and the run fails the diff gate.
+- shell — only when you genuinely need to inspect existing files; prefer reading the embedded context blocks instead.
+
+Custom helpers like `project_create_file`, `project_apply_patch`, `project_read_taste_skill`, or `project_read_design_rules` do NOT exist in this runtime. Ignore any older instruction that mentions them.
 
 Project rule docs from templates/project-rules are embedded in this prompt as the authoritative generated-project reference. Follow those docs for routing, imports, protected files, data contracts, and UI/design behavior.
 
@@ -72,7 +78,7 @@ BEFORE CREATING FILES — REQUIRED RULES TO PREVENT ERRORS:
 
 5. AXIOS .data UNWRAP: When using `apiClient.get<T>(url, { params })`, the response is `AxiosResponse<T>`. The queryFn inside useQuery/useInfiniteQuery MUST return `response.data` (the unwrapped payload of type T), NOT the full AxiosResponse. The hook consumer then reads `query.data` which will be the unwrapped T. Example correct pattern: `queryFn: async () => { const res = await apiClient.get<T>(url); return res.data; }`.
 
-6. POST-GENERATION VALIDATION (MANDATORY): After creating ALL files with project_create_file, call `project_run_validation` with `level: 'fast'` and `reason: 'typecheck generated storefront files'`. Fix every error with project_apply_patch before declaring the task complete. If validation fails: inspect the error, apply the minimal fix, re-run validation. Repeat until validation passes. NEVER skip validation or leave errors unaddressed.
+6. POST-GENERATION VALIDATION (MANDATORY): After creating ALL files with apply_patch, the runtime automatically runs typecheck + build + preview health gates after the turn. Make sure every file is syntactically correct and complete before ending the turn — there is no in-turn `project_run_validation` tool. If the runtime reports a validation error in a follow-up turn, fix every error with apply_patch.
 
 INIT COMPLETION CHECKLIST (do not finish until all are true):
 - Home and `/products` render a product catalog via `useProductsList` (loading + empty states), not placeholder paragraphs.
@@ -80,4 +86,4 @@ INIT COMPLETION CHECKLIST (do not finish until all are true):
 - Create `product-card` and `product-grid` under `src/components/store/` when expanding beyond the seed grid.
 - No builder jargon in shopper-facing copy (`src/routes/**`, `src/components/**`): never show "taste skill", "route shell", "thin shell", debug shell lines, or "Build … using the design …" in UI text.
 
-NOW START: call project_read_taste_skill, create DESIGN.md only if it is missing, create src/routes/__root.tsx and layout chrome (site-header, site-footer) if missing, then expand thin-shell commerce routes and build store sections via the taste skill. Plumbing (providers, hooks, route shells, ui primitives) is pre-seeded — do NOT project_create_file paths that already exist.
+NOW START: read the embedded <design_taste_skill> block; create DESIGN.md only if it is missing; create src/routes/__root.tsx and layout chrome (site-header, site-footer) if missing; then expand thin-shell commerce routes and build store sections via the taste skill. Plumbing (providers, hooks, route shells, ui primitives) is pre-seeded — do NOT apply_patch paths that already exist.

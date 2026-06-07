@@ -5,7 +5,7 @@ DESIGN.md is the source of truth. Use only declared palette roles (primary/accen
 Violations to fix:
 {{violations}}
 
-1. Call project_read_design_rules to reload DESIGN.md tokens.
-2. Inspect each listed file with project_read_file before patching.
-3. Replace off-palette colors with the matching DESIGN.md role utility.
-4. Run project_run_validation after mutations.
+1. Re-read DESIGN.md tokens via shell (e.g. `cat DESIGN.md`).
+2. Inspect each listed file via shell (`cat <path>`) before patching.
+3. Replace off-palette colors with the matching DESIGN.md role utility via apply_patch.
+4. End the turn after patches; the runtime runs validation automatically and reports any remaining errors in a follow-up turn.

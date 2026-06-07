@@ -2,10 +2,24 @@ import { and, asc, desc, eq, or } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { agentRuns, projectToolExecutionLogs } from "@/db/schema";
 import type * as schema from "@/db/schema";
-import type { AgentRun, AgentRunStatus, BuilderIntent, ChangePlan, ProjectToolExecutionLog, ValidationResult } from "@/features/projects/legacy/project-state.schema";
+import type {
+  AgentRun,
+  AgentRunClarificationSnapshot,
+  AgentRunFailureCode,
+  AgentRunKind,
+  AgentRunPlanPhase,
+  AgentRunProgressTimelineEvent,
+  AgentRunStatus,
+  BuilderIntent,
+  ChangePlan,
+  ProjectToolExecutionLog,
+  ValidationResult,
+} from "@/features/projects/legacy/project-state.schema";
 
 type AgentRunDatabase = PostgresJsDatabase<typeof schema>;
 type AgentRunRow = typeof agentRuns.$inferSelect;
+
+const MAX_PROGRESS_TIMELINE_EVENTS = 200;
 
 function toRun(row: AgentRunRow): AgentRun {
   return {
@@ -17,14 +31,20 @@ function toRun(row: AgentRunRow): AgentRun {
     userPrompt: row.userPrompt,
     reasoningEffort: (row.reasoningEffort as AgentRun["reasoningEffort"]) ?? undefined,
     planMode: row.planMode,
+    kind: (row.kind as AgentRunKind | null) ?? undefined,
     intent: row.intent as BuilderIntent | undefined,
     plan: row.plan as ChangePlan | undefined,
     status: row.status as AgentRunStatus,
+    failureCode: (row.failureCode as AgentRunFailureCode | null) ?? undefined,
     modelUsage: row.modelUsage as Record<string, unknown> | undefined,
     thinking: row.thinking as AgentRun["thinking"],
     affectedFiles: row.affectedFiles as string[],
     validationResult: row.validationResult as ValidationResult | undefined,
     codeToolRunState: row.codeToolRunState as AgentRun["codeToolRunState"],
+    progressTimeline: (row.progressTimeline as AgentRunProgressTimelineEvent[] | null) ?? [],
+    planPhase: (row.planPhase as AgentRunPlanPhase | null) ?? null,
+    clarificationSnapshot:
+      (row.clarificationSnapshot as AgentRunClarificationSnapshot | null) ?? null,
     error: row.error as AgentRun["error"],
     startedAt: row.startedAt.toISOString(),
     completedAt: row.completedAt?.toISOString(),
@@ -43,14 +63,19 @@ function toValues(run: AgentRun) {
     userPrompt: run.userPrompt,
     reasoningEffort: run.reasoningEffort,
     planMode: run.planMode,
+    kind: run.kind ?? null,
     intent: run.intent,
     plan: run.plan,
     status: run.status,
+    failureCode: run.failureCode ?? null,
     modelUsage: run.modelUsage,
     thinking: run.thinking,
     affectedFiles: run.affectedFiles,
     validationResult: run.validationResult,
     codeToolRunState: run.codeToolRunState,
+    progressTimeline: run.progressTimeline ?? [],
+    planPhase: run.planPhase ?? null,
+    clarificationSnapshot: run.clarificationSnapshot ?? null,
     error: run.error,
     startedAt: new Date(run.startedAt),
     completedAt: run.completedAt ? new Date(run.completedAt) : null,
@@ -65,6 +90,11 @@ export function sortRunsForProjectHistory(runs: AgentRun[]): AgentRun[] {
 
 export type ListProjectRunsOptions = {
   limit?: number;
+};
+
+export type ReconcileOrphanRunsResult = {
+  interruptedRunIds: string[];
+  recoveredAwaitingClarificationRunIds: string[];
 };
 
 export class PgAgentRunRepository {
@@ -118,6 +148,117 @@ export class PgAgentRunRepository {
     return rows.map(toRun);
   }
 
+  async appendProgressTimelineEvent(
+    runId: string,
+    event: AgentRunProgressTimelineEvent,
+  ): Promise<void> {
+    const [row] = await this.db.select().from(agentRuns).where(eq(agentRuns.id, runId));
+    if (!row) return;
+    const existing = (row.progressTimeline as AgentRunProgressTimelineEvent[] | null) ?? [];
+    const next = [...existing, event];
+    const trimmed =
+      next.length > MAX_PROGRESS_TIMELINE_EVENTS
+        ? next.slice(next.length - MAX_PROGRESS_TIMELINE_EVENTS)
+        : next;
+    await this.db
+      .update(agentRuns)
+      .set({ progressTimeline: trimmed, updatedAt: new Date() })
+      .where(eq(agentRuns.id, runId));
+  }
+
+  async setPlanPhase(runId: string, planPhase: AgentRunPlanPhase | null): Promise<void> {
+    await this.db
+      .update(agentRuns)
+      .set({ planPhase, updatedAt: new Date() })
+      .where(eq(agentRuns.id, runId));
+  }
+
+  async setClarificationSnapshot(
+    runId: string,
+    snapshot: AgentRunClarificationSnapshot | null,
+  ): Promise<void> {
+    await this.db
+      .update(agentRuns)
+      .set({ clarificationSnapshot: snapshot, updatedAt: new Date() })
+      .where(eq(agentRuns.id, runId));
+  }
+
+  async setStatus(
+    runId: string,
+    status: AgentRunStatus,
+    failureCode?: AgentRunFailureCode,
+  ): Promise<void> {
+    const completedAt =
+      status === "completed" || status === "failed" || status === "stopped" || status === "interrupted"
+        ? new Date()
+        : null;
+    await this.db
+      .update(agentRuns)
+      .set({
+        status,
+        failureCode: failureCode ?? null,
+        completedAt: completedAt ?? undefined,
+        updatedAt: new Date(),
+      })
+      .where(eq(agentRuns.id, runId));
+  }
+
+  async setKind(runId: string, kind: AgentRunKind): Promise<void> {
+    await this.db
+      .update(agentRuns)
+      .set({ kind, updatedAt: new Date() })
+      .where(eq(agentRuns.id, runId));
+  }
+
+  async reconcileOrphanRuns(input: {
+    isLiveHandle: (runId: string) => boolean;
+    now?: Date;
+  }): Promise<ReconcileOrphanRunsResult> {
+    const now = input.now ?? new Date();
+    const orphanFilter = or(
+      eq(agentRuns.status, "streaming"),
+      eq(agentRuns.status, "awaiting_input"),
+    );
+    const rows = await this.db.select().from(agentRuns).where(orphanFilter);
+    const interrupted: string[] = [];
+    const recovered: string[] = [];
+    for (const row of rows) {
+      if (input.isLiveHandle(row.id)) continue;
+      if (row.status === "streaming") {
+        await this.db
+          .update(agentRuns)
+          .set({
+            status: "interrupted",
+            failureCode: "interrupted_by_restart",
+            completedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(agentRuns.id, row.id));
+        interrupted.push(row.id);
+      } else if (row.status === "awaiting_input") {
+        const snapshot = row.clarificationSnapshot as AgentRunClarificationSnapshot | null;
+        if (snapshot) {
+          recovered.push(row.id);
+        } else {
+          await this.db
+            .update(agentRuns)
+            .set({
+              status: "interrupted",
+              failureCode: "interrupted_by_restart",
+              completedAt: now,
+              updatedAt: now,
+            })
+            .where(eq(agentRuns.id, row.id));
+          interrupted.push(row.id);
+        }
+      }
+    }
+    return {
+      interruptedRunIds: interrupted,
+      recoveredAwaitingClarificationRunIds: recovered,
+    };
+  }
+
   async saveToolExecutionLog(log: ProjectToolExecutionLog): Promise<ProjectToolExecutionLog> {
     const values = {
       id: log.id,
@@ -165,3 +306,5 @@ export class PgAgentRunRepository {
     return rows.map(toRun);
   }
 }
+
+export const __testing = { MAX_PROGRESS_TIMELINE_EVENTS };
