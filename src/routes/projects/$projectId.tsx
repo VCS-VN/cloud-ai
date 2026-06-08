@@ -583,15 +583,25 @@ function ProjectDetailPage() {
     setSending(false);
   }
 
-  async function handleSelectOption(messageId: string, optionId: string) {
-    if (!project) return;
+  async function handleSelectOption(messageId: string, optionId: string): Promise<boolean> {
+    console.log("[route] handleSelectOption", { messageId, optionId, hasProject: !!project, msgCount: messages.length });
+    if (!project) {
+      console.warn("[route] handleSelectOption — no project");
+      return false;
+    }
     const message = messages.find((item) => item.id === messageId);
-    if (!message?.runId) return;
+    console.log("[route] handleSelectOption — message lookup", { found: !!message, runId: message?.runId });
+    if (!message?.runId) {
+      console.warn("[route] handleSelectOption — message has no runId", { messageId, message });
+      return false;
+    }
     setSendError(undefined);
-    const ok = await agentStream.submitAnswer(message.runId, { optionId });
-    if (!ok) {
-      setSendError("Unable to select that option. Please try again.");
-      return;
+    console.log("[route] calling submitAnswer", { runId: message.runId, optionId });
+    const result = await agentStream.submitAnswer(message.runId, { optionId });
+    console.log("[route] submitAnswer → result", result);
+    if (!result.ok) {
+      setSendError(result.message);
+      return false;
     }
     setProject((currentProject) =>
       currentProject
@@ -603,6 +613,7 @@ function ProjectDetailPage() {
           }
         : currentProject,
     );
+    return true;
   }
 
   function handleStopGeneration() {
@@ -716,15 +727,11 @@ function ProjectDetailPage() {
                     onSelectOption={handleSelectOption}
                     onPlanAction={async (message, action) => {
                       if (!message.runId) return;
-                      const ok = await agentStream.submitAnswer(message.runId, {
+                      const result = await agentStream.submitAnswer(message.runId, {
                         planAction: action,
                       });
-                      if (!ok) {
-                        setSendError(
-                          action === "approve"
-                            ? "Không thể áp dụng kế hoạch. Vui lòng thử lại."
-                            : "Không thể từ chối kế hoạch. Vui lòng thử lại.",
-                        );
+                      if (!result.ok) {
+                        setSendError(result.message);
                       }
                     }}
                     awaitingPlanReviewRunId={
@@ -733,13 +740,15 @@ function ProjectDetailPage() {
                         : null
                     }
                     onSubmitFreeText={async (message, freeText) => {
-                      if (!message.runId) return;
-                      const ok = await agentStream.submitAnswer(message.runId, {
+                      if (!message.runId) return false;
+                      const result = await agentStream.submitAnswer(message.runId, {
                         freeText,
                       });
-                      if (!ok) {
-                        setSendError("Không thể gửi mô tả. Vui lòng thử lại.");
+                      if (!result.ok) {
+                        setSendError(result.message);
+                        return false;
                       }
+                      return true;
                     }}
                   />
                 </div>

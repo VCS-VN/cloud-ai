@@ -130,4 +130,58 @@ describe("BoundedCodexThread.runTurn retry semantics", () => {
     // Only the first attempt ran; abort fired during backoff.
     expect(thread.run.mock.calls.length).toBeLessThanOrEqual(2);
   });
+
+  it("treats gateway-error finalResponse as a transient failure and retries", async () => {
+    let calls = 0;
+    const thread = makeThread(() => {
+      calls++;
+      if (calls < 3) {
+        return {
+          items: [{ type: "agent_message" }],
+          finalResponse: "[gateway error: upstream model error — please retry in a moment]",
+          usage: null,
+        };
+      }
+      return SUCCESS_TURN;
+    });
+    const bounded = new BoundedCodexThread(thread as never);
+
+    const promise = bounded.runTurn({ prompt: "p" });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+    expect(result.finalResponse).toBe("ok");
+    expect(thread.run).toHaveBeenCalledTimes(3);
+  });
+
+  it("does NOT misclassify a normal answer that contains the word 'error' somewhere mid-text", async () => {
+    const thread = makeThread(() => ({
+      items: [{ type: "agent_message" }],
+      finalResponse:
+        "Đây là kế hoạch xử lý error log của user. Bạn có thể thử lại sau nếu cần.",
+      usage: null,
+    }));
+    const bounded = new BoundedCodexThread(thread as never);
+    const promise = bounded.runTurn({ prompt: "p" });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+    // Patterns are anchored to the start of the response; a normal answer
+    // mentioning "error" mid-text must not trigger a retry.
+    expect(thread.run).toHaveBeenCalledTimes(1);
+    expect(result.finalResponse.startsWith("Đây là")).toBe(true);
+  });
+
+  it("does NOT throw when fileChanges or skill calls accompany the suspect text", async () => {
+    // If the model actually performed work AND its narrative happens to start
+    // with "[gateway error" (vanishingly rare but possible in skill output),
+    // we still trust the work — the heuristic only fires on empty turns.
+    const thread = makeThread(() => ({
+      items: [{ type: "file_change", changes: [{ path: "src/a.tsx" }] }],
+      finalResponse: "[gateway error: foo]",
+      usage: null,
+    }));
+    const bounded = new BoundedCodexThread(thread as never);
+    const result = await bounded.runTurn({ prompt: "p" });
+    expect(result.fileChanges).toEqual(["src/a.tsx"]);
+    expect(thread.run).toHaveBeenCalledTimes(1);
+  });
 });

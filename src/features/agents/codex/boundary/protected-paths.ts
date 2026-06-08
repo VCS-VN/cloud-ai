@@ -5,7 +5,6 @@ export const BLOCKED_PROJECT_PATHS: readonly string[] = [
   "yarn.lock",
   "bun.lockb",
   ".env",
-  "src/routes/__root.tsx",
   "src/main.ts",
   "src/main.tsx",
   "src/router.ts",
@@ -25,7 +24,7 @@ export const BLOCKED_PROJECT_PATH_PATTERNS: readonly RegExp[] = [
 ];
 
 export const ALLOWED_AUDIT_PROJECT_PATH_PATTERNS: readonly RegExp[] = [
-  /^src\/routes(?!\/__root\.tsx$)\//,
+  /^src\/routes\//,
   /^src\/components\//,
   /^src\/styles\//,
   /^src\/lib\//,

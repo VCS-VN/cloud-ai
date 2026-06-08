@@ -63,10 +63,20 @@ describe("runDiffGate", () => {
     expect(result.violations).toEqual([]);
   });
 
-  it("blocks src/routes/__root.tsx", () => {
+  it("allows changes to src/routes/__root.tsx (now in audit scope)", () => {
     const result = runDiffGate({
       draftWorkspacePath: DRAFT,
       diff: diff({ modified: ["src/routes/__root.tsx"] }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.violations).toEqual([]);
+  });
+
+  it("blocks src/router.tsx (runtime owns the router config)", () => {
+    const result = runDiffGate({
+      draftWorkspacePath: DRAFT,
+      diff: diff({ modified: ["src/router.tsx"] }),
     });
 
     expect(result.ok).toBe(false);

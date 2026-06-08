@@ -3,7 +3,7 @@ import type { DesignVariant, Message } from "@/shared/project-types";
 
 type AgentQuestionBubbleProps = {
   message: Message;
-  onSelectOption?: (messageId: string, optionId: string) => Promise<void>;
+  onSelectOption?: (messageId: string, optionId: string) => Promise<boolean | void>;
 };
 
 /** Renders motion level as dot indicators 1-10 */

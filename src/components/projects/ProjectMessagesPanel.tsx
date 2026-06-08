@@ -16,10 +16,10 @@ type ProjectMessagesPanelProps = {
   error?: string;
   onLoadOlder?: () => void;
   onRetryMessage?: (message: Message) => void;
-  onSelectOption?: (messageId: string, optionId: string) => Promise<void>;
+  onSelectOption?: (messageId: string, optionId: string) => Promise<boolean | void>;
   onPlanAction?: (message: Message, action: "approve" | "reject") => Promise<void>;
   awaitingPlanReviewRunId?: string | null;
-  onSubmitFreeText?: (message: Message, freeText: string) => Promise<void>;
+  onSubmitFreeText?: (message: Message, freeText: string) => Promise<boolean | void>;
 };
 
 const STICK_TO_BOTTOM_THRESHOLD = 72;

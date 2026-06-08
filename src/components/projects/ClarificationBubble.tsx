@@ -4,7 +4,7 @@ import type { Message } from "@/shared/project-types";
 
 type ClarificationBubbleProps = {
   message: Message;
-  onSelectOption?: (messageId: string, optionId: string) => Promise<void>;
+  onSelectOption?: (messageId: string, optionId: string) => Promise<boolean | void>;
 };
 
 export function ClarificationBubble({

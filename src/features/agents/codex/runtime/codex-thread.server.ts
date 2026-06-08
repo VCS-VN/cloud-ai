@@ -68,6 +68,27 @@ async function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+const GATEWAY_ERROR_PATTERNS: RegExp[] = [
+  /^\s*\[gateway error[: ]/i,
+  /^\s*\[upstream model error/i,
+  /^\s*upstream model error/i,
+  /\bplease retry in a moment\b/i,
+  /^\s*\[rate.?limited?\b/i,
+];
+
+function isSoftGatewayError(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const head = text.slice(0, 240);
+  return GATEWAY_ERROR_PATTERNS.some((re) => re.test(head));
+}
+
+export class GatewaySoftError extends Error {
+  constructor(public readonly preview: string) {
+    super(`gateway_soft_error: ${preview.slice(0, 160)}`);
+    this.name = "GatewaySoftError";
+  }
+}
+
 export class BoundedCodexThread {
   private readonly thread: Thread;
   private readonly skillToolCallbacks?: ProjectReadSkillCallbacks;
@@ -138,6 +159,28 @@ export class BoundedCodexThread {
           result,
         });
       }
+    }
+    // Some upstream gateways respond with a soft-error string in finalResponse
+    // (status 200, single agent_message, no file_change, no tool call) when
+    // the model is rate-limited or the gateway upstream times out. The SDK
+    // doesn't surface this as an error, so the retry loop never engages and
+    // downstream parsers (classifier, planner, summary) silently treat the
+    // error text as the model's answer. Detect the canonical phrasings and
+    // throw so runTurn's exponential backoff kicks in.
+    if (
+      fileChanges.length === 0 &&
+      skillToolCalls.length === 0 &&
+      isSoftGatewayError(turn.finalResponse)
+    ) {
+      console.warn(
+        JSON.stringify({
+          event: "codex_turn_soft_gateway_error",
+          finalResponsePreview: (turn.finalResponse ?? "").slice(0, 240),
+          itemCount: turn.items.length,
+          itemTypeCounts,
+        }),
+      );
+      throw new GatewaySoftError(turn.finalResponse ?? "");
     }
     console.log(
       JSON.stringify({

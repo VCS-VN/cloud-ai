@@ -34,7 +34,7 @@ const BLOCKED_PATH_MENTIONS = [
   /tsconfig\.json/i,
   /tailwind\.config\.(?:ts|js)/i,
   /\.env(?:\.\w+)?(?:\b|$)/i,
-  /__root\.tsx/i,
+  /\bsrc\/router\.tsx?\b/i,
 ];
 
 export function classifyUpdatePrompt(

@@ -20,10 +20,10 @@ import { SkillClarificationList } from "@/features/agents/ui/SkillClarificationL
 type MessageBubbleProps = {
   message: Message;
   onRetry?: (message: Message) => void;
-  onSelectOption?: (messageId: string, optionId: string) => Promise<void>;
+  onSelectOption?: (messageId: string, optionId: string) => Promise<boolean | void>;
   onPlanAction?: (message: Message, action: "approve" | "reject") => Promise<void>;
   planAwaitingReview?: boolean;
-  onSubmitFreeText?: (message: Message, freeText: string) => Promise<void>;
+  onSubmitFreeText?: (message: Message, freeText: string) => Promise<boolean | void>;
 };
 
 const MARKDOWN_CLASS =
@@ -67,10 +67,10 @@ function AgentBody({
   onSubmitFreeText,
 }: {
   message: Message;
-  onSelectOption?: (messageId: string, optionId: string) => Promise<void>;
+  onSelectOption?: (messageId: string, optionId: string) => Promise<boolean | void>;
   onPlanAction?: (message: Message, action: "approve" | "reject") => Promise<void>;
   planAwaitingReview?: boolean;
-  onSubmitFreeText?: (message: Message, freeText: string) => Promise<void>;
+  onSubmitFreeText?: (message: Message, freeText: string) => Promise<boolean | void>;
 }) {
   if (message.kind === "plan") {
     if (planAwaitingReview && onPlanAction) {
@@ -97,10 +97,24 @@ function AgentBody({
       return (
         <DesignVariantPicker
           variants={variants}
-          onSelect={(optionId) => onSelectOption(message.id, optionId)}
+          onSelect={async (optionId) => {
+            console.log("[bubble] DesignVariantPicker onSelect", { messageId: message.id, optionId });
+            const ok = await onSelectOption(message.id, optionId);
+            console.log("[bubble] DesignVariantPicker onSelect → result", { ok });
+            if (ok === false) {
+              throw new Error("submit_failed");
+            }
+          }}
           onCustom={
             onSubmitFreeText
-              ? (freeText) => onSubmitFreeText(message, freeText)
+              ? async (freeText) => {
+                  console.log("[bubble] DesignVariantPicker onCustom", { messageId: message.id });
+                  const ok = await onSubmitFreeText(message, freeText);
+                  console.log("[bubble] DesignVariantPicker onCustom → result", { ok });
+                  if (ok === false) {
+                    throw new Error("submit_failed");
+                  }
+                }
               : undefined
           }
         />
@@ -118,7 +132,12 @@ function AgentBody({
         <SkillClarificationList
           question={message.content}
           options={options}
-          onSelect={(optionId) => onSelectOption(message.id, optionId)}
+          onSelect={async (optionId) => {
+            const ok = await onSelectOption(message.id, optionId);
+            if (ok === false) {
+              throw new Error("submit_failed");
+            }
+          }}
         />
       );
     }

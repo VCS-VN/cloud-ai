@@ -235,6 +235,21 @@ async function ensureDraftWorkspace(input: {
 }
 
 /**
+ * Init driver writes straight into the project workspace root
+ * (`projects/<id>/`) — the same directory the preview pm2 process picks up
+ * as cwd. Skipping the draft → publish copy means files are visible to the
+ * dev runtime as soon as codex apply_patch lands. Diff gate, typecheck,
+ * build, and preview-health still execute against this root.
+ */
+async function ensureProjectWorkspace(input: {
+  projectId: string;
+}): Promise<string> {
+  const projectsRoot = getProjectWorkspaceRoot(input.projectId);
+  await fs.mkdir(projectsRoot, { recursive: true });
+  return projectsRoot;
+}
+
+/**
  * Phase 6 plan-mode wrapper. When ctx.planMode is true and the kind is not init,
  * run the plan turn (read-only) before delegating to the execute driver. The
  * driver pauses on awaiting_clarification(plan_review) — a separate /answer call
@@ -344,9 +359,11 @@ export async function runInitBuilderRun(
     return pausedOutcome(ctx, skillSelection);
   }
 
-  const draftWorkspacePath = await ensureDraftWorkspace({
+  // Init writes straight into projects/<id>/ — the same cwd the preview
+  // pm2 process binds to. Plan generation + variant clarification still
+  // run; validation gates execute against this workspace root.
+  const draftWorkspacePath = await ensureProjectWorkspace({
     projectId: ctx.projectId,
-    runId,
   });
 
   const fileManifest = await listFiles(draftWorkspacePath);
@@ -499,6 +516,16 @@ export async function runInitBuilderRun(
       const choice = await new Promise<{ optionId?: string; freeText?: string }>(
         (resolveChoice) => {
           if (handle) {
+            const variantOptions = result.variants.map((v) => ({
+              id: v.id,
+              label: v.label,
+            }));
+            // /answer route validates optionId against handle.clarificationPrompt.options.
+            // Without this, picking any variant returns INVALID_OPTION.
+            handle.clarificationPrompt = {
+              question: "Chọn phong cách thiết kế cho cửa hàng",
+              options: variantOptions,
+            };
             handle.resumeFn = async (answer) => {
               handle.resumeFn = null;
               handle.clarificationPrompt = null;
@@ -511,7 +538,7 @@ export async function runInitBuilderRun(
               runId,
               milestone: "awaiting_clarification",
               question: "Chọn phong cách thiết kế cho cửa hàng",
-              options: result.variants.map((v) => ({ id: v.id, label: v.label })),
+              options: variantOptions,
               metadata: {
                 questionType: "design_variant",
                 options: result.variants,
@@ -760,9 +787,8 @@ export async function runInitBuilderRun(
     });
   }
 
-  const publishedPath = path.join(getProjectWorkspaceRoot(ctx.projectId), "published");
-  await syncDraftToPublished(draftWorkspacePath, publishedPath);
-  await fs.rm(draftWorkspacePath, { recursive: true, force: true });
+  // Init wrote straight into published/, so there is nothing to sync or
+  // clean up here. Update / new_route drivers still publish from drafts.
   {
     const handle = getBuilderRunHandle(runId);
     if (handle) fireRemainingTasksComplete(handle, emit);

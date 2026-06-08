@@ -316,16 +316,54 @@ export function useChatStream({
   );
 
   const submitAnswer = useCallback(
-    async (runId: string, answer: { optionId?: string; freeText?: string; planAction?: "approve" | "reject" }) => {
-      const resp = await fetch(
-        `/api/projects/${projectId}/builder-runs/${runId}/answer`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(answer),
-        },
-      );
-      return resp.ok;
+    async (
+      runId: string,
+      answer: { optionId?: string; freeText?: string; planAction?: "approve" | "reject" },
+    ): Promise<
+      | { ok: true }
+      | { ok: false; status: number; code: string; message: string }
+    > => {
+      let resp: Response;
+      try {
+        resp = await fetch(
+          `/api/projects/${projectId}/builder-runs/${runId}/answer`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(answer),
+          },
+        );
+      } catch (cause) {
+        return {
+          ok: false,
+          status: 0,
+          code: "network_error",
+          message:
+            cause instanceof Error
+              ? `Mất kết nối: ${cause.message}`
+              : "Mất kết nối máy chủ. Hãy kiểm tra mạng và thử lại.",
+        };
+      }
+      if (resp.ok) return { ok: true };
+      let body: { code?: unknown; message?: unknown } | null = null;
+      try {
+        body = (await resp.json()) as { code?: unknown; message?: unknown };
+      } catch {
+        body = null;
+      }
+      const code =
+        body && typeof body.code === "string" ? body.code : `http_${resp.status}`;
+      const fallback =
+        resp.status === 404
+          ? "Phiên đã kết thúc hoặc máy chủ đã khởi động lại. Hãy gửi lại tin nhắn để tạo phiên mới."
+          : resp.status === 409
+            ? "Phiên không còn ở trạng thái chờ phản hồi. Có thể agent đã chuyển sang bước khác."
+            : `Máy chủ trả về lỗi (${resp.status}).`;
+      const message =
+        body && typeof body.message === "string" && body.message.trim()
+          ? body.message
+          : fallback;
+      return { ok: false, status: resp.status, code, message };
     },
     [projectId],
   );

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
 import type { DesignVariant } from "@/shared/project-types";
 
 export type DesignVariantPickerProps = {
@@ -8,14 +9,12 @@ export type DesignVariantPickerProps = {
   disabled?: boolean;
 };
 
-/**
- * Design variant picker (T065). Renders four variants as visual-lite cards with
- * palette dots and a one-line description, plus an optional custom textarea
- * for users who want to give free-text guidance instead of picking a card.
- *
- * Privacy: descriptions are filtered server-side before they reach this UI;
- * this component never echoes paths or code.
- */
+const OTHER_ID = "__other";
+
+type Committed =
+  | { kind: "option"; id: string; label: string; description: string }
+  | { kind: "custom"; text: string };
+
 export function DesignVariantPicker({
   variants,
   onSelect,
@@ -23,85 +22,246 @@ export function DesignVariantPicker({
   disabled,
 }: DesignVariantPickerProps) {
   const [customText, setCustomText] = useState("");
-  const [submitting, setSubmitting] = useState<string | null>(null);
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [committed, setCommitted] = useState<Committed | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handlePick = async (id: string) => {
-    setSubmitting(id);
+  const handleSubmit = async () => {
+    console.log("[picker] handleSubmit click", { pickedId, submitting, isBusy: disabled || submitting });
+    if (!pickedId || submitting) {
+      console.log("[picker] handleSubmit early-return", { pickedId, submitting });
+      return;
+    }
+    setErrorMessage(null);
+    if (pickedId === OTHER_ID) {
+      const trimmed = customText.trim();
+      if (!trimmed || !onCustom) {
+        console.log("[picker] OTHER skipped — no text or no onCustom", { hasText: !!trimmed, hasOnCustom: !!onCustom });
+        return;
+      }
+      setSubmitting(true);
+      try {
+        console.log("[picker] calling onCustom");
+        await onCustom(trimmed);
+        console.log("[picker] onCustom resolved → committing");
+        setCommitted({ kind: "custom", text: trimmed });
+      } catch (cause) {
+        console.warn("[picker] onCustom threw", cause);
+        setErrorMessage(extractMessage(cause));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+    const picked = variants.find((v) => v.id === pickedId);
+    if (!picked) {
+      console.warn("[picker] pickedId not found in variants", { pickedId, variants: variants.map((v) => v.id) });
+      return;
+    }
+    setSubmitting(true);
     try {
-      await onSelect(id);
+      console.log("[picker] calling onSelect", { optionId: pickedId });
+      await onSelect(pickedId);
+      console.log("[picker] onSelect resolved → committing");
+      setCommitted({
+        kind: "option",
+        id: picked.id,
+        label: picked.label,
+        description: picked.description,
+      });
+    } catch (cause) {
+      console.warn("[picker] onSelect threw", cause);
+      setErrorMessage(extractMessage(cause));
     } finally {
-      setSubmitting(null);
+      setSubmitting(false);
     }
   };
 
-  const handleCustomSubmit = async () => {
-    if (!onCustom) return;
-    const trimmed = customText.trim();
-    if (!trimmed) return;
-    setSubmitting("__custom");
-    try {
-      await onCustom(trimmed);
-    } finally {
-      setSubmitting(null);
-    }
-  };
+  const isBusy = disabled || submitting;
+  const otherEnabled = Boolean(onCustom);
+  const submitDisabled =
+    isBusy ||
+    !pickedId ||
+    (pickedId === OTHER_ID && !customText.trim());
 
-  const isBusy = disabled || submitting !== null;
+  if (committed) {
+    return <CommittedView committed={committed} />;
+  }
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {variants.map((variant) => (
-          <button
-            key={variant.id}
-            type="button"
-            disabled={isBusy}
-            onClick={() => handlePick(variant.id)}
-            className={`text-left rounded-md border border-app-border bg-app-surface hover:border-app-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-focus-ring p-3 transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
-              submitting === variant.id ? "ring-2 ring-app-accent" : ""
-            }`}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <div className="flex gap-1">
-                {variant.preview.palette.map((hex, idx) => (
-                  <span
-                    key={`${variant.id}-${idx}`}
-                    className="inline-block h-4 w-4 rounded-full border border-app-border-soft"
-                    style={{ backgroundColor: hex }}
-                    aria-hidden="true"
-                  />
-                ))}
+      <div
+        className="flex flex-col gap-2"
+        role="radiogroup"
+        aria-label="Phong cách thiết kế"
+      >
+        {variants.map((variant) => {
+          const isPicked = pickedId === variant.id;
+          return (
+            <button
+              key={variant.id}
+              type="button"
+              role="radio"
+              aria-checked={isPicked}
+              disabled={isBusy}
+              onClick={() => setPickedId(variant.id)}
+              className={cardClass(isPicked)}
+            >
+              <div className="flex items-start gap-3">
+                <RadioDot picked={isPicked} />
+                <div className="flex shrink-0 gap-1 pt-[2px]">
+                  {variant.preview.palette.map((hex, idx) => (
+                    <span
+                      key={`${variant.id}-${idx}`}
+                      className="inline-block h-4 w-4 rounded-full border border-[var(--app-border)]"
+                      style={{ backgroundColor: hex }}
+                      aria-hidden="true"
+                    />
+                  ))}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-sm text-[var(--app-panel-text)]">
+                    {variant.label}
+                  </div>
+                  <p className="mt-1 text-xs leading-snug text-[var(--app-muted)]">
+                    {variant.description}
+                  </p>
+                </div>
               </div>
-              <span className="font-medium text-sm text-app-fg">{variant.label}</span>
-            </div>
-            <p className="text-xs text-app-fg/80 leading-snug">{variant.description}</p>
-          </button>
-        ))}
-      </div>
-      {onCustom ? (
-        <div className="space-y-2 pt-1">
-          <label className="block text-xs text-app-fg/70" htmlFor="design-variant-custom">
-            Hoặc mô tả phong cách bạn muốn
-          </label>
-          <textarea
-            id="design-variant-custom"
-            value={customText}
-            disabled={isBusy}
-            rows={2}
-            onChange={(e) => setCustomText(e.target.value)}
-            className="w-full rounded-md border border-app-border bg-app-surface text-sm text-app-fg p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-focus-ring disabled:opacity-60"
-            placeholder="Ví dụ: Tôi muốn tone cá tính, gam đậm và typography táo bạo."
-          />
-          <button
-            type="button"
-            disabled={isBusy || !customText.trim()}
-            onClick={handleCustomSubmit}
-            className="bg-app-accent text-app-on-accent hover:bg-app-accent-hover disabled:opacity-60 px-4 py-2 rounded-md text-sm"
+            </button>
+          );
+        })}
+
+        {otherEnabled ? (
+          <div
+            role="radio"
+            aria-checked={pickedId === OTHER_ID}
+            tabIndex={isBusy ? -1 : 0}
+            onClick={() => !isBusy && setPickedId(OTHER_ID)}
+            onKeyDown={(e) => {
+              if (isBusy) return;
+              if (e.key === " " || e.key === "Enter") {
+                e.preventDefault();
+                setPickedId(OTHER_ID);
+              }
+            }}
+            className={cardClass(pickedId === OTHER_ID, isBusy)}
           >
-            {submitting === "__custom" ? "Đang áp dụng…" : "Dùng mô tả này"}
-          </button>
-        </div>
+            <div className="flex items-start gap-3">
+              <RadioDot picked={pickedId === OTHER_ID} />
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-sm text-[var(--app-panel-text)]">
+                  Mô tả khác
+                </div>
+                <p className="mt-1 text-xs leading-snug text-[var(--app-muted)]">
+                  Tự mô tả phong cách bạn muốn
+                </p>
+                {pickedId === OTHER_ID ? (
+                  <textarea
+                    autoFocus
+                    value={customText}
+                    disabled={isBusy}
+                    rows={2}
+                    onChange={(e) => setCustomText(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-2 w-full resize-none rounded-md border border-[var(--app-border)] bg-[var(--app-panel-bg)] p-2 text-xs text-[var(--app-panel-text)] placeholder:text-[var(--app-subtle-text)] focus-visible:border-[var(--app-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:opacity-60"
+                    placeholder="Ví dụ: tone cá tính, gam đậm, typography táo bạo."
+                  />
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {errorMessage ? (
+        <p
+          className="rounded-md border border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] px-3 py-2 text-xs leading-snug text-[var(--app-danger-text)]"
+          role="alert"
+        >
+          {errorMessage}
+        </p>
       ) : null}
+
+      <div className="flex items-center justify-end pt-1">
+        <button
+          type="button"
+          disabled={submitDisabled}
+          onClick={handleSubmit}
+          className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-[var(--app-text)] px-4 text-xs font-[580] text-[var(--app-bg)] outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {submitting ? (
+            <>
+              <Loader2 aria-hidden="true" className="animate-spin" size={14} />
+              Đang gửi…
+            </>
+          ) : (
+            "Submit"
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function extractMessage(cause: unknown): string {
+  if (cause instanceof Error && cause.message && cause.message !== "submit_failed") {
+    return cause.message;
+  }
+  return "Không thể gửi lựa chọn. Vui lòng thử lại.";
+}
+
+function RadioDot({ picked }: { picked: boolean }) {
+  return (
+    <span
+      className={`mt-[2px] inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+        picked
+          ? "border-[var(--app-border-strong)] bg-[var(--color-primary)]"
+          : "border-[var(--app-border)] bg-[var(--app-panel-bg)]"
+      }`}
+      aria-hidden="true"
+    >
+      {picked ? (
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-on-primary)]" />
+      ) : null}
+    </span>
+  );
+}
+
+function cardClass(picked: boolean, isBusy = false): string {
+  const base =
+    "block w-full text-left rounded-md border p-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]";
+  const stateClass = picked
+    ? "border-[var(--app-border-strong)] bg-[var(--app-panel-strong)]"
+    : "border-[var(--app-border)] bg-[var(--app-panel-bg)] hover:border-[var(--app-border-strong)]";
+  const disabledClass = isBusy ? "opacity-60 cursor-not-allowed" : "cursor-pointer";
+  return `${base} ${stateClass} ${disabledClass}`;
+}
+
+function CommittedView({ committed }: { committed: Committed }) {
+  return (
+    <div
+      className="rounded-md border border-[var(--app-border-strong)] bg-[var(--app-panel-strong)] p-3"
+      aria-live="polite"
+    >
+      <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--app-muted)]">
+        Đã chọn
+      </div>
+      {committed.kind === "option" ? (
+        <>
+          <div className="mt-1 text-sm font-medium text-[var(--app-panel-text)]">
+            {committed.label}
+          </div>
+          <p className="mt-1 text-xs leading-snug text-[var(--app-muted)]">
+            {committed.description}
+          </p>
+        </>
+      ) : (
+        <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--app-panel-text)]">
+          {committed.text}
+        </p>
+      )}
     </div>
   );
 }
