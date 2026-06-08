@@ -237,6 +237,28 @@ export function translateBuilderEventToRunStreamEvent(
         };
       }
       const questionMetadata = buildAgentQuestionMetadata(event.metadata);
+      // Observability: surface the metadata shape that's actually flowing
+      // through. The init flow's variant-pick run was reported with
+      // `metadata: null` despite the driver attaching design_variant data —
+      // this log makes the truth obvious in server output.
+      const rawMeta = event.metadata;
+      const rawOptionsCount =
+        rawMeta && "options" in rawMeta && Array.isArray(rawMeta.options)
+          ? rawMeta.options.length
+          : 0;
+      console.log(
+        JSON.stringify({
+          event: "translator_agent_question_emitted",
+          runId,
+          rawQuestionType: rawMeta?.questionType ?? null,
+          rawOptionsCount,
+          mappedMetadataNull: questionMetadata === null,
+          mappedQuestionType:
+            questionMetadata && "questionType" in questionMetadata
+              ? questionMetadata.questionType
+              : null,
+        }),
+      );
       return {
         events: [
           {
