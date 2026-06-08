@@ -29,7 +29,7 @@ of shape `{ "variants": [ ... ] }` containing 4 items. Each item:
 
 Validation rules (server-side; payloads that fail are retried once):
 - Exactly 4 variants per init clarification.
-- `label` ≤ 30 chars, `description` ≤ 120 chars.
+- `label` ≤ 40 chars, `description` ≤ 240 chars (target 80-160 chars; the parser auto-truncates anything longer).
 - `description` MUST NOT contain file paths, code identifiers, framework names,
   or code snippets — the chat surfaces this string verbatim and the privacy
   filter will reject leaks.

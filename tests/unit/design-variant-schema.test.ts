@@ -107,9 +107,9 @@ describe("DesignVariant strict schema (US4)", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("rejects descriptions longer than 120 chars", () => {
+  it("rejects descriptions longer than 240 chars", () => {
     const long = [...VALID_FOUR];
-    long[0] = { ...long[0], description: "A".repeat(121) };
+    long[0] = { ...long[0], description: "A".repeat(241) };
     const result = validateDesignVariants(long);
     expect(result.ok).toBe(false);
   });

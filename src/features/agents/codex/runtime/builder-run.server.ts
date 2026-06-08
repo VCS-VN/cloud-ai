@@ -470,9 +470,16 @@ export async function runInitBuilderRun(
       runTurn: async () => {
         const summary = await variantThread.runTurn({
           prompt:
-            "Emit exactly 4 retail-vibe design variants as STRICT JSON per the contract. " +
+            "You MUST output JSON only — no prose, no code fence. Emit exactly 4 retail-vibe design variants. " +
+            "Output shape: a JSON array (or {\"variants\": [...]}) with exactly 4 items. " +
+            "Each item REQUIRES these exact field names: " +
+            "id (kebab-case string), " +
+            "label (≤40 chars human label, e.g. \"Minimalist Retail\"), " +
+            "description (Vietnamese, KEEP IT SHORT — ideally 80-160 chars, hard cap 240. NEVER mention file paths, framework tokens, or code), " +
+            'preview (object with: font (string), palette (array of 3-5 hex strings like "#ffffff"), motion (number 0..1), density (optional number 0..1)). ' +
             "Always cover minimalist retail / warm retail / luxury retail / playful retail. " +
-            "Description must be Vietnamese, ≤120 chars, NEVER mention file paths, framework tokens, or code.",
+            "Do NOT use field names like \"name\" or \"vibe\" — use \"label\" and \"id\". " +
+            "Do NOT wrap output in ```json fences.",
           signal: ctx.signal,
         });
         return { finalResponse: summary.finalResponse };
@@ -513,9 +520,27 @@ export async function runInitBuilderRun(
           selectedVariant,
           freeText: choice.freeText,
         });
+    } else {
+      console.warn(
+        JSON.stringify({
+          event: "design_variants_generation_failed",
+          runId,
+          projectId: ctx.projectId,
+          reason: result.reason,
+        }),
+      );
     }
-  } catch {
+  } catch (error) {
     // soft fall-through — init proceeds without variant guidance if generation fails.
+    console.warn(
+      JSON.stringify({
+        event: "design_variants_generation_threw",
+        runId,
+        projectId: ctx.projectId,
+        rawMessage: error instanceof Error ? error.message : String(error),
+        rawName: error instanceof Error ? error.name : undefined,
+      }),
+    );
     variantPromptAddendum = "";
   }
 
@@ -571,6 +596,20 @@ export async function runInitBuilderRun(
   const afterSnapshot = await takeSnapshot(draftWorkspacePath);
   const diff = diffSnapshots(beforeSnapshot, afterSnapshot);
   const diffGate = runDiffGate({ draftWorkspacePath, diff });
+  console.log(
+    JSON.stringify({
+      event: "init_diff_gate_result",
+      runId,
+      projectId: ctx.projectId,
+      ok: diffGate.ok,
+      changedFilesCount: diffGate.changedFiles.length,
+      changedFilesPreview: diffGate.changedFiles.slice(0, 30),
+      violationsPreview: diffGate.violations.slice(0, 30),
+      addedCount: diff.added.length,
+      modifiedCount: diff.modified.length,
+      removedCount: diff.removed.length,
+    }),
+  );
   if (!diffGate.ok) {
     const code: BuilderRunFailureCode = diffGate.violations.some(
       (v) => v.reason === "outside_draft_workspace",
@@ -1030,6 +1069,20 @@ export async function runNewRouteBuilderRun(
   const afterSnapshot = await takeSnapshot(draftWorkspacePath);
   const diff = diffSnapshots(beforeSnapshot, afterSnapshot);
   const diffGate = runDiffGate({ draftWorkspacePath, diff });
+  console.log(
+    JSON.stringify({
+      event: "init_diff_gate_result",
+      runId,
+      projectId: ctx.projectId,
+      ok: diffGate.ok,
+      changedFilesCount: diffGate.changedFiles.length,
+      changedFilesPreview: diffGate.changedFiles.slice(0, 30),
+      violationsPreview: diffGate.violations.slice(0, 30),
+      addedCount: diff.added.length,
+      modifiedCount: diff.modified.length,
+      removedCount: diff.removed.length,
+    }),
+  );
   if (!diffGate.ok) {
     const code: BuilderRunFailureCode = diffGate.violations.some(
       (v) => v.reason === "outside_draft_workspace",
@@ -1270,6 +1323,20 @@ export async function runSmallUpdateBuilderRun(
   const afterSnapshot = await takeSnapshot(draftWorkspacePath);
   const diff = diffSnapshots(beforeSnapshot, afterSnapshot);
   const diffGate = runDiffGate({ draftWorkspacePath, diff });
+  console.log(
+    JSON.stringify({
+      event: "init_diff_gate_result",
+      runId,
+      projectId: ctx.projectId,
+      ok: diffGate.ok,
+      changedFilesCount: diffGate.changedFiles.length,
+      changedFilesPreview: diffGate.changedFiles.slice(0, 30),
+      violationsPreview: diffGate.violations.slice(0, 30),
+      addedCount: diff.added.length,
+      modifiedCount: diff.modified.length,
+      removedCount: diff.removed.length,
+    }),
+  );
   if (!diffGate.ok) {
     const code: BuilderRunFailureCode = diffGate.violations.some(
       (v) => v.reason === "outside_draft_workspace",

@@ -8,11 +8,11 @@ const HEX_PATTERN = /^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 
 const designVariantSchema = z.object({
   id: z.string().min(1).max(64),
-  label: z.string().min(1).max(30),
+  label: z.string().min(1).max(40),
   description: z
     .string()
     .min(1)
-    .max(120)
+    .max(240)
     .refine((s) => isPrivacySafe(s), {
       message: "description must be privacy-safe (no paths, code, framework tokens)",
     }),
@@ -75,17 +75,85 @@ export type GenerateRetailVariantsResult =
   | { ok: true; variants: DesignVariant[]; rawResponse: string }
   | { ok: false; reason: string };
 
+function stripCodeFence(raw: string): string {
+  // Models often wrap JSON in ```json … ``` or bare ```. Strip the fence and
+  // any surrounding prose. We accept either: a leading fence opener, OR a
+  // bare object/array buried in narrative text.
+  const trimmed = raw.trim();
+  // 1) Strip leading/trailing triple-backtick fence
+  const fenceMatch = trimmed.match(/^```(?:json|JSON)?\s*\n([\s\S]*?)\n?```\s*$/);
+  if (fenceMatch && fenceMatch[1]) return fenceMatch[1].trim();
+  // 2) Extract first balanced JSON object/array from the text
+  const objectStart = trimmed.indexOf("{");
+  const arrayStart = trimmed.indexOf("[");
+  const start =
+    objectStart === -1
+      ? arrayStart
+      : arrayStart === -1
+        ? objectStart
+        : Math.min(objectStart, arrayStart);
+  if (start === -1) return trimmed;
+  // Find matching closer by balancing
+  const opener = trimmed[start];
+  const closer = opener === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (escape) { escape = false; continue; }
+    if (ch === "\\") { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === opener) depth++;
+    else if (ch === closer) {
+      depth--;
+      if (depth === 0) return trimmed.slice(start, i + 1);
+    }
+  }
+  return trimmed; // unbalanced — let JSON.parse fail with a clearer error
+}
+
+function normalizeVariantShape(raw: unknown): unknown {
+  // Tolerate model field-name drift: accept both `label`/`name` and
+  // `id`/`vibe`. Also auto-truncate `description` to 240 chars before
+  // validation, since Vietnamese prose tends to overshoot tighter limits.
+  if (Array.isArray(raw)) return raw.map(normalizeVariantShape);
+  if (!raw || typeof raw !== "object") return raw;
+  const obj = raw as Record<string, unknown>;
+  if (Array.isArray(obj.variants)) {
+    return { variants: (obj.variants as unknown[]).map(normalizeVariantShape) };
+  }
+  const reshape: Record<string, unknown> = { ...obj };
+  if (!reshape.label && typeof obj.name === "string") reshape.label = obj.name;
+  if (!reshape.id && typeof obj.vibe === "string") {
+    reshape.id = String(obj.vibe).toLowerCase().replace(/\s+/g, "-");
+  }
+  if (typeof reshape.description === "string" && reshape.description.length > 240) {
+    reshape.description = reshape.description.slice(0, 237).trimEnd() + "…";
+  }
+  if (typeof reshape.label === "string" && reshape.label.length > 40) {
+    reshape.label = reshape.label.slice(0, 40).trimEnd();
+  }
+  return reshape;
+}
+
 function tryParseVariants(rawResponse: string): DesignVariantValidationResult {
   let json: unknown;
   try {
-    json = JSON.parse(rawResponse);
+    json = JSON.parse(stripCodeFence(rawResponse));
   } catch {
     return { ok: false, reason: "invalid JSON" };
   }
+  const normalized = normalizeVariantShape(json);
   // Allow the model to wrap the array in an object: { variants: [...] }
-  if (Array.isArray(json)) return validateDesignVariants(json);
-  if (json && typeof json === "object" && Array.isArray((json as { variants?: unknown }).variants)) {
-    return validateDesignVariants((json as { variants: unknown[] }).variants);
+  if (Array.isArray(normalized)) return validateDesignVariants(normalized);
+  if (
+    normalized &&
+    typeof normalized === "object" &&
+    Array.isArray((normalized as { variants?: unknown }).variants)
+  ) {
+    return validateDesignVariants((normalized as { variants: unknown[] }).variants);
   }
   return { ok: false, reason: "expected an array or { variants: [] } object" };
 }

@@ -136,6 +136,14 @@ CODEX_API_KEY=<provider-api-key>
 CODEX_MODEL=<provider-model-id>
 # CODEX_BASE_URL=https://api.openai.com/v1   # set only if your provider needs a non-default endpoint
 
+# Codex sandbox bypass (set to true on hosts where the bwrap sandbox cannot
+# create user/network namespaces — Ubuntu 24+ default, locked-down VPS, Docker
+# default seccomp). Symptom in logs: "bwrap: loopback: Failed RTM_NEWADDR:
+# Operation not permitted" and apply_patch silently fails. With this set,
+# codex CLI runs in danger-full-access mode; the application's diff gate
+# still enforces the draft-workspace boundary.
+CODEX_DISABLE_SANDBOX=true
+
 # Skill runtime (deferred from phase 1; folder must exist for phase 2)
 SKILLS_ROOT=/var/bin/skills
 
