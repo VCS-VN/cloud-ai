@@ -405,10 +405,12 @@ async function persistAgentMessage(
           : "agent_question";
   const content =
     "content" in directive ? directive.content : (directive as { question: string }).question;
-  const planMetadata =
+  const metadata =
     directive.kind === "plan"
       ? ({ planPhase: "plan_ready" } as never)
-      : null;
+      : directive.kind === "agent_question"
+        ? directive.metadata
+        : null;
   await persistence.messageRepository.saveMessage(
     {
       id: crypto.randomUUID(),
@@ -421,7 +423,7 @@ async function persistAgentMessage(
       parentMessageId,
       runId,
       kind,
-      metadata: planMetadata,
+      metadata,
       provider: "codex-sdk",
       createdAt: now,
       updatedAt: now,

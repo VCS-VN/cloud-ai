@@ -48,6 +48,13 @@ import {
   type BoundedCodexThread,
 } from "./codex-thread.server";
 import {
+  fireRemainingTasksComplete,
+  fireTaskPauseAll,
+  fireTaskResumeAll,
+  fireTaskTransitions,
+} from "./task-transition.server";
+import { runPlanGenerationPhase } from "./plan-generation.server";
+import {
   planInitBatches,
   validatePlan,
   stripBlockedFromBatches,
@@ -125,6 +132,8 @@ function emitMilestoneInternal(
   milestone: BuilderRunMilestone,
 ): void {
   emit({ type: "milestone", runId, milestone, at: Date.now() });
+  const handle = getBuilderRunHandle(runId);
+  if (handle) fireTaskTransitions(handle, emit, milestone);
 }
 
 async function runTurnAndBridge(
@@ -493,8 +502,10 @@ export async function runInitBuilderRun(
             handle.resumeFn = async (answer) => {
               handle.resumeFn = null;
               handle.clarificationPrompt = null;
+              if (handle) fireTaskResumeAll(handle, emit);
               resolveChoice(answer);
             };
+            if (handle) fireTaskPauseAll(handle, emit);
             publishBuilderRunEvent(handle, {
               type: "awaiting_clarification",
               runId,
@@ -543,6 +554,19 @@ export async function runInitBuilderRun(
     );
     variantPromptAddendum = "";
   }
+
+  // T013: generate task list for init runs (bypass classifier; complex+EN).
+  await runPlanGenerationPhase(
+    ctx,
+    {
+      draftWorkspacePath,
+      bypassClassifier: true,
+      promptOverride: ctx.userPrompt + variantPromptAddendum,
+      languageOverride: "en",
+      currentMilestone: "creating_draft",
+    },
+    emit,
+  );
 
   emitMilestoneInternal(emit, runId, "building_pages");
   try {
@@ -739,6 +763,10 @@ export async function runInitBuilderRun(
   const publishedPath = path.join(getProjectWorkspaceRoot(ctx.projectId), "published");
   await syncDraftToPublished(draftWorkspacePath, publishedPath);
   await fs.rm(draftWorkspacePath, { recursive: true, force: true });
+  {
+    const handle = getBuilderRunHandle(runId);
+    if (handle) fireRemainingTasksComplete(handle, emit);
+  }
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({
     runId,
@@ -831,9 +859,11 @@ async function runSkillSelection(
           handle.pendingSkills = [];
           handle.clarificationPrompt = null;
           handle.resumeFn = null;
+          fireTaskResumeAll(handle, emit);
           await resumeFnFactory(augmentedPrompt);
         };
       }
+      fireTaskPauseAll(handle, emit);
     }
     publishBuilderRunEvent(handle ?? ({} as never), {
       type: "awaiting_clarification",
@@ -949,6 +979,16 @@ export async function runNewRouteBuilderRun(
   });
   const fileManifest = await listFiles(draftWorkspacePath);
   const foundationInstructions = await loadFoundationInstructions();
+
+  // T015: classifier+planner gate. Skipped automatically when ctx.planMode === true.
+  await runPlanGenerationPhase(
+    ctx,
+    {
+      draftWorkspacePath,
+      currentMilestone: "loading_context",
+    },
+    emit,
+  );
 
   const bundle = buildContextBundle({
     projectId: ctx.projectId,
@@ -1197,6 +1237,10 @@ export async function runNewRouteBuilderRun(
   const publishedPath = path.join(getProjectWorkspaceRoot(ctx.projectId), "published");
   await syncDraftToPublished(draftWorkspacePath, publishedPath);
   await fs.rm(draftWorkspacePath, { recursive: true, force: true });
+  {
+    const handle = getBuilderRunHandle(runId);
+    if (handle) fireRemainingTasksComplete(handle, emit);
+  }
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({
     runId,
@@ -1236,6 +1280,16 @@ export async function runSmallUpdateBuilderRun(
   });
   const fileManifest = await listFiles(draftWorkspacePath);
   const foundationInstructions = await loadFoundationInstructions();
+
+  // T014: classifier+planner gate. Skipped automatically when ctx.planMode === true.
+  await runPlanGenerationPhase(
+    ctx,
+    {
+      draftWorkspacePath,
+      currentMilestone: "loading_context",
+    },
+    emit,
+  );
 
   const bundle = buildContextBundle({
     projectId: ctx.projectId,
@@ -1453,6 +1507,10 @@ export async function runSmallUpdateBuilderRun(
   const publishedPath = path.join(getProjectWorkspaceRoot(ctx.projectId), "published");
   await syncDraftToPublished(draftWorkspacePath, publishedPath);
   await fs.rm(draftWorkspacePath, { recursive: true, force: true });
+  {
+    const handle = getBuilderRunHandle(runId);
+    if (handle) fireRemainingTasksComplete(handle, emit);
+  }
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({
     runId,

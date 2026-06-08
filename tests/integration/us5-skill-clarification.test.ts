@@ -34,6 +34,7 @@ describe("US5 — skill_clarification renders distinct from design_variant", () 
         { id: "a", label: "Skill A" },
         { id: "b", label: "Skill B" },
       ],
+      metadata: null,
     });
     expect(out.terminal).toBe("awaiting_input");
   });

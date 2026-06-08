@@ -235,10 +235,22 @@ export type SkeletonState = {
   detail?: string
 }
 
+export type PlanTaskPhase = 'prep' | 'build' | 'verify'
+
+export type PlanTaskStatus = 'pending' | 'active' | 'paused' | 'done'
+
+export type PlanTask = {
+  id: string
+  title: string
+  phase: PlanTaskPhase
+}
+
 export type RunUIState = {
   runId: string
   status: AgentRunStatus
   skeleton: SkeletonState | null
+  tasks: PlanTask[] | null
+  taskStatuses: Record<string, PlanTaskStatus>
   error?: StreamError
 }
 
@@ -312,6 +324,20 @@ export type OptionSelectedEvent = {
   userMessage?: Message
 }
 
+export type PlanCreatedEvent = {
+  type: 'plan.created'
+  runId: string
+  tasks: PlanTask[]
+  at: number
+}
+
+export type PlanTaskTransitionEvent = {
+  type: 'plan.task.started' | 'plan.task.completed' | 'plan.task.paused' | 'plan.task.resumed'
+  runId: string
+  taskId: string
+  at: number
+}
+
 export type RunStreamEvent =
   | RunStartedEvent
   | RunMessageCreatedEvent
@@ -323,6 +349,8 @@ export type RunStreamEvent =
   | RunHeartbeatEvent
   | RunAwaitingInputEvent
   | OptionSelectedEvent
+  | PlanCreatedEvent
+  | PlanTaskTransitionEvent
 
 export type RuntimeStreamEvent =
   | DevRuntimeEvent

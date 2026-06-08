@@ -1,6 +1,8 @@
-import type { BuilderRunEvent, BuilderRunClarificationOption } from "@/features/agents/ui/builder-events";
+import type { BuilderRunEvent, BuilderRunClarificationOption, BuilderRunPlannedTask } from "@/features/agents/ui/builder-events";
 import type { BuilderRunStatus } from "@/features/agents/ui/builder-run-status";
 import type { SelectionPending } from "@/features/agents/codex/skills/selection.server";
+
+export type BuilderRunTaskStatus = "pending" | "active" | "paused" | "done";
 
 export type BuilderRunHandle = {
   runId: string;
@@ -23,6 +25,8 @@ export type BuilderRunHandle = {
       }) => Promise<void>)
     | null;
   loadedSkills: { name: string; at: number }[];
+  taskList: BuilderRunPlannedTask[] | null;
+  taskStatuses: Record<string, BuilderRunTaskStatus>;
 };
 
 const registry = new Map<string, BuilderRunHandle>();
@@ -56,6 +60,8 @@ export function createBuilderRunHandle(input: {
     userPrompt: null,
     resumeFn: null,
     loadedSkills: [],
+    taskList: null,
+    taskStatuses: {},
   };
   registry.set(input.runId, handle);
   activeByProject.set(input.projectId, input.runId);

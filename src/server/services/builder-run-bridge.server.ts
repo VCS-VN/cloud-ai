@@ -10,14 +10,18 @@ import type {
   BuilderRunEvent,
   BuilderRunFailureCode,
 } from "@/features/agents/ui/builder-events";
-import type { AgentMessageKind, RunStreamEvent } from "@/shared/project-types";
+import type {
+  AgentMessageKind,
+  AgentQuestionMetadata,
+  RunStreamEvent,
+} from "@/shared/project-types";
 
 export type BridgePersistAdapter = {
   saveAgentMessage(input: {
     runId: string;
     kind: Extract<AgentMessageKind, "answer" | "error" | "agent_question" | "plan">;
     content: string;
-    metadata?: { questionType: string; options: { id: string; label: string }[] } | null;
+    metadata?: AgentQuestionMetadata | null;
   }): Promise<void>;
   appendProgressTimeline(input: {
     runId: string;
@@ -90,10 +94,7 @@ export async function runBuilderBridge(input: BridgeRunInput): Promise<{
           runId: ctx.runId,
           kind: "agent_question",
           content: directive.question,
-          metadata: {
-            questionType: "skill_clarification",
-            options: directive.options,
-          },
+          metadata: directive.metadata,
         });
       }
     }

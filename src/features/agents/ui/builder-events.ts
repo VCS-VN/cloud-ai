@@ -45,6 +45,14 @@ export type BuilderRunClarificationMetadata =
       planMarkdown: string;
     };
 
+export type BuilderRunTaskPhase = "prep" | "build" | "verify";
+
+export type BuilderRunPlannedTask = {
+  id: string;
+  title: string;
+  phase: BuilderRunTaskPhase;
+};
+
 export type BuilderRunEvent =
   | { type: "milestone"; runId: string; milestone: BuilderRunMilestone; at: number }
   | {
@@ -67,4 +75,14 @@ export type BuilderRunEvent =
   | { type: "done"; runId: string; milestone: "done"; at: number }
   | { type: "cancelled"; runId: string; milestone: "cancelled"; at: number }
   | { type: "file_change"; runId: string; path: string; at: number }
-  | { type: "turn_completed"; runId: string; finalResponse: string; at: number };
+  | { type: "turn_completed"; runId: string; finalResponse: string; at: number }
+  | {
+      type: "plan.created";
+      runId: string;
+      tasks: BuilderRunPlannedTask[];
+      at: number;
+    }
+  | { type: "plan.task.started"; runId: string; taskId: string; at: number }
+  | { type: "plan.task.completed"; runId: string; taskId: string; at: number }
+  | { type: "plan.task.paused"; runId: string; taskId: string; at: number }
+  | { type: "plan.task.resumed"; runId: string; taskId: string; at: number };

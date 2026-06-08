@@ -81,7 +81,13 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
     case "run.started":
       return {
         ...state,
-        activeRun: { runId: event.runId, status: "streaming", skeleton: null },
+        activeRun: {
+          runId: event.runId,
+          status: "streaming",
+          skeleton: null,
+          tasks: null,
+          taskStatuses: {},
+        },
       };
 
     case "message.created": {
@@ -154,12 +160,52 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
           runId: event.runId,
           status: "streaming",
           skeleton: { phase: "starting", label: CLIENT_SKELETON_LABELS.starting },
+          tasks: state.activeRun?.tasks ?? null,
+          taskStatuses: state.activeRun?.taskStatuses ?? {},
         },
         messages: messages.map((m) =>
           m.id === messageId
             ? { ...m, metadata: { ...m.metadata, selectedOptionId: optionId } as AgentQuestionMetadata }
             : m,
         ),
+      };
+    }
+
+    case "plan.created":
+      if (!state.activeRun) return state;
+      return {
+        ...state,
+        activeRun: {
+          ...state.activeRun,
+          tasks: event.tasks,
+          taskStatuses: Object.fromEntries(
+            event.tasks.map((t) => [t.id, "pending" as const]),
+          ),
+        },
+      };
+
+    case "plan.task.started":
+    case "plan.task.completed":
+    case "plan.task.paused":
+    case "plan.task.resumed": {
+      if (!state.activeRun) return state;
+      const nextStatus =
+        event.type === "plan.task.started"
+          ? "active"
+          : event.type === "plan.task.completed"
+            ? "done"
+            : event.type === "plan.task.paused"
+              ? "paused"
+              : "active";
+      return {
+        ...state,
+        activeRun: {
+          ...state.activeRun,
+          taskStatuses: {
+            ...state.activeRun.taskStatuses,
+            [event.taskId]: nextStatus,
+          },
+        },
       };
     }
 

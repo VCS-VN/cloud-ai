@@ -48,6 +48,7 @@ import { buildPreviewUrl, normalizePreviewPath } from "@/features/agents/ui/prev
 import { useUserPresence } from "@/hooks/useUserPresence";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { MessageComposer } from "@/components/projects/MessageComposer";
+import { PlanChecklist } from "@/features/agents/ui/PlanChecklist";
 import { ProjectFileExplorer } from "@/components/projects/ProjectFileExplorer";
 import { ProjectMessagesPanel } from "@/components/projects/ProjectMessagesPanel";
 import { ProjectDeleteConfirmDialog } from "@/components/projects/ProjectDeleteConfirmDialog";
@@ -743,6 +744,14 @@ function ProjectDetailPage() {
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="shrink-0 px-sm">
+              <PlanChecklist
+                tasks={chatState.activeRun?.tasks ?? null}
+                statuses={chatState.activeRun?.taskStatuses ?? {}}
+                runClosed={chatState.activeRun === null}
+              />
             </div>
 
             <div className="shrink-0 p-sm">

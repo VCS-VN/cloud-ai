@@ -11,8 +11,11 @@ import type {
   BuilderRunEvent,
   BuilderRunFailureCode,
   BuilderRunMilestone,
+  BuilderRunClarificationMetadata,
 } from "@/features/agents/ui/builder-events";
 import type {
+  AgentQuestionMetadata,
+  DesignVariant,
   RunStreamEvent,
   SkeletonPhase,
 } from "@/shared/project-types";
@@ -47,6 +50,7 @@ export type PersistDirective =
       kind: "agent_question";
       question: string;
       options: { id: string; label: string }[];
+      metadata: AgentQuestionMetadata | null;
     }
   | {
       kind: "plan";
@@ -57,7 +61,16 @@ export type ProgressTimelineDirective =
   | { kind: "milestone"; milestone: string }
   | { kind: "section"; section: string; locale: ProgressLocale }
   | { kind: "summary"; text: string }
-  | { kind: "error"; failureCode: BuilderRunFailureCode };
+  | { kind: "error"; failureCode: BuilderRunFailureCode }
+  | {
+      kind: "task_plan";
+      tasks: Array<{ id: string; title: string; phase: "prep" | "build" | "verify" }>;
+    }
+  | {
+      kind: "task_transition";
+      id: string;
+      transition: "started" | "completed" | "paused" | "resumed";
+    };
 
 export function friendlyFailureMessage(
   code: BuilderRunFailureCode,
@@ -82,6 +95,35 @@ const MILESTONE_TO_SKELETON: Record<
   failed: "responding",
   cancelled: "responding",
 };
+
+function buildAgentQuestionMetadata(
+  raw: BuilderRunClarificationMetadata | undefined,
+): AgentQuestionMetadata | null {
+  if (!raw) return null;
+  if (raw.questionType === "design_variant") {
+    return {
+      questionType: "design_variant",
+      options: raw.options as DesignVariant[],
+      selectedOptionId: null,
+    };
+  }
+  if (raw.questionType === "skill_clarification") {
+    return {
+      questionType: "clarification_options",
+      options: raw.options.map((o) => ({
+        id: o.id,
+        label: o.label,
+        description: o.label,
+        pros: [],
+        cons: [],
+        recommended: false,
+      })),
+      selectedOptionId: null,
+      customAnswerAllowed: raw.customAnswerAllowed,
+    };
+  }
+  return null;
+}
 
 /**
  * Translator: BuilderRunEvent → RunStreamEvent + persistence + progress-timeline directives.
@@ -194,6 +236,7 @@ export function translateBuilderEventToRunStreamEvent(
           terminal: "awaiting_input",
         };
       }
+      const questionMetadata = buildAgentQuestionMetadata(event.metadata);
       return {
         events: [
           {
@@ -204,7 +247,7 @@ export function translateBuilderEventToRunStreamEvent(
             content: event.question,
             processingStatus: "completed",
             createdAt: new Date(event.at).toISOString(),
-            metadata: null,
+            metadata: questionMetadata,
           },
           { type: "run.awaiting_input", runId },
         ],
@@ -212,6 +255,7 @@ export function translateBuilderEventToRunStreamEvent(
           kind: "agent_question",
           question: event.question,
           options: event.options,
+          metadata: questionMetadata,
         },
         timeline: null,
         terminal: "awaiting_input",
@@ -263,6 +307,47 @@ export function translateBuilderEventToRunStreamEvent(
         persist: null,
         timeline: null,
         terminal: "stopped",
+      };
+    }
+    case "plan.created": {
+      return {
+        events: [
+          {
+            type: "plan.created",
+            runId,
+            tasks: event.tasks,
+            at: event.at,
+          },
+        ],
+        persist: null,
+        timeline: { kind: "task_plan", tasks: event.tasks },
+        terminal: null,
+      };
+    }
+    case "plan.task.started":
+    case "plan.task.completed":
+    case "plan.task.paused":
+    case "plan.task.resumed": {
+      const transition =
+        event.type === "plan.task.started"
+          ? "started"
+          : event.type === "plan.task.completed"
+            ? "completed"
+            : event.type === "plan.task.paused"
+              ? "paused"
+              : "resumed";
+      return {
+        events: [
+          {
+            type: event.type,
+            runId,
+            taskId: event.taskId,
+            at: event.at,
+          },
+        ],
+        persist: null,
+        timeline: { kind: "task_transition", id: event.taskId, transition },
+        terminal: null,
       };
     }
   }

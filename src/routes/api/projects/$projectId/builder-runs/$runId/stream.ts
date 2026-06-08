@@ -124,6 +124,17 @@ type RunForReplay = {
     | { at: number; kind: "section"; section: string; locale: string }
     | { at: number; kind: "summary"; text: string }
     | { at: number; kind: "error"; failureCode: string }
+    | {
+        at: number;
+        kind: "task_plan";
+        tasks: Array<{ id: string; title: string; phase: "prep" | "build" | "verify" }>;
+      }
+    | {
+        at: number;
+        kind: "task_transition";
+        id: string;
+        transition: "started" | "completed" | "paused" | "resumed";
+      }
   >;
 };
 
@@ -159,6 +170,28 @@ function buildArchivedReplay(runId: string, run: RunForReplay): ReadableStream<U
             runId,
             messageId,
             content: item.text,
+          });
+        } else if (item.kind === "task_plan") {
+          enqueue({
+            type: "plan.created",
+            runId,
+            tasks: item.tasks,
+            at: item.at,
+          });
+        } else if (item.kind === "task_transition") {
+          const eventType =
+            item.transition === "started"
+              ? "plan.task.started"
+              : item.transition === "completed"
+                ? "plan.task.completed"
+                : item.transition === "paused"
+                  ? "plan.task.paused"
+                  : "plan.task.resumed";
+          enqueue({
+            type: eventType,
+            runId,
+            taskId: item.id,
+            at: item.at,
           });
         }
         // milestone/section/error are decorative for archived runs; the

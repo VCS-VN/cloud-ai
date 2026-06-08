@@ -170,6 +170,7 @@ describe("BuilderRunEvent → RunStreamEvent translator (Phase 1 contract)", () 
       kind: "agent_question",
       question: "Bạn muốn skill nào?",
       options: [{ id: "a", label: "Skill A" }],
+      metadata: null,
     });
     expect(out.terminal).toBe("awaiting_input");
   });
