@@ -91,8 +91,13 @@ function AgentBody({
       const selected = (message.metadata as { selectedOptionId?: string | null } | null)
         ?.selectedOptionId;
       if (selected) {
-        // already chosen — keep render minimal; existing bubble shows confirmation.
-        return <AgentQuestionBubble message={message} onSelectOption={onSelectOption} />;
+        const picked = variants.find((v) => v.id === selected);
+        return (
+          <CommittedAnswer
+            label={picked?.label ?? selected}
+            description={picked?.description}
+          />
+        );
       }
       return (
         <DesignVariantPicker
@@ -123,7 +128,8 @@ function AgentBody({
       const selected = (message.metadata as { selectedOptionId?: string | null } | null)
         ?.selectedOptionId;
       if (selected) {
-        return <AgentQuestionBubble message={message} onSelectOption={onSelectOption} />;
+        const picked = options.find((o) => o.id === selected);
+        return <CommittedAnswer label={picked?.label ?? selected} />;
       }
       return (
         <SkillClarificationList
@@ -230,5 +236,32 @@ export function MessageBubble({
         ) : null}
       </div>
     </article>
+  );
+}
+
+function CommittedAnswer({
+  label,
+  description,
+}: {
+  label: string;
+  description?: string;
+}) {
+  return (
+    <div
+      className="rounded-md border border-[var(--app-border-strong)] bg-[var(--app-panel-strong)] p-3"
+      aria-live="polite"
+    >
+      <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--app-muted)]">
+        Đã chọn
+      </div>
+      <div className="mt-1 text-sm font-medium text-[var(--app-panel-text)]">
+        {label}
+      </div>
+      {description ? (
+        <p className="mt-1 text-xs leading-snug text-[var(--app-muted)]">
+          {description}
+        </p>
+      ) : null}
+    </div>
   );
 }
