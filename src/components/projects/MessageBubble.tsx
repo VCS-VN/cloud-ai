@@ -93,9 +93,9 @@ function AgentBody({
       if (selected) {
         const picked = variants.find((v) => v.id === selected);
         return (
-          <CommittedAnswer
-            label={picked?.label ?? selected}
-            description={picked?.description}
+          <CommittedAnswerInline
+            question={message.content}
+            answer={picked?.label ?? selected}
           />
         );
       }
@@ -129,7 +129,12 @@ function AgentBody({
         ?.selectedOptionId;
       if (selected) {
         const picked = options.find((o) => o.id === selected);
-        return <CommittedAnswer label={picked?.label ?? selected} />;
+        return (
+          <CommittedAnswerInline
+            question={message.content}
+            answer={picked?.label ?? selected}
+          />
+        );
       }
       return (
         <SkillClarificationList
@@ -239,29 +244,26 @@ export function MessageBubble({
   );
 }
 
-function CommittedAnswer({
-  label,
-  description,
+function CommittedAnswerInline({
+  question,
+  answer,
 }: {
-  label: string;
-  description?: string;
+  question: string;
+  answer: string;
 }) {
   return (
-    <div
-      className="rounded-md border border-[var(--app-border-strong)] bg-[var(--app-panel-strong)] p-3"
-      aria-live="polite"
-    >
-      <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--app-muted)]">
-        Đã chọn
-      </div>
-      <div className="mt-1 text-sm font-medium text-[var(--app-panel-text)]">
-        {label}
-      </div>
-      {description ? (
-        <p className="mt-1 text-xs leading-snug text-[var(--app-muted)]">
-          {description}
+    <div className="space-y-2" aria-live="polite">
+      {question ? (
+        <p className="text-sm leading-snug text-[var(--app-panel-text)]">
+          {question}
         </p>
       ) : null}
+      <p className="text-sm font-medium text-[var(--app-panel-text)]">
+        <span className="mr-2 text-[11px] font-medium uppercase tracking-wide text-[var(--app-muted)]">
+          Đã chọn:
+        </span>
+        {answer}
+      </p>
     </div>
   );
 }
