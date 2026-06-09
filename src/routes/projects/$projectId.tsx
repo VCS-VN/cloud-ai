@@ -584,21 +584,11 @@ function ProjectDetailPage() {
   }
 
   async function handleSelectOption(messageId: string, optionId: string): Promise<boolean> {
-    console.log("[route] handleSelectOption", { messageId, optionId, hasProject: !!project, msgCount: messages.length });
-    if (!project) {
-      console.warn("[route] handleSelectOption — no project");
-      return false;
-    }
+    if (!project) return false;
     const message = messages.find((item) => item.id === messageId);
-    console.log("[route] handleSelectOption — message lookup", { found: !!message, runId: message?.runId });
-    if (!message?.runId) {
-      console.warn("[route] handleSelectOption — message has no runId", { messageId, message });
-      return false;
-    }
+    if (!message?.runId) return false;
     setSendError(undefined);
-    console.log("[route] calling submitAnswer", { runId: message.runId, optionId });
     const result = await agentStream.submitAnswer(message.runId, { optionId });
-    console.log("[route] submitAnswer → result", result);
     if (!result.ok) {
       setSendError(result.message);
       return false;

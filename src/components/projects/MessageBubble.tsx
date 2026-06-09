@@ -98,9 +98,7 @@ function AgentBody({
         <DesignVariantPicker
           variants={variants}
           onSelect={async (optionId) => {
-            console.log("[bubble] DesignVariantPicker onSelect", { messageId: message.id, optionId });
             const ok = await onSelectOption(message.id, optionId);
-            console.log("[bubble] DesignVariantPicker onSelect → result", { ok });
             if (ok === false) {
               throw new Error("submit_failed");
             }
@@ -108,9 +106,7 @@ function AgentBody({
           onCustom={
             onSubmitFreeText
               ? async (freeText) => {
-                  console.log("[bubble] DesignVariantPicker onCustom", { messageId: message.id });
                   const ok = await onSubmitFreeText(message, freeText);
-                  console.log("[bubble] DesignVariantPicker onCustom → result", { ok });
                   if (ok === false) {
                     throw new Error("submit_failed");
                   }

@@ -249,7 +249,7 @@ export function ProjectMessagesPanel({
           viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
           setShowJumpToLatest(false);
         }}
-        className={`pointer-events-auto absolute bottom-md right-md inline-flex items-center gap-xs rounded-pill border border-[var(--app-border-strong)] bg-[var(--app-panel-bg)] px-sm py-xs text-[12px] font-medium text-[var(--app-panel-text)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] transition-all duration-200 ease-out hover:-translate-y-px hover:border-[var(--app-border-strong)] hover:bg-[var(--app-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] ${showJumpToLatest ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}
+        className={`absolute bottom-md right-md inline-flex items-center gap-xs rounded-pill border border-[var(--app-border-strong)] bg-[var(--app-panel-bg)] px-sm py-xs text-[12px] font-medium text-[var(--app-panel-text)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] transition-all duration-200 ease-out hover:-translate-y-px hover:border-[var(--app-border-strong)] hover:bg-[var(--app-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] ${showJumpToLatest ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}
         aria-hidden={!showJumpToLatest}
         tabIndex={showJumpToLatest ? 0 : -1}
       >

@@ -28,26 +28,16 @@ export function DesignVariantPicker({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    console.log("[picker] handleSubmit click", { pickedId, submitting, isBusy: disabled || submitting });
-    if (!pickedId || submitting) {
-      console.log("[picker] handleSubmit early-return", { pickedId, submitting });
-      return;
-    }
+    if (!pickedId || submitting) return;
     setErrorMessage(null);
     if (pickedId === OTHER_ID) {
       const trimmed = customText.trim();
-      if (!trimmed || !onCustom) {
-        console.log("[picker] OTHER skipped — no text or no onCustom", { hasText: !!trimmed, hasOnCustom: !!onCustom });
-        return;
-      }
+      if (!trimmed || !onCustom) return;
       setSubmitting(true);
       try {
-        console.log("[picker] calling onCustom");
         await onCustom(trimmed);
-        console.log("[picker] onCustom resolved → committing");
         setCommitted({ kind: "custom", text: trimmed });
       } catch (cause) {
-        console.warn("[picker] onCustom threw", cause);
         setErrorMessage(extractMessage(cause));
       } finally {
         setSubmitting(false);
@@ -55,15 +45,10 @@ export function DesignVariantPicker({
       return;
     }
     const picked = variants.find((v) => v.id === pickedId);
-    if (!picked) {
-      console.warn("[picker] pickedId not found in variants", { pickedId, variants: variants.map((v) => v.id) });
-      return;
-    }
+    if (!picked) return;
     setSubmitting(true);
     try {
-      console.log("[picker] calling onSelect", { optionId: pickedId });
       await onSelect(pickedId);
-      console.log("[picker] onSelect resolved → committing");
       setCommitted({
         kind: "option",
         id: picked.id,
@@ -71,7 +56,6 @@ export function DesignVariantPicker({
         description: picked.description,
       });
     } catch (cause) {
-      console.warn("[picker] onSelect threw", cause);
       setErrorMessage(extractMessage(cause));
     } finally {
       setSubmitting(false);
