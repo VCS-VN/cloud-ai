@@ -49,7 +49,7 @@ export function SkillClarificationList({
         aria-live="polite"
       >
         <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--app-muted)]">
-          Đã chọn
+          Selected
         </div>
         <div className="mt-1 text-sm font-medium text-[var(--app-panel-text)]">
           {committed.label}
@@ -124,7 +124,7 @@ export function SkillClarificationList({
           {submitting ? (
             <>
               <Loader2 aria-hidden="true" className="animate-spin" size={14} />
-              Đang gửi…
+              Submitting…
             </>
           ) : (
             "Submit"
@@ -139,5 +139,5 @@ function extractMessage(cause: unknown): string {
   if (cause instanceof Error && cause.message && cause.message !== "submit_failed") {
     return cause.message;
   }
-  return "Không thể gửi lựa chọn. Vui lòng thử lại.";
+  return "Couldn't submit your selection. Please try again.";
 }

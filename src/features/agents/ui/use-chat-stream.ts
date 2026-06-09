@@ -340,8 +340,8 @@ export function useChatStream({
           code: "network_error",
           message:
             cause instanceof Error
-              ? `Mất kết nối: ${cause.message}`
-              : "Mất kết nối máy chủ. Hãy kiểm tra mạng và thử lại.",
+              ? `Connection lost: ${cause.message}`
+              : "Connection lost. Please check your network and try again.",
         };
       }
       if (resp.ok) return { ok: true };
@@ -355,10 +355,10 @@ export function useChatStream({
         body && typeof body.code === "string" ? body.code : `http_${resp.status}`;
       const fallback =
         resp.status === 404
-          ? "Phiên đã kết thúc hoặc máy chủ đã khởi động lại. Hãy gửi lại tin nhắn để tạo phiên mới."
+          ? "This session has ended or the server restarted. Send a new message to start a new session."
           : resp.status === 409
-            ? "Phiên không còn ở trạng thái chờ phản hồi. Có thể agent đã chuyển sang bước khác."
-            : `Máy chủ trả về lỗi (${resp.status}).`;
+            ? "This session is no longer awaiting a response. The agent may have moved on."
+            : `Server returned an error (${resp.status}).`;
       const message =
         body && typeof body.message === "string" && body.message.trim()
           ? body.message

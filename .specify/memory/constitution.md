@@ -1,15 +1,17 @@
-<!-- 
+<!--
 Sync Impact Report:
-- Version change: 1.4.0 -> 1.4.1
-- Added sections: None
-- Modified principles: Principle VI (AI Agent generated project-detail env exception for `VITE_STORE_SLUG`)
+- Version change: 1.4.1 -> 1.5.0
+- Added principles:
+  - Principle XI. Builder UI Locale (English Default)
+- Modified principles: None
 - Removed sections: None
 - Templates requiring updates:
-  - .specify/templates/plan-template.md ✅ no changes needed
+  - .specify/templates/plan-template.md ✅ no changes needed (Constitution Check is a generic placeholder)
   - .specify/templates/spec-template.md ✅ no changes needed
   - .specify/templates/tasks-template.md ✅ no changes needed
-  - AGENTS.md ⚠ pending (existing import convention follow-up remains)
-- Follow-up TODOs: Audit existing imports across codebase for compliance with Principle X; migrate non-compliant imports in a separate cleanup pass
+- Follow-up TODOs:
+  - Audit existing builder UI strings for non-English content (legacy `BUILDER_RUN_LOCALE_VI` consumers, `AgentQuestionBubble`, server-side `apiErrors` map). Plan a separate cleanup pass; do NOT block in-flight work.
+  - Existing import-convention follow-up from v1.4.0 still pending.
 -->
 # Cloud-AI Constitution
 
@@ -69,6 +71,25 @@ import { utils } from "~/lib/utils";         // SAI: dùng ~ thay vì @/
 
 **Lý do:** Alias giúp import path ổn định khi di chuyển file, dễ đọc hơn, và tránh lỗi "relative path hell" khi refactor. Cấu hình `tsconfig.json` đã có sẵn `paths` mapping cho `@/*` và `@app/*`.
 
+### XI. Builder UI Locale (English Default)
+Toàn bộ chuỗi UI hardcode trong **Builder application** (Cloud-AI app — folders: `src/components/**`, `src/features/**/ui/**`, `src/routes/**`) BẮT BUỘC viết bằng tiếng Anh. Áp dụng cho:
+
+- Button labels, badge/status text, header labels, placeholder, ARIA `aria-label`/`aria-live` text, empty states, error fallbacks, confirmation/committed views.
+- Toast/snackbar/inline error messages do client tạo ra trong builder runtime.
+- Console-facing strings không được i18n (debug logs, hard-coded `Error("...")` constructors trong client UI).
+
+**Loại trừ (vẫn được giữ ngôn ngữ khác):**
+- Nội dung động do LLM tạo (task title, agent answer, plan markdown) — ngôn ngữ theo prompt người dùng (xem feature `028-plan-task-checklist` decision).
+- Server-side i18n maps đã tồn tại (`BUILDER_RUN_LOCALE_VI`, `apiErrors`) — chỉ thay đổi qua tracked migration, không ad-hoc.
+- Chuỗi trong **generated storefront** mà builder tạo cho project người dùng — đó là ngôn ngữ của storefront end-user, không phải builder UI.
+
+**Quy tắc khi viết code:**
+- Khi thêm hoặc sửa UI component trong builder, mọi string mới phải English.
+- Khi chạm vào component đã có chuỗi không phải English, KHÔNG được "improve" sang English nếu không nằm trong scope task — đó là drift. Chỉ thay khi (a) task yêu cầu, hoặc (b) string mới do mình thêm.
+- `aria-label` phải English ngay cả khi nội dung visible vẫn là chuỗi LLM-generated (LLM content render trong children, `aria-label` mô tả cấu trúc).
+
+**Lý do:** Builder phục vụ contributor đa quốc gia; trộn ngôn ngữ trong UI infrastructure gây không nhất quán, khó review screenshot, và phá test snapshot khi locale đổi. Mặc định một locale (English) loại bỏ class lỗi này tận gốc; nội dung user-facing động vẫn theo người dùng.
+
 ## Architecture & UX Requirements
 
 - Giao diện: Icon cần dùng semantic theme tokens (ví dụ: `--app-icon`, `--app-icon-muted`). Tuyệt đối không hardcode color bằng hex hay các màu trực tiếp kiểu `text-white`, `text-black` trừ khi là brand asset cố định.
@@ -79,4 +100,4 @@ import { utils } from "~/lib/utils";         // SAI: dùng ~ thay vì @/
 - Amendments phải được sự đồng ý của Product Owner/Lead.
 - Toàn bộ thay đổi phải tuân theo Core Principles trên. Nếu có vi phạm (ví dụ API lỗi không đúng chuẩn, hoặc UX code hardcode color không theo DESIGN.md) thì Pull Request sẽ bị reject.
 
-**Version**: 1.4.1 | **Ratified**: 2026-05-05 | **Last Amended**: 2026-05-18
+**Version**: 1.5.0 | **Ratified**: 2026-05-05 | **Last Amended**: 2026-06-09

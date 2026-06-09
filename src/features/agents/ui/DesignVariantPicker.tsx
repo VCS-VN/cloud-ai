@@ -85,7 +85,7 @@ export function DesignVariantPicker({
       <div
         className="flex flex-col gap-2"
         role="radiogroup"
-        aria-label={question ?? "Phong cách thiết kế"}
+        aria-label={question ?? "Design style"}
       >
         {variants.map((variant) => {
           const isPicked = pickedId === variant.id;
@@ -143,10 +143,10 @@ export function DesignVariantPicker({
               <RadioDot picked={pickedId === OTHER_ID} />
               <div className="min-w-0 flex-1">
                 <div className="font-medium text-sm text-[var(--app-panel-text)]">
-                  Mô tả khác
+                  Other
                 </div>
                 <p className="mt-1 text-xs leading-snug text-[var(--app-muted)]">
-                  Tự mô tả phong cách bạn muốn
+                  Describe the style you want
                 </p>
                 {pickedId === OTHER_ID ? (
                   <textarea
@@ -157,7 +157,7 @@ export function DesignVariantPicker({
                     onChange={(e) => setCustomText(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
                     className="mt-2 w-full resize-none rounded-md border border-[var(--app-border)] bg-[var(--app-panel-bg)] p-2 text-xs text-[var(--app-panel-text)] placeholder:text-[var(--app-subtle-text)] focus-visible:border-[var(--app-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:opacity-60"
-                    placeholder="Ví dụ: tone cá tính, gam đậm, typography táo bạo."
+                    placeholder="e.g. bold tone, deep palette, daring typography."
                   />
                 ) : null}
               </div>
@@ -185,7 +185,7 @@ export function DesignVariantPicker({
           {submitting ? (
             <>
               <Loader2 aria-hidden="true" className="animate-spin" size={14} />
-              Đang gửi…
+              Submitting…
             </>
           ) : (
             "Submit"
@@ -200,7 +200,7 @@ function extractMessage(cause: unknown): string {
   if (cause instanceof Error && cause.message && cause.message !== "submit_failed") {
     return cause.message;
   }
-  return "Không thể gửi lựa chọn. Vui lòng thử lại.";
+  return "Couldn't submit your selection. Please try again.";
 }
 
 function RadioDot({ picked }: { picked: boolean }) {
@@ -237,7 +237,7 @@ function CommittedView({ committed }: { committed: Committed }) {
       aria-live="polite"
     >
       <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--app-muted)]">
-        Đã chọn
+        Selected
       </div>
       {committed.kind === "option" ? (
         <>

@@ -260,7 +260,7 @@ function CommittedAnswerInline({
       ) : null}
       <p className="text-sm font-medium text-[var(--app-panel-text)]">
         <span className="mr-2 text-[11px] font-medium uppercase tracking-wide text-[var(--app-muted)]">
-          Đã chọn:
+          Selected:
         </span>
         {answer}
       </p>
