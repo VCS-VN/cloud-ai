@@ -91,6 +91,28 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
       };
 
     case "message.created": {
+      const existing = state.messages.find((m) => m.id === event.messageId);
+      // SSE replay (reconnect, tab refocus, StrictMode double-mount) re-emits
+      // every buffered event including the original agent_question. If the
+      // user already picked an option, the existing message carries
+      // `selectedOptionId` in metadata; preserve it so the picker stays in its
+      // committed view instead of resurrecting as un-answered.
+      const preservedSelectedOptionId =
+        existing?.kind === "agent_question" &&
+        existing.metadata &&
+        typeof (existing.metadata as { selectedOptionId?: unknown })
+          .selectedOptionId === "string"
+          ? ((existing.metadata as { selectedOptionId: string })
+              .selectedOptionId)
+          : undefined;
+      const incomingMeta = event.metadata ?? null;
+      const mergedMeta =
+        preservedSelectedOptionId && incomingMeta
+          ? ({
+              ...incomingMeta,
+              selectedOptionId: preservedSelectedOptionId,
+            } as AgentQuestionMetadata)
+          : incomingMeta;
       const message: Message = {
         id: event.messageId,
         projectId: "",
@@ -101,7 +123,7 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
         status: "completed",
         processingStatus: event.processingStatus,
         createdAt: event.createdAt,
-        metadata: event.metadata ?? null,           // T030: agent_question carries options
+        metadata: mergedMeta,
       };
       return { ...state, messages: upsertMessage(state.messages, message) };
     }

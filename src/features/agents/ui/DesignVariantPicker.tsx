@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import type { DesignVariant } from "@/shared/project-types";
 
 export type DesignVariantPickerProps = {
+  question?: string;
   variants: DesignVariant[];
   onSelect: (optionId: string) => Promise<void> | void;
   onCustom?: (freeText: string) => Promise<void> | void;
@@ -16,6 +17,7 @@ type Committed =
   | { kind: "custom"; text: string };
 
 export function DesignVariantPicker({
+  question,
   variants,
   onSelect,
   onCustom,
@@ -75,10 +77,15 @@ export function DesignVariantPicker({
 
   return (
     <div className="space-y-3">
+      {question ? (
+        <p className="text-sm leading-snug text-[var(--app-panel-text)]">
+          {question}
+        </p>
+      ) : null}
       <div
         className="flex flex-col gap-2"
         role="radiogroup"
-        aria-label="Phong cách thiết kế"
+        aria-label={question ?? "Phong cách thiết kế"}
       >
         {variants.map((variant) => {
           const isPicked = pickedId === variant.id;

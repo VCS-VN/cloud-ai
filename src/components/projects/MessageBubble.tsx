@@ -96,6 +96,7 @@ function AgentBody({
       }
       return (
         <DesignVariantPicker
+          question={message.content}
           variants={variants}
           onSelect={async (optionId) => {
             const ok = await onSelectOption(message.id, optionId);

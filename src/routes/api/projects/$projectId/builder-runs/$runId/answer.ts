@@ -3,6 +3,7 @@ import { requireServerUser } from "@/server/functions/auth";
 import { getBuilderRunHandle } from "@/features/agents/codex/runtime/builder-run-registry.server";
 import { BUILDER_RUN_LOCALE_VI } from "@/features/agents/ui/builder-run-i18n";
 import { getProjectServices } from "@/server/services/project-services";
+import { publishChatEvent } from "@/server/services/chat-event-channel.server";
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -116,6 +117,19 @@ export const Route = createFileRoute(
             ok: false,
             code: "detector_failed",
             message: "Không thể tiếp tục phiên.",
+          });
+        }
+
+        // Publish option.selected so SSE replay (after reconnect / tab refocus)
+        // restores the picker's committed state. Without this, the channel
+        // buffer only contains the original `message.created` agent_question
+        // and replay resurrects the unanswered version.
+        if (optionId || freeText) {
+          publishChatEvent(runId, {
+            type: "option.selected",
+            runId,
+            messageId: `msg-${runId}-question`,
+            optionId: optionId || `__custom:${freeText}`,
           });
         }
 
