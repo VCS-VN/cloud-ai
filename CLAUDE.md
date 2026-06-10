@@ -61,18 +61,13 @@ For multi-step tasks, state a brief plan:
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
 <!-- SPECKIT START -->
-**Current feature**: `027-codex-sdk-chat-migration` (status: completed 2026-06-07)
-**Plan**: `specs/027-codex-sdk-chat-migration/plan.md`
-**Spec**: `specs/027-codex-sdk-chat-migration/spec.md`
+**Current feature**: `030-init-settings-seed` (status: planning 2026-06-10)
+**Plan**: `specs/030-init-settings-seed/plan.md`
+**Spec**: `specs/030-init-settings-seed/spec.md`
 
-Chat now flows through `src/features/agents/codex/runtime/**` (codex SDK builder
-runs) and the `/api/projects/$projectId/builder-runs/**` route tree. The legacy
-chat orchestrator under `src/features/ai-agent/agent/**` was removed; the few
-remaining files there (`agent-events.ts`, `agent-errors.ts`, `agentic-loop.types.ts`,
-`error-classifier.ts`, `prompt-template-store.server.ts`) are kept because
-non-chat production code (init backfill, error analyzer, code-tools events)
-imports them. Do NOT add new code paths to `@/features/ai-agent/agent/`. Do NOT
-recreate `@/server/services/message-service.ts` or the `/api/projects/$projectId/runs/`
-route tree — `tests/contract/no-legacy-chat-path.contract.test.ts` will fail
-the build if either reappears.
+Codex SDK init will pre-seed generated storefront settings before Agent execution.
+Runtime-owned settings stay protected from Agent edits; editable storefront theme
+and root layout files remain Agent-editable. Keep legacy chat path restrictions from
+`027-codex-sdk-chat-migration`: do NOT add new code paths to `@/features/ai-agent/agent/`,
+recreate `@/server/services/message-service.ts`, or recreate `/api/projects/$projectId/runs/`.
 <!-- SPECKIT END -->

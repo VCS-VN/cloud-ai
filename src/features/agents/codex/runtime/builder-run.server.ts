@@ -60,6 +60,11 @@ import {
   stripBlockedFromBatches,
   type InitBatchPlan,
 } from "./init-batch-planner.server";
+import {
+  InitSettingsSeedError,
+  installInitWorkspaceDependencies,
+  seedInitSettingsFiles,
+} from "./init-settings-seed.server";
 import { runRepairLoop } from "./repair-loop.server";
 import { recordBoundaryViolation, type ViolationLayer } from "./violation-counter.server";
 import { SMALL_UPDATE_FILE_CAP } from "./update-classifier.server";
@@ -365,6 +370,35 @@ export async function runInitBuilderRun(
   const draftWorkspacePath = await ensureProjectWorkspace({
     projectId: ctx.projectId,
   });
+
+  try {
+    await seedInitSettingsFiles({ draftWorkspacePath });
+    await installInitWorkspaceDependencies({
+      draftWorkspacePath,
+      signal: ctx.signal,
+    });
+  } catch (error) {
+    const isSeedError = error instanceof InitSettingsSeedError;
+    const failureCode: BuilderRunFailureCode =
+      isSeedError && error.code === "conflicting_runtime_file"
+        ? "blocked_request"
+        : "codex_runtime_failed";
+    emitFailure(
+      emit,
+      runId,
+      failureCode,
+      isSeedError ? error.message : "failed to seed init settings",
+    );
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode,
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: [],
+      optionalRouteWarnings: [],
+    });
+  }
 
   const fileManifest = await listFiles(draftWorkspacePath);
   const foundationInstructions = await loadFoundationInstructions();
