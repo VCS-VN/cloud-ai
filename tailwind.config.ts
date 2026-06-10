@@ -1,71 +1,126 @@
-export default {
+/**
+ * Tailwind theme — Lumen design system (neutral ink + warm paper).
+ * Tokens mirror tokens.json (Tokens Studio for Figma).
+ *
+ * Khi đổi brand: chỉ sửa CSS variables trong app/styles/tokens.css — toàn bộ
+ * utilities ở đây tự động đọc theo, không cần rebuild config.
+ */
+import type { Config } from 'tailwindcss'
+
+const config: Config = {
   content: ['./app/**/*.{ts,tsx}', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        primary: 'var(--color-primary)',
-        'on-primary': 'var(--color-on-primary)',
-        ink: 'var(--color-ink)',
-        canvas: 'var(--color-canvas)',
-        'inverse-canvas': 'var(--color-inverse-canvas)',
-        'inverse-ink': 'var(--color-inverse-ink)',
-        'on-inverse-soft': 'var(--color-on-inverse-soft)',
-        hairline: 'var(--color-hairline)',
-        'hairline-soft': 'var(--color-hairline-soft)',
-        'surface-soft': 'var(--color-surface-soft)',
-        lime: 'var(--color-block-lime)',
-        lilac: 'var(--color-block-lilac)',
-        cream: 'var(--color-block-cream)',
-        pink: 'var(--color-block-pink)',
-        mint: 'var(--color-block-mint)',
-        coral: 'var(--color-block-coral)',
-        navy: 'var(--color-block-navy)',
-        magenta: 'var(--color-accent-magenta)',
-        success: 'var(--color-semantic-success)',
-        scrim: 'var(--color-overlay-scrim)'
+        paper: 'rgb(var(--color-paper) / <alpha-value>)',
+        chalk: 'rgb(var(--color-chalk) / <alpha-value>)',
+        surface: 'rgb(var(--color-surface) / <alpha-value>)',
+        hairline: 'rgb(var(--color-hairline) / <alpha-value>)',
+        'hairline-soft': 'rgb(var(--color-hairline-soft) / <alpha-value>)',
+        ink: 'rgb(var(--color-ink) / <alpha-value>)',
+        deep: 'rgb(var(--color-deep) / <alpha-value>)',
+        muted: 'rgb(var(--color-muted) / <alpha-value>)',
+        subtle: 'rgb(var(--color-subtle) / <alpha-value>)',
+
+        success: {
+          bg: 'rgb(var(--color-success-bg) / <alpha-value>)',
+          fg: 'rgb(var(--color-success-fg) / <alpha-value>)',
+          dot: 'rgb(var(--color-success-dot) / <alpha-value>)',
+        },
+        warning: {
+          bg: 'rgb(var(--color-warning-bg) / <alpha-value>)',
+          fg: 'rgb(var(--color-warning-fg) / <alpha-value>)',
+          dot: 'rgb(var(--color-warning-dot) / <alpha-value>)',
+        },
+        danger: {
+          bg: 'rgb(var(--color-danger-bg) / <alpha-value>)',
+          fg: 'rgb(var(--color-danger-fg) / <alpha-value>)',
+          dot: 'rgb(var(--color-danger-dot) / <alpha-value>)',
+        },
       },
-      borderRadius: {
-        xs: 'var(--radius-xs)',
-        sm: 'var(--radius-sm)',
-        md: 'var(--radius-md)',
-        lg: 'var(--radius-lg)',
-        xl: 'var(--radius-xl)',
-        pill: 'var(--radius-pill)',
-        full: 'var(--radius-full)'
-      },
-      spacing: {
-        hair: 'var(--space-hair)',
-        xxs: 'var(--space-xxs)',
-        xs: 'var(--space-xs)',
-        sm: 'var(--space-sm)',
-        md: 'var(--space-md)',
-        lg: 'var(--space-lg)',
-        xl: 'var(--space-xl)',
-        xxl: 'var(--space-xxl)',
-        section: 'var(--space-section)'
-      },
+
       fontFamily: {
-        sans: ['figmaSans', 'Inter', 'system-ui', 'sans-serif'],
-        mono: ['figmaMono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']
+        sans: 'var(--font-sans)',
+        display: 'var(--font-display)',
+        mono: 'var(--font-mono)',
       },
+
       fontSize: {
-        'display-xl': ['86px', { lineHeight: '1', letterSpacing: '-1.72px', fontWeight: '340' }],
-        'display-lg': ['64px', { lineHeight: '1.1', letterSpacing: '-0.96px', fontWeight: '340' }],
-        headline: ['26px', { lineHeight: '1.35', letterSpacing: '-0.26px', fontWeight: '540' }],
-        subhead: ['26px', { lineHeight: '1.35', letterSpacing: '-0.26px', fontWeight: '340' }],
-        'card-title': ['24px', { lineHeight: '1.45', fontWeight: '700' }],
-        'body-lg': ['20px', { lineHeight: '1.4', letterSpacing: '-0.14px', fontWeight: '330' }],
-        body: ['18px', { lineHeight: '1.45', letterSpacing: '-0.26px', fontWeight: '320' }],
-        'body-sm': ['16px', { lineHeight: '1.45', letterSpacing: '-0.14px', fontWeight: '330' }],
-        link: ['20px', { lineHeight: '1.4', letterSpacing: '-0.1px', fontWeight: '480' }],
-        button: ['20px', { lineHeight: '1.4', letterSpacing: '-0.1px', fontWeight: '480' }],
-        eyebrow: ['18px', { lineHeight: '1.3', letterSpacing: '0.54px', fontWeight: '400' }],
-        caption: ['12px', { lineHeight: '1', letterSpacing: '0.6px', fontWeight: '400' }]
+        eyebrow: ['11px', { lineHeight: '1.5', letterSpacing: '0.18em' }],
+        caption: ['12px', { lineHeight: '1.5' }],
+        'ui-sm': ['13px', { lineHeight: '1.5' }],
+        body: ['14px', { lineHeight: '1.5' }],
+        'body-lead': ['16px', { lineHeight: '1.65' }],
+        'card-title': ['18px', { lineHeight: '1.2' }],
+        'section-title': ['20px', { lineHeight: '1.2', letterSpacing: '-0.01em' }],
+        h3: ['24px', { lineHeight: '1.2', letterSpacing: '-0.01em' }],
+        h2: ['32px', { lineHeight: '1.2', letterSpacing: '-0.01em' }],
+        h1: ['40px', { lineHeight: '1.2', letterSpacing: '-0.01em' }],
+        'display-compact': ['52px', { lineHeight: '1.05', letterSpacing: '-0.03em' }],
+        display: ['56px', { lineHeight: '1.05', letterSpacing: '-0.03em' }],
       },
+
+      letterSpacing: {
+        'display-tight': '-0.03em',
+        wide: '0.18em',
+      },
+
+      spacing: {
+        topbar: '56px',
+        'prompt-max': '760px',
+        'container-max': '1440px',
+        'control-sm': '32px',
+        'control-md': '36px',
+        'control-lg': '40px',
+      },
+
+      maxWidth: {
+        prompt: '760px',
+        container: '1440px',
+      },
+
+      borderRadius: {
+        input: '8px',
+        button: '8px',
+        card: '12px',
+        modal: '16px',
+        pill: '9999px',
+      },
+
+      borderWidth: {
+        hairline: '1px',
+      },
+
       boxShadow: {
-        editorial: '0 24px 80px rgb(0 0 0 / 0.08)',
-        panel: '0 12px 40px rgb(0 0 0 / 0.06)'
-      }
-    }
-  }
+        card: '0 1px 2px 0 rgb(15 15 16 / 0.04), 0 4px 12px 0 rgb(15 15 16 / 0.03)',
+        'card-hover': '0 1px 2px 0 rgb(15 15 16 / 0.04), 0 12px 32px 0 rgb(15 15 16 / 0.08)',
+        focus: '0 0 0 3px rgb(15 15 16 / 0.08)',
+      },
+
+      transitionDuration: {
+        fast: '120ms',
+        base: '180ms',
+        slow: '320ms',
+      },
+
+      transitionTimingFunction: {
+        standard: 'cubic-bezier(0.2, 0, 0, 1)',
+      },
+
+      animation: {
+        'pulse-soft': 'pulseSoft 1.6s ease-in-out infinite',
+        'spin-slow': 'spin 1.4s linear infinite',
+      },
+
+      keyframes: {
+        pulseSoft: {
+          '0%, 100%': { opacity: '0.4' },
+          '50%': { opacity: '1' },
+        },
+      },
+    },
+  },
+  plugins: [],
 }
+
+export default config

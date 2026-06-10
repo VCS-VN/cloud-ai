@@ -1,6 +1,7 @@
 import { EmptyState } from "../common/EmptyState";
 import { ErrorState } from "../common/ErrorState";
 import { LoadingState } from "../common/LoadingState";
+import { Button } from "@/components/ui/button";
 import type { Project } from "@/shared/project-types";
 import { ProjectListItem } from "./ProjectListItem";
 
@@ -48,21 +49,23 @@ export function ProjectList({
         }
         action={
           hasSearch && onClearSearch ? (
-            <button
+            <Button
+              variant="unstyled"
               className="builder-button bg-[var(--app-panel)] text-[var(--app-text)] ring-1 ring-[var(--app-border)]"
               type="button"
               onClick={onClearSearch}
             >
               Clear search
-            </button>
+            </Button>
           ) : onCreateProject ? (
-            <button
+            <Button
+              variant="unstyled"
               className="builder-button"
               type="button"
               onClick={onCreateProject}
             >
               Create first project
-            </button>
+            </Button>
           ) : null
         }
       />

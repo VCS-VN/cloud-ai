@@ -1,4 +1,6 @@
+import { Check, ChevronDown, Loader2, Pause, SquareCheckBig } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import type { PlanTask, PlanTaskStatus } from "@/shared/project-types";
 
 export type PlanChecklistProps = {
@@ -18,32 +20,36 @@ const STATUS_LABEL: Record<PlanTaskStatus, string> = {
 function StatusIcon({
   status,
   animate,
+  index,
 }: {
   status: PlanTaskStatus;
   animate: boolean;
+  index?: number;
 }) {
-  const baseClass = "inline-block size-4 shrink-0 text-center text-sm leading-4";
   switch (status) {
     case "pending":
       return (
-        <span aria-hidden className={`${baseClass} text-muted-foreground`}>○</span>
+        <span aria-hidden className="plan-status-icon plan-status-pending">
+          {typeof index === "number" ? index + 1 : ""}
+        </span>
       );
     case "active":
       return (
-        <span
-          aria-hidden
-          className={`${baseClass} text-primary ${animate ? "animate-pulse" : ""}`}
-        >
-          ◐
+        <span aria-hidden className="plan-status-icon plan-status-active">
+          <Loader2 size={12} className={animate ? "animate-spin" : undefined} />
         </span>
       );
     case "paused":
       return (
-        <span aria-hidden className={`${baseClass} text-muted-foreground`}>⏸</span>
+        <span aria-hidden className="plan-status-icon plan-status-paused">
+          <Pause size={10} />
+        </span>
       );
     case "done":
       return (
-        <span aria-hidden className={`${baseClass} text-emerald-600`}>✓</span>
+        <span aria-hidden className="plan-status-icon plan-status-done">
+          <Check size={10} />
+        </span>
       );
   }
 }
@@ -82,7 +88,7 @@ export function PlanChecklist({ tasks, statuses, runClosed }: PlanChecklistProps
 
   const headerSummaryText = runClosed
     ? `${allDone ? "Completed" : "Stopped"} ${summary.doneCount} of ${summary.total} tasks`
-    : `${summary.doneCount}/${summary.total}: ${summary.activeTitle ?? ""}`;
+    : `${summary.doneCount} / ${summary.total} done${summary.activeTitle ? ` · ${summary.activeTitle}` : ""}`;
 
   const liveAnnouncement = runClosed
     ? `Run finished. ${summary.doneCount} of ${summary.total} tasks completed.`
@@ -92,36 +98,40 @@ export function PlanChecklist({ tasks, statuses, runClosed }: PlanChecklistProps
 
   const listId = "plan-checklist-list";
 
+  const showRunningBadge = !runClosed && !allDone;
+
   return (
-    <section
-      aria-label="Run task checklist"
-      className="rounded-md border border-border bg-card/60 px-3 py-2 text-sm shadow-sm"
-    >
-      <button
+    <section aria-label="Run task checklist" className="plan-checklist">
+      <Button
+        variant="unstyled"
         type="button"
         aria-expanded={expanded}
         aria-controls={listId}
         onClick={() => setExpanded((prev) => !prev)}
-        className="flex w-full items-center gap-2 text-left text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="plan-checklist-toggle"
       >
-        <span aria-hidden className="text-muted-foreground">
-          {expanded ? "▾" : "▸"}
+        <span className="plan-checklist-iconbox" aria-hidden="true">
+          <SquareCheckBig size={14} />
         </span>
-        <StatusIcon status={headerStatus} animate={!runClosed} />
-        <span className="flex-1 truncate font-medium">{headerSummaryText}</span>
-      </button>
+        <span className="min-w-0 flex-1">
+          <span className="block plan-checklist-title">Tasks</span>
+          <span className="block plan-checklist-summary">{headerSummaryText}</span>
+        </span>
+        {showRunningBadge ? <span className="plan-checklist-badge">Running</span> : null}
+        <ChevronDown
+          aria-hidden="true"
+          size={16}
+          className={`plan-checklist-chevron ${expanded ? "" : "plan-checklist-chevron-collapsed"}`}
+        />
+      </Button>
 
       <p className="sr-only" aria-live="polite">
         {liveAnnouncement}
       </p>
 
       {expanded ? (
-        <ul
-          id={listId}
-          role="list"
-          className="mt-2 flex flex-col gap-1.5 border-t border-border/60 pt-2"
-        >
-          {tasks.map((task) => {
+        <ul id={listId} role="list" className="plan-checklist-body">
+          {tasks.map((task, index) => {
             const status = statuses[task.id] ?? "pending";
             const isActive = status === "active";
             return (
@@ -129,18 +139,25 @@ export function PlanChecklist({ tasks, statuses, runClosed }: PlanChecklistProps
                 key={task.id}
                 role="listitem"
                 aria-busy={isActive && !runClosed}
-                className="flex items-start gap-2"
+                className={`plan-task-row ${isActive ? "plan-task-row-active" : ""} ${status === "pending" ? "plan-task-row-pending" : ""}`}
               >
-                <StatusIcon status={status} animate={isActive && !runClosed} />
+                <StatusIcon
+                  status={status}
+                  animate={isActive && !runClosed}
+                  index={index}
+                />
                 <span className="sr-only">{STATUS_LABEL[status]}.</span>
-                <span
-                  className={
-                    status === "done"
-                      ? "flex-1 text-muted-foreground line-through"
-                      : "flex-1 text-foreground"
-                  }
-                >
-                  {task.title}
+                <span className="min-w-0 flex-1">
+                  <span
+                    className={`block plan-task-title ${isActive ? "plan-task-title-active" : ""} ${status === "done" ? "plan-task-title-done" : ""}`}
+                  >
+                    {task.title}
+                  </span>
+                  <span
+                    className={`block plan-task-meta ${isActive ? "plan-task-meta-active" : ""}`}
+                  >
+                    {STATUS_LABEL[status]}
+                  </span>
                 </span>
               </li>
             );

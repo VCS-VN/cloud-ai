@@ -7,7 +7,7 @@ type TokenBarProps = {
 
 /**
  * T060-T061: Circular SVG badge showing context window usage.
- * Color: xanh (<50%), vàng (50-85%), đỏ (>85%).
+ * Color: green (<50%), amber (50-85%), red (>85%).
  * Hover popover shows "N/N tokens (X%)".
  */
 export function TokenBar({ tokenContext }: TokenBarProps) {
@@ -18,11 +18,11 @@ export function TokenBar({ tokenContext }: TokenBarProps) {
   const { used, total, percent } = tokenContext;
 
   // Color based on usage threshold
-  let color = "var(--app-accent)"; // xanh / green
+  let color = "var(--app-accent)"; // green
   if (percent >= 85) {
-    color = "var(--app-danger-text, #ef4444)"; // đỏ
+    color = "var(--app-danger-text, #ef4444)"; // red
   } else if (percent >= 50) {
-    color = "var(--app-icon-selected, #f59e0b)"; // vàng
+    color = "var(--app-icon-selected, #f59e0b)"; // amber
   }
 
   const radius = 10;

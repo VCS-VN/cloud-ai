@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import { ErrorState } from "../common/ErrorState";
 import { LoadingState } from "../common/LoadingState";
+import { Input } from "@/components/ui/input";
 import type { ProjectFileNode } from "@/shared/project-types";
 import { ProjectFileTreeNode } from "./ProjectFileTreeNode";
 
@@ -63,7 +64,7 @@ export function ProjectFileExplorer({
         <label className="mb-sm flex h-9 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm text-[12px] text-[var(--app-muted-text)] [&_svg]:text-[var(--app-icon-muted)]">
           <Search aria-hidden="true" size={15} />
           <span className="sr-only">Search code</span>
-          <input
+          <Input
             className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] text-[var(--app-panel-text)] outline-none placeholder:text-[var(--app-subtle-text)]"
             value={query}
             placeholder="Search code"

@@ -27,6 +27,7 @@ import {
   ExternalLink,
   Eye,
   Globe,
+  Laptop,
   Loader2,
   MessageSquarePlus,
   PanelLeftClose,
@@ -34,21 +35,32 @@ import {
   Play,
   RefreshCw,
   Settings,
+  Smartphone,
+  Tablet,
   TriangleAlert,
 } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { PreviewInitPanel } from "@/components/projects/PreviewInitPanel";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   createInitialChatState,
   type DevRuntimeUIState,
 } from "@/features/agents/ui/agent-event-reducer";
 import { useChatStream as useAgentStream } from "@/features/agents/ui/use-chat-stream";
-import { isProjectPreviewStartAvailable, isProjectPreviewTemporarilyUnavailable } from "@/features/agents/ui/preview-availability";
-import { buildPreviewUrl, normalizePreviewPath } from "@/features/agents/ui/preview-path";
+import {
+  isProjectPreviewStartAvailable,
+  isProjectPreviewTemporarilyUnavailable,
+} from "@/features/agents/ui/preview-availability";
+import {
+  buildPreviewUrl,
+  normalizePreviewPath,
+} from "@/features/agents/ui/preview-path";
 import { useUserPresence } from "@/hooks/useUserPresence";
-import { UserMenu } from "@/components/auth/UserMenu";
+import { ChatPanelMeta, ChatPanelTabs } from "@/components/projects/ChatPanelHeader";
 import { MessageComposer } from "@/components/projects/MessageComposer";
 import { PlanChecklist } from "@/features/agents/ui/PlanChecklist";
+import { ProjectDetailTopBar } from "@/components/projects/ProjectDetailTopBar";
 import { ProjectFileExplorer } from "@/components/projects/ProjectFileExplorer";
 import { ProjectMessagesPanel } from "@/components/projects/ProjectMessagesPanel";
 import { ProjectDeleteConfirmDialog } from "@/components/projects/ProjectDeleteConfirmDialog";
@@ -71,7 +83,11 @@ import type {
 } from "@/shared/project-types";
 
 type DetailMode = "preview" | "code";
-type PreviewTokenState = { status: "idle" | "refreshing" | "ready" | "failed"; error: string | null; refreshedAt: string | null };
+type PreviewTokenState = {
+  status: "idle" | "refreshing" | "ready" | "failed";
+  error: string | null;
+  refreshedAt: string | null;
+};
 
 const CHAT_WIDTH_KEY = "project-detail-chat-width";
 const CHAT_VISIBLE_KEY = "project-detail-chat-visible";
@@ -137,17 +153,27 @@ function ProjectDetailPage() {
   const [previewStarting, setPreviewStarting] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
-  const [settingsSaveError, setSettingsSaveError] = useState<string | null>(null);
-  const [settingsSaveSuccess, setSettingsSaveSuccess] = useState<string | null>(null);
-  const [settingsProjectName, setSettingsProjectName] = useState(workspace?.project.name ?? "");
-  const [settingsSelectedStoreSlug, setSettingsSelectedStoreSlug] = useState<string | null>(workspace?.project.selectedStoreSlug ?? null);
+  const [settingsSaveError, setSettingsSaveError] = useState<string | null>(
+    null,
+  );
+  const [settingsSaveSuccess, setSettingsSaveSuccess] = useState<string | null>(
+    null,
+  );
+  const [settingsProjectName, setSettingsProjectName] = useState(
+    workspace?.project.name ?? "",
+  );
+  const [settingsSelectedStoreSlug, setSettingsSelectedStoreSlug] = useState<
+    string | null
+  >(workspace?.project.selectedStoreSlug ?? null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [previewStartError, setPreviewStartError] = useState<string | null>(
     null,
   );
-  const [previewTokenState, setPreviewTokenState] = useState<PreviewTokenState>({ status: "idle", error: null, refreshedAt: null });
+  const [previewTokenState, setPreviewTokenState] = useState<PreviewTokenState>(
+    { status: "idle", error: null, refreshedAt: null },
+  );
   const [manualRuntime, setManualRuntime] = useState<DevRuntimeUIState | null>(
     null,
   );
@@ -234,37 +260,60 @@ function ProjectDetailPage() {
     if (manualRuntime) runtime = manualRuntime;
     if (chatState.runtime.status !== "idle") runtime = chatState.runtime;
     return runtime;
-  }, [chatState.runtime, manualRuntime, runtimeQuery.data, workspace?.devRuntime]);
-  const refreshPreviewToken = useCallback(async (projectId: string, signal?: AbortSignal) => {
-    setPreviewTokenState({ status: "refreshing", error: null, refreshedAt: null });
-    const timeout = new AbortController();
-    const timer = window.setTimeout(() => timeout.abort(), 15000);
-    const abort = () => timeout.abort();
-    signal?.addEventListener("abort", abort, { once: true });
-    try {
-      const response = await fetch(`/api/projects/${projectId}/preview-token/refresh`, {
-        method: "POST",
-        credentials: "include",
-        signal: timeout.signal,
+  }, [
+    chatState.runtime,
+    manualRuntime,
+    runtimeQuery.data,
+    workspace?.devRuntime,
+  ]);
+  const refreshPreviewToken = useCallback(
+    async (projectId: string, signal?: AbortSignal) => {
+      setPreviewTokenState({
+        status: "refreshing",
+        error: null,
+        refreshedAt: null,
       });
-      if (!response.ok) throw new Error("Unable to refresh preview access.");
-      setPreviewTokenState({ status: "ready", error: null, refreshedAt: new Date().toISOString() });
-      setPreviewStartError(null);
-      return true;
-    } catch (cause) {
-      if (signal?.aborted) return false;
-      const message = cause instanceof Error && cause.name === "AbortError"
-        ? "Timed out while preparing secure preview access."
-        : "Unable to refresh preview access.";
-      setPreviewTokenState({ status: "failed", error: message, refreshedAt: null });
-      setPreviewStartError(message);
-      return false;
-    } finally {
-      window.clearTimeout(timer);
-      signal?.removeEventListener("abort", abort);
-    }
-  }, []);
-
+      const timeout = new AbortController();
+      const timer = window.setTimeout(() => timeout.abort(), 15000);
+      const abort = () => timeout.abort();
+      signal?.addEventListener("abort", abort, { once: true });
+      try {
+        const response = await fetch(
+          `/api/projects/${projectId}/preview-token/refresh`,
+          {
+            method: "POST",
+            credentials: "include",
+            signal: timeout.signal,
+          },
+        );
+        if (!response.ok) throw new Error("Unable to refresh preview access.");
+        setPreviewTokenState({
+          status: "ready",
+          error: null,
+          refreshedAt: new Date().toISOString(),
+        });
+        setPreviewStartError(null);
+        return true;
+      } catch (cause) {
+        if (signal?.aborted) return false;
+        const message =
+          cause instanceof Error && cause.name === "AbortError"
+            ? "Timed out while preparing secure preview access."
+            : "Unable to refresh preview access.";
+        setPreviewTokenState({
+          status: "failed",
+          error: message,
+          refreshedAt: null,
+        });
+        setPreviewStartError(message);
+        return false;
+      } finally {
+        window.clearTimeout(timer);
+        signal?.removeEventListener("abort", abort);
+      }
+    },
+    [],
+  );
 
   const { isActive } = useUserPresence({
     projectId: project?.id ?? "",
@@ -315,18 +364,32 @@ function ProjectDetailPage() {
   }, [workspace?.project.id, workspace?.fileTree]);
 
   useEffect(() => {
-    if (!project?.id || detailMode !== "preview" || runtimeState.status !== "running" || !runtimeState.previewUrl) {
+    if (
+      !project?.id ||
+      detailMode !== "preview" ||
+      runtimeState.status !== "running" ||
+      !runtimeState.previewUrl
+    ) {
       setPreviewTokenState({ status: "idle", error: null, refreshedAt: null });
       return;
     }
     const abortController = new AbortController();
     void refreshPreviewToken(project.id, abortController.signal);
-    const interval = window.setInterval(() => void refreshPreviewToken(project.id, abortController.signal), 10 * 60 * 1000);
+    const interval = window.setInterval(
+      () => void refreshPreviewToken(project.id, abortController.signal),
+      10 * 60 * 1000,
+    );
     return () => {
       abortController.abort();
       window.clearInterval(interval);
     };
-  }, [detailMode, project?.id, refreshPreviewToken, runtimeState.previewUrl, runtimeState.status]);
+  }, [
+    detailMode,
+    project?.id,
+    refreshPreviewToken,
+    runtimeState.previewUrl,
+    runtimeState.status,
+  ]);
 
   const selectedNode = useMemo(
     () => findNode(workspace?.fileTree ?? [], selectedNodeId),
@@ -376,47 +439,75 @@ function ProjectDetailPage() {
     if (previous && !current) {
       setProject((currentProject) =>
         currentProject && currentProject.processingStatus === "processing"
-          ? { ...currentProject, processingStatus: "idle", activeRunId: undefined }
+          ? {
+              ...currentProject,
+              processingStatus: "idle",
+              activeRunId: undefined,
+            }
           : currentProject,
       );
       if (project?.id) {
-        void queryClient.invalidateQueries({ queryKey: ["project", project.id] });
-        void queryClient.invalidateQueries({ queryKey: ["project-files", project.id] });
-        void queryClient.invalidateQueries({ queryKey: ["project-preview", project.id] });
-        void queryClient.invalidateQueries({ queryKey: ["project-runs", project.id] });
+        void queryClient.invalidateQueries({
+          queryKey: ["project", project.id],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ["project-files", project.id],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ["project-preview", project.id],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ["project-runs", project.id],
+        });
         void router.invalidate();
       }
     }
   }, [chatState.activeRun?.runId, project?.id, queryClient, router]);
 
+  const handleSaveProjectSettings = useCallback(
+    async (settings: { name?: string; selectedStoreSlug?: string | null }) => {
+      if (!project || settingsSaving) return;
+      setSettingsSaving(true);
+      setSettingsSaveError(null);
+      setSettingsSaveSuccess(null);
 
-  const handleSaveProjectSettings = useCallback(async (settings: { name?: string; selectedStoreSlug?: string | null }) => {
-    if (!project || settingsSaving) return;
-    setSettingsSaving(true);
-    setSettingsSaveError(null);
-    setSettingsSaveSuccess(null);
-
-    try {
-      const updatedProject = await saveProjectSettings({
-        data: {
-          projectId: project.id,
-          name: settings.name ?? settingsProjectName,
-          selectedStoreSlug: settings.selectedStoreSlug ?? settingsSelectedStoreSlug ?? null,
-        },
-      });
-      setProject(updatedProject);
-      setSettingsProjectName(updatedProject.name);
-      setSettingsSelectedStoreSlug(updatedProject.selectedStoreSlug ?? null);
-      queryClient.setQueryData(["project-workspace", project.id], (current: ProjectWorkspace | undefined) =>
-        current ? { ...current, project: updatedProject } : current,
-      );
-      setSettingsSaveSuccess("Project settings saved.");
-    } catch (cause) {
-      setSettingsSaveError(cause instanceof Error ? cause.message : "Unable to save project settings.");
-    } finally {
-      setSettingsSaving(false);
-    }
-  }, [project, queryClient, saveProjectSettings, settingsProjectName, settingsSaving, settingsSelectedStoreSlug]);
+      try {
+        const updatedProject = await saveProjectSettings({
+          data: {
+            projectId: project.id,
+            name: settings.name ?? settingsProjectName,
+            selectedStoreSlug:
+              settings.selectedStoreSlug ?? settingsSelectedStoreSlug ?? null,
+          },
+        });
+        setProject(updatedProject);
+        setSettingsProjectName(updatedProject.name);
+        setSettingsSelectedStoreSlug(updatedProject.selectedStoreSlug ?? null);
+        queryClient.setQueryData(
+          ["project-workspace", project.id],
+          (current: ProjectWorkspace | undefined) =>
+            current ? { ...current, project: updatedProject } : current,
+        );
+        setSettingsSaveSuccess("Project settings saved.");
+      } catch (cause) {
+        setSettingsSaveError(
+          cause instanceof Error
+            ? cause.message
+            : "Unable to save project settings.",
+        );
+      } finally {
+        setSettingsSaving(false);
+      }
+    },
+    [
+      project,
+      queryClient,
+      saveProjectSettings,
+      settingsProjectName,
+      settingsSaving,
+      settingsSelectedStoreSlug,
+    ],
+  );
 
   function requestDeleteProject() {
     setDeleteError(null);
@@ -432,7 +523,9 @@ function ProjectDetailPage() {
       setDeleteConfirmOpen(false);
       void navigate({ to: "/projects" as never });
     } catch (cause) {
-      setDeleteError(cause instanceof Error ? cause.message : "Unable to delete project.");
+      setDeleteError(
+        cause instanceof Error ? cause.message : "Unable to delete project.",
+      );
     } finally {
       setDeletePending(false);
     }
@@ -583,7 +676,10 @@ function ProjectDetailPage() {
     setSending(false);
   }
 
-  async function handleSelectOption(messageId: string, optionId: string): Promise<boolean> {
+  async function handleSelectOption(
+    messageId: string,
+    optionId: string,
+  ): Promise<boolean> {
     if (!project) return false;
     const message = messages.find((item) => item.id === messageId);
     if (!message?.runId) return false;
@@ -613,7 +709,11 @@ function ProjectDetailPage() {
     agentStream.markStopping();
     setProject((currentProject) =>
       currentProject
-        ? { ...currentProject, processingStatus: "idle", activeRunId: undefined }
+        ? {
+            ...currentProject,
+            processingStatus: "idle",
+            activeRunId: undefined,
+          }
         : currentProject,
     );
     // Fire-and-forget; the run.stopped event will clear the skeleton.
@@ -624,12 +724,15 @@ function ProjectDetailPage() {
 
   const handleStartPreview = useCallback(async () => {
     if (!project?.id || previewStarting) return;
-    if (!isProjectPreviewStartAvailable({
-      projectStatus: project.status,
-      projectProcessingStatus: project.processingStatus,
-      runtimeStatus: runtimeState.status,
-      previewUrl: runtimeState.previewUrl,
-    })) return;
+    if (
+      !isProjectPreviewStartAvailable({
+        projectStatus: project.status,
+        projectProcessingStatus: project.processingStatus,
+        runtimeStatus: runtimeState.status,
+        previewUrl: runtimeState.previewUrl,
+      })
+    )
+      return;
     setPreviewStarting(true);
     setPreviewStartError(null);
     setPreviewDraftPath("/");
@@ -682,30 +785,57 @@ function ProjectDetailPage() {
     } finally {
       setPreviewStarting(false);
     }
-  }, [project, previewStarting, refreshPreviewToken, router, runtimeState.previewUrl, runtimeState.status, startProjectPreview]);
+  }, [
+    project,
+    previewStarting,
+    refreshPreviewToken,
+    router,
+    runtimeState.previewUrl,
+    runtimeState.status,
+    startProjectPreview,
+  ]);
 
   return (
-    <main className={`h-dvh min-h-0 overflow-hidden bg-(--app-bg) text-(--app-text) ${resizingChat ? "cursor-col-resize select-none" : ""}`}>
+    <main
+      className={`project-detail-shell ${resizingChat ? "cursor-col-resize select-none" : ""}`}
+    >
       {workspace && project ? (
-        <div className="flex h-full min-h-0 min-w-0 overflow-hidden">
+        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+          <ProjectDetailTopBar
+            project={project}
+            processing={isProcessing}
+            detailMode={detailMode}
+            chatVisible={chatVisible}
+            user={user}
+            onModeChange={setDetailMode}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onToggleChat={toggleChat}
+          />
+
+          <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
           <div
-            className="flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-(--app-border) bg-(--app-panel) transition-[width,border-width] duration-300 ease-in-out"
+            className="project-chat-panel"
             style={{
               width: chatVisible ? chatWidth : 0,
               borderRightWidth: chatVisible ? undefined : 0,
               transitionDuration: resizingChat ? "0ms" : undefined,
             }}
           >
-            <ChatHeader
-              project={project}
-              processing={isProcessing}
-              onBack={() => void navigate({ to: "/projects" as never })}
-              onOpenSettings={() => setSettingsOpen(true)}
-              onToggleChat={toggleChat}
+            <ChatPanelTabs
+              activeTab="chat"
+              fileCount={countFileNodes(workspace.fileTree)}
+              versionCount={countRunVersions(messages)}
+              onTabChange={(tab) => {
+                if (tab === "files") setDetailMode("code");
+              }}
+            />
+            <ChatPanelMeta
+              domain={project.selectedStoreSlug ? `${project.selectedStoreSlug}.lumen.app` : null}
+              messageCount={messages.length}
             />
 
-            <div className="min-h-0 flex-1 overflow-hidden px-sm">
-              <div className="flex h-full min-h-0 flex-col gap-sm">
+            <div className="min-h-0 flex-1 overflow-hidden px-3">
+              <div className="flex h-full min-h-0 flex-col gap-2">
                 <div className="min-h-0 flex-1 overflow-hidden">
                   <ProjectMessagesPanel
                     messages={messages}
@@ -717,9 +847,12 @@ function ProjectDetailPage() {
                     onSelectOption={handleSelectOption}
                     onPlanAction={async (message, action) => {
                       if (!message.runId) return;
-                      const result = await agentStream.submitAnswer(message.runId, {
-                        planAction: action,
-                      });
+                      const result = await agentStream.submitAnswer(
+                        message.runId,
+                        {
+                          planAction: action,
+                        },
+                      );
                       if (!result.ok) {
                         setSendError(result.message);
                       }
@@ -731,9 +864,12 @@ function ProjectDetailPage() {
                     }
                     onSubmitFreeText={async (message, freeText) => {
                       if (!message.runId) return false;
-                      const result = await agentStream.submitAnswer(message.runId, {
-                        freeText,
-                      });
+                      const result = await agentStream.submitAnswer(
+                        message.runId,
+                        {
+                          freeText,
+                        },
+                      );
                       if (!result.ok) {
                         setSendError(result.message);
                         return false;
@@ -745,7 +881,7 @@ function ProjectDetailPage() {
               </div>
             </div>
 
-            <div className="shrink-0 px-sm">
+            <div className="shrink-0 px-3 pb-2">
               <PlanChecklist
                 tasks={chatState.activeRun?.tasks ?? null}
                 statuses={chatState.activeRun?.taskStatuses ?? {}}
@@ -753,7 +889,7 @@ function ProjectDetailPage() {
               />
             </div>
 
-            <div className="shrink-0 p-sm">
+            <div className="shrink-0 border-t border-hairline bg-paper/95 px-3 py-3">
               <MessageComposer
                 value={draft}
                 reasoningEffort={reasoningEffort}
@@ -773,9 +909,9 @@ function ProjectDetailPage() {
             </div>
           </div>
 
-          <button
+          <Button
             type="button"
-            className={`left-0 z-[12000] group relative w-2 shrink-0 cursor-col-resize touch-none border-0 p-0 outline-none transition-[opacity] duration-200 ${chatVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+            className={`left-0 z-40 group relative w-2 shrink-0 cursor-col-resize touch-none border-0 p-0 outline-none transition-[opacity] duration-200 ${chatVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}
             aria-label="Resize chat panel"
             onPointerDown={beginResize}
             onPointerMove={resize}
@@ -784,34 +920,27 @@ function ProjectDetailPage() {
             onLostPointerCapture={endResize}
           >
             <span
-              className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--app-border-strong)] transition-colors duration-200 group-hover:bg-[var(--app-accent)]"
+              className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-hairline-soft transition-colors duration-200 group-hover:bg-ink"
               aria-hidden="true"
             />
-          </button>
+          </Button>
 
-          <section className="flex min-h-0 min-w-0 flex-1 shrink-0 flex-col overflow-hidden bg-(--app-panel) transition-colors duration-300">
+          <section className="project-preview-shell">
             <PreviewToolbar
-              chatVisible={chatVisible}
-              mode={detailMode}
               previewDraftPath={previewDraftPath}
               previewPathError={previewPathError}
               previewReady={previewReady}
               previewControlsLoading={previewControlsLoading}
               activePreviewUrl={activePreviewUrl}
               runtimeState={runtimeState}
-              previewStarting={previewStarting}
               projectStatus={project.status}
               projectProcessingStatus={project.processingStatus}
-              onToggleChat={toggleChat}
-              onModeChange={setDetailMode}
               onPathChange={handlePreviewPathChange}
               onPathSubmit={handlePreviewReload}
               onPathReset={handlePreviewPathReset}
-              onStartPreview={handleStartPreview}
-              user={user}
             />
-            <div className="min-h-0 flex-1 overflow-hidden p-sm">
-              <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-md  border-[var(--app-border)] bg-[var(--app-panel)] transition-colors duration-300">
+            <div className="min-h-0 flex-1 overflow-hidden p-2 lg:p-3">
+              <div className="project-preview-frame">
                 {detailMode === "preview" ? (
                   <PreviewWorkspace
                     previewUrl={activePreviewUrl}
@@ -822,7 +951,11 @@ function ProjectDetailPage() {
                     projectStatus={project.status}
                     projectProcessingStatus={project.processingStatus}
                     previewTokenState={previewTokenState}
-                    onRefreshPreviewToken={() => project?.id ? void refreshPreviewToken(project.id) : undefined}
+                    onRefreshPreviewToken={() =>
+                      project?.id
+                        ? void refreshPreviewToken(project.id)
+                        : undefined
+                    }
                     previewStartError={previewStartError}
                     onStartPreview={handleStartPreview}
                   />
@@ -840,7 +973,16 @@ function ProjectDetailPage() {
                 )}
               </div>
             </div>
+            {runtimeState.status === "running" ? (
+              <div className="build-status-pill" aria-live="polite">
+                <span className="build-status-dot" aria-hidden="true" />
+                Build · live
+                <span className="text-paper/50" aria-hidden="true">·</span>
+                <span>v12</span>
+              </div>
+            ) : null}
           </section>
+          </div>
           <ProjectSettingsDrawer
             open={settingsOpen}
             project={project}
@@ -879,7 +1021,7 @@ function ProjectDetailPage() {
           />
         </div>
       ) : (
-        <div className="p-md">
+        <div className="p-4">
           <EmptyState
             title="Project not found"
             description="This project is no longer available or no valid project is selected."
@@ -898,7 +1040,7 @@ function runtimeStatusBadge(
     case "installing":
       return {
         label: "Installing...",
-        tone: "border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)]",
+        tone: "border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-chalk))] text-[rgb(var(--color-muted))]",
         icon: <Loader2 aria-hidden="true" className="animate-spin" size={12} />,
       };
     case "installed":
@@ -907,25 +1049,25 @@ function runtimeStatusBadge(
           state.durationMs !== null
             ? `Installed (${(state.durationMs / 1000).toFixed(1)}s)`
             : "Installed",
-        tone: "border-[var(--app-border)] bg-[var(--color-block-lime)] text-[var(--app-on-color-block)]",
+        tone: "border-success-bg bg-success-bg text-success-fg",
         icon: <CheckCircle2 aria-hidden="true" size={12} />,
       };
     case "starting":
       return {
         label: "Starting...",
-        tone: "border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)]",
+        tone: "border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-chalk))] text-[rgb(var(--color-muted))]",
         icon: <Loader2 aria-hidden="true" className="animate-spin" size={12} />,
       };
     case "running":
       return {
         label: "Running",
-        tone: "border-[var(--app-border)] bg-[var(--color-block-lime)] text-[var(--app-on-color-block)]",
+        tone: "border-success-bg bg-success-bg text-success-fg",
         icon: <CheckCircle2 aria-hidden="true" size={12} />,
       };
     case "stopped":
       return {
         label: previewStarting ? "Resuming..." : "Stopped",
-        tone: "border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)]",
+        tone: "border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-chalk))] text-[rgb(var(--color-muted))]",
         icon: previewStarting ? (
           <Loader2 aria-hidden="true" className="animate-spin" size={12} />
         ) : (
@@ -935,13 +1077,13 @@ function runtimeStatusBadge(
     case "error":
       return {
         label: state.error ? `Error: ${state.error}` : "Error",
-        tone: "border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] text-[var(--app-danger-text)]",
+        tone: "border-[rgb(var(--color-hairline-soft))] bg-[rgb(var(--color-danger-bg))] text-[rgb(var(--color-danger-fg))]",
         icon: <TriangleAlert aria-hidden="true" size={12} />,
       };
     case "fixing":
       return {
         label: `Fixing error (attempt ${state.fixAttempt ?? "?"}/3)...`,
-        tone: "border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)]",
+        tone: "border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-chalk))] text-[rgb(var(--color-muted))]",
         icon: (
           <RefreshCw aria-hidden="true" className="animate-spin" size={12} />
         ),
@@ -965,58 +1107,57 @@ function ChatHeader({
   onToggleChat: () => void;
 }) {
   return (
-    <header className="shrink-0 border-b border-[var(--app-border)] p-sm">
-      <div className="flex min-w-0 items-start gap-sm">
-        <button
-          className="mt-xxs inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+    <header className="shrink-0 border-b border-[rgb(var(--color-hairline))] p-2">
+      <div className="flex min-w-0 items-start gap-2">
+        <Button
+          className="mt-xxs inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-chalk))] text-[rgb(var(--color-muted))] transition-colors duration-200 hover:text-[rgb(var(--color-ink))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-ink) / 0.2)]"
           type="button"
           onClick={onBack}
           aria-label="Back to projects"
         >
           <ArrowLeft aria-hidden="true" size={16} />
-        </button>
+        </Button>
         <div className="min-w-0 flex-1">
           <h1 className="m-0 truncate text-[14px] font-[580] leading-4 tracking-[-0.015em]">
             {project.name}
           </h1>
 
-          <div className="mt-xs flex flex-wrap gap-xs text-[12px] leading-4 text-[var(--app-muted)]">
-            <span className="rounded-pill bg-[var(--app-control)] px-xs py-xxs">
+          <div className="mt-1 flex flex-wrap gap-1 text-[12px] leading-4 text-[rgb(var(--color-muted))]">
+            <span className="rounded-pill bg-[rgb(var(--color-chalk))] px-1 py-xxs">
               {project.status !== 0 ? statusLabel[project.status] : "Inactive"}
             </span>
             {processing ? (
-              <span className="inline-flex items-center gap-xxs rounded-pill bg-[var(--color-block-lime)] px-xs py-xxs text-[var(--app-on-color-block)]">
+              <span className="inline-flex items-center gap-0.5 rounded-pill bg-[var(--color-block-lime)] px-1 py-xxs text-[rgb(var(--color-paper))]">
                 <Loader2
                   aria-hidden="true"
-                  className="animate-spin text-[var(--app-icon-on-color-block)]"
+                  className="animate-spin text-[rgb(var(--color-paper))]"
                   size={12}
                 />
                 Generating
               </span>
             ) : null}
-            <span className="rounded-pill bg-[var(--app-control)] px-xs py-xxs">
+            <span className="rounded-pill bg-[rgb(var(--color-chalk))] px-1 py-xxs">
               Edited {new Date(project.updatedAt).toLocaleDateString("en-US")}
             </span>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-xs">
-          <button
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-chalk))] text-[rgb(var(--color-muted))] transition-colors duration-200 hover:text-[rgb(var(--color-ink))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-ink) / 0.2)]"
             type="button"
             onClick={onOpenSettings}
             aria-label="Open project settings"
           >
             <Settings aria-hidden="true" size={16} />
-          </button>
-          <button
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+          </Button>
+          <Button
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-chalk))] text-[rgb(var(--color-muted))] transition-colors duration-200 hover:text-[rgb(var(--color-ink))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-ink) / 0.2)]"
             type="button"
             onClick={onToggleChat}
             aria-label="Hide chat"
           >
             <PanelLeftClose aria-hidden="true" size={16} />
-          </button>
-
+          </Button>
         </div>
       </div>
     </header>
@@ -1024,179 +1165,158 @@ function ChatHeader({
 }
 
 function PreviewToolbar({
-  chatVisible,
-  mode,
   previewDraftPath,
   previewPathError,
   previewReady,
   previewControlsLoading,
   activePreviewUrl,
   runtimeState,
-  previewStarting,
   projectStatus,
   projectProcessingStatus,
-  onToggleChat,
-  onModeChange,
   onPathChange,
   onPathSubmit,
   onPathReset,
-  onStartPreview,
-  user,
 }: {
-  chatVisible: boolean;
-  mode: DetailMode;
   previewDraftPath: string;
   previewPathError: string | null;
   previewReady: boolean;
   previewControlsLoading: boolean;
   activePreviewUrl: string | null;
   runtimeState: DevRuntimeUIState;
-  previewStarting: boolean;
   projectStatus: Project["status"];
   projectProcessingStatus: Project["processingStatus"];
-  onToggleChat: () => void;
-  onModeChange: (mode: DetailMode) => void;
   onPathChange: (path: string) => void;
   onPathSubmit: () => void;
   onPathReset: () => void;
-  onStartPreview: () => void;
-  user?: import("@/auth/types").AuthUserSummary;
 }) {
-  const canStartPreview = isProjectPreviewStartAvailable({
+  const previewTemporarilyUnavailable = isProjectPreviewTemporarilyUnavailable({
     projectStatus,
     projectProcessingStatus,
-    runtimeStatus: runtimeState.status,
-    previewUrl: runtimeState.status === "running" ? runtimeState.previewUrl : null,
   });
-  const previewTemporarilyUnavailable = isProjectPreviewTemporarilyUnavailable({ projectStatus, projectProcessingStatus });
   const pathInputId = "preview-path";
+  const [activeDevice, setActiveDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const versionLabel = "v12";
+  const lastBuildLabel = runtimeState.status === "running" ? "last build 23s ago" : "no preview";
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-sm pt-3  border-[var(--app-border)] px-sm transition-colors duration-300">
-      {!chatVisible ? (
-        <button
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
-          type="button"
-          onClick={onToggleChat}
-          aria-label="Show chat"
-        >
-          <PanelLeftOpen aria-hidden="true" size={16} />
-        </button>
-      ) : null}
-
-      <div
-        className="flex shrink-0 rounded-md border border-[var(--app-border)] bg-[var(--app-control)] p-xxs"
-        role="group"
-        aria-label="Choose view mode"
-      >
-        <button
-          className={`inline-flex h-6 items-center gap-xs rounded-sm border-0 px-sm text-[12px] transition ${mode === "preview" ? "bg-[var(--color-block-lime)] text-[var(--app-on-color-block)] [&_svg]:text-[var(--app-icon-on-color-block)] ring-1 ring-[var(--color-primary)]" : "bg-transparent text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"}`}
-          type="button"
-          aria-pressed={mode === "preview"}
-          onClick={() => onModeChange("preview")}
-        >
-          <Globe aria-hidden="true" size={15} />
-          Preview
-        </button>
-        <button
-          className={`inline-flex h-6 items-center gap-xs rounded-sm border-0 px-sm text-[12px] transition ${mode === "code" ? "bg-[var(--color-block-lime)] text-[var(--app-on-color-block)] [&_svg]:text-[var(--app-icon-on-color-block)] ring-1 ring-[var(--color-primary)]" : "bg-transparent text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"}`}
-          type="button"
-          aria-pressed={mode === "code"}
-          onClick={() => onModeChange("code")}
-        >
-          <Code2 aria-hidden="true" size={15} />
-          Code
-        </button>
-      </div>
-
-      <div className="mx-auto flex min-w-0 flex-1 flex-col">
-        <div className="flex min-w-0 items-center gap-xs">
-          <label
-            className={`flex h-9 min-w-0 flex-1 items-center gap-xs rounded-pill border px-sm text-[12px] text-[var(--app-text)] ${previewPathError ? "border-[var(--app-border-strong)] bg-[var(--app-control)]" : "border-[var(--app-border)] bg-[var(--app-control)]"}`}
-            htmlFor={pathInputId}
-          >
-            <Globe
-              aria-hidden="true"
-              className="text-[var(--app-icon-subtle)]"
-              size={14}
-            />
-
-            <input
-              id={pathInputId}
-              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] text-[var(--app-page-text)] outline-none placeholder:text-[var(--app-subtle-text)] disabled:cursor-not-allowed disabled:text-[var(--app-muted)]"
-              value={previewDraftPath}
-              placeholder="/"
-              disabled={!previewReady}
-              aria-invalid={previewPathError ? "true" : undefined}
-              onChange={(event) => onPathChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") onPathSubmit();
-                if (event.key === "Escape") onPathReset();
-              }}
-            />
-          </label>
+    <header className="preview-toolbar">
+      {/* Left: Device toggle */}
+      <div className="flex items-center gap-2">
+        <div className="preview-device-group" role="group" aria-label="Device preview">
           <button
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
             type="button"
-            onClick={onPathSubmit}
-            disabled={!previewReady}
-            aria-label="Reload preview"
+            className={`preview-device-btn ${activeDevice === "desktop" ? "preview-device-btn-active" : ""}`}
+            onClick={() => setActiveDevice("desktop")}
+            aria-label="Desktop"
+            title="Desktop"
           >
-            {previewControlsLoading ? (
-              <Loader2 aria-hidden="true" className="animate-spin" size={15} />
-            ) : (
-              <RefreshCw aria-hidden="true" size={15} />
-            )}
+            <Laptop aria-hidden="true" size={14} />
+          </button>
+          <button
+            type="button"
+            className={`preview-device-btn ${activeDevice === "tablet" ? "preview-device-btn-active" : ""}`}
+            onClick={() => setActiveDevice("tablet")}
+            aria-label="Tablet"
+            title="Tablet — visual only"
+          >
+            <Tablet aria-hidden="true" size={14} />
+          </button>
+          <button
+            type="button"
+            className={`preview-device-btn ${activeDevice === "mobile" ? "preview-device-btn-active" : ""}`}
+            onClick={() => setActiveDevice("mobile")}
+            aria-label="Mobile"
+            title="Mobile — visual only"
+          >
+            <Smartphone aria-hidden="true" size={14} />
           </button>
         </div>
-        {previewPathError ? (
-          <span className="mt-xxs truncate text-[11px] leading-3 text-[var(--app-danger-text)]">
-            {previewPathError}
-          </span>
-        ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-xs">
-        <UserMenu user={user} compact />
-        {previewTemporarilyUnavailable ? (
-          <span className="inline-flex h-8 items-center gap-xxs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm text-[12px] text-[var(--app-muted)]">
-            <Loader2 aria-hidden="true" className="animate-spin" size={13} />
-            Building storefront…
+      {/* Center: URL pill */}
+      <div className="preview-url-pill">
+        <Globe aria-hidden="true" size={14} className="text-muted shrink-0" />
+        <label htmlFor={pathInputId} className="flex-1 min-w-0">
+          <Input
+            id={pathInputId}
+            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-ui-sm text-ink outline-none placeholder:text-subtle disabled:cursor-not-allowed disabled:text-muted"
+            value={previewDraftPath}
+            placeholder="/ — type a path, press Enter"
+            disabled={!previewReady}
+            aria-invalid={previewPathError ? "true" : undefined}
+            onChange={(event) => onPathChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") onPathSubmit();
+              if (event.key === "Escape") onPathReset();
+            }}
+          />
+        </label>
+        {previewPathError ? (
+          <span className="text-eyebrow text-danger-fg shrink-0 truncate max-w-[200px]" title={previewPathError}>
+            {previewPathError}
           </span>
-        ) : canStartPreview ? (
-          <button
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
-            type="button"
-            onClick={onStartPreview}
-            disabled={previewStarting}
-            aria-label="Start preview"
-          >
-            {previewStarting ? (
-              <Loader2 aria-hidden="true" className="animate-spin" size={15} />
-            ) : (
-              <Play aria-hidden="true" size={15} />
-            )}
-          </button>
+        ) : (
+          <>
+            <span aria-hidden="true" className="text-subtle">·</span>
+            <span className="text-eyebrow font-mono text-muted shrink-0">{versionLabel}</span>
+            <span aria-hidden="true" className="text-subtle">·</span>
+            <span className="text-eyebrow text-muted shrink-0">{lastBuildLabel}</span>
+          </>
+        )}
+      </div>
+
+      {/* Right: Actions */}
+      <div className="flex items-center gap-1.5">
+        {previewTemporarilyUnavailable ? (
+          <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-hairline bg-chalk px-2 text-eyebrow text-muted">
+            <Loader2 aria-hidden="true" className="animate-spin" size={12} />
+            Building…
+          </span>
         ) : null}
+        <Button
+          variant="unstyled"
+          type="button"
+          onClick={onPathSubmit}
+          disabled={!previewReady || previewControlsLoading}
+          aria-label="Reload preview"
+          title="Reload preview"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted hover:text-ink hover:bg-ink/[0.04] transition-colors duration-base"
+        >
+          {previewControlsLoading ? (
+            <Loader2 aria-hidden="true" className="animate-spin" size={14} />
+          ) : (
+            <RefreshCw aria-hidden="true" size={14} />
+          )}
+        </Button>
+        <Button
+          variant="unstyled"
+          type="button"
+          disabled
+          aria-label="Inspect"
+          title="Inspect — coming soon"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted opacity-60"
+        >
+          <Code2 aria-hidden="true" size={14} />
+        </Button>
         {activePreviewUrl ? (
           <a
             href={activePreviewUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
-            aria-label="Open preview"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted hover:text-ink hover:bg-ink/[0.04] transition-colors duration-base"
+            aria-label="Open preview in new tab"
+            title="Open preview"
           >
-            <ExternalLink aria-hidden="true" size={15} />
+            <ExternalLink aria-hidden="true" size={14} />
           </a>
         ) : (
-          <button
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] opacity-60"
-            type="button"
-            disabled
+          <span
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted opacity-60"
             aria-label="Open preview"
+            title="Preview not available"
           >
-            <ExternalLink aria-hidden="true" size={15} />
-          </button>
+            <ExternalLink aria-hidden="true" size={14} />
+          </span>
         )}
       </div>
     </header>
@@ -1229,71 +1349,79 @@ function PreviewWorkspace({
   onRefreshPreviewToken: () => void;
 }) {
   const showIframe = !!previewUrl;
-  const previewTemporarilyUnavailable = isProjectPreviewTemporarilyUnavailable({ projectStatus, projectProcessingStatus });
+  const previewTemporarilyUnavailable = isProjectPreviewTemporarilyUnavailable({
+    projectStatus,
+    projectProcessingStatus,
+  });
   const showInitPanel =
     !previewTemporarilyUnavailable &&
     ["idle", "stopped", "error"].includes(runtimeState.status) &&
     runtimeState.status !== "running";
-  const statusBadge = runtimeStatusBadge(runtimeState, previewStarting);
-
   return (
-    <section className="preview-theme-isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--app-panel)] transition-colors duration-300">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-sm border border-[var(--app-border)] bg-[var(--app-surface)] transition-colors duration-300">
-        <div className="flex h-11 shrink-0 items-center justify-between gap-sm border-b border-[var(--app-border)] bg-[var(--app-panel)] px-sm transition-colors duration-300">
-          <div className="min-w-0">
-            <p className="m-0 text-[12px] font-[580] leading-4 text-[var(--app-text)]">
-              Preview mode
-            </p>
-          </div>
-          {statusBadge ? (
-            <span
-              className={`inline-flex shrink-0 items-center gap-xxs rounded-pill border px-xs py-xxs text-[12px] leading-4 ${statusBadge.tone}`}
-            >
-              {statusBadge.icon}
-              {statusBadge.label}
-            </span>
-          ) : (
-            <span className="inline-flex shrink-0 items-center gap-xxs rounded-pill border border-[var(--app-border)] bg-[var(--app-control)] px-xs py-xxs text-[12px] leading-4 text-[var(--app-muted)]">
-              Idle
-            </span>
-          )}
-        </div>
+    <section className="preview-theme-isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-paper transition-colors duration-300">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-paper transition-colors duration-300">
         {showIframe ? (
           <iframe
             key={`${previewUrl}:${previewTokenState.refreshedAt ?? "ready"}:${previewReloadKey}`}
             src={previewUrl}
             className="h-full w-full border-0"
-            style={{ colorScheme: "light", backgroundColor: "var(--app-panel)" }}
+            style={{
+              colorScheme: "light",
+              backgroundColor: "rgb(var(--color-surface))",
+            }}
             title="Project preview"
             sandbox="allow-scripts allow-same-origin allow-forms"
           />
-        ) : runtimeState.status === "running" && runtimeState.previewUrl && previewTokenState.status === "refreshing" ? (
-          <div className="flex h-full items-center justify-center text-sm text-[var(--app-muted)]">
+        ) : runtimeState.status === "running" &&
+          runtimeState.previewUrl &&
+          previewTokenState.status === "refreshing" ? (
+          <div className="flex h-full items-center justify-center text-sm text-[rgb(var(--color-muted))]">
             Preparing secure preview access…
           </div>
-        ) : runtimeState.status === "running" && runtimeState.previewUrl && previewTokenState.status === "failed" ? (
-          <div className="flex h-full items-center justify-center p-md text-center text-sm text-[var(--app-muted)]">
-            <div className="max-w-sm space-y-sm rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] p-md">
-              <TriangleAlert className="mx-auto text-[var(--app-icon)]" aria-hidden="true" size={22} />
-              <p className="m-0 font-[560] text-[var(--app-text)]">Could not prepare secure preview access.</p>
-              <p className="m-0 text-[12px] leading-5">{previewTokenState.error ?? "Unable to refresh preview access."}</p>
-              <p className="m-0 text-[11px] leading-4 text-[var(--app-muted)]">Runtime is running and preview URL is available. Token refresh failed.</p>
-              <button
+        ) : runtimeState.status === "running" &&
+          runtimeState.previewUrl &&
+          previewTokenState.status === "failed" ? (
+          <div className="flex h-full items-center justify-center p-4 text-center text-sm text-[rgb(var(--color-muted))]">
+            <div className="max-w-sm space-y-2 rounded-md border border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-surface))] p-4">
+              <TriangleAlert
+                className="mx-auto text-[rgb(var(--color-ink))]"
+                aria-hidden="true"
+                size={22}
+              />
+              <p className="m-0 font-[560] text-[rgb(var(--color-ink))]">
+                Could not prepare secure preview access.
+              </p>
+              <p className="m-0 text-[12px] leading-5">
+                {previewTokenState.error ?? "Unable to refresh preview access."}
+              </p>
+              <p className="m-0 text-[11px] leading-4 text-[rgb(var(--color-muted))]">
+                Runtime is running and preview URL is available. Token refresh
+                failed.
+              </p>
+              <Button
                 type="button"
                 onClick={onRefreshPreviewToken}
-                className="inline-flex items-center gap-xxs rounded-pill border border-[var(--app-border)] bg-[var(--app-control)] px-sm py-xs text-[12px] font-[520] text-[var(--app-text)] hover:border-[var(--app-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+                className="inline-flex items-center gap-0.5 rounded-pill border border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-chalk))] px-2 py-1 text-[12px] font-[520] text-[rgb(var(--color-ink))] hover:border-[rgb(var(--color-hairline-soft))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-ink) / 0.2)]"
               >
                 <RefreshCw aria-hidden="true" size={13} />
                 Retry secure access
-              </button>
+              </Button>
             </div>
           </div>
         ) : previewTemporarilyUnavailable ? (
-          <div className="flex h-full items-center justify-center p-md text-center text-sm text-[var(--app-muted)]">
-            <div className="max-w-sm space-y-xs rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] p-md">
-              <Loader2 className="mx-auto animate-spin text-[var(--app-icon-muted)]" aria-hidden="true" size={22} />
-              <p className="m-0 font-[560] text-[var(--app-text)]">Your storefront is being prepared.</p>
-              <p className="m-0 text-[12px] leading-5">Preview will be available when setup is complete.</p>
+          <div className="flex h-full items-center justify-center p-4 text-center text-sm text-[rgb(var(--color-muted))]">
+            <div className="max-w-sm space-y-1 rounded-md border border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-surface))] p-4">
+              <Loader2
+                className="mx-auto animate-spin text-[rgb(var(--color-muted))]"
+                aria-hidden="true"
+                size={22}
+              />
+              <p className="m-0 font-[560] text-[rgb(var(--color-ink))]">
+                Your storefront is being prepared.
+              </p>
+              <p className="m-0 text-[12px] leading-5">
+                Preview will be available when setup is complete.
+              </p>
             </div>
           </div>
         ) : showInitPanel ? (
@@ -1305,7 +1433,7 @@ function PreviewWorkspace({
             onRetry={onStartPreview}
           />
         ) : (
-          <div className="flex h-full items-center justify-center p-md text-center text-sm text-[var(--app-muted)]">
+          <div className="flex h-full items-center justify-center p-4 text-center text-sm text-[rgb(var(--color-muted))]">
             Start preview when your storefront is ready.
           </div>
         )}
@@ -1355,7 +1483,7 @@ function CodeView({
 }) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 gap-0 overflow-hidden xl:grid-cols-[360px_minmax(0,1fr)]">
-      <div className="min-h-0 overflow-auto border-r bg-[var(--app-panel)] p-sm transition-colors duration-300">
+      <div className="min-h-0 overflow-auto border-r bg-[rgb(var(--color-surface))] p-2 transition-colors duration-300">
         <ProjectFileExplorer
           fileTree={fileTree}
           selectedNodeId={selectedNodeId}
@@ -1374,51 +1502,51 @@ function CodeView({
 
 function CodeContentPanel({ node }: { node?: ProjectFileNode }) {
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--app-panel)] transition-colors duration-300">
-      <header className="flex h-12 shrink-0 items-center justify-between gap-sm border-b border-[var(--app-border)] bg-[var(--app-control)] px-sm transition-colors duration-300">
-        <div className="flex min-w-0 items-center gap-xs">
-          <span className="truncate rounded-t-md bg-[var(--app-panel)] px-sm py-xs text-[12px] font-[520]">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[rgb(var(--color-surface))] transition-colors duration-300">
+      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-chalk))] px-2 transition-colors duration-300">
+        <div className="flex min-w-0 items-center gap-1">
+          <span className="truncate rounded-t-md bg-[rgb(var(--color-surface))] px-2 py-1 text-[12px] font-[520]">
             {node?.path ?? "Select a file"}
           </span>
         </div>
-        <div className="flex items-center gap-sm text-[12px] text-[var(--app-muted)]">
+        <div className="flex items-center gap-2 text-[12px] text-[rgb(var(--color-muted))]">
           <span>Read only</span>
-          <button
-            className="inline-flex h-8 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
+          <Button
+            className="inline-flex h-8 items-center gap-1 rounded-md border border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-chalk))] px-2"
             type="button"
           >
             <MessageSquarePlus aria-hidden="true" size={14} />
-          </button>
-          <button
-            className="inline-flex h-8 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
+          </Button>
+          <Button
+            className="inline-flex h-8 items-center gap-1 rounded-md border border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-chalk))] px-2"
             type="button"
           >
             <Copy aria-hidden="true" size={14} />
-          </button>
-          <button
-            className="inline-flex h-8 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-sm"
+          </Button>
+          <Button
+            className="inline-flex h-8 items-center gap-1 rounded-md border border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-chalk))] px-2"
             type="button"
           >
             <Download aria-hidden="true" size={14} />
             Download
-          </button>
+          </Button>
         </div>
       </header>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-md">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-4">
         {node?.content ? (
           node.contentType?.startsWith("image/") ? (
-            <div className="flex min-h-full items-center justify-center bg-[var(--app-control)] p-md">
-              <pre className="whitespace-pre-wrap break-words text-[12px] text-[var(--app-text)]">
+            <div className="flex min-h-full items-center justify-center bg-[rgb(var(--color-chalk))] p-4">
+              <pre className="whitespace-pre-wrap break-words text-[12px] text-[rgb(var(--color-ink))]">
                 {node.content}
               </pre>
             </div>
           ) : (
-            <pre className="builder-truncate-safe min-w-0 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-[var(--app-control)] p-sm font-mono text-[12px] leading-4 text-[var(--app-text)] transition-colors duration-300 [overflow-wrap:anywhere]">
+            <pre className="builder-truncate-safe min-w-0 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-[rgb(var(--color-chalk))] p-2 font-mono text-[12px] leading-4 text-[rgb(var(--color-ink))] transition-colors duration-300 [overflow-wrap:anywhere]">
               {node.content}
             </pre>
           )
         ) : (
-          <p className="m-0 rounded-md border border-[var(--app-border)] bg-[var(--app-control)] p-sm text-[12px] leading-4 text-[var(--app-icon-muted)] transition-colors duration-300">
+          <p className="m-0 rounded-md border border-[rgb(var(--color-hairline))] bg-[rgb(var(--color-chalk))] p-2 text-[12px] leading-4 text-[rgb(var(--color-muted))] transition-colors duration-300">
             Select a file to inspect its content. Folders expand in the file
             tree and do not show content here.
           </p>
@@ -1442,6 +1570,20 @@ function firstFileNode(nodes: ProjectFileNode[]): ProjectFileNode | undefined {
     if (child) return child;
   }
   return undefined;
+}
+
+function countFileNodes(nodes: ProjectFileNode[]): number {
+  return nodes.reduce((total, node) => {
+    if (node.type === "file") return total + 1;
+    return total + countFileNodes(node.children ?? []);
+  }, 0);
+}
+
+function countRunVersions(messages: Message[]): number {
+  const runIds = new Set(
+    messages.map((message) => message.runId).filter((runId): runId is string => !!runId),
+  );
+  return Math.max(1, runIds.size);
 }
 
 function clamp(value: number, min: number, max: number): number {

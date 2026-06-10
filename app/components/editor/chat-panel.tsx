@@ -47,12 +47,12 @@ export function ChatPanel({
       {...rest}
     >
       {/* Project Header */}
-      <div className="flex-shrink-0 flex items-center gap-sm px-lg py-md border-b border-[var(--app-border)]">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--app-color-block)] text-[var(--app-on-color-block)] font-mono text-caption">
+      <div className="flex-shrink-0 flex items-center gap-2 px-6 py-4 border-b border-[var(--app-border)]">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[rgb(var(--color-chalk))] text-[rgb(var(--color-ink))] font-mono text-caption">
           {projectName.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="m-0 text-headline leading-tight tracking-tight truncate-safe">
+          <h2 className="m-0 text-h3 leading-tight tracking-tight truncate-safe">
             {projectName}
           </h2>
         </div>
@@ -61,11 +61,11 @@ export function ChatPanel({
       {/* Message List — the ONLY scrollable element */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto overscroll-contain px-lg py-md scroll-smooth"
+        className="flex-1 overflow-y-auto overscroll-contain px-6 py-4 scroll-smooth"
       >
-        <div className="flex flex-col gap-md">
+        <div className="flex flex-col gap-4">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-xs py-xxl text-center">
+            <div className="flex flex-col items-center justify-center gap-1 py-xxl text-center">
               <p className="m-0 text-body-sm text-[var(--app-muted)]">
                 No messages yet
               </p>
@@ -80,7 +80,7 @@ export function ChatPanel({
                 className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[85%] rounded-lg px-md py-sm ${
+                  className={`max-w-[85%] rounded-lg px-4 py-2 ${
                     msg.role === "user"
                       ? "bg-[var(--app-selected-bg)] text-[var(--app-selected-text)]"
                       : "bg-[var(--app-surface)] text-[var(--app-text)]"
@@ -97,14 +97,14 @@ export function ChatPanel({
       </div>
 
       {/* Chat Input */}
-      <div className="flex-shrink-0 border-t border-[var(--app-composer-border)] px-md py-md">
-        <div className="flex items-end gap-xs">
+      <div className="flex-shrink-0 border-t border-[var(--app-composer-border)] px-4 py-4">
+        <div className="flex items-end gap-1">
           <textarea
             ref={inputRef}
             rows={1}
             placeholder={inputPlaceholder}
             onKeyDown={handleKeyDown}
-            className="flex-1 resize-none rounded-md border border-[var(--app-composer-border)] bg-[var(--app-control)] px-sm py-sm text-body text-[var(--app-text)] placeholder:text-[var(--app-composer-placeholder)] outline-none transition-colors duration-150 focus:border-[var(--app-composer-border-focus)] focus:shadow-[0_0_0_3px_rgb(0_0_0_/_0.08)]"
+            className="flex-1 resize-none rounded-md border border-[var(--app-composer-border)] bg-[var(--app-control)] px-2 py-2 text-body text-[var(--app-text)] placeholder:text-[var(--app-composer-placeholder)] outline-none transition-colors duration-150 focus:border-[var(--app-composer-border-focus)] focus:shadow-[0_0_0_3px_rgb(0_0_0_/_0.08)]"
             aria-label="Chat message input"
           />
           <button
@@ -119,7 +119,7 @@ export function ChatPanel({
                 }
               }
             }}
-            className="flex-shrink-0 rounded-pill bg-[var(--app-pill-bg)] px-lg py-sm text-button text-[var(--app-pill-text)] transition-colors duration-150 hover:bg-[var(--app-pill-hover)]"
+            className="flex-shrink-0 rounded-pill bg-[var(--app-pill-bg)] px-6 py-2 text-ui-sm text-[var(--app-pill-text)] transition-colors duration-150 hover:bg-[var(--app-pill-hover)]"
             aria-label="Send message"
           >
             <svg

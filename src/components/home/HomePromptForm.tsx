@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { ChevronDown, Mic, Plus, SendHorizonal } from "lucide-react";
+import { ArrowRight, FileCode, Image, Link2, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 type HomePromptFormProps = {
   prompt: string;
@@ -10,8 +12,15 @@ type HomePromptFormProps = {
 };
 
 const placeholders = [
-  "Ask Cloud AI to create a website, app, or anything you imagine...",
-  "Build a retail website with products, collections, and checkout pages...",
+  "Example: Landing page for an AI English learning app. Hero with demo, 3 features, pricing, CTA.",
+  "Example: Handmade storefront with 24 SKUs and Stripe checkout sandbox.",
+];
+
+const ATTACHMENTS: Array<{ key: string; label: string; Icon: typeof Image }> = [
+  { key: "image", label: "Image", Icon: Image },
+  { key: "url", label: "URL", Icon: Link2 },
+  { key: "brand", label: "Brand", Icon: Sparkles },
+  { key: "figma", label: "Figma", Icon: FileCode },
 ];
 
 export function HomePromptForm({
@@ -40,86 +49,67 @@ export function HomePromptForm({
     }
   }
 
+  function handleAnimationIteration() {
+    setPlaceholderIndex((current) =>
+      current === placeholders.length - 1 ? 0 : current + 1,
+    );
+  }
+
   return (
-    <form className="mx-auto w-full max-w-[1040px]" onSubmit={handleSubmit}>
-      <div className="motion-lift rounded-lg border border-[var(--app-composer-border)] bg-[var(--app-composer-bg)] p-md text-[var(--app-composer-text)] focus-within:border-[var(--app-composer-border-focus)] focus-within:ring-2 focus-within:ring-[var(--app-focus-ring)] sm:p-lg">
-        <label className="sr-only" htmlFor="project-prompt">
-          Describe what you want to build
-        </label>
-        <div className="relative min-h-[112px]">
-          {!prompt ? (
-            <span
-              className="pointer-events-none absolute left-0 top-0 max-w-full overflow-hidden whitespace-nowrap text-body font-[330] leading-[1.45] text-[var(--app-subtle-text)] [animation:prompt-placeholder-reveal_4.8s_ease-in-out_infinite]"
-              onAnimationIteration={() =>
-                setPlaceholderIndex((current) =>
-                  current === placeholders.length - 1 ? 0 : current + 1,
-                )
-              }
-            >
-              {placeholder}
+    <form className="composer" onSubmit={handleSubmit}>
+      <label className="sr-only" htmlFor="project-prompt">
+        Describe what you want to build
+      </label>
+      <Textarea
+        id="project-prompt"
+        className="composer-textarea"
+        value={prompt}
+        placeholder={placeholder}
+        disabled={loading}
+        onChange={(event) => onPromptChange(event.target.value)}
+        onKeyDown={handleKeyDown}
+        onAnimationIteration={handleAnimationIteration}
+      />
+
+      <div className="border-t border-hairline/60 pt-2">
+        <div className="composer-row">
+          <div className="composer-attach">
+            {ATTACHMENTS.map(({ key, label, Icon }) => (
+              <Button
+                key={key}
+                variant="unstyled"
+                className="composer-attach-btn"
+                aria-label={label}
+                title={`${label} — coming soon`}
+                disabled
+              >
+                <Icon aria-hidden="true" size={14} />
+                <span>{label}</span>
+              </Button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="hidden font-mono text-eyebrow text-subtle sm:inline">
+              ⌘ + ↵
             </span>
-          ) : null}
-          <textarea
-            id="project-prompt"
-            className="relative min-h-[112px] w-full resize-none border-0 bg-transparent p-0 text-body font-[330] leading-[1.45] text-[var(--app-composer-text)] outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            value={prompt}
-            placeholder=""
-            disabled={loading}
-            onChange={(event) => onPromptChange(event.target.value)}
-            onKeyDown={handleKeyDown}
-          />
-        </div>
-
-        <div className="mt-md flex items-end justify-between gap-sm">
-          <button
-            className="motion-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] outline-none hover:border-[var(--app-border-strong)] hover:text-[var(--app-icon)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
-            type="button"
-            aria-label="Add attachment"
-            disabled={loading}
-          >
-            <Plus aria-hidden="true" size={24} strokeWidth={1.8} />
-          </button>
-
-          <div className="flex items-center gap-sm text-[var(--app-icon-muted)]">
-            <button
-              className="motion-press inline-flex h-10 items-center gap-xxs rounded-pill border border-transparent px-sm text-button font-[480] outline-none hover:border-[var(--app-border)] hover:bg-[var(--app-control)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
-              type="button"
-              disabled={loading}
-            >
-              Build
-              <ChevronDown aria-hidden="true" size={16} />
-            </button>
-            <button
-              className="motion-press hidden h-10 w-10 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] outline-none hover:border-[var(--app-border-strong)] hover:text-[var(--app-icon)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 sm:inline-flex"
-              type="button"
-              aria-label="Use microphone"
-              disabled={loading}
-            >
-              <Mic aria-hidden="true" size={20} strokeWidth={1.8} />
-            </button>
-            <button
-              className="motion-press inline-flex h-11 w-11 items-center justify-center rounded-full bg-[var(--app-pill-bg)] text-[var(--app-pill-text)] outline-none hover:bg-[var(--app-pill-hover)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45 [&_svg]:text-[var(--app-icon-selected)]"
+            <Button
+              variant="default"
               type="submit"
               disabled={!canSubmit}
               aria-label={loading ? "Building project..." : "Build project"}
               aria-busy={loading}
             >
-              <SendHorizonal
-                aria-hidden="true"
-                className={loading ? "animate-pulse" : ""}
-                size={22}
-              />
-              {loading ? (
-                <span className="sr-only">Building project...</span>
-              ) : null}
-            </button>
+              {loading ? "Building..." : "Start build"}
+              <ArrowRight aria-hidden="true" size={14} />
+            </Button>
           </div>
         </div>
       </div>
 
       {error ? (
         <p
-          className="mx-auto mt-sm max-w-[1040px] rounded-md border border-[var(--app-border)] bg-[var(--app-danger-bg)] p-sm text-[14px] leading-5 text-[var(--app-danger-text)]"
+          className="mt-2 rounded-input border border-hairline bg-danger-bg p-3 text-ui-sm text-danger-fg"
           role="alert"
           aria-live="assertive"
         >

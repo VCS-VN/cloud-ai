@@ -9,7 +9,7 @@ const Command = forwardRef<
   <CommandPrimitive
     ref={ref}
     className={cn(
-      "flex h-full w-full flex-col overflow-hidden rounded-md bg-[var(--app-bg)] text-[var(--app-text)]",
+      "flex h-full w-full flex-col overflow-hidden rounded-card bg-surface text-ink",
       className,
     )}
     {...props}
@@ -22,13 +22,13 @@ const CommandInput = forwardRef<
   ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
 >(({ className, ...props }, ref) => (
   <div
-    className="flex items-center border-b border-[var(--app-border)] px-md"
+    className="flex items-center border-b border-hairline px-4"
     cmdk-input-wrapper=""
   >
     <CommandPrimitive.Input
       ref={ref}
       className={cn(
-        "flex h-11 w-full bg-transparent py-xs text-[15px] text-[var(--app-text)] outline-none placeholder:text-[var(--app-muted)] disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-control-lg w-full bg-transparent py-2 text-body text-ink outline-none placeholder:text-subtle disabled:cursor-not-allowed disabled:opacity-50",
         className,
       )}
       {...props}
@@ -55,7 +55,7 @@ const CommandEmpty = forwardRef<
 >((props, ref) => (
   <CommandPrimitive.Empty
     ref={ref}
-    className="py-md text-center text-[14px] text-[var(--app-muted)]"
+    className="py-4 text-center text-body text-muted"
     {...props}
   />
 ));
@@ -68,8 +68,8 @@ const CommandGroup = forwardRef<
   <CommandPrimitive.Group
     ref={ref}
     className={cn(
-      "overflow-hidden p-xs text-[var(--app-text)]",
-      "[&_[cmdk-group-heading]]:px-sm [&_[cmdk-group-heading]]:py-xs [&_[cmdk-group-heading]]:text-[12px] [&_[cmdk-group-heading]]:font-[580] [&_[cmdk-group-heading]]:text-[var(--app-muted)]",
+      "overflow-hidden p-2 text-ink",
+      "[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted",
       className,
     )}
     {...props}
@@ -83,7 +83,7 @@ const CommandSeparator = forwardRef<
 >(({ className, ...props }, ref) => (
   <CommandPrimitive.Separator
     ref={ref}
-    className={cn("-mx-xs h-px bg-[var(--app-border)]", className)}
+    className={cn("-mx-2 h-px bg-hairline", className)}
     {...props}
   />
 ));
@@ -96,8 +96,8 @@ const CommandItem = forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-pointer select-none items-center rounded-md px-sm py-xs text-[14px] text-[var(--app-text)] outline-none",
-      "data-[selected=true]:bg-[var(--app-control)] data-[selected=true]:text-[var(--app-text)]",
+      "relative flex cursor-pointer select-none items-center rounded-md px-3 py-2 text-body text-ink outline-none",
+      "data-[selected=true]:bg-chalk data-[selected=true]:text-ink",
       "data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
       className,
     )}

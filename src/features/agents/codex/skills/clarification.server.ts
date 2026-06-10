@@ -1,4 +1,4 @@
-import { BUILDER_RUN_LOCALE_VI } from "@/features/agents/ui/builder-run-i18n";
+import { BUILDER_RUN_LOCALE_EN } from "@/features/agents/ui/builder-run-i18n";
 import type { SelectionPending } from "./selection.server";
 import type { LoadedSkill } from "./skill-loader.server";
 
@@ -63,7 +63,7 @@ export function buildClarificationPrompt(input: {
   });
 
   return {
-    question: BUILDER_RUN_LOCALE_VI.clarification.questionScaffold,
+    question: BUILDER_RUN_LOCALE_EN.clarification.questionScaffold,
     options,
   };
 }

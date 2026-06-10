@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "../common/EmptyState";
 import { ErrorState } from "../common/ErrorState";
 import { LoadingState } from "../common/LoadingState";
@@ -16,10 +17,19 @@ type ProjectMessagesPanelProps = {
   error?: string;
   onLoadOlder?: () => void;
   onRetryMessage?: (message: Message) => void;
-  onSelectOption?: (messageId: string, optionId: string) => Promise<boolean | void>;
-  onPlanAction?: (message: Message, action: "approve" | "reject") => Promise<void>;
+  onSelectOption?: (
+    messageId: string,
+    optionId: string,
+  ) => Promise<boolean | void>;
+  onPlanAction?: (
+    message: Message,
+    action: "approve" | "reject",
+  ) => Promise<void>;
   awaitingPlanReviewRunId?: string | null;
-  onSubmitFreeText?: (message: Message, freeText: string) => Promise<boolean | void>;
+  onSubmitFreeText?: (
+    message: Message,
+    freeText: string,
+  ) => Promise<boolean | void>;
 };
 
 const STICK_TO_BOTTOM_THRESHOLD = 72;
@@ -27,6 +37,7 @@ const MIN_MESSAGE_HEIGHT_FALLBACK = 56;
 const JUMP_TO_LATEST_MESSAGE_COUNT = 10;
 
 type RenderItem =
+  | { type: "day-divider"; key: string; label: string }
   | { type: "single"; message: Message }
   | { type: "run-group"; runId: string; messages: Message[] };
 
@@ -37,7 +48,18 @@ type RenderItem =
  */
 export function buildRenderItems(messages: Message[]): RenderItem[] {
   const items: RenderItem[] = [];
+  let currentDayKey: string | null = null;
   for (const message of messages) {
+    const dayKey = getMessageDayKey(message.createdAt);
+    if (dayKey !== currentDayKey) {
+      currentDayKey = dayKey;
+      items.push({
+        type: "day-divider",
+        key: dayKey,
+        label: formatDayDivider(message.createdAt),
+      });
+    }
+
     if (message.role !== "agent" || !message.runId) {
       items.push({ type: "single", message });
       continue;
@@ -46,10 +68,38 @@ export function buildRenderItems(messages: Message[]): RenderItem[] {
     if (last && last.type === "run-group" && last.runId === message.runId) {
       last.messages.push(message);
     } else {
-      items.push({ type: "run-group", runId: message.runId, messages: [message] });
+      items.push({
+        type: "run-group",
+        runId: message.runId,
+        messages: [message],
+      });
     }
   }
   return items;
+}
+
+function getMessageDayKey(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function formatDayDivider(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Conversation";
+
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+  if (getMessageDayKey(iso) === getMessageDayKey(today.toISOString())) {
+    return `Today · ${time}`;
+  }
+  if (getMessageDayKey(iso) === getMessageDayKey(yesterday.toISOString())) {
+    return `Yesterday · ${time}`;
+  }
+  return `${d.toLocaleDateString("en-US", { day: "2-digit", month: "2-digit", year: "numeric" })} · ${time}`;
 }
 
 export function ProjectMessagesPanel({
@@ -76,7 +126,10 @@ export function ProjectMessagesPanel({
       ),
     [messages],
   );
-  const renderItems = useMemo(() => buildRenderItems(orderedMessages), [orderedMessages]);
+  const renderItems = useMemo(
+    () => buildRenderItems(orderedMessages),
+    [orderedMessages],
+  );
   const stickToBottomRef = useRef(true);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
@@ -172,7 +225,7 @@ export function ProjectMessagesPanel({
       <section
         id="project-messages-viewport"
         ref={viewportRef}
-        className="builder-scrollbar-hidden flex h-full min-h-0 flex-1 flex-col gap-sm overflow-y-auto pr-xs scroll-smooth"
+        className="builder-scrollbar-hidden flex h-full min-h-0 flex-1 flex-col overflow-y-auto px-1 py-3 scroll-smooth"
         aria-label="Message history"
         onScroll={() => {
           syncScrollState();
@@ -180,19 +233,24 @@ export function ProjectMessagesPanel({
       >
         <div ref={topSentinelRef} className="h-px" aria-hidden="true" />
         {hasMore ? (
-          <button
-            className="mx-auto inline-flex items-center rounded-pill border border-[var(--app-border)] bg-[var(--app-panel-bg)] px-sm py-xxs text-[11px] text-[var(--app-muted)] transition-colors duration-200 hover:border-[var(--app-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+          <Button
+            variant="unstyled"
+            className="load-older-btn"
             type="button"
             onClick={onLoadOlder}
             disabled={loadingOlder}
             aria-busy={loadingOlder}
           >
-            {loadingOlder ? "Loading older messages..." : "Load older messages"}
-          </button>
+            {loadingOlder ? "Loading..." : "Load older messages"}
+          </Button>
         ) : null}
-        <div ref={messageListRef} className="flex flex-col gap-sm">
+        <div ref={messageListRef} className="flex flex-col gap-7">
           {renderItems.map((item) =>
-            item.type === "single" ? (
+            item.type === "day-divider" ? (
+              <div key={`day-${item.key}`} className="msg-day-divider">
+                <span className="msg-day-label">{item.label}</span>
+              </div>
+            ) : item.type === "single" ? (
               <div key={item.message.id} data-message-bubble="true">
                 <MessageBubble
                   message={item.message}
@@ -211,7 +269,7 @@ export function ProjectMessagesPanel({
               <div
                 key={item.runId}
                 data-run-group={item.runId}
-                className="flex flex-col gap-sm border-l border-[var(--app-border-soft)] pl-sm"
+                // className="flex flex-col gap-4 border-l border-hairline-soft pl-4"
               >
                 {item.messages.map((message) => (
                   <div key={message.id} data-message-bubble="true">
@@ -240,7 +298,8 @@ export function ProjectMessagesPanel({
         </div>
       </section>
 
-      <button
+      <Button
+        variant="unstyled"
         type="button"
         onClick={() => {
           const viewport = viewportRef.current;
@@ -249,13 +308,13 @@ export function ProjectMessagesPanel({
           viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
           setShowJumpToLatest(false);
         }}
-        className={`absolute bottom-md right-md inline-flex items-center gap-xs rounded-pill border border-[var(--app-border-strong)] bg-[var(--app-panel-bg)] px-sm py-xs text-[12px] font-medium text-[var(--app-panel-text)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] transition-all duration-200 ease-out hover:-translate-y-px hover:border-[var(--app-border-strong)] hover:bg-[var(--app-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] ${showJumpToLatest ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"}`}
+        className={`jump-latest ${showJumpToLatest ? "jump-latest-visible" : ""}`}
         aria-hidden={!showJumpToLatest}
         tabIndex={showJumpToLatest ? 0 : -1}
       >
-        <ArrowDown className="h-4 w-4 text-[var(--app-icon)] transition-transform duration-200" />
+        <ArrowDown aria-hidden="true" size={14} />
         <span>Jump to latest</span>
-      </button>
+      </Button>
     </div>
   );
 }

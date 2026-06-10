@@ -1,5 +1,6 @@
 import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { useReducer } from "react";
+import { Button } from "@/components/ui/button";
 import type { Message } from "@/shared/project-types";
 
 type ClarificationBubbleProps = {
@@ -48,8 +49,9 @@ export function ClarificationBubble({
             const dimmed = Boolean(metadata.selectedOptionId && !isSelected);
 
             return (
-              <button
+              <Button
                 key={option.id}
+                variant="unstyled"
                 type="button"
                 disabled={disabled}
                 onClick={() => handleSelect(option.id)}
@@ -98,18 +100,18 @@ export function ClarificationBubble({
                   <OptionList title="Pros" items={option.pros} />
                   <OptionList title="Cons" items={option.cons} />
                 </div>
-              </button>
+              </Button>
             );
           })}
           {metadata.customAnswerAllowed !== false ? (
             <p className="text-[11px] italic text-[var(--app-icon-muted)]">
-              Bạn vẫn có thể nhập câu trả lời riêng thay vì chọn option.
+              You can still type your own answer instead of choosing an option.
             </p>
           ) : null}
         </div>
       ) : (
         <p className="text-[11px] italic text-[var(--app-icon-muted)]">
-          Hãy trả lời bằng tin nhắn mới để tiếp tục.
+          Reply with a new message to continue.
         </p>
       )}
     </div>

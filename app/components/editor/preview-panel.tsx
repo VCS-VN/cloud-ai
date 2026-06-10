@@ -186,13 +186,13 @@ export function PreviewPanel() {
   return (
     <div className="flex h-full flex-col bg-[var(--app-panel)] text-[var(--app-text)]">
       {/* Tab bar */}
-      <div className="flex-shrink-0 flex items-center gap-xxs border-b border-[var(--app-border)] px-md py-xs overflow-x-auto">
+      <div className="flex-shrink-0 flex items-center gap-xxs border-b border-[var(--app-border)] px-4 py-1 overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-shrink-0 rounded-pill px-md py-xs text-button transition-all duration-150 ${
+            className={`flex-shrink-0 rounded-pill px-4 py-1 text-ui-sm transition-all duration-150 ${
               activeTab === tab.id
                 ? "bg-[var(--app-selected-bg)] text-[var(--app-selected-text)]"
                 : "bg-[var(--app-control)] text-[var(--app-text)] hover:bg-[var(--app-surface)]"

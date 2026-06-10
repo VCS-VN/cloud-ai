@@ -57,7 +57,7 @@ function getFileIcon(name: string) {
         fill="currentColor"
         opacity="0.32"
       />
-      <text x="20" y="26" textAnchor="middle" fontSize="8" fontWeight="600" fill="currentColor" fontFamily="figmaMono, monospace">
+      <text x="20" y="26" textAnchor="middle" fontSize="8" fontWeight="600" fill="currentColor" fontFamily="var(--font-mono)">
         {ext?.toUpperCase().slice(0, 4)}
       </text>
     </svg>
@@ -83,13 +83,13 @@ export function FileTreeGrid({
   const segments = currentPath.split("/").filter(Boolean);
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto p-md">
+    <div className="flex flex-1 flex-col overflow-y-auto p-4">
       {/* Parent folder navigation */}
       {onNavigateParent && segments.length > 0 && (
         <button
           type="button"
           onClick={onNavigateParent}
-          className="mb-md flex w-fit items-center gap-xs rounded-md px-sm py-xs text-body-sm text-[var(--app-muted)] transition-colors hover:bg-[var(--app-surface)] hover:text-[var(--app-text)]"
+          className="mb-4 flex w-fit items-center gap-1 rounded-md px-2 py-1 text-body-sm text-[var(--app-muted)] transition-colors hover:bg-[var(--app-surface)] hover:text-[var(--app-text)]"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M9 2L4 7L9 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -99,9 +99,9 @@ export function FileTreeGrid({
       )}
 
       {/* File/folder grid — wraps to next line */}
-      <div className="flex flex-wrap gap-md">
+      <div className="flex flex-wrap gap-4">
         {sorted.length === 0 && (
-          <p className="m-0 py-lg text-body-sm text-[var(--app-subtle)]">
+          <p className="m-0 py-6 text-body-sm text-[var(--app-subtle)]">
             This folder is empty
           </p>
         )}
@@ -116,7 +116,7 @@ export function FileTreeGrid({
                 onSelectFile(node);
               }
             }}
-            className="flex w-20 flex-col items-center gap-xs rounded-md px-xs py-sm text-body-sm text-[var(--app-icon-muted)] transition-colors duration-150 hover:bg-[var(--app-surface)] hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+            className="flex w-20 flex-col items-center gap-1 rounded-md px-1 py-2 text-body-sm text-[var(--app-icon-muted)] transition-colors duration-150 hover:bg-[var(--app-surface)] hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
             title={node.name}
           >
             <div className="flex h-12 w-12 items-center justify-center transition-colors">

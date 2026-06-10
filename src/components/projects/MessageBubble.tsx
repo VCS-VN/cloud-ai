@@ -2,14 +2,19 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
-  Clock3,
   HelpCircle,
   Loader2,
   RefreshCw,
   ShieldAlert,
+  Sparkles,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { dumprify } from "@/lib/dumprify";
-import type { AgentMessageKind, DesignVariant, Message } from "@/shared/project-types";
+import type {
+  AgentMessageKind,
+  DesignVariant,
+  Message,
+} from "@/shared/project-types";
 import { PlanMessageContent } from "./PlanMessageContent";
 import { AgentQuestionBubble } from "./AgentQuestionBubble";
 import { ClarificationBubble } from "./ClarificationBubble";
@@ -20,43 +25,42 @@ import { SkillClarificationList } from "@/features/agents/ui/SkillClarificationL
 type MessageBubbleProps = {
   message: Message;
   onRetry?: (message: Message) => void;
-  onSelectOption?: (messageId: string, optionId: string) => Promise<boolean | void>;
-  onPlanAction?: (message: Message, action: "approve" | "reject") => Promise<void>;
+  onSelectOption?: (
+    messageId: string,
+    optionId: string,
+  ) => Promise<boolean | void>;
+  onPlanAction?: (
+    message: Message,
+    action: "approve" | "reject",
+  ) => Promise<void>;
   planAwaitingReview?: boolean;
-  onSubmitFreeText?: (message: Message, freeText: string) => Promise<boolean | void>;
+  onSubmitFreeText?: (
+    message: Message,
+    freeText: string,
+  ) => Promise<boolean | void>;
 };
 
 const MARKDOWN_CLASS =
-  "min-w-0 max-w-full break-words text-[12px] leading-4 text-current [overflow-wrap:anywhere] [&_code]:rounded-sm [&_code]:bg-black/10 [&_code]:px-xxs [&_code]:py-[1px] [&_code]:text-[11px] [&_h1]:my-xxs [&_h1]:text-[13px] [&_h1]:font-semibold [&_h2]:my-xxs [&_h2]:text-[12px] [&_h2]:font-semibold [&_h3]:my-xxs [&_h3]:text-[12px] [&_h3]:font-semibold [&_li]:my-xxs [&_p]:my-xxs [&_pre]:my-xs [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_pre]:rounded-md [&_pre]:bg-black/10 [&_pre]:p-xs [&_ul]:my-xs [&_ul]:pl-md";
+  "msg-prose [&_pre]:my-2 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre [&_pre]:rounded-md [&_pre]:bg-ink/[0.06] [&_pre]:p-2 [&_pre]:text-[12px] [&_pre]:font-mono [&_h1]:mt-2 [&_h1]:text-[14px] [&_h1]:font-semibold [&_h2]:mt-2 [&_h2]:text-[13px] [&_h2]:font-semibold [&_h3]:mt-2 [&_h3]:text-[13px] [&_h3]:font-semibold";
 
 function MarkdownContent({ content }: { content: string }) {
   return (
-    <div className={MARKDOWN_CLASS} dangerouslySetInnerHTML={{ __html: dumprify(content) }} />
+    <div
+      className={MARKDOWN_CLASS}
+      dangerouslySetInnerHTML={{ __html: dumprify(content) }}
+    />
   );
 }
 
 type KindMeta = {
   badge: string;
   icon: typeof HelpCircle;
-  tone: string;
 };
 
 const KIND_META: Partial<Record<AgentMessageKind, KindMeta>> = {
-  clarification: {
-    badge: "Needs your input",
-    icon: HelpCircle,
-    tone: "border-[var(--app-border-strong)] bg-[var(--app-control)] text-[var(--app-panel-text)]",
-  },
-  error: {
-    badge: "Something went wrong",
-    icon: AlertCircle,
-    tone: "border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] text-[var(--app-danger-text)]",
-  },
-  review_required: {
-    badge: "Needs your review",
-    icon: ShieldAlert,
-    tone: "border-[var(--app-border-strong)] bg-[var(--color-block-cream)] text-[var(--app-text)]",
-  },
+  clarification: { badge: "Needs your decision", icon: HelpCircle },
+  error: { badge: "Error occurred", icon: AlertCircle },
+  review_required: { badge: "Needs your review", icon: ShieldAlert },
 };
 
 function AgentBody({
@@ -67,10 +71,19 @@ function AgentBody({
   onSubmitFreeText,
 }: {
   message: Message;
-  onSelectOption?: (messageId: string, optionId: string) => Promise<boolean | void>;
-  onPlanAction?: (message: Message, action: "approve" | "reject") => Promise<void>;
+  onSelectOption?: (
+    messageId: string,
+    optionId: string,
+  ) => Promise<boolean | void>;
+  onPlanAction?: (
+    message: Message,
+    action: "approve" | "reject",
+  ) => Promise<void>;
   planAwaitingReview?: boolean;
-  onSubmitFreeText?: (message: Message, freeText: string) => Promise<boolean | void>;
+  onSubmitFreeText?: (
+    message: Message,
+    freeText: string,
+  ) => Promise<boolean | void>;
 }) {
   if (message.kind === "plan") {
     if (planAwaitingReview && onPlanAction) {
@@ -85,11 +98,14 @@ function AgentBody({
     return <PlanMessageContent content={message.content} />;
   }
   if (message.kind === "agent_question") {
-    const questionType = (message.metadata as { questionType?: string } | null)?.questionType;
+    const questionType = (message.metadata as { questionType?: string } | null)
+      ?.questionType;
     if (questionType === "design_variant" && onSelectOption) {
-      const variants = (message.metadata?.options as DesignVariant[] | undefined) ?? [];
-      const selected = (message.metadata as { selectedOptionId?: string | null } | null)
-        ?.selectedOptionId;
+      const variants =
+        (message.metadata?.options as DesignVariant[] | undefined) ?? [];
+      const selected = (
+        message.metadata as { selectedOptionId?: string | null } | null
+      )?.selectedOptionId;
       if (selected) {
         const picked = variants.find((v) => v.id === selected);
         return (
@@ -123,10 +139,12 @@ function AgentBody({
       );
     }
     if (questionType === "skill_clarification" && onSelectOption) {
-      const options = ((message.metadata as { options?: { id: string; label: string }[] } | null)
-        ?.options ?? []) as { id: string; label: string }[];
-      const selected = (message.metadata as { selectedOptionId?: string | null } | null)
-        ?.selectedOptionId;
+      const options = ((
+        message.metadata as { options?: { id: string; label: string }[] } | null
+      )?.options ?? []) as { id: string; label: string }[];
+      const selected = (
+        message.metadata as { selectedOptionId?: string | null } | null
+      )?.selectedOptionId;
       if (selected) {
         const picked = options.find((o) => o.id === selected);
         return (
@@ -149,10 +167,24 @@ function AgentBody({
         />
       );
     }
-    return <AgentQuestionBubble message={message} onSelectOption={onSelectOption} />;
+    return (
+      <AgentQuestionBubble message={message} onSelectOption={onSelectOption} />
+    );
   }
-  if (message.kind === "clarification") return <ClarificationBubble message={message} onSelectOption={onSelectOption} />;
+  if (message.kind === "clarification")
+    return (
+      <ClarificationBubble message={message} onSelectOption={onSelectOption} />
+    );
   return <MarkdownContent content={message.content} />;
+}
+
+function formatTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  } catch {
+    return "";
+  }
 }
 
 export function MessageBubble({
@@ -164,18 +196,22 @@ export function MessageBubble({
   onSubmitFreeText,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
+  const time = formatTime(message.createdAt);
 
   if (isUser) {
     return (
-      <article className="flex min-h-0 justify-end">
-        <div className="builder-truncate-safe min-w-0 max-w-[min(420px,92%)] overflow-hidden rounded-md border border-[var(--app-border-strong)] bg-[var(--app-selected-bg)] px-sm py-xs text-[var(--app-selected-text)]">
-          <div className="mb-xs flex items-center gap-xxs text-[11px] uppercase tracking-[0.08em] opacity-[0.62]">
-            <Clock3 aria-hidden="true" size={12} />
-            You
+      <article className="msg-row">
+        <div className="msg-avatar-user">TM</div>
+        <div className="msg-content">
+          <div className="msg-meta">
+            <span className="msg-author">You</span>
+            {time ? <span className="msg-time">{time}</span> : null}
           </div>
-          <p className="m-0 whitespace-pre-wrap break-words text-[12px] leading-4 [overflow-wrap:anywhere]">
-            {message.content}
-          </p>
+          <div className="msg-prose">
+            <p className="m-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              {message.content}
+            </p>
+          </div>
         </div>
       </article>
     );
@@ -184,39 +220,50 @@ export function MessageBubble({
   const meta = message.kind ? KIND_META[message.kind] : undefined;
   const isStreaming = message.processingStatus === "streaming";
   const isFailed = message.processingStatus === "failed";
-  // An answer that failed mid-stream keeps its partial text — show it as
-  // "interrupted" (softer than a hard error, since the agent did produce work).
   const isInterruptedAnswer = message.kind === "answer" && isFailed;
-  // Any failed agent message can be retried (error milestone or interrupted answer).
   const canRetry = (message.kind === "error" || isFailed) && !!onRetry;
 
   const interruptedMeta: KindMeta = {
-    badge: "Bị gián đoạn",
+    badge: "Interrupted",
     icon: AlertTriangle,
-    tone: "border-[var(--app-border-strong)] bg-[var(--color-block-cream)] text-[var(--app-text)]",
   };
   const activeMeta = isInterruptedAnswer ? interruptedMeta : meta;
-
-  const tone =
-    activeMeta?.tone ??
-    "border-[var(--app-border)] bg-[var(--app-panel-bg)] text-[var(--app-panel-text)]";
-  const HeaderIcon = activeMeta?.icon ?? (isStreaming ? Loader2 : CheckCircle2);
-  const headerLabel = activeMeta?.badge ?? "Agent";
+  const StatusIcon = isStreaming ? Loader2 : CheckCircle2;
+  const messageMetadata = message.metadata as unknown as {
+    model?: unknown;
+  } | null;
+  const modelLabel =
+    typeof messageMetadata?.model === "string" ? messageMetadata.model : null;
 
   return (
-    <article className="flex min-h-0 justify-start">
-      <div
-        className={`builder-truncate-safe min-w-0 max-w-[min(420px,92%)] overflow-hidden rounded-md border px-sm py-xs transition-all duration-200 ${tone} ${
-          isStreaming ? "shadow-[0_0_0_1px_var(--app-border-strong)]" : ""
-        }`}
-      >
-        <div className="mb-xs flex items-center gap-xxs text-[11px] uppercase tracking-[0.08em] opacity-[0.62] [&_svg]:text-current">
-          <HeaderIcon
-            aria-hidden="true"
-            size={12}
-            className={isStreaming && !activeMeta ? "animate-spin text-[var(--app-icon-selected)]" : ""}
-          />
-          {headerLabel}
+    <article className="msg-row mt-4">
+      <div className="msg-avatar-agent">
+        <Sparkles aria-hidden="true" size={14} />
+      </div>
+
+      <div className="msg-content">
+        <div className="msg-meta flex-wrap">
+          <span className="msg-author">Cloud AI</span>
+          {time ? <span className="msg-time">{time}</span> : null}
+          {modelLabel ? <span className="msg-model">{modelLabel}</span> : null}
+          {isStreaming ? (
+            <span className="msg-pill">
+              <Loader2 aria-hidden="true" size={10} className="animate-spin" />
+              Replying
+            </span>
+          ) : null}
+          {activeMeta ? (
+            <span className="msg-pill-warn">
+              <activeMeta.icon aria-hidden="true" size={10} />
+              {activeMeta.badge}
+            </span>
+          ) : !isStreaming && message.kind === "answer" ? (
+            <StatusIcon
+              aria-hidden="true"
+              size={12}
+              className="text-success-fg"
+            />
+          ) : null}
         </div>
 
         <AgentBody
@@ -228,15 +275,16 @@ export function MessageBubble({
         />
 
         {canRetry ? (
-          <div className="mt-sm flex justify-end">
-            <button
+          <div className="mt-2 flex">
+            <Button
+              variant="unstyled"
               type="button"
               onClick={() => onRetry?.(message)}
-              className="inline-flex items-center gap-xxs rounded-pill border border-[var(--app-border)] bg-[var(--app-panel-bg)] px-sm py-xxs text-[11px] font-[520] text-current outline-none transition-colors hover:border-[var(--app-border-strong)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+              className="inline-flex items-center gap-1 h-6 px-2 rounded-md text-eyebrow font-medium text-muted hover:bg-ink/[0.04] hover:text-ink focus-ring"
             >
               <RefreshCw aria-hidden="true" size={12} />
               Retry
-            </button>
+            </Button>
           </div>
         ) : null}
       </div>
@@ -252,14 +300,10 @@ function CommittedAnswerInline({
   answer: string;
 }) {
   return (
-    <div className="space-y-2" aria-live="polite">
-      {question ? (
-        <p className="text-sm leading-snug text-[var(--app-panel-text)]">
-          {question}
-        </p>
-      ) : null}
-      <p className="text-sm font-medium text-[var(--app-panel-text)]">
-        <span className="mr-2 text-[11px] font-medium uppercase tracking-wide text-[var(--app-muted)]">
+    <div className="msg-prose space-y-2" aria-live="polite">
+      {question ? <p className="m-0 leading-snug">{question}</p> : null}
+      <p className="m-0 font-medium">
+        <span className="mr-2 font-mono text-eyebrow uppercase tracking-wide text-muted">
           Selected:
         </span>
         {answer}

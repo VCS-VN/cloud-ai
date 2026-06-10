@@ -1,417 +1,417 @@
-# Hướng dẫn sử dụng Cloud AI Builder
+# Cloud AI Builder User Guide
 
-Cloud AI Builder giúp bạn dựng một storefront hoàn chỉnh chỉ bằng cách trò chuyện với AI. Bạn không cần biết code, không cần lo về kỹ thuật — chỉ cần mô tả cửa hàng bạn muốn, AI sẽ lo phần còn lại.
+Cloud AI Builder helps you build a complete storefront just by chatting with AI. No coding knowledge needed, no technical worries — simply describe the store you want and AI handles the rest.
 
-Tài liệu này dành cho chủ shop, nhà bán lẻ, và đội ngũ vận hành tại Việt Nam. Bạn sẽ học cách tạo dự án đầu tiên, làm việc với AI, hiểu các thông báo trong quá trình dựng, và xử lý khi gặp trục trặc.
-
----
-
-## Mục lục
-
-1. [Bắt đầu](#bat-dau)
-2. [Khám phá workspace](#workspace)
-3. [Trò chuyện với AI](#chat)
-4. [Hiểu thông báo và tiến trình](#tien-trinh)
-5. [Trả lời câu hỏi của AI](#clarification)
-6. [Quản lý preview](#preview)
-7. [Xem code](#code-view)
-8. [Cài đặt dự án](#settings)
-9. [Khi gặp sự cố](#troubleshoot)
-10. [Mẹo và phím tắt](#tips)
-11. [Câu hỏi thường gặp](#faq)
+This guide is for shop owners, retailers, and operations teams. You'll learn how to create your first project, work with AI, understand build-time messages, and handle issues when they arise.
 
 ---
 
-## 1. Bắt đầu {#bat-dau}
+## Table of Contents
 
-### Đăng nhập
-
-Bạn đăng nhập Cloud AI Builder bằng tài khoản OAuth. Truy cập trang chủ rồi bấm **Đăng nhập** — hệ thống sẽ chuyển sang trang xác thực, sau đó tự động đưa bạn về **Dashboard**.
-
-> **Mẹo:** Nếu bạn đã đăng nhập rồi mà vào lại trang chủ, app sẽ tự đưa bạn thẳng vào **Dashboard**. Ngược lại, nếu bạn chưa đăng nhập mà mở một trang dự án, app sẽ đưa bạn về trang đăng nhập trước.
-
-### Tạo dự án đầu tiên
-
-Có hai cách bắt đầu một dự án mới:
-
-**Từ trang chủ:** Bạn sẽ thấy phần giới thiệu cùng 6 gợi ý sẵn — ví dụ *Fashion store homepage*, *Product collection page*. Bấm vào một gợi ý để điền sẵn ô prompt, hoặc tự nhập mô tả riêng của bạn. Sau đó bấm gửi.
-
-**Từ Dashboard:** Sau khi đăng nhập, bạn sẽ thấy lời chào *"What should we build, {tên bạn}?"* và một ô nhập prompt. Mô tả cửa hàng bạn muốn dựng rồi gửi.
-
-Khi bạn gửi prompt, hệ thống sẽ:
-1. Tạo một dự án mới
-2. Chuyển bạn vào trang chi tiết của dự án (URL dạng `/projects/<id>`)
-3. AI bắt đầu phân tích yêu cầu và dựng cửa hàng cho bạn
-
-> **Mẹo viết prompt tốt:** Càng cụ thể càng tốt. Thay vì *"Tạo cho tôi một shop"*, hãy thử *"Tạo cửa hàng quần áo nữ phong cách tối giản, tông màu pastel, có trang chủ với banner lớn và khu sản phẩm nổi bật"*.
-
-### Trang quản lý dự án
-
-Truy cập `/projects` để xem toàn bộ dự án của bạn:
-
-- **Chế độ hiển thị:** Bấm để chuyển giữa **Grid** (lưới thẻ) và **List** (danh sách).
-- **Tìm kiếm:** Gõ tên dự án vào ô tìm kiếm để lọc nhanh.
-- **Sắp xếp:** Mặc định sắp theo *Last edited* (chỉnh sửa gần nhất).
-- **Mỗi thẻ dự án** hiển thị: tên, badge trạng thái (**Draft**, **Generating**, **Ready**, **Failed**), ngày cập nhật, và ảnh thumbnail.
-
-Khi bạn chưa có dự án nào, trang sẽ hiển thị empty state mời bạn tạo dự án đầu tiên.
+1. [Getting Started](#getting-started)
+2. [Exploring the Workspace](#workspace)
+3. [Chatting with AI](#chat)
+4. [Understanding Messages and Progress](#progress)
+5. [Answering AI Questions](#clarification)
+6. [Managing the Preview](#preview)
+7. [Viewing Code](#code-view)
+8. [Project Settings](#settings)
+9. [Troubleshooting](#troubleshoot)
+10. [Tips and Shortcuts](#tips)
+11. [FAQ](#faq)
 
 ---
 
-## 2. Khám phá workspace {#workspace}
+## 1. Getting Started {#getting-started}
 
-Mỗi dự án mở ra trong một workspace 3 cột:
+### Sign In
 
-| Cột | Vị trí | Nội dung |
-|-----|--------|----------|
-| Trái | Chat | Lịch sử trò chuyện với AI |
-| Giữa | Preview / Code | Xem giao diện đang dựng hoặc xem code (đọc) |
-| Phải | Tuỳ ngữ cảnh | Thông tin bổ sung |
+Sign in to Cloud AI Builder using your OAuth account. Go to the homepage and click **Sign In** — the system redirects you to the authentication page, then automatically brings you back to the **Dashboard**.
 
-### Resize và ẩn cột chat
+> **Tip:** If you're already signed in and visit the homepage again, the app takes you straight to the **Dashboard**. Conversely, if you're not signed in and open a project page, the app sends you to the sign-in page first.
 
-- **Kéo viền cột chat** để thay đổi độ rộng. Tối thiểu 320px, tối đa 55% chiều rộng màn hình.
-- Kích thước bạn chọn **được lưu lại** trong trình duyệt — lần sau quay lại vẫn giữ nguyên.
-- Bấm nút **Hide chat** để gập cột chat lại nếu cần thêm không gian xem preview. Bấm lại để mở ra.
+### Creating Your First Project
 
-### Header của chat
+There are two ways to start a new project:
 
-Phía trên cột chat có:
+**From the homepage:** You'll see an introduction with 6 ready-made suggestions — for example *Fashion store homepage*, *Product collection page*. Click a suggestion to pre-fill the prompt box, or type your own description. Then press send.
 
-- Tên dự án và badge trạng thái
-- Badge **Processing** khi AI đang chạy một run
-- Ngày cập nhật gần nhất
-- Nút **Back** đưa bạn về danh sách dự án
-- Nút **Settings** mở drawer cài đặt
-- Nút **Hide chat** để gập cột chat
+**From the Dashboard:** After signing in, you'll see a greeting *"What should we build, {your name}?"* and a prompt input box. Describe the store you want to build and submit.
+
+When you send a prompt, the system will:
+1. Create a new project
+2. Redirect you to the project detail page (URL like `/projects/<id>`)
+3. AI starts analyzing your request and building your store
+
+> **Tip for good prompts:** Be as specific as possible. Instead of *"Create a shop for me"*, try *"Create a minimalist women's fashion store with a pastel color scheme, a homepage with a large banner and a featured products section"*.
+
+### Project Management Page
+
+Visit `/projects` to see all your projects:
+
+- **Display mode:** Click to switch between **Grid** (card grid) and **List** (list view).
+- **Search:** Type a project name in the search box to filter quickly.
+- **Sorting:** Defaults to *Last edited* (most recently edited).
+- **Each project card** shows: name, status badge (**Draft**, **Generating**, **Ready**, **Failed**), last updated date, and a thumbnail image.
+
+When you have no projects yet, the page shows an empty state inviting you to create your first one.
 
 ---
 
-## 3. Trò chuyện với AI {#chat}
+## 2. Exploring the Workspace {#workspace}
 
-Mọi tương tác với AI diễn ra qua khung soạn tin (composer) ở dưới cùng cột chat.
+Each project opens in a 3-column workspace:
 
-### Soạn tin và gửi
+| Column | Position | Content |
+|--------|----------|---------|
+| Left | Chat | Chat history with AI |
+| Center | Preview / Code | View the storefront being built or view the code (read-only) |
+| Right | Contextual | Additional information |
 
-- Ô nhập tối đa **12.000 ký tự**.
-- Bấm **Enter** để gửi. **Shift + Enter** để xuống dòng.
-- Khi AI đang xử lý, ô nhập sẽ bị khoá — bạn không thể gửi tin mới cho đến khi run hiện tại kết thúc.
+### Resizing and Hiding the Chat Column
+
+- **Drag the chat column border** to change its width. Minimum 320px, maximum 55% of screen width.
+- Your chosen size **is saved** in the browser — it persists across sessions.
+- Click the **Hide chat** button to collapse the chat column if you need more preview space. Click again to expand it.
+
+### Chat Header
+
+At the top of the chat column:
+
+- Project name and status badge
+- **Processing** badge when AI is running
+- Most recently updated date
+- **Back** button to return to the project list
+- **Settings** button to open the settings drawer
+- **Hide chat** button to collapse the chat column
+
+---
+
+## 3. Chatting with AI {#chat}
+
+All interactions with AI happen through the message composer at the bottom of the chat column.
+
+### Composing and Sending
+
+- Input field supports up to **12,000 characters**.
+- Press **Enter** to send. **Shift + Enter** to add a new line.
+- While AI is processing, the input is locked — you can't send a new message until the current run ends.
 
 ### Reasoning Effort
 
-Ngay trên ô nhập có dropdown **Reasoning Effort** với 4 mức:
+Above the input field is the **Reasoning Effort** dropdown with 4 levels:
 
-| Mức | Khi nên dùng |
-|-----|--------------|
-| **low** | Yêu cầu đơn giản, đổi màu, đổi text |
-| **medium** *(mặc định)* | Hầu hết thay đổi giao diện thông thường |
-| **high** | Thay đổi phức tạp, nhiều trang cùng lúc |
-| **xhigh** | Tái cấu trúc lớn, logic phức tạp |
+| Level | When to use |
+|-------|-------------|
+| **low** | Simple requests, color changes, text tweaks |
+| **medium** *(default)* | Most common UI changes |
+| **high** | Complex changes, multiple pages at once |
+| **xhigh** | Major restructuring, complex logic |
 
-Mức cao hơn cho kết quả kỹ hơn nhưng chậm hơn. Bắt đầu ở **medium**, chỉ tăng khi bạn thấy AI hiểu chưa đủ.
+Higher levels produce more thorough results but are slower. Start at **medium** and only increase if the AI isn't understanding enough.
 
-### Plan mode
+### Plan Mode
 
-Bật toggle **Plan mode** (chuyển sang màu xanh chanh) để AI **lên kế hoạch trước** thay vì làm ngay. Trong chế độ này, AI sẽ:
+Toggle **Plan mode** on (turns lime green) to have AI **plan first** instead of building immediately. In this mode, AI will:
 
-1. Phân tích yêu cầu của bạn
-2. Trả về một kế hoạch chi tiết
-3. Chờ bạn duyệt **Approve** hoặc từ chối **Reject**
+1. Analyze your request
+2. Return a detailed plan
+3. Wait for you to **Approve** or **Reject**
 
-> **Khi nào dùng Plan mode:** Khi bạn muốn yêu cầu thay đổi lớn và muốn xem AI sẽ làm gì trước khi đụng vào dự án. Cách này giúp tránh hối tiếc và tiết kiệm thời gian xử lý.
+> **When to use Plan mode:** When you want to make a large change and want to see what AI will do before it touches your project. This helps avoid regret and saves processing time.
 
-### Dừng giữa chừng
+### Stopping Mid-Run
 
-Khi AI đang chạy, nút **Send** sẽ chuyển thành nút **Stop**. Bấm Stop để huỷ run hiện tại an toàn — phần đã làm sẽ được giữ lại, AI sẽ dừng ở bước kế tiếp.
+While AI is running, the **Send** button becomes a **Stop** button. Press Stop to safely cancel the current run — completed work is kept, and AI stops at the next step.
 
-### Lỗi khi gửi
+### Send Errors
 
-| Tình huống | Thông báo |
-|------------|-----------|
-| Để trống prompt | *"Enter a prompt before sending."* |
-| Vượt 12.000 ký tự | Báo lỗi vượt giới hạn |
-| Đang có run khác | *"This project already has an active builder run."* |
-
----
-
-## 4. Hiểu thông báo và tiến trình {#tien-trinh}
-
-Khi AI làm việc, bạn sẽ thấy nhiều loại tin nhắn xuất hiện trong cột chat. Hiểu được ý nghĩa giúp bạn yên tâm và biết khi nào cần can thiệp.
-
-### Bố cục tin nhắn
-
-- **Tin của bạn** căn phải, bong bóng xanh.
-- **Tin của AI** căn trái, được nhóm theo từng run với viền trái phân biệt.
-- Tin được sắp xếp theo thời gian tạo, mới nhất ở dưới cùng.
-
-### Cuộn và tải tin cũ
-
-- Khi tin mới đến và bạn đang ở gần đáy, app **tự cuộn xuống** cho bạn.
-- Khi cuộn lên xa, một nút nổi **Jump to latest** xuất hiện để đưa bạn về tin mới nhất ngay.
-- Cuộn lên đầu sẽ tự kích hoạt tải thêm tin cũ. Bạn cũng có thể bấm **Load older messages** để tải thủ công.
-- Khi AI đang xử lý, một skeleton bubble (bong bóng xám) xuất hiện ở cuối cùng để cho biết tin mới sắp đến.
-
-### Các giai đoạn (phase) trong run
-
-Trong khi AI làm việc, bạn sẽ thấy các giai đoạn được cập nhật liên tục:
-
-| Giai đoạn | Ý nghĩa |
+| Situation | Message |
 |-----------|---------|
-| Đang đọc cấu trúc trang | AI đang xem trạng thái hiện tại của dự án |
-| Đang lên kế hoạch chỉnh sửa | AI đang suy nghĩ về thay đổi cần làm |
-| Đang chuẩn bị bản nháp | AI bắt đầu soạn nội dung |
-| Đang dựng các trang/khối | AI tạo trang và phần giao diện |
-| Đang kiểm tra preview | AI xem kết quả vừa dựng |
-| Đang tự sửa các lỗi nhỏ | AI tự khắc phục vấn đề phát sinh |
-| Đang lưu thay đổi | AI ghi lại kết quả |
-| Đang chờ bạn xác nhận lựa chọn | AI cần bạn trả lời câu hỏi |
-| Hoàn tất | Run kết thúc thành công |
-| Đã xảy ra lỗi | Run gặp vấn đề |
-| Đã huỷ | Run đã bị dừng |
-
-### Phần giao diện AI đang chỉnh
-
-Cùng với phase, bạn sẽ thấy AI thông báo đang làm việc với phần nào của cửa hàng:
-
-- **Trang:** trang chủ, trang danh sách sản phẩm, trang chi tiết sản phẩm, trang giỏ hàng, trang thanh toán
-- **Khu vực:** khung chung của site, phần hero, khối sản phẩm, khu sản phẩm, phần đầu trang, phần chân trang
-- **Thành phần:** ngăn kéo giỏ hàng, banner khuyến mãi, hệ thống thiết kế
-- Hoặc *"một phần của giao diện"* khi không phân loại cụ thể
-
-> **Quyền riêng tư của bạn:** Bạn sẽ **không bao giờ** thấy tên file, tên framework, hay đoạn code kỹ thuật trong các thông báo. Cloud AI Builder có chính sách giữ ngôn ngữ thân thiện với người dùng phổ thông — mọi nội dung kỹ thuật đều được dịch sang ngôn ngữ thường ngày.
-
-### Tin tổng kết
-
-Khi run hoàn tất, AI gửi một tin tổng kết ngắn gọn (tối đa khoảng 400 ký tự). Nếu vì lý do nào đó AI không đưa được tổng kết, bạn sẽ thấy thông báo mặc định *"Đã hoàn tất yêu cầu của bạn."*
-
-### Stream timeout
-
-Nếu trong 30 giây không có cập nhật mới từ AI, hệ thống sẽ **tự thử lại một lần**. Nếu vẫn không có phản hồi, run sẽ chuyển sang trạng thái lỗi và bạn có thể bấm **Retry**.
+| Empty prompt | *"Enter a prompt before sending."* |
+| Over 12,000 characters | Character limit exceeded error |
+| Another run active | *"This project already has an active builder run."* |
 
 ---
 
-## 5. Trả lời câu hỏi của AI {#clarification}
+## 4. Understanding Messages and Progress {#progress}
 
-Trong quá trình làm việc, AI có thể hỏi bạn để làm rõ ý định. Có 3 loại câu hỏi:
+As AI works, you'll see various types of messages in the chat column. Understanding what they mean helps you stay informed and know when to intervene.
 
-### Loại 1: Chọn phong cách thiết kế (Design Variant)
+### Message Layout
 
-AI hiển thị **4 thẻ phong cách** để bạn chọn. Mỗi thẻ có:
+- **Your messages** are right-aligned, in blue bubbles.
+- **AI messages** are left-aligned, grouped by run with a distinguishing left border.
+- Messages are ordered by creation time, newest at the bottom.
 
-- Vài chấm màu nhỏ thể hiện palette
-- Tên phong cách (ví dụ *Modern & Clean*, *Bold & Vibrant*, *Warm Retail*, *Playful*)
-- Mô tả ngắn
+### Scrolling and Loading Older Messages
 
-Bạn có hai cách trả lời:
+- When new messages arrive and you're near the bottom, the app **auto-scrolls down** for you.
+- When you scroll far up, a floating **Jump to latest** button appears to take you back to the newest message.
+- Scrolling to the top automatically triggers loading of older messages. You can also click **Load older messages** to load manually.
+- While AI is processing, a skeleton bubble (gray bubble) appears at the bottom to indicate a new message is coming.
 
-1. **Bấm thẳng vào thẻ** bạn muốn — AI áp dụng ngay.
-2. **Tự mô tả** ở ô *"Hoặc mô tả phong cách bạn muốn"* — viết tự do nếu không thẻ nào hợp ý.
+### Phases During a Run
 
-Khi đã chọn, thẻ đó sẽ có viền xanh và hiện *"Đang áp dụng…"*.
+While AI works, you'll see phases updated continuously:
 
-### Loại 2: Câu hỏi nhiều lựa chọn (Skill Clarification)
+| Phase | Meaning |
+|-------|---------|
+| Reading page structure | AI is examining the current state of the project |
+| Planning the edit | AI is thinking about the changes needed |
+| Preparing draft workspace | AI is starting to compose content |
+| Building pages and sections | AI is creating pages and UI sections |
+| Checking the preview | AI is reviewing what it built |
+| Self-healing small errors | AI is fixing issues it encountered |
+| Publishing changes | AI is saving the results |
+| Waiting for your selection | AI needs you to answer a question |
+| Done | Run completed successfully |
+| An error occurred | Run encountered a problem |
+| Cancelled | Run was stopped |
 
-Đây là dạng đơn giản hơn — chỉ là danh sách radio button với label. Bấm một lựa chọn và AI tiếp tục ngay, không cần nút xác nhận riêng.
+### The Section AI Is Working On
 
-### Loại 3: Duyệt kế hoạch (Plan Review)
+Along with the phase, you'll see AI announce which part of the store it's working on:
 
-Khi bạn bật **Plan mode** (xem mục 3), AI sẽ trả về một kế hoạch chi tiết dạng markdown để bạn đọc. Có 2 nút:
+- **Pages:** homepage, products page, product detail page, cart page, checkout page
+- **Sections:** the global frame, the hero section, the product tile, the product grid, the header, the footer
+- **Components:** the cart drawer, the promo banner, the design system
+- Or *"a UI section"* when no specific category applies
 
-- **Approve** *(xanh lá)*: Đồng ý, AI bắt đầu thực hiện theo kế hoạch.
-- **Reject** *(xám)*: Từ chối, run bị huỷ. Bạn có thể nhập prompt mới.
+> **Your privacy:** You will **never** see file names, framework names, or technical code snippets in messages. Cloud AI Builder has a policy of keeping language friendly for non-technical users — all technical content is translated into everyday language.
 
-Trong khi xử lý, nút sẽ hiện *"Đang áp dụng…"* hoặc *"Đang huỷ…"*.
+### Summary Message
 
-> **Mẹo:** Bạn không bị ép trả lời ngay — chat vẫn để dấu hỏi nguyên đó. Hãy đọc kỹ trước khi bấm.
+When a run completes, AI sends a brief summary message (up to about 400 characters). If for some reason AI can't provide a summary, you'll see the default message *"Done with your request."*
 
----
+### Stream Timeout
 
-## 6. Quản lý preview {#preview}
-
-Cột giữa của workspace mặc định là **Preview** — nơi bạn xem cửa hàng đang chạy thật.
-
-### Khởi động preview
-
-Lần đầu vào dự án (hoặc sau khi thay đổi cấu hình), bạn sẽ thấy preview đi qua các trạng thái:
-
-| Trạng thái | Ý nghĩa |
-|------------|---------|
-| **Installing** | Đang cài các thư viện cần thiết |
-| **Starting** | Đang khởi động server |
-| **Running** | Cửa hàng đã chạy, sẵn sàng xem |
-| **Error** | Có lỗi khi khởi động |
-| **Fixing** | AI đang tự sửa |
-
-Quá trình **Installing → Running** thường mất 30-60 giây cho lần đầu. Lần sau nhanh hơn nhiều.
-
-### Điều hướng URL
-
-- Nhập đường dẫn vào ô URL (ví dụ `/products`, `/cart`, `/checkout`) rồi bấm **Enter** để load.
-- Bấm nút **Reload** để tải lại trang hiện tại.
-
-### Token tự động làm mới
-
-Hệ thống tự động làm mới phiên preview mỗi 10 phút trong nền — bạn không cần làm gì. Preview sẽ không bị "rớt phiên" giữa chừng.
-
-> **Lưu ý:** Iframe preview chạy trong sandbox với quyền hạn được kiểm soát chặt — đảm bảo an toàn nhưng vẫn cho phép giao diện hoạt động đầy đủ (form, JavaScript, lưu trạng thái).
+If no new updates arrive from AI within 30 seconds, the system will **automatically retry once**. If there's still no response, the run switches to an error state and you can click **Retry**.
 
 ---
 
-## 7. Xem code {#code-view}
+## 5. Answering AI Questions {#clarification}
 
-Bên cạnh tab **Preview**, bạn có thể chuyển sang tab **Code** để xem mã nguồn AI đã sinh ra.
+During the build process, AI may ask you questions to clarify your intent. There are 3 types of questions:
 
-- **Cây file** bên trái cho phép duyệt cấu trúc dự án.
-- **Ô tìm kiếm** giúp tìm file theo tên nhanh chóng.
-- Nội dung file hiển thị dạng plain text (không tô màu cú pháp).
-- Có badge **Read only** rõ ràng — bạn chỉ xem, không sửa được tại đây.
+### Type 1: Design Variant Picker
 
-Các nút **Add comment**, **Copy**, **Download** hiện ra như placeholder UI nhưng đang bị disable. Tính năng này dành cho phiên bản tương lai.
+AI displays **4 design style cards** for you to choose from. Each card has:
 
-> **Vì sao read-only?** Cloud AI Builder thiết kế để bạn chỉnh sửa qua chat với AI, không phải sửa code trực tiếp. Cách này giữ cho dự án nhất quán và tránh lỗi do can thiệp tay.
+- A few color dots showing the palette
+- Style name (e.g. *Modern & Clean*, *Bold & Vibrant*, *Warm Retail*, *Playful*)
+- A short description
 
----
+You have two ways to answer:
 
-## 8. Cài đặt dự án {#settings}
+1. **Click the card** you want — AI applies it immediately.
+2. **Describe your own** in the *"Or describe the style you want"* field — write freely if no card matches.
 
-Bấm nút **Settings** trên header chat để mở drawer cài đặt. Drawer có 2 tab:
+Once selected, the card gets a blue border and shows *"Applying…"*.
 
-### Tab General
+### Type 2: Multiple-Choice Question (Skill Clarification)
 
-- **Đổi tên dự án:** Sửa tên trong ô input. Tên không được để trống.
-- **Xoá dự án:** Nút **Delete** ở cuối tab. Khi bấm, app hiện hộp thoại xác nhận để tránh xoá nhầm.
+This is a simpler format — just a list of radio buttons with labels. Click a choice and AI continues immediately, no separate confirm button needed.
 
-> **Cảnh báo:** Xoá dự án là hành động không hoàn tác được. Mọi tin nhắn, code, cài đặt sẽ mất vĩnh viễn.
+### Type 3: Plan Review
 
-### Tab Info
+When you enable **Plan mode** (see section 3), AI returns a detailed plan in markdown for you to read. There are 2 buttons:
 
-Cài đặt cửa hàng kết nối với storefront:
+- **Approve** *(green)*: Agree — AI starts executing the plan.
+- **Reject** *(gray)*: Decline — the run is cancelled. You can enter a new prompt.
 
-- **Chọn store** từ dropdown **selectedStoreSlug** — đây là cửa hàng nguồn dữ liệu (sản phẩm, đơn hàng, tồn kho).
-- Bấm **Save** để áp dụng. Hệ thống sẽ:
-  1. Đồng bộ giá trị `VITE_STORE_SLUG` vào cấu hình dự án
-  2. Tự khởi động lại preview với cấu hình mới
+While processing, buttons show *"Applying…"* or *"Cancelling…"*.
 
-### Indicator "Unsaved changes"
-
-Khi bạn chỉnh gì đó nhưng chưa bấm **Save**, footer của drawer sẽ hiện *"Unsaved changes"* nhắc bạn lưu trước khi đóng.
+> **Tip:** You're not forced to answer immediately — the question stays in the chat. Read carefully before clicking.
 
 ---
 
-## 9. Khi gặp sự cố {#troubleshoot}
+## 6. Managing the Preview {#preview}
 
-### Bảng thông báo lỗi thường gặp
+The center column of the workspace defaults to **Preview** — where you see the storefront running live.
 
-| Mã lỗi | Thông báo bạn thấy | Nên làm gì |
-|--------|--------------------|------------|
-| `validation_failed` | Bản dựng không qua kiểm tra. Vui lòng thử lại. | Bấm **Retry** |
-| `boundary_violation` | Yêu cầu bị chặn vì lý do an toàn. | Sửa prompt cho phù hợp |
-| `config_unavailable` | Trình tạo AI hiện chưa sẵn sàng. Hãy thử lại sau. | Đợi vài phút rồi thử lại |
-| `cancelled` | Đã huỷ. | Bạn đã chủ động dừng — gửi prompt mới |
-| `preview_failed` | Preview chưa lên được. Hãy thử lại. | Bấm **Reload** preview hoặc **Retry** |
-| `codex_runtime_failed` | Trình tạo gặp lỗi tạm thời. Hãy thử lại. | Bấm **Retry** |
-| `blocked_request` | Yêu cầu nằm ngoài phạm vi. | Đổi cách diễn đạt prompt |
-| `repair_exhausted` | Vẫn còn lỗi sau khi tự sửa. Hãy thử lại. | Thử prompt đơn giản hơn |
-| `required_skill_unavailable` | Thiếu hướng dẫn bắt buộc. | Liên hệ hỗ trợ |
-| `skill_unavailable` | Skill được yêu cầu chưa có sẵn. | Bấm **Retry** sau ít phút |
-| `interrupted_by_restart` | Phiên xử lý bị gián đoạn. Bạn có thể thử lại an toàn. | Bấm **Retry** — không mất dữ liệu |
+### Starting the Preview
 
-### Nút Retry
+The first time you enter a project (or after changing configuration), you'll see the preview go through these states:
 
-Mọi tin nhắn lỗi đều có nút **Retry** đi kèm. Bấm để **tạo run mới với cùng prompt** ban đầu — bạn không phải gõ lại.
+| State | Meaning |
+|-------|---------|
+| **Installing** | Installing required dependencies |
+| **Starting** | Starting the server |
+| **Running** | The store is up and ready to view |
+| **Error** | An error occurred during startup |
+| **Fixing** | AI is self-repairing |
 
-### Tin nhắn bị gián đoạn
+The **Installing → Running** process usually takes 30-60 seconds the first time. Subsequent starts are much faster.
 
-Đôi khi run đang chạy giữa chừng thì bị ngắt (mất mạng, server khởi động lại). Bạn sẽ thấy:
+### URL Navigation
 
-- Một badge **Bị gián đoạn** trên tin nhắn
-- Phần văn bản đã streaming được **giữ lại** để bạn đọc
-- Nút **Retry** để chạy lại
+- Enter a path in the URL field (e.g. `/products`, `/cart`, `/checkout`) and press **Enter** to load it.
+- Click the **Reload** button to refresh the current page.
 
-### An toàn khi server khởi động lại
+### Automatic Token Refresh
 
-Cloud AI Builder thiết kế để chịu được việc server tự khởi động lại. Khi điều này xảy ra giữa run:
+The system automatically refreshes the preview session every 10 minutes in the background — you don't need to do anything. The preview won't lose its session mid-use.
 
-- Tải lại trang sẽ thấy tin **Bị gián đoạn** ngay lập tức.
-- Nếu run đang chờ bạn trả lời clarification, **trạng thái chờ vẫn được khôi phục** — bạn vẫn có thể trả lời tiếp.
-- Bấm **Retry** để chạy lại an toàn, không gây xung đột dữ liệu.
-
-> **Mẹo:** Nếu bạn bấm Retry liên tục mà vẫn lỗi, hãy thử đơn giản hoá prompt hoặc chia thành nhiều bước nhỏ.
+> **Note:** The preview iframe runs in a sandbox with strictly controlled permissions — ensuring safety while still allowing the UI to function fully (forms, JavaScript, state persistence).
 
 ---
 
-## 10. Mẹo và phím tắt {#tips}
+## 7. Viewing Code {#code-view}
 
-### Phím tắt soạn tin
+Next to the **Preview** tab, you can switch to the **Code** tab to view the source code AI has generated.
 
-| Phím | Tác dụng |
-|------|----------|
-| **Enter** | Gửi tin |
-| **Shift + Enter** | Xuống dòng trong tin |
+- The **file tree** on the left lets you browse the project structure.
+- The **search box** helps find files by name quickly.
+- File content is displayed as plain text (no syntax highlighting).
+- A clear **Read only** badge — you can only view, not edit here.
 
-### Mẹo viết prompt hiệu quả
+The **Add comment**, **Copy**, and **Download** buttons appear as placeholder UI but are currently disabled. These features are for a future release.
 
-- **Cụ thể về ngành hàng:** *"shop quần áo nữ"* hơn là *"shop online"*.
-- **Mô tả phong cách:** *"tối giản, tông pastel"* hoặc *"sôi động, nhiều màu"*.
-- **Liệt kê thành phần:** *"có banner lớn, khu sản phẩm nổi bật, footer có thông tin liên hệ"*.
-- **Yêu cầu thay đổi nhỏ một lần:** Thay vì gộp 5 yêu cầu vào một tin, hãy chia thành nhiều tin để dễ kiểm soát.
-
-### Mẹo dùng Plan mode
-
-- Bật **Plan mode** khi yêu cầu lớn (ví dụ tái cấu trúc trang chủ).
-- Đọc kỹ kế hoạch trước khi bấm **Approve**.
-- Nếu kế hoạch chưa đúng ý, bấm **Reject** rồi viết prompt rõ hơn.
-
-### Mẹo tiết kiệm thời gian
-
-- Bắt đầu **Reasoning Effort** ở **medium**. Chỉ tăng khi cần.
-- Resize cột chat về kích thước thoải mái — kích thước được lưu lại.
-- Dùng tab **Code** để hiểu AI đã làm gì khi muốn học hỏi.
+> **Why read-only?** Cloud AI Builder is designed for you to make edits through chat with AI, not by editing code directly. This keeps the project consistent and avoids errors from manual intervention.
 
 ---
 
-## 11. Câu hỏi thường gặp {#faq}
+## 8. Project Settings {#settings}
 
-### Tôi có cần biết code không?
+Click the **Settings** button in the chat header to open the settings drawer. The drawer has 2 tabs:
 
-Không. Cloud AI Builder được thiết kế cho người không kỹ thuật. Bạn chỉ cần mô tả ý tưởng bằng tiếng Việt thông thường.
+### General Tab
 
-### Vì sao tôi không thấy tên file hay code trong tin nhắn AI?
+- **Rename project:** Edit the name in the input field. The name cannot be empty.
+- **Delete project:** The **Delete** button at the bottom of the tab. When clicked, the app shows a confirmation dialog to prevent accidental deletion.
 
-Đây là chính sách quyền riêng tư có chủ đích. App **không bao giờ** lộ tên file, tên framework, hay code identifier ra giao diện chat. AI sẽ luôn dùng cách diễn đạt thân thiện như *"trang chủ"*, *"khu sản phẩm"*, *"phần đầu trang"*.
+> **Warning:** Deleting a project is irreversible. All messages, code, and settings will be permanently lost.
 
-### Run đang chạy thì tôi đóng tab có sao không?
+### Info Tab
 
-Không sao. Run vẫn chạy ở phía server. Khi bạn quay lại, lịch sử tin nhắn sẽ được khôi phục đầy đủ.
+Configure the store connected to the storefront:
 
-### Tôi có thể chỉnh code trực tiếp không?
+- **Select a store** from the **selectedStoreSlug** dropdown — this is the data source store (products, orders, inventory).
+- Click **Save** to apply. The system will:
+  1. Sync the `VITE_STORE_SLUG` value into the project configuration
+  2. Automatically restart the preview with the new configuration
 
-Hiện tại tab **Code** chỉ ở chế độ đọc. Mọi chỉnh sửa thực hiện qua chat với AI. Cách này giữ dự án nhất quán và an toàn.
+### "Unsaved changes" Indicator
 
-### Plan mode có khác gì với chat thường?
-
-Ở chế độ thường, AI bắt tay vào làm ngay. Ở **Plan mode**, AI trình bày kế hoạch trước và chờ bạn duyệt — phù hợp khi bạn muốn xem trước trước khi thay đổi lớn.
-
-### Reasoning Effort cao có tốn nhiều thời gian không?
-
-Có. Mức **xhigh** có thể chậm hơn nhiều lần so với **low**. Hãy bắt đầu ở **medium** và chỉ tăng khi thực sự cần.
-
-### Tôi xoá dự án nhầm có khôi phục được không?
-
-Không. Xoá là hành động vĩnh viễn. App có hộp thoại xác nhận để tránh nhầm lẫn — hãy đọc kỹ trước khi bấm **Delete**.
-
-### Khi nào nên dùng nút Stop?
-
-Khi bạn nhận ra prompt sai ý hoặc AI đang đi sai hướng. Bấm **Stop** để dừng an toàn — phần đã làm được giữ lại, AI không bị "treo".
-
-### Vì sao preview lúc nào cũng phải Installing trước?
-
-Lần đầu mở dự án, hệ thống cần cài thư viện cho cửa hàng của bạn. Lần sau preview sẽ khởi động nhanh hơn nhiều vì các thư viện đã sẵn.
-
-### Tôi đổi store slug ở tab Info thì chuyện gì xảy ra?
-
-App sẽ cập nhật biến `VITE_STORE_SLUG` trong cấu hình dự án và **tự khởi động lại preview**. Bạn sẽ thấy preview chuyển trạng thái về **Starting** rồi **Running** với dữ liệu của store mới.
+When you change something but haven't clicked **Save**, the drawer footer shows *"Unsaved changes"* reminding you to save before closing.
 
 ---
 
-> Cần thêm hỗ trợ? Liên hệ đội ngũ Cloud AI Builder qua kênh hỗ trợ chính thức của bạn. Chúc bạn dựng được cửa hàng ưng ý!
+## 9. Troubleshooting {#troubleshoot}
+
+### Common Error Messages
+
+| Error Code | Message You See | What to Do |
+|------------|-----------------|------------|
+| `validation_failed` | Validation failed. Please try again. | Click **Retry** |
+| `boundary_violation` | Request blocked for safety reasons. | Adjust your prompt |
+| `config_unavailable` | AI builder is temporarily unavailable. Please try again later. | Wait a few minutes and retry |
+| `cancelled` | Cancelled. | You stopped it intentionally — send a new prompt |
+| `preview_failed` | Preview didn't come up. Please try again. | Click **Reload** preview or **Retry** |
+| `codex_runtime_failed` | The builder hit a transient error. Please try again. | Click **Retry** |
+| `blocked_request` | Request is out of scope. | Rephrase your prompt |
+| `repair_exhausted` | Errors remain after self-repair. Please try again. | Try a simpler prompt |
+| `required_skill_unavailable` | Missing required instructions. | Contact support |
+| `skill_unavailable` | The requested skill is not available. | Click **Retry** after a few minutes |
+| `interrupted_by_restart` | The session was interrupted. You can safely retry. | Click **Retry** — no data is lost |
+
+### Retry Button
+
+Every error message includes a **Retry** button. Click to **create a new run with the same prompt** — you don't have to retype it.
+
+### Interrupted Messages
+
+Sometimes a run is interrupted mid-way (network loss, server restart). You'll see:
+
+- An **Interrupted** badge on the message
+- The text that was streamed so far is **preserved** for you to read
+- A **Retry** button to run again
+
+### Server Restart Safety
+
+Cloud AI Builder is designed to withstand automatic server restarts. When this happens during a run:
+
+- Reloading the page shows the **Interrupted** message immediately.
+- If the run was waiting for your clarification answer, **the waiting state is restored** — you can still answer.
+- Click **Retry** to safely restart without causing data conflicts.
+
+> **Tip:** If you keep clicking Retry and still get errors, try simplifying your prompt or breaking it into smaller steps.
+
+---
+
+## 10. Tips and Shortcuts {#tips}
+
+### Message Shortcuts
+
+| Key | Action |
+|-----|--------|
+| **Enter** | Send message |
+| **Shift + Enter** | New line in message |
+
+### Tips for Effective Prompts
+
+- **Be specific about the industry:** *"women's fashion store"* is better than *"online shop"*.
+- **Describe the style:** *"minimalist, pastel tones"* or *"vibrant, colorful"*.
+- **List components:** *"with a large banner, featured products section, footer with contact info"*.
+- **Make small changes one at a time:** Instead of bundling 5 requests into one message, split them into multiple messages for better control.
+
+### Tips for Using Plan Mode
+
+- Turn on **Plan mode** for large requests (e.g. restructuring the homepage).
+- Read the plan carefully before clicking **Approve**.
+- If the plan doesn't match your intent, click **Reject** and write a clearer prompt.
+
+### Time-Saving Tips
+
+- Start **Reasoning Effort** at **medium**. Only increase when needed.
+- Resize the chat column to a comfortable size — the size is saved.
+- Use the **Code** tab to understand what AI did when you want to learn.
+
+---
+
+## 11. FAQ {#faq}
+
+### Do I need to know how to code?
+
+No. Cloud AI Builder is designed for non-technical users. You just need to describe your ideas in plain language.
+
+### Why don't I see file names or code in AI messages?
+
+This is an intentional privacy policy. The app **never** exposes file names, framework names, or code identifiers in the chat UI. AI always uses friendly phrasing like *"homepage"*, *"product section"*, *"header"*.
+
+### Is it okay to close the tab while a run is in progress?
+
+Yes. The run continues on the server. When you come back, the full message history will be restored.
+
+### Can I edit the code directly?
+
+Currently the **Code** tab is read-only. All edits are made through chat with AI. This keeps the project consistent and safe.
+
+### How is Plan mode different from regular chat?
+
+In regular mode, AI starts working immediately. In **Plan mode**, AI presents a plan first and waits for your approval — useful when you want to preview before making major changes.
+
+### Does high Reasoning Effort take more time?
+
+Yes. The **xhigh** level can be several times slower than **low**. Start at **medium** and only increase when truly needed.
+
+### Can I recover a deleted project?
+
+No. Deletion is permanent. The app has a confirmation dialog to prevent mistakes — read it carefully before clicking **Delete**.
+
+### When should I use the Stop button?
+
+When you realize your prompt was wrong or AI is heading in the wrong direction. Press **Stop** to safely halt — completed work is preserved and AI doesn't get "stuck".
+
+### Why does the preview always need to Install first?
+
+The first time you open a project, the system needs to install dependencies for your store. Subsequent previews start much faster because the libraries are already in place.
+
+### What happens when I change the store slug in the Info tab?
+
+The app updates the `VITE_STORE_SLUG` variable in the project configuration and **automatically restarts the preview**. You'll see the preview switch back to **Starting** then **Running** with the new store's data.
+
+---
+
+> Need more help? Contact the Cloud AI Builder team through your official support channel. Happy building!

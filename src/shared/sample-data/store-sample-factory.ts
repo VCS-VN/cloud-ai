@@ -8,7 +8,7 @@ const sampleStore: Store = {
   userId: "user_01KH5D9KFP6MWHZ4ZC33KPK0DQ",
   name: "Nail Studio",
   address:
-    "Chung cư cán bộ, nhân viên bộ tổng Tham Mưu, Đường Cầu Khoát, Tây Tựu, Từ Liêm, Hà Nội",
+    "Staff Quarters, General Staff Department, Cau Khoat Street, Tay Tuu, Tu Liem, Hanoi",
   phoneNumber: "+8488040437",
   placeId:
     "EzmaZl-NJIRggqqxm0AlnH1YhXqdVrPYY74vQLcIhZlgsRhY52Kr6WGtHHmnUaTVZpV6RJxyuKFM2xIzoFGB_HH-CG6tLC7_Neb2jWJ1tf_R4hwtQq50LnXqvIFCdCubd",

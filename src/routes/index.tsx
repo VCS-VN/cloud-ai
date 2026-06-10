@@ -1,203 +1,147 @@
-import { useState } from "react";
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
-import { LoginModal } from "@/components/auth/LoginModal";
-import { HomePromptForm } from "@/components/home/HomePromptForm";
-import { useReveal } from "@/hooks/useReveal";
-import { createProjectFromPrompt } from "@/server/functions/projects";
+import { useEffect, useState } from "react";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { getCurrentUser } from "@/server/functions/auth";
 
 export const Route = createFileRoute("/")({
   loader: async () => {
     const result = await getCurrentUser();
-    if (result.user) throw redirect({ to: "/dashboard" });
-    return result;
+    return { user: result.user };
   },
-  component: HomePage,
+  component: HomeAuthGate,
 });
 
-function HomePage() {
-  const createProject = useServerFn(createProjectFromPrompt);
-  const navigate = useNavigate();
+function HomeAuthGate() {
   const { user } = Route.useLoaderData();
-  const [prompt, setPrompt] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
-  const [error, setError] = useState<string | undefined>();
-  const [createdProjectName, setCreatedProjectName] = useState<
-    string | undefined
-  >();
-  const heroRef = useReveal<HTMLDivElement>();
-  const cardsRef = useReveal<HTMLDivElement>({ threshold: 0.1 });
+  const navigate = useNavigate();
+  const [countdown, setCountdown] = useState(3);
 
-  async function handleCreateProject(nextPrompt: string) {
-    if (!user) {
-      setLoginOpen(true);
-      return;
-    }
+  useEffect(() => {
+    if (!user) return;
 
-    setLoading(true);
-    setError(undefined);
-    setCreatedProjectName(undefined);
+    setCountdown(3);
+    const interval = window.setInterval(() => {
+      setCountdown((current) => Math.max(current - 1, 0));
+    }, 1_000);
+    const redirect = window.setTimeout(() => {
+      void navigate({ to: "/dashboard" as never });
+    }, 3_000);
 
-    try {
-      const workspace = await createProject({ data: { prompt: nextPrompt } });
-      setCreatedProjectName(workspace.project.name);
-      await navigate({
-        to: "/projects" as never,
-        search: { projectId: workspace.project.id } as never,
-      });
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to create your project. Please try again.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(redirect);
+    };
+  }, [navigate, user]);
 
   return (
-    <main className="min-h-screen bg-[var(--app-page-bg)] text-[var(--app-page-text)] transition-colors duration-300">
-      <div className="flex min-h-screen flex-col px-md py-md sm:px-xl sm:py-lg">
-        <nav
-          className="flex items-center justify-between gap-md"
-          aria-label="Home navigation"
-        >
-          <a
-            className="flex items-center gap-xs text-[15px] font-[650] no-underline transition-opacity duration-200 hover:opacity-80"
-            href="/"
-          >
-            <span
-              className="h-5 w-5 rounded-sm bg-[var(--color-block-lilac)]"
+    <div className="relative min-h-screen overflow-hidden bg-paper text-ink">
+      <div className="auth-gate-grid" aria-hidden="true" />
+      <div className="auth-gate-radial" aria-hidden="true" />
+
+      <header className="relative z-10 flex h-14 items-center justify-between border-b border-hairline bg-paper/80 px-6 backdrop-blur-md lg:px-8">
+        <Link to="/dashboard" className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-ink text-paper">
+            <svg
               aria-hidden="true"
-            />
-            Cloud AI
-          </a>
-          <div className="flex items-center gap-xs">
-            <button
-              className="motion-press rounded-pill bg-[var(--color-primary)] px-md py-xs text-button font-[480] text-[var(--color-on-primary)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
-              type="button"
-              onClick={() => setLoginOpen(true)}
+              className="h-3.5 w-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
             >
-              Sign in
-            </button>
-          </div>
-        </nav>
+              <path d="M4 7h16M4 12h16M4 17h10" />
+            </svg>
+          </span>
+          <span className="font-semibold tracking-tight">Cloud AI</span>
+        </Link>
+        <Link
+          to="/auth/login"
+          className="text-ui-sm text-muted transition-colors duration-base hover:text-ink"
+        >
+          Sign in
+        </Link>
+      </header>
 
-        <section className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col justify-center pb-xl pt-xl text-center sm:pt-xxl">
-          <div ref={heroRef} data-reveal="cinematic">
-            <h1 className="type-display-xl m-0 mx-auto max-w-5xl text-[var(--app-page-text)]">
-              Build more with Cloud AI
-            </h1>
-            <p className="m-0 mx-auto mt-md max-w-3xl text-subhead font-[340] leading-[1.35] tracking-[-0.26px] text-[var(--app-muted)]">
-              Create websites by chatting with AI
-            </p>
-
-            <div className="mt-xl w-full rounded-lg bg-[var(--color-block-lilac)] p-lg text-left text-[var(--app-on-color-block)] sm:p-xxl">
-              <HomePromptForm
-                prompt={prompt}
-                loading={loading}
-                error={error}
-                onPromptChange={setPrompt}
-                onSubmit={handleCreateProject}
-              />
-            </div>
-          </div>
-
-          {createdProjectName ? (
-            <p
-              className="mx-auto mt-md max-w-3xl rounded-pill border border-[var(--app-border)] bg-[var(--app-panel-bg)] px-md py-sm text-body-sm leading-5 text-[var(--app-panel-text)]"
-              role="status"
-            >
-              Created “{createdProjectName}”.
-            </p>
-          ) : null}
-
-          <div
-            ref={cardsRef}
-            className="mt-xl grid gap-sm text-left md:grid-cols-[1.05fr_0.95fr]"
-          >
-            <article
-              data-reveal
-              style={{ "--reveal-index": 0 } as React.CSSProperties}
-              className="motion-lift rounded-lg bg-[var(--color-block-lime)] p-lg text-[var(--color-ink)] sm:p-xl"
-            >
-              <p className="m-0 font-mono text-caption uppercase tracking-[0.6px] opacity-70">
-                FAST START
+      <main className="relative z-10 flex min-h-[calc(100vh-56px)] items-center justify-center px-5 py-10">
+        <section className="w-full max-w-[460px]">
+          {user ? (
+            <div className="auth-gate-card">
+              <div className="auth-gate-spinner mx-auto mb-7" />
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-subtle">
+                Signed in
               </p>
-              <h2 className="m-0 mt-lg max-w-xl text-headline font-[540] leading-[1.35] tracking-[-0.26px]">
-                Turn a rough prompt into a structured website workspace.
-              </h2>
-              <div className="mt-xl grid gap-sm sm:grid-cols-3">
-                {[
-                  ["01", "Describe the page"],
-                  ["02", "Review generated sections"],
-                  ["03", "Iterate by chatting"],
-                ].map(([step, label]) => (
-                  <div
-                    key={step}
-                    className="motion-lift rounded-md border border-[rgb(0_0_0_/_0.12)] bg-[var(--color-canvas)] p-md"
+              <h1 className="mb-3 text-[28px] font-semibold leading-[1.08] tracking-tight md:text-[32px]">
+                Redirecting to Dashboard.
+              </h1>
+              <p className="mx-auto mb-8 max-w-sm text-ui-sm leading-relaxed text-muted md:text-[15px]">
+                Your account is ready. You will be redirected in{" "}
+                <span className="font-mono font-medium text-ink">{countdown}</span>{" "}
+                seconds.
+              </p>
+              <Link
+                to="/dashboard"
+                className="flex h-11 items-center justify-center rounded-xl bg-ink text-ui-sm font-medium text-paper transition-colors duration-base hover:bg-ink/90"
+              >
+                Go now
+              </Link>
+            </div>
+          ) : (
+            <div className="auth-gate-card">
+              <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-hairline bg-chalk">
+                <svg
+                  aria-hidden="true"
+                  className="h-6 w-6 text-ink"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.8}
+                >
+                  <rect x="4" y="10" width="16" height="10" rx="2" />
+                  <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                </svg>
+              </div>
+
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-subtle">
+                Sign-in required
+              </p>
+              <h1 className="mb-3 text-[28px] font-semibold leading-[1.08] tracking-tight md:text-[32px]">
+                Sign in to create a project.
+              </h1>
+              <p className="mx-auto mb-8 max-w-sm text-ui-sm leading-relaxed text-muted md:text-[15px]">
+                New projects require a Monmi account so prompt history, previews, and build status can be saved.
+              </p>
+
+              <div className="grid gap-3">
+                <Link
+                  to="/auth/login"
+                  className="flex h-11 items-center justify-center gap-2 rounded-xl bg-ink text-ui-sm font-medium text-paper transition-colors duration-base hover:bg-ink/90"
+                >
+                  Sign in with Monmi
+                  <svg
+                    aria-hidden="true"
+                    className="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
                   >
-                    <span className="font-mono text-caption uppercase tracking-[0.6px] opacity-60">
-                      {step}
-                    </span>
-                    <p className="m-0 mt-md text-body-sm font-[330] leading-[1.45] tracking-[-0.14px]">
-                      {label}
-                    </p>
-                  </div>
-                ))}
+                    <path d="M5 12h14M13 5l7 7-7 7" />
+                  </svg>
+                </Link>
+                <Link
+                  to="/dashboard"
+                  className="flex h-11 items-center justify-center rounded-xl border border-hairline bg-surface text-ui-sm font-medium transition-colors duration-base hover:border-ink/30"
+                >
+                  Back to Dashboard
+                </Link>
               </div>
-            </article>
+            </div>
+          )}
 
-            <aside className="grid gap-sm sm:grid-cols-2 md:grid-cols-1">
-              <div
-                data-reveal
-                style={{ "--reveal-index": 1 } as React.CSSProperties}
-                className="motion-lift rounded-lg bg-[var(--color-block-cream)] p-lg text-[var(--color-ink)]"
-              >
-                <p className="m-0 font-mono text-caption uppercase tracking-[0.6px] opacity-70">
-                  PROMPT IDEAS
-                </p>
-                <div className="mt-lg flex flex-wrap gap-xs">
-                  {[
-                    "Fashion store homepage",
-                    "Product collection page",
-                    "Flash sale landing page",
-                    "Checkout upsell flow",
-                    "New arrival campaign",
-                    "Retail loyalty page",
-                  ].map((label) => (
-                    <button
-                      key={label}
-                      className="motion-press rounded-pill border border-[rgb(0_0_0_/_0.12)] bg-[var(--color-canvas)] px-sm py-xs text-body-sm font-[480] hover:border-[var(--color-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
-                      type="button"
-                      onClick={() => setPrompt(label)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div
-                data-reveal
-                style={{ "--reveal-index": 2 } as React.CSSProperties}
-                className="motion-lift rounded-lg bg-[var(--color-block-navy)] p-lg text-[var(--color-inverse-ink)]"
-              >
-                <p className="m-0 font-mono text-caption uppercase tracking-[0.6px] opacity-70">
-                  WORKFLOW
-                </p>
-                <p className="m-0 mt-lg text-body font-[320] leading-[1.45] tracking-[-0.26px] opacity-90">
-                  Generate, preview, and refine pages in one focused builder flow.
-                </p>
-              </div>
-            </aside>
-          </div>
+          <p className="mt-6 text-center text-xs leading-relaxed text-subtle">
+            This page checks access before you create a new project.
+          </p>
         </section>
-      </div>
-      <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
-    </main>
+      </main>
+    </div>
   );
 }

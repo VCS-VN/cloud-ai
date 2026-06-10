@@ -181,7 +181,7 @@ export class ProjectService {
           projectId: project.id,
           userId,
           prompt: initialPrompt,
-          locale: "vi",
+          locale: "en",
           project: { status: "draft" },
           runId: agentRun.id,
           parentMessageId: userMessage.id,

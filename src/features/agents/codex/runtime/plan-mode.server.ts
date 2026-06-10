@@ -145,7 +145,7 @@ export async function runPlanTurn(
       type: "awaiting_clarification",
       runId: ctx.runId,
       milestone: "awaiting_clarification",
-      question: "Bạn muốn tiếp tục với kế hoạch này?",
+      question: "Would you like to continue with this plan?",
       options: [
         { id: "approve", label: "Approve" },
         { id: "reject", label: "Reject" },

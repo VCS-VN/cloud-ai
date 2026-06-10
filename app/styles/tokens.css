@@ -1,0 +1,50 @@
+/**
+ * Lumen — design tokens as CSS variables.
+ * Single source of truth: tokens.json (Tokens Studio for Figma).
+ * Keep values in sync — when brand spec arrives, update only this file.
+ *
+ * Color values use space-separated RGB so Tailwind utilities can
+ * apply alpha via `<alpha-value>`:
+ *   bg-ink/40 → rgb(15 15 16 / 0.4)
+ */
+
+@layer base {
+  :root {
+    /* ─── Surfaces ─────────────────────────────────────────────── */
+    --color-paper:          253 250 246;  /* #FDFAF6 — global page bg */
+    --color-chalk:          244 239 230;  /* #F4EFE6 — soft beige */
+    --color-surface:        255 255 255;  /* #FFFFFF — cards */
+    --color-hairline:       235 229 220;  /* #EBE5DC — borders */
+    --color-hairline-soft:  220 214 204;  /* #DCD6CC — strong divider */
+
+    /* ─── Foreground ────────────────────────────────────────────── */
+    --color-ink:    15 15 16;    /* #0F0F10 — primary text + CTA */
+    --color-deep:   8 9 13;      /* #08090D — dark surfaces */
+    --color-muted:  117 115 110; /* #75736E — secondary text */
+    --color-subtle: 155 152 146; /* #9B9892 — placeholder, disabled */
+
+    /* ─── Status — pastel bg + readable fg + saturated dot ─────── */
+    --color-success-bg:  236 253 245;  /* #ECFDF5 */
+    --color-success-fg:  4 120 87;     /* #047857 */
+    --color-success-dot: 5 150 105;    /* #059669 */
+
+    --color-warning-bg:  255 251 235;  /* #FFFBEB */
+    --color-warning-fg:  146 64 14;    /* #92400E */
+    --color-warning-dot: 217 119 6;    /* #D97706 */
+
+    --color-danger-bg:  255 241 242;   /* #FFF1F2 */
+    --color-danger-fg:  190 18 60;     /* #BE123C */
+    --color-danger-dot: 225 29 72;     /* #E11D48 */
+
+    /* ─── Typography stacks ────────────────────────────────────── */
+    --font-sans:    'Instrument Sans', -apple-system, BlinkMacSystemFont,
+                    'Segoe UI', system-ui, sans-serif;
+    --font-display: 'Instrument Sans', -apple-system, BlinkMacSystemFont,
+                    'Segoe UI', system-ui, sans-serif;
+    --font-mono:    ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo,
+                    monospace;
+  }
+
+  /* Khi brand thật về dark mode (chưa active) — chỉ cần override ở đây */
+  /* :root[data-theme='dark'] { ... } */
+}

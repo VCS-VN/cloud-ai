@@ -523,7 +523,7 @@ export async function runInitBuilderRun(
             // /answer route validates optionId against handle.clarificationPrompt.options.
             // Without this, picking any variant returns INVALID_OPTION.
             handle.clarificationPrompt = {
-              question: "Chọn phong cách thiết kế cho cửa hàng",
+              question: "Choose a design style for your store",
               options: variantOptions,
             };
             handle.resumeFn = async (answer) => {
@@ -537,7 +537,7 @@ export async function runInitBuilderRun(
               type: "awaiting_clarification",
               runId,
               milestone: "awaiting_clarification",
-              question: "Chọn phong cách thiết kế cho cửa hàng",
+              question: "Choose a design style for your store",
               options: variantOptions,
               metadata: {
                 questionType: "design_variant",

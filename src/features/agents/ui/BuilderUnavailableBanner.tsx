@@ -1,11 +1,12 @@
-import { BUILDER_RUN_LOCALE_VI } from "./builder-run-i18n";
+import { Textarea } from "@/components/ui/textarea";
+import { BUILDER_RUN_LOCALE_EN } from "./builder-run-i18n";
 
 export type BuilderUnavailableBannerProps = {
   message?: string;
 };
 
 export function BuilderUnavailableBanner(props: BuilderUnavailableBannerProps) {
-  const message = props.message ?? BUILDER_RUN_LOCALE_VI.failures.config_unavailable;
+  const message = props.message ?? BUILDER_RUN_LOCALE_EN.failures.config_unavailable;
   return (
     <div
       role="status"
@@ -30,11 +31,11 @@ export function BuilderPromptInput(props: BuilderPromptInputProps) {
   const placeholder =
     props.placeholder ??
     (props.available
-      ? "Mô tả thay đổi bạn muốn áp dụng cho dự án..."
-      : BUILDER_RUN_LOCALE_VI.failures.config_unavailable);
+      ? "Describe the change you want to apply to this project..."
+      : BUILDER_RUN_LOCALE_EN.failures.config_unavailable);
   return (
     <div className="flex flex-col gap-1">
-      <textarea
+      <Textarea
         className="min-h-[3rem] w-full rounded border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
         disabled={!props.available}
         value={props.value}

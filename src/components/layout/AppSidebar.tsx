@@ -10,6 +10,7 @@ import {
   Star,
 } from "lucide-react";
 import { UserMenu } from "@/components/auth/UserMenu";
+import { Button } from "@/components/ui/button";
 import type { AuthUserSummary } from "@/auth/types";
 import type { Project } from "@/shared/project-types";
 
@@ -70,26 +71,26 @@ export function AppSidebar({
   return (
     <aside
       data-collapsed={collapsed}
-      className="flex min-w-0 flex-col rounded-lg border border-[var(--app-sidebar-border)] bg-[var(--app-sidebar-bg)] p-sm text-[var(--app-sidebar-text)] shadow-none transition-all duration-300 ease-out"
+      className="flex min-w-0 flex-col rounded-card border border-hairline bg-surface p-3 text-ink shadow-card transition-all duration-base ease-standard"
     >
-      <div className="mb-md flex items-center justify-between gap-sm">
-        <button
-          className="flex min-w-0 items-center gap-xs border-0 bg-transparent p-0 text-left text-[12px] font-[520] text-[var(--app-sidebar-text)] transition-opacity duration-200 hover:opacity-75"
-          type="button"
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Button
+          variant="ghost"
+          className="!h-auto !min-h-0 !px-0 !py-0 flex min-w-0 items-center gap-2 !justify-start text-left text-ui-sm font-medium text-ink hover:bg-transparent hover:opacity-75"
           onClick={goDashboard}
           aria-label="Dashboard"
         >
           <span
-            className="h-5 w-5 shrink-0 rounded-sm bg-[var(--color-block-lilac)]"
+            className="h-5 w-5 shrink-0 rounded-md bg-ink"
             aria-hidden="true"
           />
           {!collapsed ? (
-            <span className="truncate text-[15px] font-[680]">Cloud AI</span>
+            <span className="truncate text-card-title font-semibold">Cloud AI</span>
           ) : null}
-        </button>
-        <button
-          className="motion-press inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--app-sidebar-border)] bg-[var(--app-sidebar-control)] text-[var(--app-icon-muted)] hover:bg-[var(--app-sidebar-control-hover)] hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
-          type="button"
+        </Button>
+        <Button
+          variant="icon"
+          size="icon"
           onClick={toggleSidebar}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
@@ -98,7 +99,7 @@ export function AppSidebar({
           ) : (
             <PanelLeftClose aria-hidden="true" size={16} />
           )}
-        </button>
+        </Button>
       </div>
 
       <SidebarSection title="Menu" collapsed={collapsed}>
@@ -133,7 +134,7 @@ export function AppSidebar({
           collapsed={collapsed}
           className="min-h-0 flex-1 overflow-hidden"
         >
-          <div className="flex min-h-0 flex-col gap-xxs overflow-y-auto pr-xxs">
+          <div className="flex min-h-0 flex-col gap-1 overflow-y-auto pr-1">
             {recentProjects.map((project) => (
               <SidebarButton
                 key={project.id}
@@ -157,7 +158,7 @@ export function AppSidebar({
       )}
 
       <div
-        className={`mt-auto flex items-center ${collapsed ? "justify-center" : "justify-between"} gap-sm border-t border-[var(--app-sidebar-border)] pt-sm`}
+        className={`mt-auto flex items-center ${collapsed ? "justify-center" : "justify-between"} gap-3 border-t border-hairline pt-3`}
       >
         <UserMenu user={user} compact placement="top" align="left" />
       </div>
@@ -177,13 +178,13 @@ function SidebarSection({
   children: ReactNode;
 }) {
   return (
-    <section className={`mb-md ${className}`} aria-label={title}>
+    <section className={`mb-4 ${className}`} aria-label={title}>
       {!collapsed ? (
-        <p className="mb-xs mt-0 px-xs text-[12px] font-[520] text-[var(--app-sidebar-subtle)]">
+        <p className="eyebrow mb-2 mt-0 px-2 text-muted">
           {title}
         </p>
       ) : null}
-      <div className="flex flex-col gap-xxs">{children}</div>
+      <div className="flex flex-col gap-1">{children}</div>
     </section>
   );
 }
@@ -203,10 +204,12 @@ function SidebarButton({
   collapsed: boolean;
   onClick: () => void;
 }) {
+  const layoutClass = collapsed ? "justify-center px-0" : "";
   return (
-    <button
-      className={`motion-press flex h-9 w-full min-w-0 items-center gap-sm rounded-sm border border-transparent px-sm text-left text-[12px] ${selected ? "bg-[var(--app-selected-bg)] text-[var(--app-selected-text)]" : "bg-transparent text-[var(--app-sidebar-muted)] hover:border-[var(--app-sidebar-border)] hover:bg-[var(--app-sidebar-control-hover)] hover:text-[var(--app-icon)]"} ${collapsed ? "justify-center px-0" : ""}`}
-      type="button"
+    <Button
+      variant={selected ? "nav-active" : "nav"}
+      size="navItem"
+      className={layoutClass}
       title={collapsed ? label : undefined}
       aria-label={label}
       onClick={onClick}
@@ -216,11 +219,11 @@ function SidebarButton({
         <span className="min-w-0 flex-1 truncate">{label}</span>
       ) : null}
       {!collapsed && typeof count === "number" ? (
-        <span className="font-mono text-[12px] text-[var(--app-sidebar-subtle)]">
+        <span className="font-mono text-caption text-muted">
           {count}
         </span>
       ) : null}
-    </button>
+    </Button>
   );
 }
 

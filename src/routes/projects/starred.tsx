@@ -36,22 +36,21 @@ function StarredProjectsPage() {
         />
       }
     >
-      <header className="mb-md flex items-start justify-between gap-sm">
+      <header className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h1 className="m-0 text-[20px] font-[580] leading-tight tracking-[-0.015em]">
+          <h1 className="m-0 text-h2 font-semibold leading-tight tracking-tight">
             Starred
           </h1>
-          <p className="m-0 mt-xxs text-[12px] leading-4 text-[var(--app-muted)]">
+          <p className="m-0 mt-1 text-ui-sm text-muted">
             Quickly return to projects you mark as important.
           </p>
         </div>
-        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--app-control)] text-[var(--app-icon-muted)]">
+        <span className="inline-flex h-9 w-9 items-center justify-center rounded-pill bg-chalk text-muted">
           <Star aria-hidden="true" size={16} />
         </span>
       </header>
 
       <EmptyState
-        tone="cream"
         title="Starred projects are coming soon"
         description="This page is ready for your starred projects. Star and unstar actions will be added in a later update."
       />

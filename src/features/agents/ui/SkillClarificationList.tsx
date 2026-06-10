@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export type SkillClarificationOption = {
   id: string;
@@ -21,7 +22,9 @@ export function SkillClarificationList({
 }: SkillClarificationListProps) {
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [committed, setCommitted] = useState<SkillClarificationOption | null>(null);
+  const [committed, setCommitted] = useState<SkillClarificationOption | null>(
+    null,
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async () => {
@@ -72,7 +75,8 @@ export function SkillClarificationList({
           const isPicked = pickedId === option.id;
           return (
             <li key={option.id}>
-              <button
+              <Button
+                variant="unstyled"
                 type="button"
                 role="radio"
                 aria-checked={isPicked}
@@ -99,7 +103,7 @@ export function SkillClarificationList({
                 <span className="flex-1 text-sm text-[var(--app-panel-text)]">
                   {option.label}
                 </span>
-              </button>
+              </Button>
             </li>
           );
         })}
@@ -115,7 +119,8 @@ export function SkillClarificationList({
       ) : null}
 
       <div className="flex items-center justify-end pt-1">
-        <button
+        <Button
+          variant="unstyled"
           type="button"
           disabled={isBusy || !pickedId}
           onClick={handleSubmit}
@@ -129,14 +134,18 @@ export function SkillClarificationList({
           ) : (
             "Submit"
           )}
-        </button>
+        </Button>
       </div>
     </div>
   );
 }
 
 function extractMessage(cause: unknown): string {
-  if (cause instanceof Error && cause.message && cause.message !== "submit_failed") {
+  if (
+    cause instanceof Error &&
+    cause.message &&
+    cause.message !== "submit_failed"
+  ) {
     return cause.message;
   }
   return "Couldn't submit your selection. Please try again.";

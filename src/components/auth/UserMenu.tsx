@@ -14,6 +14,7 @@ import {
   UserRound,
 } from "lucide-react";
 import type { AuthUserSummary } from "@/auth/types";
+import { Button } from "@/components/ui/button";
 import { logout } from "@/server/functions/auth";
 import { useTheme, type AppTheme } from "@/theme";
 
@@ -109,11 +110,12 @@ export function UserMenu({
 
   return (
     <div className="relative" ref={menuRef}>
-      <button
+      <Button
+        variant="unstyled"
         className={
           compact
             ? "motion-press inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--app-sidebar-border)] bg-[var(--app-sidebar-control)] text-[var(--app-sidebar-text)] outline-none hover:bg-[var(--app-sidebar-control-hover)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
-            : "motion-press inline-flex h-10 items-center gap-xs rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-xs pr-sm text-body-sm text-[var(--app-icon-muted)] outline-none hover:border-[var(--app-border-strong)] hover:text-[var(--app-icon)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+            : "motion-press inline-flex h-10 items-center gap-1 rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-1 pr-sm text-body-sm text-[var(--app-icon-muted)] outline-none hover:border-[var(--app-border-strong)] hover:text-[var(--app-icon)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
         }
         type="button"
         onClick={() => setOpen((current) => !current)}
@@ -127,15 +129,15 @@ export function UserMenu({
         {!compact ? (
           <span className="max-w-[160px] truncate">{userLabel}</span>
         ) : null}
-      </button>
+      </Button>
 
       {open ? (
         <div
-          className={`motion-dialog-in absolute ${menuPosition} z-50 w-[min(320px,calc(100vw-32px))] overflow-hidden rounded-lg border border-[var(--app-dropdown-border)] bg-[var(--app-dropdown-bg)] text-[var(--app-dropdown-text)] shadow-[var(--shadow-panel)] ring-1 ring-[var(--app-dropdown-border)]`}
+          className={`motion-dialog-in absolute ${menuPosition} z-50 w-[min(320px,calc(100vw-32px))] overflow-hidden rounded-lg border border-[var(--app-dropdown-border)] bg-[var(--app-dropdown-bg)] text-[var(--app-dropdown-text)] shadow-card-hover ring-1 ring-[var(--app-dropdown-border)]`}
           role="menu"
           aria-label="Account menu"
         >
-          <div className="flex items-center gap-sm border-b border-[var(--app-dropdown-border)] p-md">
+          <div className="flex items-center gap-2 border-b border-[var(--app-dropdown-border)] p-4">
             <UserAvatar user={user} size="lg" />
             <div className="min-w-0">
               <p className="m-0 truncate text-[16px] font-[720] leading-tight tracking-[-0.02em]">
@@ -148,7 +150,7 @@ export function UserMenu({
           </div>
 
           {appearanceOpen ? (
-            <div className="py-xs">
+            <div className="py-1">
               <MenuButton
                 icon={ChevronLeft}
                 label="Appearance"
@@ -170,7 +172,7 @@ export function UserMenu({
               ))}
             </div>
           ) : (
-            <div className="py-xs">
+            <div className="py-1">
               <MenuButton
                 icon={UserRound}
                 label="Profile"
@@ -218,8 +220,9 @@ function MenuButton({
   onClick: () => void;
 }) {
   return (
-    <button
-      className={`flex h-12 w-full items-center gap-sm border-0 px-md text-left text-[15px] font-[560] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-focus-ring)] ${selected ? "bg-[var(--app-dropdown-control-active)] text-[var(--app-selected-text)] [&_svg]:text-[var(--app-icon-selected)]" : "bg-transparent text-[var(--app-dropdown-text)] hover:bg-[var(--app-dropdown-control-hover)] [&_svg]:text-[var(--app-icon-muted)]"}`}
+    <Button
+      variant="unstyled"
+      className={`flex h-12 w-full items-center gap-2 border-0 px-4 text-left text-[15px] font-[560] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-focus-ring)] ${selected ? "bg-[var(--app-dropdown-control-active)] text-[var(--app-selected-text)] [&_svg]:text-[var(--app-icon-selected)]" : "bg-transparent text-[var(--app-dropdown-text)] hover:bg-[var(--app-dropdown-control-hover)] [&_svg]:text-[var(--app-icon-muted)]"}`}
       type="button"
       role="menuitem"
       onClick={onClick}
@@ -246,7 +249,7 @@ function MenuButton({
             aria-hidden="true"
           />
         ) : null)}
-    </button>
+    </Button>
   );
 }
 
@@ -289,7 +292,7 @@ export function UserAvatar({
 
   return (
     <span
-      className={`${dimensions} ${textSize} inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--color-block-lilac)] font-[720] text-[var(--app-on-color-block)] ring-1 ring-[var(--app-dropdown-border)]`}
+      className={`${dimensions} ${textSize} inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--color-block-lilac)] font-[720] text-[rgb(var(--color-ink))] ring-1 ring-[var(--app-dropdown-border)]`}
       aria-hidden="true"
     >
       {initials}

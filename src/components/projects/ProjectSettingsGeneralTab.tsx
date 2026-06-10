@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { Project } from "@/shared/project-types";
 
 function formatCreatedAt(createdAt?: string) {
@@ -40,7 +42,7 @@ export function ProjectSettingsGeneralTab({
         <label className="block text-[11px] uppercase tracking-[0.08em] text-[var(--app-muted)]" htmlFor="project-settings-name">
           Project name
         </label>
-        <input
+        <Input
           id="project-settings-name"
           className="mt-xs h-9 w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-sm text-[14px] font-[520] text-[var(--app-text)] outline-none transition-colors duration-200 placeholder:text-[var(--app-muted)] focus:border-[var(--app-border-strong)] focus:ring-2 focus:ring-[var(--app-focus-ring)]"
           value={projectName ?? project.name}
@@ -64,14 +66,15 @@ export function ProjectSettingsGeneralTab({
           <p className="m-0 text-[12px] leading-5 text-[var(--app-muted)]">
             Delete separately from Save.
           </p>
-          <button
+          <Button
+            variant="unstyled"
             className="shrink-0 rounded-pill bg-[var(--app-danger-bg)] px-sm py-xxs text-[13px] font-[560] text-[var(--app-danger-text)] ring-1 ring-[var(--app-border-strong)] transition-opacity duration-200 disabled:cursor-not-allowed disabled:opacity-60"
             type="button"
             disabled={deleting}
             onClick={onDelete}
           >
             {deleting ? "Deleting..." : "Delete"}
-          </button>
+          </Button>
         </div>
       </section>
     </div>

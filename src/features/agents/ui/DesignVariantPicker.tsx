@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import type { DesignVariant } from "@/shared/project-types";
 
 export type DesignVariantPickerProps = {
@@ -67,31 +69,32 @@ export function DesignVariantPicker({
   const isBusy = disabled || submitting;
   const otherEnabled = Boolean(onCustom);
   const submitDisabled =
-    isBusy ||
-    !pickedId ||
-    (pickedId === OTHER_ID && !customText.trim());
+    isBusy || !pickedId || (pickedId === OTHER_ID && !customText.trim());
 
   if (committed) {
     return <CommittedView committed={committed} />;
   }
 
   return (
-    <div className="space-y-3">
+    <div className="question-card overflow-hidden rounded-lg border border-hairline bg-surface">
       {question ? (
-        <p className="text-sm leading-snug text-[var(--app-panel-text)]">
-          {question}
-        </p>
+        <div className="px-3.5 pb-2.5 pt-3">
+          <p className="m-0 text-[13.5px] font-medium leading-snug text-ink">
+            {question}
+          </p>
+        </div>
       ) : null}
       <div
-        className="flex flex-col gap-2"
+        className="space-y-1.5 px-3.5 pb-3"
         role="radiogroup"
         aria-label={question ?? "Design style"}
       >
-        {variants.map((variant) => {
+        {variants.map((variant, index) => {
           const isPicked = pickedId === variant.id;
           return (
-            <button
+            <Button
               key={variant.id}
+              variant="unstyled"
               type="button"
               role="radio"
               aria-checked={isPicked}
@@ -99,28 +102,23 @@ export function DesignVariantPicker({
               onClick={() => setPickedId(variant.id)}
               className={cardClass(isPicked)}
             >
-              <div className="flex items-start gap-3">
-                <RadioDot picked={isPicked} />
-                <div className="flex shrink-0 gap-1 pt-[2px]">
-                  {variant.preview.palette.map((hex, idx) => (
-                    <span
-                      key={`${variant.id}-${idx}`}
-                      className="inline-block h-4 w-4 rounded-full border border-[var(--app-border)]"
-                      style={{ backgroundColor: hex }}
-                      aria-hidden="true"
-                    />
-                  ))}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium text-sm text-[var(--app-panel-text)]">
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium leading-snug text-ink">
                     {variant.label}
-                  </div>
-                  <p className="mt-1 text-xs leading-snug text-[var(--app-muted)]">
-                    {variant.description}
-                  </p>
-                </div>
-              </div>
-            </button>
+                  </span>
+                  {index === 0 || variant.id.toLowerCase().includes("recommended") ? (
+                    <span className="inline-flex h-5 items-center rounded border border-emerald-200 bg-emerald-50 px-1.5 font-mono text-[10px] font-medium uppercase tracking-wide text-emerald-700">
+                      Đề xuất
+                    </span>
+                  ) : null}
+                </span>
+                <span className="mt-1 block text-xs leading-relaxed text-muted">
+                  {variant.description}
+                </span>
+              </span>
+              <RadioDot picked={isPicked} />
+            </Button>
           );
         })}
 
@@ -139,48 +137,49 @@ export function DesignVariantPicker({
             }}
             className={cardClass(pickedId === OTHER_ID, isBusy)}
           >
-            <div className="flex items-start gap-3">
-              <RadioDot picked={pickedId === OTHER_ID} />
-              <div className="min-w-0 flex-1">
-                <div className="font-medium text-sm text-[var(--app-panel-text)]">
-                  Other
-                </div>
-                <p className="mt-1 text-xs leading-snug text-[var(--app-muted)]">
-                  Describe the style you want
-                </p>
-                {pickedId === OTHER_ID ? (
-                  <textarea
-                    autoFocus
-                    value={customText}
-                    disabled={isBusy}
-                    rows={2}
-                    onChange={(e) => setCustomText(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="mt-2 w-full resize-none rounded-md border border-[var(--app-border)] bg-[var(--app-panel-bg)] p-2 text-xs text-[var(--app-panel-text)] placeholder:text-[var(--app-subtle-text)] focus-visible:border-[var(--app-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:opacity-60"
-                    placeholder="e.g. bold tone, deep palette, daring typography."
-                  />
-                ) : null}
-              </div>
-            </div>
+            <span className="min-w-0 flex-1">
+              <span className="text-sm font-medium leading-snug text-ink">
+                Other
+              </span>
+              <span className="mt-1 block text-xs leading-relaxed text-muted">
+                Describe the style you want
+              </span>
+              {pickedId === OTHER_ID ? (
+                <Textarea
+                  autoFocus
+                  value={customText}
+                  disabled={isBusy}
+                  rows={3}
+                  onChange={(e) => setCustomText(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="mt-3 w-full resize-none rounded-md border border-hairline bg-paper p-2 text-xs leading-relaxed text-ink placeholder:text-subtle focus-visible:border-ink focus-visible:outline-none focus-visible:shadow-focus disabled:opacity-60"
+                  placeholder="Describe your preferred option..."
+                />
+              ) : null}
+            </span>
+            <RadioDot picked={pickedId === OTHER_ID} />
           </div>
         ) : null}
       </div>
 
       {errorMessage ? (
-        <p
-          className="rounded-md border border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] px-3 py-2 text-xs leading-snug text-[var(--app-danger-text)]"
-          role="alert"
-        >
-          {errorMessage}
-        </p>
+        <div className="px-3.5 pb-2.5">
+          <p
+            className="rounded-md border border-danger-bg bg-danger-bg px-3 py-2 text-xs leading-snug text-danger-fg"
+            role="alert"
+          >
+            {errorMessage}
+          </p>
+        </div>
       ) : null}
 
-      <div className="flex items-center justify-end pt-1">
-        <button
+      <div className="flex items-center justify-end border-t border-hairline bg-stone-50/60 px-3.5 py-2.5">
+        <Button
+          variant="unstyled"
           type="button"
           disabled={submitDisabled}
           onClick={handleSubmit}
-          className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-[var(--app-text)] px-4 text-xs font-[580] text-[var(--app-bg)] outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-ink px-3.5 text-[12.5px] font-medium text-paper outline-none transition-all duration-base hover:bg-deep active:translate-y-px focus-visible:shadow-focus disabled:cursor-not-allowed disabled:opacity-40"
         >
           {submitting ? (
             <>
@@ -190,14 +189,18 @@ export function DesignVariantPicker({
           ) : (
             "Submit"
           )}
-        </button>
+        </Button>
       </div>
     </div>
   );
 }
 
 function extractMessage(cause: unknown): string {
-  if (cause instanceof Error && cause.message && cause.message !== "submit_failed") {
+  if (
+    cause instanceof Error &&
+    cause.message &&
+    cause.message !== "submit_failed"
+  ) {
     return cause.message;
   }
   return "Couldn't submit your selection. Please try again.";
@@ -206,50 +209,48 @@ function extractMessage(cause: unknown): string {
 function RadioDot({ picked }: { picked: boolean }) {
   return (
     <span
-      className={`mt-[2px] inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-        picked
-          ? "border-[var(--app-border-strong)] bg-[var(--color-primary)]"
-          : "border-[var(--app-border)] bg-[var(--app-panel-bg)]"
+      className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors duration-base ${
+        picked ? "border-ink bg-ink text-paper" : "border-hairline bg-paper text-transparent"
       }`}
       aria-hidden="true"
     >
-      {picked ? (
-        <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-on-primary)]" />
-      ) : null}
+      {picked ? <Check size={10} strokeWidth={3} /> : null}
     </span>
   );
 }
 
 function cardClass(picked: boolean, isBusy = false): string {
   const base =
-    "block w-full text-left rounded-md border p-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]";
+    "flex w-full items-start gap-3 rounded-md border p-3 text-left transition-all duration-base focus-visible:outline-none focus-visible:shadow-focus";
   const stateClass = picked
-    ? "border-[var(--app-border-strong)] bg-[var(--app-panel-strong)]"
-    : "border-[var(--app-border)] bg-[var(--app-panel-bg)] hover:border-[var(--app-border-strong)]";
-  const disabledClass = isBusy ? "opacity-60 cursor-not-allowed" : "cursor-pointer";
+    ? "border-ink bg-[#FAF7F2] shadow-[inset_0_0_0_1px_rgb(15_15_16)]"
+    : "border-hairline bg-surface hover:bg-[#FAF7F2] hover:border-hairline-soft";
+  const disabledClass = isBusy
+    ? "opacity-60 cursor-not-allowed"
+    : "cursor-pointer";
   return `${base} ${stateClass} ${disabledClass}`;
 }
 
 function CommittedView({ committed }: { committed: Committed }) {
   return (
     <div
-      className="rounded-md border border-[var(--app-border-strong)] bg-[var(--app-panel-strong)] p-3"
+      className="rounded-lg border border-hairline bg-surface p-3.5"
       aria-live="polite"
     >
-      <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--app-muted)]">
+      <div className="font-mono text-[10px] font-medium uppercase tracking-wide text-muted">
         Selected
       </div>
       {committed.kind === "option" ? (
         <>
-          <div className="mt-1 text-sm font-medium text-[var(--app-panel-text)]">
+          <div className="mt-1 text-sm font-medium text-ink">
             {committed.label}
           </div>
-          <p className="mt-1 text-xs leading-snug text-[var(--app-muted)]">
+          <p className="mt-1 text-xs leading-relaxed text-muted">
             {committed.description}
           </p>
         </>
       ) : (
-        <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--app-panel-text)]">
+        <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink">
           {committed.text}
         </p>
       )}

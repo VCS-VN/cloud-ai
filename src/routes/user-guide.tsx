@@ -15,7 +15,7 @@ function UserGuidePage() {
     let cancelled = false;
     fetch("/docs/user-guide.md")
       .then((res) => {
-        if (!res.ok) throw new Error("Không tải được hướng dẫn.");
+        if (!res.ok) throw new Error("Could not load the user guide.");
         return res.text();
       })
       .then((text) => {
@@ -29,7 +29,7 @@ function UserGuidePage() {
           setError(
             cause instanceof Error
               ? cause.message
-              : "Không tải được hướng dẫn. Vui lòng thử lại.",
+              : "Could not load the user guide. Please try again.",
           );
           setLoading(false);
         }
@@ -68,7 +68,7 @@ function UserGuidePage() {
   if (loading) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-12">
-        <div className="text-app-muted text-sm">Đang tải hướng dẫn…</div>
+        <div className="text-ui-sm text-muted">Loading user guide…</div>
       </main>
     );
   }
@@ -76,8 +76,8 @@ function UserGuidePage() {
   if (error) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-2xl font-semibold mb-4">Hướng dẫn sử dụng</h1>
-        <p className="text-app-danger-text bg-app-danger-bg border border-app-border rounded-md p-4">
+        <h1 className="mb-4 text-h2 font-semibold">User Guide</h1>
+        <p className="rounded-card border border-hairline bg-danger-bg p-4 text-danger-fg">
           {error}
         </p>
       </main>
@@ -85,7 +85,7 @@ function UserGuidePage() {
   }
 
   return (
-    <main className="user-guide mx-auto max-w-3xl px-6 py-12 text-app-fg">
+    <main className="user-guide mx-auto max-w-3xl px-6 py-12 text-ink">
       <article
         className="user-guide-content"
         dangerouslySetInnerHTML={{ __html: html }}

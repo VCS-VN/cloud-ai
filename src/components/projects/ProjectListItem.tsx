@@ -1,5 +1,6 @@
 import { Clock3, ExternalLink, Heart, Loader2, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import type { Project } from '@/shared/project-types'
 
 type ProjectListItemProps = {
@@ -43,7 +44,7 @@ export function ProjectListItem({ project, selected = false, variant = 'grid', o
   if (variant === 'list') {
     return (
       <article className={`flex w-full min-w-0 items-center gap-sm rounded-md border p-sm transition-all duration-200 ${selected ? 'border-[var(--app-accent)] bg-[var(--app-selected-bg)] text-[var(--app-selected-text)]' : 'border-[var(--app-border)] bg-[var(--app-panel)] text-[var(--app-text)] hover:border-[var(--app-border-strong)] hover:bg-[var(--app-control)]'}`}>
-        <button type="button" className="flex min-w-0 flex-1 items-center gap-sm rounded-sm border-0 bg-transparent p-0 text-left text-current outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]" aria-pressed={selected} onClick={() => onSelect(project.id)}>
+        <Button variant="unstyled" type="button" className="flex min-w-0 flex-1 items-center gap-sm rounded-sm border-0 bg-transparent p-0 text-left text-current outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]" aria-pressed={selected} onClick={() => onSelect(project.id)}>
           <ProjectThumb name={project.name} compact />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-[520] leading-4 text-current">{project.name}</span>
@@ -55,7 +56,7 @@ export function ProjectListItem({ project, selected = false, variant = 'grid', o
           </span>
           <ProjectStatusBadge selected={selected} status={statusText} />
           <ExternalLink aria-hidden="true" className={selected ? 'text-[var(--app-icon-selected)]' : 'text-[var(--app-icon-subtle)]'} size={15} />
-        </button>
+        </Button>
         {onDelete ? <DeleteButton confirming={confirmingDelete} deleting={deleting} onCancel={() => setConfirmingDelete(false)} onDelete={handleDelete} /> : null}
       </article>
     )
@@ -63,7 +64,7 @@ export function ProjectListItem({ project, selected = false, variant = 'grid', o
 
   return (
     <article className={`group relative min-w-0 overflow-hidden rounded-md border transition-all duration-200 ${selected ? 'border-[var(--app-accent)] bg-[var(--app-selected-bg)] text-[var(--app-selected-text)]' : 'border-[var(--app-border)] bg-[var(--app-panel)] text-[var(--app-text)] hover:border-[var(--app-border-strong)] hover:bg-[var(--app-control)]'}`}>
-      <button type="button" className="block w-full min-w-0 border-0 bg-transparent p-sm text-left text-current outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-focus-ring)]" aria-pressed={selected} onClick={() => onSelect(project.id)}>
+      <Button variant="unstyled" type="button" className="block w-full min-w-0 border-0 bg-transparent p-sm text-left text-current outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-focus-ring)]" aria-pressed={selected} onClick={() => onSelect(project.id)}>
         <ProjectThumb name={project.name} />
         <span className="mt-sm flex min-w-0 items-start gap-sm">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-block-lilac)] text-[12px] font-[700] text-[var(--app-on-color-block)]">
@@ -84,7 +85,7 @@ export function ProjectListItem({ project, selected = false, variant = 'grid', o
             </span>
           </span>
         </span>
-      </button>
+      </Button>
       {onDelete ? <div className="absolute right-xs top-xs opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"><DeleteButton confirming={confirmingDelete} deleting={deleting} onCancel={() => setConfirmingDelete(false)} onDelete={handleDelete} /></div> : null}
     </article>
   )
@@ -102,16 +103,16 @@ function DeleteButton({ confirming, deleting, onCancel, onDelete }: { confirming
   return (
     <span className="inline-flex items-center gap-xxs rounded-pill bg-[var(--app-panel)] p-xxs text-red-500 ring-1 ring-red-300 transition-colors duration-200">
       {confirming ? (
-        <button className="inline-flex h-7 items-center gap-xxs rounded-pill px-xs text-[11px] font-[520] text-red-500 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={onDelete} disabled={deleting} aria-busy={deleting}>
+        <Button variant="unstyled" className="inline-flex h-7 items-center gap-xxs rounded-pill px-xs text-[11px] font-[520] text-red-500 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={onDelete} disabled={deleting} aria-busy={deleting}>
           {deleting ? <Loader2 aria-hidden="true" className="animate-spin" size={12} /> : <Trash2 aria-hidden="true" size={12} />}
           Delete
-        </button>
+        </Button>
       ) : (
-        <button className="inline-flex h-7 w-7 items-center justify-center rounded-full text-red-500 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]" type="button" onClick={onDelete} aria-label="Delete project">
+        <Button variant="unstyled" className="inline-flex h-7 w-7 items-center justify-center rounded-full text-red-500 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]" type="button" onClick={onDelete} aria-label="Delete project">
           <Trash2 aria-hidden="true" size={14} />
-        </button>
+        </Button>
       )}
-      {confirming ? <button className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--app-muted)] outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]" type="button" onClick={onCancel} disabled={deleting} aria-label="Cancel delete"><X aria-hidden="true" size={13} /></button> : null}
+      {confirming ? <Button variant="unstyled" className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--app-muted)] outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]" type="button" onClick={onCancel} disabled={deleting} aria-label="Cancel delete"><X aria-hidden="true" size={13} /></Button> : null}
     </span>
   )
 }

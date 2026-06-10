@@ -73,7 +73,7 @@ export function createSampleProduct(options: CreateSampleProductOptions): Produc
     store: {
       country: null,
       address:
-        "Chung cư cán bộ, nhân viên bộ tổng Tham Mưu, Đường Cầu Khoát, Tây Tựu, Từ Liêm, Hà Nội",
+        "Staff Quarters, General Staff Department, Cau Khoat Street, Tay Tuu, Tu Liem, Hanoi",
       isDomesticShipping: false,
       postalCode: "10000",
       name: "Nail Studio",

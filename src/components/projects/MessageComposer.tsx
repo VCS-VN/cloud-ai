@@ -1,6 +1,29 @@
-import { ArrowDown, ArrowUp, Loader2, Plus, Square, Wand2 } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  Clock,
+  FileText,
+  Image as ImageIcon,
+  Link2,
+  Loader2,
+  Paperclip,
+  Shield,
+  Square,
+  Wand2,
+} from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
-import type { ComposerReasoningEffort, TokenContext } from "@/shared/project-types";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
+import type {
+  ComposerReasoningEffort,
+  TokenContext,
+} from "@/shared/project-types";
 import { TokenBar } from "./TokenBar";
 
 type MessageComposerProps = {
@@ -32,11 +55,47 @@ export function validateProjectMessageInput(value: string) {
   return null;
 }
 
-const reasoningEffortOptions: ComposerReasoningEffort[] = [
+const EFFORT_META: Record<
+  ComposerReasoningEffort,
+  { label: string; bar: string; description: string }
+> = {
+  low: {
+    label: "Low",
+    bar: "bg-ink/30",
+    description: "Fast response, minimal reasoning. Good for small tweaks.",
+  },
+  medium: {
+    label: "Medium",
+    bar: "bg-ink/60",
+    description: "Balanced speed and quality. Default.",
+  },
+  high: {
+    label: "High",
+    bar: "bg-ink",
+    description: "Deep reasoning, multi-step. ~2-3× slower.",
+  },
+  xhigh: {
+    label: "Extreme",
+    bar: "bg-ink",
+    description: "Maximum reasoning. ~5× slower, for complex tasks.",
+  },
+};
+
+const EFFORT_OPTIONS: ComposerReasoningEffort[] = [
   "low",
   "medium",
   "high",
   "xhigh",
+];
+
+const ATTACH_BUTTONS: Array<{
+  key: string;
+  label: string;
+  Icon: typeof ImageIcon;
+}> = [
+  { key: "attach", label: "Attach", Icon: Paperclip },
+  { key: "image", label: "Image", Icon: ImageIcon },
+  { key: "url", label: "Reference file/url", Icon: Link2 },
 ];
 
 export function MessageComposer({
@@ -55,10 +114,17 @@ export function MessageComposer({
   onStop,
 }: MessageComposerProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
-  const inputValidationError = useMemo(() => validateProjectMessageInput(value), [value]);
+  const [effortOpen, setEffortOpen] = useState(false);
+  const inputValidationError = useMemo(
+    () => validateProjectMessageInput(value),
+    [value],
+  );
   const canSend = !inputValidationError && !sending && !disabled;
   const canStop = processing && !sending && !!onStop;
   const displayedError = validationError ?? error;
+  const placeholder = planMode
+    ? "Describe your goal — Cloud AI will plan before building..."
+    : "Describe the next change... (Cmd + Enter to send)";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -72,7 +138,12 @@ export function MessageComposer({
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      (event.metaKey || event.ctrlKey || !event.shiftKey)
+    ) {
+      // Cmd/Ctrl+Enter or plain Enter (without Shift) submits
       event.preventDefault();
       if (canSend) {
         event.currentTarget.form?.requestSubmit();
@@ -81,120 +152,199 @@ export function MessageComposer({
   }
 
   return (
-    <form
-      className="rounded-md border border-[var(--app-border)] bg-[var(--app-panel-bg)] p-sm transition-colors duration-300 focus-within:border-[var(--app-border-strong)]"
-      onSubmit={handleSubmit}
-    >
+    <form className="composer" onSubmit={handleSubmit}>
+      {/* Top row: mode toggle + reasoning effort */}
+      <div className="flex items-center justify-between gap-2 border-b border-hairline/70 px-2.5 pb-1 pt-2">
+        <div role="tablist" aria-label="Mode" className="composer-mode-group">
+          <Button
+            variant="unstyled"
+            type="button"
+            role="tab"
+            aria-selected={!planMode}
+            disabled={sending || disabled}
+            onClick={() => onPlanModeChange(false)}
+            className={`composer-mode-btn ${!planMode ? "composer-mode-btn-active" : ""}`}
+          >
+            <Shield aria-hidden="true" size={12} />
+            Build
+          </Button>
+          <Button
+            variant="unstyled"
+            type="button"
+            role="tab"
+            aria-selected={planMode}
+            disabled={sending || disabled}
+            onClick={() => onPlanModeChange(true)}
+            className={`composer-mode-btn ${planMode ? "composer-mode-btn-active" : ""}`}
+          >
+            <Wand2 aria-hidden="true" size={12} />
+            Plan
+          </Button>
+        </div>
+
+        <Popover open={effortOpen} onOpenChange={setEffortOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="unstyled"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded={effortOpen}
+              disabled={sending || disabled}
+              className="composer-effort-trigger"
+            >
+              <Clock aria-hidden="true" size={12} />
+              Reasoning:{" "}
+              <span className="text-ink">
+                {EFFORT_META[reasoningEffort].label}
+              </span>
+              <ChevronDown
+                aria-hidden="true"
+                size={10}
+                className="text-subtle"
+              />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            sideOffset={6}
+            className="w-56 p-1"
+            role="listbox"
+          >
+            {EFFORT_OPTIONS.map((option) => {
+              const meta = EFFORT_META[option];
+              const active = option === reasoningEffort;
+              return (
+                <Button
+                  key={option}
+                  variant="unstyled"
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => {
+                    onReasoningEffortChange(option);
+                    setEffortOpen(false);
+                  }}
+                  className={`composer-effort-option ${active ? "composer-effort-option-active" : ""}`}
+                >
+                  <span className={`composer-effort-bar ${meta.bar}`} />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-ui-sm font-medium text-ink inline-flex items-center gap-1.5">
+                      {meta.label}
+                      {active ? (
+                        <Check
+                          aria-hidden="true"
+                          size={12}
+                          className="text-success-fg"
+                        />
+                      ) : null}
+                    </span>
+                    <span className="block text-eyebrow text-muted">
+                      {meta.description}
+                    </span>
+                  </span>
+                </Button>
+              );
+            })}
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      {/* Textarea */}
       <label className="sr-only" htmlFor="project-message">
         Enter message
       </label>
-
-      <textarea
-        id="project-message"
-        className="min-h-32 w-full resize-none border-0 bg-transparent p-0 text-[12px] leading-4 text-[var(--app-panel-text)] outline-none placeholder:text-[var(--app-subtle-text)] disabled:cursor-not-allowed disabled:opacity-60"
-        value={value}
-        style={{
-          minHeight: 120,
-        }}
-        placeholder="Ask Cloud AI..."
-        disabled={sending || disabled}
-        maxLength={MAX_PROJECT_MESSAGE_LENGTH}
-        aria-invalid={!!displayedError}
-        onChange={(event) => {
-          setValidationError(null);
-          onChange(event.target.value);
-        }}
-        onKeyDown={handleKeyDown}
-      />
-
-      {displayedError ? (
-        <p
-          className="builder-truncate-safe mt-xs rounded-md bg-[var(--app-danger-bg)] p-sm text-[12px] leading-4 text-[var(--app-danger-text)]"
-          role="alert"
-          aria-live="assertive"
-        >
-          {displayedError}
-        </p>
-      ) : null}
-
-      <div className="mt-sm flex flex-wrap items-center gap-xs border-t border-[var(--app-border)] pt-sm">
-        <label className="inline-flex h-8 items-center gap-xs rounded-pill border border-[var(--app-border)] bg-[var(--app-control)] px-sm text-[12px] text-[var(--app-muted)] transition-colors duration-200 focus-within:border-[var(--app-border-strong)] focus-within:ring-2 focus-within:ring-[var(--app-focus-ring)]">
-          <span>Reasoning</span>
-          <select
-            className="border-0 bg-transparent text-[12px] font-medium capitalize text-[var(--app-panel-text)] outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            value={reasoningEffort}
-            disabled={sending || disabled}
-            onChange={(event) =>
-              onReasoningEffortChange(
-                event.target.value as ComposerReasoningEffort,
-              )
-            }
-            aria-label="Reasoning effort"
-          >
-            {reasoningEffortOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          className={`inline-flex h-8 items-center gap-xs rounded-pill border px-sm text-[12px] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 ${planMode ? "border-[var(--app-border-strong)] bg-[var(--color-block-lime)] text-[var(--app-on-color-block)] [&_svg]:text-[var(--app-icon-on-color-block)]" : "border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-muted)] hover:border-[var(--app-border-strong)] hover:text-[var(--app-panel-text)] [&_svg]:text-[var(--app-icon-muted)]"}`}
-          type="button"
-          aria-pressed={planMode}
+      <div className="px-3 pt-3">
+        <Textarea
+          id="project-message"
+          className="w-full bg-transparent border-0 outline-none p-0
+                     text-body leading-relaxed text-ink
+                     placeholder:text-subtle
+                     resize-none min-h-[96px] max-h-[260px] overflow-y-auto
+                     focus-visible:shadow-none"
+          value={value}
+          placeholder={placeholder}
           disabled={sending || disabled}
-          onClick={() => onPlanModeChange(!planMode)}
-        >
-          <Wand2 aria-hidden="true" size={14} />
-          Plan mode {planMode ? "on" : "off"}
-        </button>
+          maxLength={MAX_PROJECT_MESSAGE_LENGTH}
+          aria-invalid={!!displayedError}
+          onChange={(event) => {
+            setValidationError(null);
+            onChange(event.target.value);
+          }}
+          onKeyDown={handleKeyDown}
+        />
       </div>
 
-      <div className="mt-sm flex items-center justify-between gap-sm">
-        <div className="flex items-center gap-xs">
-          <button
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)]"
-            type="button"
-            aria-label="Add context"
+      {displayedError ? (
+        <div className="px-3 pb-2">
+          <p
+            className="rounded-md border border-hairline bg-danger-bg p-2 text-ui-sm text-danger-fg"
+            role="alert"
+            aria-live="assertive"
           >
-            <Plus aria-hidden="true" size={15} />
-          </button>
-          <span className="inline-flex h-8 items-center gap-xs rounded-pill bg-[var(--app-panel)] px-sm text-[12px] text-[var(--app-muted)] [&_svg]:text-[var(--app-icon-muted)] transition-colors duration-200">
-            <Wand2 aria-hidden="true" size={14} />
-            Visual edits
-          </span>
+            {displayedError}
+          </p>
         </div>
-        <div className="flex items-center gap-xs">
-          {/* T062: TokenBar near send button */}
+      ) : null}
+
+      {/* Bottom row: attachments + send */}
+      <div className="flex items-center justify-between gap-2 px-2 pb-2">
+        <div className="flex items-center gap-0.5">
+          {ATTACH_BUTTONS.map(({ key, label, Icon }) => (
+            <Button
+              key={key}
+              variant="unstyled"
+              type="button"
+              className="composer-icon-btn"
+              aria-label={label}
+              title={`${label} — coming soon`}
+              disabled
+            >
+              <Icon aria-hidden="true" size={14} />
+            </Button>
+          ))}
+          <Button
+            variant="unstyled"
+            type="button"
+            className="composer-icon-btn px-2 w-auto h-7 text-eyebrow font-medium"
+            title="Hint — coming soon"
+            disabled
+          >
+            <FileText aria-hidden="true" size={12} />
+            <span>Hint</span>
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-2">
           <TokenBar tokenContext={tokenContext ?? null} />
           {canStop ? (
-            <button
-              className="inline-flex h-8 items-center gap-xs rounded-pill border border-[var(--app-border)] bg-[var(--app-panel-bg)] px-sm text-[12px] text-[var(--app-panel-text)] transition-colors duration-200 hover:border-[var(--app-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+            <Button
+              variant="unstyled"
               type="button"
               onClick={() => void onStop?.()}
               aria-label="Stop generating"
+              className="composer-stop"
             >
-              <Square
-                aria-hidden="true"
-                className="text-[var(--app-icon)]"
-                size={12}
-              />
+              <Square aria-hidden="true" size={12} />
               Stop
-            </button>
+            </Button>
           ) : null}
-          <button
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border-0 bg-[var(--color-primary)] text-[var(--color-on-primary)] [&_svg]:text-current outline-none transition-transform duration-200 hover:scale-105 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+          <Button
+            variant="unstyled"
             type="submit"
             disabled={!canSend}
             aria-label={sending ? "Sending message..." : "Send message"}
             aria-busy={sending}
+            className="composer-send"
           >
             {sending ? (
-              <Loader2 aria-hidden="true" className="animate-spin" size={16} />
+              <Loader2 aria-hidden="true" className="animate-spin" size={14} />
             ) : (
-              <ArrowUp aria-hidden="true" size={16} />
+              <>
+                <span>{planMode ? "Plan" : "Send"}</span>
+                <ArrowRight aria-hidden="true" size={14} />
+              </>
             )}
-          </button>
+          </Button>
         </div>
       </div>
       <p className="sr-only" aria-live="polite">

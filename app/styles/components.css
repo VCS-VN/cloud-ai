@@ -1,0 +1,900 @@
+/**
+ * Lumen — component classes.
+ * Built on top of tokens.css + tailwind.config.js. Use these for repeating
+ * patterns (cards, buttons, inputs, status pills, hero, composer…).
+ *
+ * Convention:
+ *   .btn / .btn-primary / .btn-ghost / .btn-icon
+ *   .input / .textarea
+ *   .card / .card-hover
+ *   .pill / .pill-success / .pill-warning / .pill-danger / .pill-soft
+ *   .topbar / .topbar-link / .topbar-link-active
+ *   .eyebrow / .kbd / .divider-h
+ *   .hero / .hero-headline / .hero-subtext
+ *   .composer / .composer-row
+ *   .step / .step-done / .step-running / .step-pending
+ *   .option-card / .option-card-active
+ *   .focus-ring (mixin via @apply)
+ *
+ * Khi viết component React/Vue, dùng `class="card card-hover"` thay vì
+ * lặp 8 utilities mỗi nơi.
+ */
+
+@layer components {
+
+  /* ─── Focus ring (reusable via @apply) ─────────────────────── */
+  .focus-ring {
+    @apply outline-none ring-0 focus-visible:shadow-focus focus-visible:border-ink/40 transition-shadow duration-base;
+  }
+
+  /* ─── Topbar ───────────────────────────────────────────────── */
+  .topbar {
+    @apply h-topbar w-full bg-paper/90 backdrop-blur border-b border-hairline sticky top-0 z-40 flex items-center px-6;
+  }
+
+  .topbar-link {
+    @apply text-ui-sm text-muted hover:text-ink transition-colors duration-base px-2 py-1 rounded-md;
+  }
+
+  .topbar-link-active {
+    @apply text-ink font-medium;
+  }
+
+  /* ─── Eyebrow / kbd / divider ──────────────────────────────── */
+  .eyebrow {
+    @apply font-mono text-eyebrow text-muted uppercase tracking-wide;
+  }
+
+  .kbd {
+    @apply font-mono text-eyebrow text-muted px-1.5 py-0.5 border border-hairline rounded-md bg-surface;
+  }
+
+  .divider-h {
+    @apply h-px w-full bg-hairline;
+  }
+
+  /* ─── Buttons ──────────────────────────────────────────────── */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 h-control-lg px-4 rounded-button text-ui-sm font-medium transition-all duration-base ease-standard disabled:opacity-50 disabled:pointer-events-none;
+    @apply focus-ring;
+  }
+
+  .btn-primary {
+    @apply btn bg-ink text-paper hover:bg-deep;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-ink hover:bg-ink/[0.04];
+  }
+
+  .btn-outline {
+    @apply btn bg-surface text-ink border border-hairline hover:border-ink/30;
+  }
+
+  .btn-sm {
+    @apply h-control-sm px-3 text-caption;
+  }
+
+  .btn-icon {
+    @apply inline-flex items-center justify-center w-control-md h-control-md rounded-md text-muted hover:text-ink hover:bg-ink/[0.04] transition-colors duration-base;
+    @apply focus-ring;
+  }
+
+  /* ─── Inputs ───────────────────────────────────────────────── */
+  .input {
+    @apply w-full h-control-lg px-3 bg-surface border border-hairline rounded-input text-body text-ink placeholder:text-subtle transition-shadow duration-base;
+    @apply focus-ring;
+  }
+
+  .textarea {
+    @apply input h-auto py-2.5 resize-none;
+    field-sizing: content;
+  }
+
+  /* ─── Cards ────────────────────────────────────────────────── */
+  .card {
+    @apply bg-surface border border-hairline rounded-card shadow-card transition-shadow duration-base ease-standard;
+  }
+
+  .card-hover {
+    @apply hover:shadow-card-hover hover:border-hairline-soft;
+  }
+
+  .card-padded {
+    @apply card p-6;
+  }
+
+  /* ─── Pills (status + soft) ────────────────────────────────── */
+  .pill {
+    @apply inline-flex items-center gap-1.5 h-6 px-2.5 rounded-pill text-eyebrow font-medium border border-hairline bg-surface text-ink;
+  }
+
+  .pill-soft {
+    @apply pill bg-chalk border-chalk text-ink;
+  }
+
+  .pill-success {
+    @apply pill bg-success-bg border-success-bg text-success-fg;
+  }
+
+  .pill-success::before {
+    content: '';
+    @apply w-1.5 h-1.5 rounded-pill bg-success-dot;
+  }
+
+  .pill-warning {
+    @apply pill bg-warning-bg border-warning-bg text-warning-fg;
+  }
+
+  .pill-warning::before {
+    content: '';
+    @apply w-1.5 h-1.5 rounded-pill bg-warning-dot;
+  }
+
+  .pill-danger {
+    @apply pill bg-danger-bg border-danger-bg text-danger-fg;
+  }
+
+  .pill-danger::before {
+    content: '';
+    @apply w-1.5 h-1.5 rounded-pill bg-danger-dot;
+  }
+
+  /* ─── Hero (dashboard / new-project) ───────────────────────── */
+  .hero {
+    @apply min-h-[calc(100vh-3.5rem)] flex items-center justify-center px-6 py-12;
+  }
+
+  .hero-inner {
+    @apply w-full max-w-prompt mx-auto text-center;
+  }
+
+  .hero-headline {
+    @apply font-display text-display font-semibold text-ink tracking-display-tight leading-tight;
+  }
+
+  .hero-headline-compact {
+    @apply font-display text-display-compact font-semibold text-ink tracking-display-tight leading-tight;
+  }
+
+  .hero-subtext {
+    @apply text-body-lead text-muted mt-4;
+  }
+
+  /* ─── Composer (project-detail chat input) ─────────────────── */
+  .composer {
+    @apply rounded-xl border border-hairline bg-surface flex flex-col gap-2 transition-all duration-base focus-within:shadow-focus focus-within:border-ink/40;
+    box-shadow: 0 1px 2px rgba(15, 15, 16, 0.04);
+  }
+
+  .composer-row {
+    @apply flex items-center justify-between gap-2;
+  }
+
+  .composer-textarea {
+    @apply textarea min-h-[96px] max-h-[260px] border-0 shadow-none focus-visible:shadow-none p-0;
+  }
+
+  /* ─── Composer mode segmented (Build / Plan) ───────────────── */
+  .composer-mode-group {
+    @apply inline-flex items-center bg-chalk border border-hairline rounded-md p-0.5;
+  }
+
+  .composer-mode-btn {
+    @apply h-6 px-2 rounded text-[11.5px] font-medium text-muted inline-flex items-center gap-1 transition-all duration-base hover:text-ink active:translate-y-px disabled:opacity-40 disabled:pointer-events-none;
+  }
+
+  .composer-mode-btn-active {
+    @apply bg-surface text-ink shadow-sm hover:text-ink;
+  }
+
+  /* ─── Composer reasoning trigger (popover) ────────────────── */
+  .composer-effort-trigger {
+    @apply h-6 px-2 rounded-md text-[11.5px] font-medium text-muted inline-flex items-center gap-1.5 transition-all duration-base hover:bg-ink/[0.04] hover:text-ink active:translate-y-px disabled:opacity-40 disabled:pointer-events-none;
+    @apply focus-ring;
+  }
+
+  .composer-effort-option {
+    @apply w-full text-left px-2.5 py-2 rounded-md flex items-start gap-2.5 transition-colors duration-base hover:bg-ink/[0.04];
+  }
+
+  .composer-effort-option-active {
+    @apply bg-ink/[0.04];
+  }
+
+  .composer-effort-bar {
+    @apply mt-0.5 w-1 h-3 rounded-sm shrink-0;
+  }
+
+  /* ─── Composer send + secondary actions ───────────────────── */
+  .composer-send {
+    @apply h-8 px-3 rounded-md bg-ink text-paper text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-base hover:bg-deep active:translate-y-px disabled:opacity-40 disabled:pointer-events-none;
+    @apply focus-ring;
+  }
+
+  .composer-stop {
+    @apply h-8 px-3 rounded-md border border-hairline bg-surface text-xs font-medium text-ink inline-flex items-center gap-1.5 transition-all duration-base hover:border-hairline-soft hover:bg-ink/[0.025] active:translate-y-px;
+    @apply focus-ring;
+  }
+
+  .composer-icon-btn {
+    @apply w-7 h-7 rounded-md text-muted flex items-center justify-center transition-all duration-base hover:text-ink hover:bg-ink/[0.04] active:translate-y-px disabled:opacity-35 disabled:pointer-events-none;
+    @apply focus-ring;
+  }
+
+  .composer-footer {
+    @apply mt-2 flex items-center justify-between text-eyebrow text-subtle;
+  }
+
+  .composer-footer-link {
+    @apply inline-flex items-center gap-1 transition-colors duration-base hover:text-ink;
+    @apply focus-ring;
+  }
+
+  /* ─── Project detail tabs (Chat / Files / Versions) ────────── */
+  .project-tab {
+    @apply h-8 px-3 rounded-md text-sm font-medium text-muted inline-flex items-center gap-1.5 transition-colors duration-base hover:text-ink hover:bg-ink/[0.04];
+    @apply focus-ring;
+  }
+
+  .project-tab-active {
+    @apply text-ink bg-ink/[0.06] hover:bg-ink/[0.06];
+  }
+
+  .project-tab-count {
+    @apply ml-1 font-mono text-[10px] leading-none text-subtle;
+  }
+
+  /* ─── Project detail shell ────────────────────────────────── */
+  .project-detail-shell {
+    @apply h-dvh min-h-0 overflow-hidden bg-paper text-ink;
+  }
+
+  .project-chat-panel {
+    @apply flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-hairline bg-paper/95 transition-[width,border-width] duration-300 ease-in-out;
+  }
+
+  .project-preview-shell {
+    @apply relative flex min-h-0 min-w-0 flex-1 shrink-0 flex-col overflow-hidden bg-stone-50 transition-colors duration-300;
+  }
+
+  .project-preview-frame {
+    @apply flex h-full min-w-0 flex-col overflow-hidden rounded-[18px] border border-hairline bg-surface shadow-sm transition-colors duration-300;
+  }
+
+  /* ─── Project detail top bar ──────────────────────────────── */
+  .project-topbar {
+    @apply sticky top-0 z-50 h-14 bg-paper/90 backdrop-blur-md border-b border-hairline flex items-center justify-between px-4 lg:px-6;
+  }
+
+  .project-topbar-iconbtn {
+    @apply hidden md:inline-flex h-8 px-2.5 rounded-md text-muted hover:text-ink hover:bg-ink/[0.04] active:translate-y-px disabled:opacity-40 disabled:pointer-events-none text-eyebrow font-medium items-center gap-1.5 transition-all duration-base;
+    @apply focus-ring;
+  }
+
+  .project-topbar-outlinebtn {
+    @apply h-8 px-2.5 rounded-md border border-hairline bg-surface text-eyebrow font-medium text-ink inline-flex items-center gap-1.5 transition-all duration-base hover:bg-ink/[0.025] hover:border-hairline-soft active:translate-y-px disabled:opacity-40 disabled:pointer-events-none;
+    @apply focus-ring;
+  }
+
+  .project-topbar-deploy {
+    @apply h-8 px-3 rounded-md bg-ink text-paper text-eyebrow font-semibold inline-flex items-center gap-1.5 transition-all duration-base hover:bg-deep active:translate-y-px disabled:opacity-40 disabled:pointer-events-none;
+    @apply focus-ring;
+  }
+
+  /* ─── Preview toolbar (device + URL pill + tools) ─────────── */
+  .preview-toolbar {
+    @apply flex-shrink-0 h-12 px-3 lg:px-4 border-b border-hairline bg-paper/90 backdrop-blur-md flex items-center justify-between gap-3;
+  }
+
+  .preview-device-group {
+    @apply inline-flex items-center bg-chalk border border-hairline rounded-lg p-0.5;
+  }
+
+  .preview-device-btn {
+    @apply h-7 w-9 rounded-md text-muted hover:text-ink hover:bg-ink/[0.035] active:translate-y-px flex items-center justify-center transition-all duration-base;
+    @apply focus-ring;
+  }
+
+  .preview-device-btn-active {
+    @apply bg-surface text-ink shadow-sm hover:bg-surface;
+  }
+
+  .preview-url-pill {
+    @apply flex-1 max-w-xl mx-auto hidden md:flex items-center gap-2 h-8 px-3 rounded-lg bg-surface border border-hairline shadow-sm;
+  }
+
+  /* ─── Live build status pill (bottom-right of preview) ────── */
+  .build-status-pill {
+    @apply absolute right-4 bottom-4 inline-flex items-center gap-2 h-8 px-3 rounded-pill bg-deep text-paper text-eyebrow font-mono shadow-card-hover;
+  }
+
+  .build-status-dot {
+    @apply relative flex w-2 h-2;
+  }
+
+  .build-status-dot::before {
+    content: '';
+    @apply absolute inline-flex h-full w-full rounded-pill bg-success-dot opacity-60 animate-ping;
+  }
+
+  .build-status-dot::after {
+    content: '';
+    @apply relative inline-flex rounded-pill w-2 h-2 bg-success-fg;
+  }
+
+  /* ─── Project detail task checklist ────────────────────────── */
+  .plan-checklist {
+    @apply rounded-xl border border-hairline bg-surface overflow-hidden;
+    box-shadow: 0 1px 2px rgba(15, 15, 16, 0.04);
+  }
+
+  .plan-checklist-toggle {
+    @apply flex h-10 w-full items-center justify-between gap-3 px-3 text-left transition-colors duration-base hover:bg-ink/[0.025];
+    @apply focus-ring;
+  }
+
+  .plan-checklist-iconbox {
+    @apply flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-hairline bg-chalk text-ink;
+  }
+
+  .plan-checklist-title {
+    @apply text-ui-sm font-semibold tracking-tight text-ink;
+  }
+
+  .plan-checklist-summary {
+    @apply truncate text-[10.5px] leading-tight text-muted;
+  }
+
+  .plan-checklist-badge {
+    @apply hidden h-5 shrink-0 items-center rounded-md border border-warning-bg bg-warning-bg px-1.5 font-mono text-[10px] font-medium uppercase tracking-wide text-warning-fg sm:inline-flex;
+  }
+
+  .plan-checklist-chevron {
+    @apply h-4 w-4 shrink-0 text-muted transition-transform duration-base;
+  }
+
+  .plan-checklist-chevron-collapsed {
+    @apply -rotate-90;
+  }
+
+  .plan-checklist-body {
+    @apply max-h-48 overflow-y-auto border-t border-hairline bg-chalk/35;
+  }
+
+  .plan-task-row {
+    @apply flex items-start gap-2.5 border-b border-hairline/70 px-3 py-2.5 transition-colors duration-base last:border-b-0 hover:bg-surface;
+  }
+
+  .plan-task-row-active {
+    @apply bg-surface;
+  }
+
+  .plan-task-row-pending {
+    @apply opacity-60;
+  }
+
+  .plan-status-icon {
+    @apply mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-pill border text-[9px] font-mono leading-none;
+  }
+
+  .plan-status-done {
+    @apply border-hairline bg-chalk text-ink;
+  }
+
+  .plan-status-active {
+    @apply border-hairline-soft bg-surface text-ink;
+  }
+
+  .plan-status-paused {
+    @apply border-warning-bg bg-warning-bg text-warning-fg;
+  }
+
+  .plan-status-pending {
+    @apply border-hairline bg-paper text-subtle;
+  }
+
+  .plan-task-title {
+    @apply text-[12.5px] font-medium leading-snug text-muted;
+  }
+
+  .plan-task-title-active {
+    @apply font-semibold text-ink;
+  }
+
+  .plan-task-title-done {
+    @apply text-subtle line-through;
+  }
+
+  .plan-task-meta {
+    @apply mt-0.5 font-mono text-[10.5px] leading-tight text-subtle;
+  }
+
+  .plan-task-meta-active {
+    @apply text-muted;
+  }
+
+  /* ─── Steps process card ───────────────────────────────────── */
+  .step {
+    @apply flex items-start gap-3 py-2;
+  }
+
+  .step-marker {
+    @apply shrink-0 w-6 h-6 rounded-pill border border-hairline flex items-center justify-center text-eyebrow font-medium text-muted bg-surface;
+  }
+
+  .step-done .step-marker {
+    @apply bg-success-fg border-success-fg text-paper;
+  }
+
+  .step-running .step-marker {
+    @apply border-ink text-ink;
+  }
+
+  .step-running .step-marker::before {
+    content: '';
+    @apply w-1.5 h-1.5 rounded-pill bg-ink animate-pulse-soft;
+  }
+
+  .step-pending {
+    @apply opacity-60;
+  }
+
+  .step-label {
+    @apply text-body text-ink;
+  }
+
+  .step-pending .step-label {
+    @apply text-muted;
+  }
+
+  .step-meta {
+    @apply text-caption text-muted mt-0.5;
+  }
+
+  /* ─── Option card (Lumen asks user to pick) ────────────────── */
+  .option-card {
+    @apply card p-3 cursor-pointer flex items-center gap-3 hover:border-hairline-soft transition-all duration-base;
+  }
+
+  .option-card-active {
+    @apply border-ink shadow-focus;
+  }
+
+  .option-check {
+    @apply shrink-0 w-5 h-5 rounded-pill border border-hairline flex items-center justify-center opacity-0 transition-opacity duration-base;
+  }
+
+  .option-card-active .option-check {
+    @apply opacity-100 bg-ink border-ink text-paper;
+  }
+
+  /* ─── Floating "Jump to latest" pill ───────────────────────── */
+  .jump-latest {
+    @apply absolute left-1/2 -translate-x-1/2 bottom-3 z-10 inline-flex items-center gap-1.5 h-8 px-3 rounded-pill bg-deep text-paper text-[11.5px] font-medium shadow-card-hover hover:bg-ink transition-all duration-base ease-standard opacity-0 translate-y-2 pointer-events-none;
+  }
+
+  .jump-latest-visible {
+    @apply opacity-100 translate-y-0 pointer-events-auto;
+  }
+
+  .jump-latest-count {
+    @apply ml-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-pill bg-paper text-deep text-eyebrow font-mono;
+  }
+
+  /* ─── Load-older messages button (top of chat thread) ──────── */
+  .load-older-btn {
+    @apply mx-auto inline-flex items-center h-7 px-3 rounded-pill border border-hairline bg-surface text-eyebrow text-muted transition-colors duration-base hover:border-hairline-soft hover:text-ink disabled:cursor-not-allowed disabled:opacity-60;
+    @apply focus-ring;
+  }
+
+  /* ─── Message bubble (chat thread row layout) ──────────────── */
+  .msg-row {
+    @apply flex gap-3;
+  }
+
+  .msg-avatar-user {
+    @apply h-7 w-7 shrink-0 rounded-pill bg-ink text-paper flex items-center justify-center text-eyebrow font-semibold;
+  }
+
+  .msg-avatar-agent {
+    @apply h-7 w-7 shrink-0 rounded-md bg-chalk border border-hairline text-ink flex items-center justify-center;
+  }
+
+  .msg-content {
+    @apply min-w-0 flex-1;
+  }
+
+  .msg-meta {
+    @apply mb-1 flex items-baseline gap-2 flex-wrap;
+  }
+
+  .msg-author {
+    @apply text-ui-sm font-semibold text-ink;
+  }
+
+  .msg-time {
+    @apply text-eyebrow text-subtle font-mono;
+  }
+
+  .msg-model {
+    @apply font-mono text-eyebrow uppercase tracking-wide text-subtle;
+  }
+
+  .msg-pill {
+    @apply inline-flex items-center gap-1 h-5 px-1.5 rounded-md border border-hairline bg-chalk text-eyebrow font-mono uppercase tracking-wide text-muted;
+  }
+
+  .msg-pill-warn {
+    @apply inline-flex items-center gap-1 h-5 px-1.5 rounded-md border border-warning-bg bg-warning-bg text-eyebrow font-mono uppercase tracking-wide text-warning-fg;
+  }
+
+  .msg-pill-error {
+    @apply inline-flex items-center gap-1 h-5 px-1.5 rounded-md border border-danger-bg bg-danger-bg text-eyebrow font-mono uppercase tracking-wide text-danger-fg;
+  }
+
+  .msg-prose {
+    @apply text-body text-ink leading-relaxed [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1 [&_ul]:pl-5 [&_ul_li]:list-disc [&_ul_li]:my-0.5 [&_ol]:my-1 [&_ol]:pl-5 [&_ol_li]:list-decimal [&_ol_li]:my-0.5 [&_code]:font-mono [&_code]:text-ui-sm [&_code]:bg-ink/[0.06] [&_code]:text-ink [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_pre]:my-2 [&_pre]:p-3 [&_pre]:rounded-md [&_pre]:bg-ink/[0.04] [&_pre]:overflow-x-auto [&_pre_code]:bg-transparent [&_pre_code]:p-0;
+  }
+
+  .msg-day-divider {
+    @apply flex items-center gap-3 my-2;
+  }
+
+  .msg-day-divider::before,
+  .msg-day-divider::after {
+    content: '';
+    @apply flex-1 h-px bg-hairline;
+  }
+
+  .msg-day-label {
+    @apply font-mono text-eyebrow uppercase tracking-widest text-subtle;
+  }
+
+  /* ─── Resizable split divider ──────────────────────────────── */
+  .split-divider {
+    @apply h-full w-1.5 cursor-col-resize bg-hairline/0 hover:bg-hairline transition-colors duration-base;
+  }
+
+  .split-divider:active {
+    @apply bg-ink/30;
+  }
+
+  /* ─── Section / page utilities ─────────────────────────────── */
+  .section-label {
+    @apply eyebrow;
+  }
+
+  .section-divider {
+    @apply flex items-center gap-3 my-8;
+  }
+
+  .section-divider::before,
+  .section-divider::after {
+    content: '';
+    @apply flex-1 h-px bg-hairline;
+  }
+
+  /* ─── Inline code (chat / docs) ────────────────────────────── */
+  .code-inline {
+    @apply font-mono text-ui-sm px-1.5 py-0.5 rounded-md bg-ink/[0.06] text-ink;
+  }
+
+  /* ─── Auth gate (new-project page) ────────────────────────── */
+  .auth-gate-grid {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(15, 15, 16, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15, 15, 16, 0.035) 1px, transparent 1px);
+    background-size: 34px 34px;
+    opacity: 0.7;
+  }
+
+  .auth-gate-radial {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 50% 20%, rgba(15, 15, 16, 0.055), transparent 34%);
+  }
+
+  .auth-gate-card {
+    @apply bg-surface border border-hairline rounded-2xl p-8 text-center;
+    box-shadow: 0 1px 2px rgba(15, 15, 16, 0.04), 0 18px 48px rgba(15, 15, 16, 0.08);
+  }
+
+  .auth-gate-spinner {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    border: 1.5px solid #EBE5DC;
+    border-top-color: #0F0F10;
+    animation: auth-gate-spin 0.8s linear infinite;
+  }
+
+  @keyframes auth-gate-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* ─── Dashboard (projects page) ───────────────────────────── */
+  .dashboard-layout-offset {
+    transition: padding-left 0.22s ease;
+  }
+
+  @media (min-width: 1280px) {
+    body:not(.sidebar-expanded) .dashboard-layout-offset {
+      padding-left: 128px;
+    }
+
+    body.sidebar-expanded .dashboard-layout-offset {
+      padding-left: 268px;
+    }
+  }
+
+  .dashboard-side-shell {
+    position: fixed;
+    left: 1.5rem;
+    top: 5.375rem;
+    bottom: 1.5rem;
+    z-index: 40;
+    width: 6rem;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 1.25rem;
+    padding: 1.25rem 1.125rem;
+    border-radius: 30px;
+    border: 1px solid var(--color-hairline);
+    background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 1px 2px rgba(15, 15, 16, 0.04), 0 4px 12px rgba(15, 15, 16, 0.03);
+    transition: width 0.22s ease;
+  }
+
+  .dashboard-side-shell[data-expanded="true"] {
+    width: 15.5rem;
+  }
+
+  .dashboard-side-brand {
+    transition: opacity 0.18s ease, max-width 0.22s ease;
+  }
+
+  .dashboard-side-shell:not([data-expanded="true"]) .dashboard-side-brand {
+    display: none;
+  }
+
+  .dashboard-side-copy,
+  .dashboard-side-label,
+  .dashboard-side-divider {
+    opacity: 0;
+    max-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: opacity 0.18s ease, max-width 0.22s ease;
+  }
+
+  .dashboard-side-shell[data-expanded="true"] .dashboard-side-copy,
+  .dashboard-side-shell[data-expanded="true"] .dashboard-side-label,
+  .dashboard-side-shell[data-expanded="true"] .dashboard-side-divider {
+    opacity: 1;
+    max-width: 180px;
+  }
+
+  .dashboard-side-toggle {
+    @apply flex shrink-0 items-center justify-center rounded-xl text-muted transition duration-base hover:bg-ink/[0.04] hover:text-ink;
+    width: 3.5rem;
+    height: 3.5rem;
+  }
+
+  .dashboard-side-shell[data-expanded="true"] .dashboard-side-toggle [data-chevron] {
+    transform: rotate(180deg);
+  }
+
+  .dashboard-side-link,
+  .dashboard-side-profile {
+    @apply flex items-center justify-center rounded-2xl px-3 text-muted transition duration-base hover:bg-ink/[0.04] hover:text-ink;
+    width: 3.5rem;
+    height: 3.5rem;
+  }
+
+  .dashboard-side-link-active {
+    @apply flex items-center justify-center rounded-2xl px-3 text-paper shadow-sm transition duration-base;
+    width: 3.5rem;
+    height: 3.5rem;
+    background-color: var(--color-ink);
+  }
+
+  .dashboard-side-shell[data-expanded="true"] .dashboard-side-link,
+  .dashboard-side-shell[data-expanded="true"] .dashboard-side-link-active,
+  .dashboard-side-shell[data-expanded="true"] .dashboard-side-profile {
+    width: auto;
+    justify-content: flex-start;
+  }
+
+  .dashboard-side-divider {
+    height: 1px;
+    background: var(--color-hairline);
+    margin: 0.5rem 0;
+  }
+
+  .dashboard-prompt-card {
+    @apply rounded-2xl border border-hairline bg-surface p-2 text-left transition duration-base;
+    box-shadow: 0 1px 2px rgba(15, 15, 16, 0.04), 0 4px 12px rgba(15, 15, 16, 0.03);
+  }
+
+  .dashboard-prompt-card:focus-within {
+    box-shadow: 0 0 0 3px rgba(15, 15, 16, 0.08);
+    border-color: #0F0F10;
+  }
+
+  .dashboard-prompt-tool {
+    @apply inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted transition duration-base hover:bg-ink/[0.04] hover:text-ink;
+  }
+
+  .dashboard-suggestion-chip {
+    @apply rounded-full bg-ink/[0.04] px-2.5 py-1 text-xs text-ink/80 transition duration-base hover:bg-ink/[0.08] hover:text-ink;
+    border: 1px solid transparent;
+  }
+
+  .dashboard-suggestion-chip:hover {
+    border-color: var(--color-hairline);
+  }
+
+  .dashboard-library-card {
+    @apply rounded-[22px] border border-hairline bg-surface p-5 md:p-6;
+    box-shadow: 0 1px 2px rgba(15, 15, 16, 0.04), 0 4px 12px rgba(15, 15, 16, 0.03);
+  }
+
+  /* ─── Not found page ───────────────────────────────────────── */
+  .notfound-grid-bg {
+    background-size: 32px 32px;
+    background-image:
+      linear-gradient(to right, rgb(15 15 16 / 0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(15 15 16 / 0.025) 1px, transparent 1px);
+  }
+
+  .notfound-card-shadow {
+    box-shadow: 0 1px 2px rgb(15 15 16 / 0.04), 0 18px 54px rgb(15 15 16 / 0.07);
+  }
+
+  @keyframes notfound-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* ─── Auth callback page ───────────────────────────────────── */
+  .callback-grid-bg {
+    background-size: 32px 32px;
+    background-image:
+      linear-gradient(to right, rgb(15 15 16 / 0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(15 15 16 / 0.025) 1px, transparent 1px);
+  }
+
+  .callback-spinner {
+    width: 44px;
+    height: 44px;
+    border: 2.5px solid rgb(15 15 16 / 0.08);
+    border-top-color: rgb(var(--color-ink));
+    border-radius: 9999px;
+    animation: callback-spin 0.8s linear infinite;
+  }
+
+  .callback-pulse-dot {
+    @apply h-1.5 w-1.5 rounded-pill bg-ink;
+    animation: callback-pulse-dot 1.4s ease-in-out infinite;
+  }
+
+  .callback-pulse-dot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .callback-pulse-dot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes callback-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes callback-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes callback-pulse-dot {
+
+    0%,
+    60%,
+    100% {
+      opacity: 0.25;
+    }
+
+    30% {
+      opacity: 1;
+    }
+  }
+
+  /* ─── Project card thumbnail patterns (dashboard grid) ─────── */
+  .thumb-pattern {
+    background-size: 14px 14px;
+    background-image:
+      linear-gradient(to right, rgb(15 15 16 / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(15 15 16 / 0.04) 1px, transparent 1px);
+  }
+
+  .dot-pattern {
+    background-size: 18px 18px;
+    background-image: radial-gradient(circle, rgb(15 15 16 / 0.07) 1px, transparent 1px);
+  }
+
+  /* ─── Hero paper wash (radial neutral wash behind hero) ────── */
+  .paper-wash {
+    @apply pointer-events-none absolute inset-0 overflow-hidden;
+  }
+
+  .paper-wash::before {
+    content: '';
+    position: absolute;
+    width: 720px;
+    height: 720px;
+    border-radius: 50%;
+    filter: blur(80px);
+    background: radial-gradient(circle, rgb(15 15 16 / 0.04) 0%, transparent 70%);
+    top: -180px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  /* ─── Tone chip (compact pill button) ──────────────────────── */
+  .chip {
+    @apply inline-flex items-center h-7 px-3 rounded-pill bg-surface border border-hairline text-caption font-medium text-muted transition-all duration-fast ease-standard hover:text-ink hover:bg-paper hover:border-hairline-soft hover:-translate-y-px;
+    @apply focus-ring;
+  }
+
+  /* ─── Composer attachments row (under textarea) ────────────── */
+  .composer-attach {
+    @apply flex items-center gap-1 flex-wrap;
+  }
+
+  .composer-attach-btn {
+    @apply inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-caption font-medium text-muted transition-colors duration-base hover:text-ink hover:bg-ink/[0.04];
+    @apply focus-ring;
+  }
+
+  /* ─── Suggested starts card (template grid) ────────────────── */
+  .start-card {
+    @apply card card-hover text-left p-5 hover:-translate-y-0.5 hover:border-ink/20 transition-all duration-base ease-standard;
+  }
+
+  .start-card-icon {
+    @apply w-9 h-9 rounded-lg bg-chalk flex items-center justify-center mb-3 text-ink;
+  }
+
+  /* ─── Recent strip card (compact horizontal) ───────────────── */
+  .recent-card {
+    @apply card flex items-center gap-3 p-3.5 hover:border-ink/30 transition-colors duration-base;
+  }
+
+  .recent-thumb {
+    @apply w-12 h-12 rounded-lg bg-chalk shrink-0 flex items-center justify-center font-mono text-caption font-semibold text-ink;
+  }
+
+}

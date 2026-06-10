@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ProjectSettingsGeneralTab } from "@/components/projects/ProjectSettingsGeneralTab";
 import { ProjectSettingsInfoTab } from "@/components/projects/ProjectSettingsInfoTab";
 import type { Project } from "@/shared/project-types";
@@ -48,7 +49,8 @@ export function ProjectSettingsDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-[color-mix(in_srgb,var(--color-overlay-scrim)_52%,transparent)] backdrop-blur-[2px] transition-opacity duration-200" role="dialog" aria-modal="true" aria-label="Project settings">
-      <button
+      <Button
+        variant="unstyled"
         className="absolute inset-0 cursor-default"
         type="button"
         aria-label="Close project settings"
@@ -64,14 +66,15 @@ export function ProjectSettingsDrawer({
               {project?.name ?? "Loading project"}
             </h2>
           </div>
-          <button
+          <Button
+            variant="unstyled"
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
             type="button"
             onClick={() => onOpenChange(false)}
             aria-label="Close settings"
           >
             <X aria-hidden="true" size={16} />
-          </button>
+          </Button>
         </header>
 
         <div className="border-b border-[var(--app-border)] px-sm pt-xs">
@@ -115,7 +118,8 @@ export function ProjectSettingsDrawer({
             <span className="text-[13px] text-[var(--app-muted)]">
               {hasChanges ? "Unsaved changes" : "No changes to save"}
             </span>
-            <button
+            <Button
+              variant="unstyled"
               className="rounded-pill bg-[var(--color-primary)] px-md py-xs text-[14px] font-[560] text-[var(--color-on-primary)] transition-opacity duration-200 disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               disabled={!hasChanges || saving}
@@ -125,7 +129,7 @@ export function ProjectSettingsDrawer({
               }}
             >
               {saving ? "Saving..." : "Save"}
-            </button>
+            </Button>
           </div>
         </footer>
       </aside>
@@ -143,13 +147,14 @@ function ProjectSettingsTabButton({
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
+      variant="unstyled"
       className={`rounded-pill px-sm py-xxs text-[13px] font-[560] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] ${active ? "bg-[var(--app-selected-bg)] text-[var(--app-selected-text)]" : "text-[var(--app-muted)] hover:text-[var(--app-text)]"}`}
       type="button"
       onClick={onClick}
       aria-pressed={active}
     >
       {children}
-    </button>
+    </Button>
   );
 }

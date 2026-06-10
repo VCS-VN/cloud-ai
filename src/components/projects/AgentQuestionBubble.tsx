@@ -1,4 +1,6 @@
 import { useReducer } from "react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { DesignVariant, Message } from "@/shared/project-types";
 
 type AgentQuestionBubbleProps = {
@@ -62,7 +64,7 @@ export function AgentQuestionBubble({ message, onSelectOption }: AgentQuestionBu
   if (!metadata?.options?.length) {
     return (
       <div className="text-[12px] text-[var(--app-icon-muted)] italic">
-        (Không có gợi ý nào để hiển thị)
+        (No suggestions to display)
       </div>
     );
   }
@@ -104,7 +106,7 @@ export function AgentQuestionBubble({ message, onSelectOption }: AgentQuestionBu
     return (
       <div className="flex flex-col gap-xs">
         <p className="text-[11px] text-[var(--app-icon-muted)]">
-          Chọn các trang bạn muốn thêm:
+          Select pages you want to add:
         </p>
         {variants.map((variant) => {
           const checked = toggles[variant.id] ?? true;
@@ -117,8 +119,7 @@ export function AgentQuestionBubble({ message, onSelectOption }: AgentQuestionBu
                   : "cursor-default border-[var(--app-border)] opacity-60"
               }`}
             >
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={checked}
                 disabled={!canToggle}
                 onChange={() => toggleDispatch({ type: "toggle", optionId: variant.id })}
@@ -136,14 +137,15 @@ export function AgentQuestionBubble({ message, onSelectOption }: AgentQuestionBu
           );
         })}
         {canToggle && (
-          <button
+          <Button
+            variant="unstyled"
             type="button"
             disabled={!!selecting}
             onClick={handleConfirmPages}
             className="mt-xs w-full rounded-pill border border-[var(--app-accent)] bg-[var(--app-accent)] px-sm py-xxs text-[12px] font-semibold text-[var(--app-panel-bg)] transition-all hover:opacity-90 disabled:opacity-50"
           >
-            {selecting ? "Đang xác nhận..." : "Xác nhận các trang đã chọn"}
-          </button>
+            {selecting ? "Confirming..." : "Confirm selected pages"}
+          </Button>
         )}
       </div>
     );
@@ -158,8 +160,9 @@ export function AgentQuestionBubble({ message, onSelectOption }: AgentQuestionBu
         const dimmed = !!selectedOptionId && !isSelected;
 
         return (
-          <button
+          <Button
             key={variant.id}
+            variant="unstyled"
             type="button"
             disabled={!!selectedOptionId || !!selecting}
             onClick={() => handleRadioClick(variant.id)}
@@ -206,15 +209,15 @@ export function AgentQuestionBubble({ message, onSelectOption }: AgentQuestionBu
 
             {isSelected && (
               <div className="mt-xxs text-[11px] font-medium text-[var(--app-accent)]">
-                Bạn đã chọn: {variant.label}
+                You selected: {variant.label}
               </div>
             )}
             {isSelecting && (
               <div className="mt-xxs text-[11px] text-[var(--app-icon-muted)]">
-                Đang chọn...
+                Selecting...
               </div>
             )}
-          </button>
+          </Button>
         );
       })}
     </div>

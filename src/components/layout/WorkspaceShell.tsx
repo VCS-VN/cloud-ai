@@ -8,10 +8,10 @@ type WorkspaceShellProps = {
 };
 
 const DEFAULT_MAIN_CLASS =
-  "h-screen overflow-hidden bg-[var(--app-bg)] p-xs text-[var(--app-text)] sm:p-sm";
+  "h-screen overflow-hidden bg-paper p-2 text-ink sm:p-3";
 
 const DEFAULT_SECTION_CLASS =
-  "min-w-0 overflow-y-auto rounded-sm bg-[var(--app-surface)] p-sm transition-colors duration-300 sm:p-md";
+  "min-w-0 overflow-y-auto rounded-card bg-surface p-3 transition-colors duration-base sm:p-4";
 
 export function WorkspaceShell({
   sidebar,
@@ -21,7 +21,7 @@ export function WorkspaceShell({
 }: WorkspaceShellProps) {
   return (
     <main className={mainClassName}>
-      <div className="grid h-[calc(100vh-16px)] gap-sm transition-[grid-template-columns] duration-200 lg:grid-cols-[290px_minmax(0,1fr)] has-[aside[data-collapsed=true]]:lg:grid-cols-[72px_minmax(0,1fr)]">
+      <div className="grid h-[calc(100vh-16px)] gap-3 transition-[grid-template-columns] duration-200 lg:grid-cols-[290px_minmax(0,1fr)] has-[aside[data-collapsed=true]]:lg:grid-cols-[72px_minmax(0,1fr)]">
         {sidebar}
         <section className={sectionClassName}>{children}</section>
       </div>

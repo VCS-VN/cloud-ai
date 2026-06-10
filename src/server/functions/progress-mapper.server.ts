@@ -42,7 +42,7 @@ const PHASE_LABELS: Record<BuilderRunMilestone, Record<ProgressLocale, string>> 
 
 export function phaseLabel(
   phase: BuilderRunMilestone,
-  locale: ProgressLocale = "vi",
+  locale: ProgressLocale = "en",
 ): string {
   return PHASE_LABELS[phase][locale];
 }
@@ -134,7 +134,7 @@ const SECTION_TABLE: SectionEntry[] = [
 
 export function fileChangeToSection(
   filePath: string,
-  locale: ProgressLocale = "vi",
+  locale: ProgressLocale = "en",
 ): string | null {
   for (const entry of SECTION_TABLE) {
     if (entry.match(filePath)) return entry[locale];
@@ -198,7 +198,7 @@ const SUMMARY_MAX_LENGTH = 400;
  */
 export function extractSummary(
   turnFinalResponse: string,
-  locale: ProgressLocale = "vi",
+  locale: ProgressLocale = "en",
 ): string {
   if (!turnFinalResponse) return SUMMARY_FALLBACK[locale];
   const firstParagraph =
@@ -211,7 +211,7 @@ export function extractSummary(
 
 export function sectionFraming(
   section: string,
-  locale: ProgressLocale = "vi",
+  locale: ProgressLocale = "en",
 ): string {
   return locale === "vi" ? `Đang cập nhật ${section}` : `Updating ${section}`;
 }

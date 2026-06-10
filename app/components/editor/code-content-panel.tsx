@@ -56,7 +56,7 @@ export function CodeContentPanel({ node }: CodeContentPanelProps) {
       </div>
 
       {/* Code content */}
-      <div className="min-h-0 flex-1 overflow-auto p-md">
+      <div className="min-h-0 flex-1 overflow-auto p-4">
         {node.content ? (
           <pre className="m-0 font-mono text-body-sm leading-relaxed text-[var(--app-text)] whitespace-pre-wrap">
             {node.content}

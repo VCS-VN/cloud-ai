@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { requireServerUser } from "@/server/functions/auth";
 import { getBuilderRunHandle } from "@/features/agents/codex/runtime/builder-run-registry.server";
-import { BUILDER_RUN_LOCALE_VI } from "@/features/agents/ui/builder-run-i18n";
+import { BUILDER_RUN_LOCALE_EN } from "@/features/agents/ui/builder-run-i18n";
 import { getProjectServices } from "@/server/services/project-services";
 import { publishChatEvent } from "@/server/services/chat-event-channel.server";
 
@@ -27,21 +27,21 @@ export const Route = createFileRoute(
           return jsonResponse(404, {
             ok: false,
             code: "not_found",
-            message: "Phiên không tìm thấy.",
+            message: "Run not found.",
           });
         }
         if (handle.userId && handle.userId !== user.id) {
           return jsonResponse(403, {
             ok: false,
             code: "forbidden",
-            message: "Không có quyền truy cập phiên này.",
+            message: "You do not have access to this run.",
           });
         }
         if (handle.status !== "awaiting_clarification") {
           return jsonResponse(409, {
             ok: false,
             code: "RUN_NOT_AWAITING_INPUT",
-            message: BUILDER_RUN_LOCALE_VI.apiErrors.not_paused,
+            message: BUILDER_RUN_LOCALE_EN.apiErrors.not_paused,
           });
         }
 
@@ -63,7 +63,7 @@ export const Route = createFileRoute(
           return jsonResponse(400, {
             ok: false,
             code: "empty_answer",
-            message: BUILDER_RUN_LOCALE_VI.apiErrors.empty_answer,
+            message: BUILDER_RUN_LOCALE_EN.apiErrors.empty_answer,
           });
         }
 
@@ -79,7 +79,7 @@ export const Route = createFileRoute(
             return jsonResponse(409, {
               ok: false,
               code: "RUN_NOT_AWAITING_INPUT",
-              message: BUILDER_RUN_LOCALE_VI.apiErrors.not_paused,
+              message: BUILDER_RUN_LOCALE_EN.apiErrors.not_paused,
             });
           }
         }
@@ -91,7 +91,7 @@ export const Route = createFileRoute(
             return jsonResponse(400, {
               ok: false,
               code: "INVALID_OPTION",
-              message: BUILDER_RUN_LOCALE_VI.apiErrors.invalid_option,
+              message: BUILDER_RUN_LOCALE_EN.apiErrors.invalid_option,
             });
           }
         }
@@ -101,7 +101,7 @@ export const Route = createFileRoute(
           return jsonResponse(500, {
             ok: false,
             code: "detector_failed",
-            message: "Không thể tiếp tục phiên.",
+            message: "Could not resume the run.",
           });
         }
 
@@ -116,7 +116,7 @@ export const Route = createFileRoute(
           return jsonResponse(500, {
             ok: false,
             code: "detector_failed",
-            message: "Không thể tiếp tục phiên.",
+            message: "Could not resume the run.",
           });
         }
 

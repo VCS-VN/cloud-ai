@@ -1,4 +1,5 @@
 import { ChevronRight, FileText, Folder, FolderOpen, Image } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import type { ProjectFileNode } from '@/shared/project-types'
 
 type ProjectFileTreeNodeProps = {
@@ -35,7 +36,8 @@ export function ProjectFileTreeNode({ node, selectedNodeId, expandedFolderIds, d
 
   return (
     <li className="list-none">
-      <button
+      <Button
+        variant="unstyled"
         type="button"
         className={`flex w-full min-w-0 items-center gap-xs rounded-md px-sm py-xs text-left text-[12px] leading-4 transition-all duration-200 ${
           selected && !isFolder ? 'bg-[var(--app-selected-bg)] text-[var(--app-selected-text)] [&_svg]:text-[var(--app-icon-selected)]' : isCode ? 'text-[var(--app-muted)] hover:bg-[var(--app-panel-strong)] hover:text-[var(--app-panel-text)] [&_svg]:text-[var(--app-icon-muted)] hover:[&_svg]:text-[var(--app-icon)]' : 'text-[var(--app-muted)] hover:bg-[var(--app-panel-strong)] hover:text-[var(--app-panel-text)] [&_svg]:text-[var(--app-icon-muted)] hover:[&_svg]:text-[var(--app-icon)]'
@@ -47,7 +49,7 @@ export function ProjectFileTreeNode({ node, selectedNodeId, expandedFolderIds, d
         {isFolder && isCode ? <ChevronRight className={`shrink-0 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} aria-hidden="true" size={14} /> : null}
         <Icon aria-hidden="true" className="shrink-0" size={15} />
         <span className="min-w-0 flex-1 truncate">{node.name}</span>
-      </button>
+      </Button>
       {isFolder && expanded && node.children?.length ? (
         <ul className="m-0 p-0">
           {node.children.map((child) => (

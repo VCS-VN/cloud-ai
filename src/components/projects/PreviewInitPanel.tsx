@@ -1,4 +1,5 @@
 import { Loader2, Play } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type PreviewInitPanelProps = {
   projectId: string;
@@ -24,14 +25,14 @@ export function PreviewInitPanel({
     return (
       <div
         aria-busy="true"
-        className="flex h-full flex-col items-center justify-center gap-md bg-[var(--app-panel)] p-md transition-colors duration-300"
+        className="flex h-full flex-col items-center justify-center gap-4 bg-paper p-6 transition-colors duration-300"
       >
         <Loader2
           aria-hidden="true"
-          className="animate-spin text-[var(--app-icon-muted)]"
+          className="animate-spin text-muted"
           size={32}
         />
-        <p className="text-[14px] leading-4 text-[var(--app-muted)]">
+        <p className="text-sm leading-5 text-muted">
           Starting preview in the review panel...
         </p>
       </div>
@@ -40,22 +41,23 @@ export function PreviewInitPanel({
 
   if (error) {
     return (
-      <div className="flex h-full items-center justify-center bg-[var(--app-panel)] p-md transition-colors duration-300">
-        <div className="max-w-sm rounded-md border border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] p-md">
-          <p className="mb-xs text-[12px] font-[580] leading-4 text-[var(--app-danger-text)]">
+      <div className="flex h-full items-center justify-center bg-paper p-6 transition-colors duration-300">
+        <div className="max-w-sm rounded-xl border border-hairline bg-danger-bg p-5 text-center">
+          <p className="mb-1 text-[13px] font-semibold leading-5 text-danger-fg">
             Preview failed
           </p>
-          <p className="text-[var(--app-danger-text)] text-[14px] leading-4">
+          <p className="text-sm leading-5 text-danger-fg">
             {error}
           </p>
           {onRetry && (
-            <button
+            <Button
+              variant="unstyled"
               type="button"
               onClick={onRetry}
-              className="mt-sm inline-flex items-center gap-xs rounded-pill bg-[var(--app-control)] px-md py-xs text-[14px] font-[480] text-[var(--app-text)] transition-colors duration-300 hover:bg-[var(--app-surface)]"
+              className="mt-4 inline-flex h-8 items-center gap-1 rounded-md border border-hairline bg-surface px-3 text-xs font-medium text-ink transition-colors duration-base hover:bg-paper"
             >
               Retry
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -63,20 +65,28 @@ export function PreviewInitPanel({
   }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-lg bg-[var(--app-panel)] p-md transition-colors duration-300">
-      <div className="flex flex-col items-center gap-sm text-center">
-        <p className="text-[14px] leading-4 text-[var(--app-muted)]">
-          Preview is stopped
-        </p>
-        <button
+    <div className="flex h-full flex-col items-center justify-center gap-6 bg-paper p-6 transition-colors duration-300">
+      <div className="flex max-w-sm flex-col items-center gap-3 rounded-2xl border border-hairline bg-surface p-6 text-center shadow-sm">
+        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-chalk text-ink">
+          <Play aria-hidden="true" size={18} />
+        </span>
+        <div>
+          <p className="m-0 text-[13px] font-semibold leading-5 text-ink">
+            Preview is stopped
+          </p>
+          <p className="m-0 mt-1 text-xs leading-5 text-muted">
+            Start runtime to view storefront output.
+          </p>
+        </div>
+        <Button
+          variant="unstyled"
           type="button"
           onClick={handleStartClick}
           disabled={isLoading}
-          className="inline-flex items-center gap-xs rounded-pill bg-[var(--app-control)] px-lg py-xs text-[14px] font-[480] text-[var(--app-text)] transition-colors duration-300 hover:bg-[var(--app-surface)]"
+          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-ink px-4 text-xs font-semibold text-paper transition-all duration-base hover:bg-deep active:translate-y-px disabled:opacity-40"
         >
-          <Play aria-hidden="true" size={16} />
-          Start Preview
-        </button>
+          Start preview
+        </Button>
       </div>
     </div>
   );
