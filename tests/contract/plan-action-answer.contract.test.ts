@@ -28,23 +28,46 @@ vi.mock("@/features/agents/codex/runtime/builder-run-registry.server", () => {
 
 vi.mock("@/server/services/project-services", () => {
   const loadMock = vi.fn();
+  const markAnsweredMock = vi.fn();
   return {
     getProjectServices: vi.fn(async () => ({
       chatHistoryService: { runStore: { load: loadMock } },
+      projectService: {
+        messageRepository: {
+          markAgentQuestionAnswered: markAnsweredMock,
+        },
+      },
     })),
     __loadMock: loadMock,
+    __markAnsweredMock: markAnsweredMock,
   };
 });
 
+vi.mock("@/server/services/chat-event-channel.server", () => ({
+  publishChatEvent: vi.fn(),
+}));
+
 import * as registryModule from "@/features/agents/codex/runtime/builder-run-registry.server";
 import * as projectServices from "@/server/services/project-services";
+import * as chatChannel from "@/server/services/chat-event-channel.server";
 import { Route } from "@/routes/api/projects/$projectId/builder-runs/$runId/answer";
 
-const handle = (registryModule as unknown as { __handle: { resumeFn: ReturnType<typeof vi.fn> } })
-  .__handle;
+const handle = (
+  registryModule as unknown as {
+    __handle: {
+      status: string;
+      clarificationPrompt: { question: string; options: { id: string; label: string }[] } | null;
+      resumeFn: ReturnType<typeof vi.fn>;
+    };
+  }
+).__handle;
 const loadMock = (
   projectServices as unknown as { __loadMock: ReturnType<typeof vi.fn> }
 ).__loadMock;
+const markAnsweredMock = (
+  projectServices as unknown as { __markAnsweredMock: ReturnType<typeof vi.fn> }
+).__markAnsweredMock;
+const publishChatEventMock = vi.mocked(chatChannel.publishChatEvent);
 const handler = (Route.options as { server?: { handlers?: { POST?: any } } }).server?.handlers?.POST as
   | ((args: { params: { projectId: string; runId: string }; request: Request }) => Promise<Response>)
   | undefined;
@@ -59,6 +82,11 @@ function makeRequest(body: unknown): Request {
 
 beforeEach(() => {
   loadMock.mockReset();
+  markAnsweredMock.mockReset();
+  markAnsweredMock.mockResolvedValue({ id: "msg-db-1" });
+  publishChatEventMock.mockReset();
+  handle.status = "awaiting_clarification";
+  handle.clarificationPrompt = { question: "?", options: [{ id: "approve", label: "Approve" }] };
   handle.resumeFn.mockReset();
 });
 
@@ -114,5 +142,60 @@ describe("POST /builder-runs/$runId/answer — planAction contract (T049)", () =
       request: makeRequest({ planAction: "maybe" }),
     });
     expect(resp.status).toBe(400);
+  });
+});
+
+describe("POST /builder-runs/$runId/answer — option persistence", () => {
+  it("persists selected option before publishing and resuming", async () => {
+    if (!handler) return;
+    handle.resumeFn.mockResolvedValueOnce(undefined);
+
+    const resp = await handler({
+      params: { projectId: "p1", runId: "run-1" },
+      request: makeRequest({ optionId: "approve" }),
+    });
+
+    expect(resp.status).toBe(204);
+    expect(markAnsweredMock).toHaveBeenCalledWith("p1", "run-1", "approve", "u1");
+    expect(publishChatEventMock).toHaveBeenCalledWith("run-1", {
+      type: "option.selected",
+      runId: "run-1",
+      messageId: "msg-db-1",
+      optionId: "approve",
+    });
+    expect(handle.resumeFn).toHaveBeenCalledWith({ optionId: "approve" });
+  });
+
+  it("does not mark planAction answers as option selections", async () => {
+    if (!handler) return;
+    loadMock.mockResolvedValueOnce({ planPhase: { stage: "plan_ready", planMarkdown: "..." } });
+    handle.resumeFn.mockResolvedValueOnce(undefined);
+
+    const resp = await handler({
+      params: { projectId: "p1", runId: "run-1" },
+      request: makeRequest({ planAction: "approve" }),
+    });
+
+    expect(resp.status).toBe(204);
+    expect(markAnsweredMock).not.toHaveBeenCalled();
+    expect(publishChatEventMock).not.toHaveBeenCalled();
+  });
+
+  it("does not resume when selected option persistence fails", async () => {
+    if (!handler) return;
+    markAnsweredMock.mockRejectedValueOnce(new Error("db down"));
+
+    const resp = await handler({
+      params: { projectId: "p1", runId: "run-1" },
+      request: makeRequest({ optionId: "approve" }),
+    });
+
+    expect(resp.status).toBe(500);
+    await expect(resp.json()).resolves.toMatchObject({
+      ok: false,
+      code: "answer_persist_failed",
+    });
+    expect(handle.resumeFn).not.toHaveBeenCalled();
+    expect(publishChatEventMock).not.toHaveBeenCalled();
   });
 });

@@ -10,6 +10,7 @@ import {
 import type { RuntimeService } from "@/features/runtime/legacy/runtime-service.server";
 import type { RuntimeOrchestrator } from "@/features/runtime/legacy/runtime-orchestrator.server";
 import type { ProjectRunStore } from "@/features/projects/legacy/project-run-store.server";
+import type { PgAgentRunRepository } from "@/server/repositories/agent-run-repository";
 import { reserveRunProducer } from "@/server/functions/project-message-stream";
 import type {
   Project,
@@ -92,6 +93,7 @@ export class ProjectService {
     private readonly envWriter?: GeneratedProjectEnvWriter,
     private readonly runtimeOrchestrator?: RuntimeOrchestrator,
     private readonly runStore?: ProjectRunStore,
+    private readonly agentRunRepository?: PgAgentRunRepository,
   ) {
     this.workspaceService = workspaceService ?? new ProjectWorkspaceService(fileNodeRepository);
   }
@@ -190,6 +192,7 @@ export class ProjectService {
                 messageRepository: this.messageRepository,
                 projectRepository: this.projectRepository,
                 runStore: this.runStore,
+                agentRunRepository: this.agentRunRepository,
               }
             : undefined,
         });

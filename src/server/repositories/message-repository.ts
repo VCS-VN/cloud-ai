@@ -4,6 +4,7 @@ import type * as schema from "@/db/schema";
 import { projectMessages } from "@/db/schema";
 import type {
   AgentMessageKind,
+  AgentQuestionMetadata,
   Message,
 } from "@/shared/project-types";
 import type { ProjectMessageRepository } from "@/shared/project-types";
@@ -230,6 +231,48 @@ export class PgProjectMessageRepository implements ProjectMessageRepository {
       nextCursor,
       total: totalResult[0]?.value ?? 0,
     };
+  }
+
+  async markAgentQuestionAnswered(
+    projectId: string,
+    runId: string,
+    selectedOptionId: string,
+    userId?: string,
+  ): Promise<Message | undefined> {
+    const filter = userId
+      ? and(
+          eq(projectMessages.projectId, projectId),
+          eq(projectMessages.runId, runId),
+          eq(projectMessages.kind, "agent_question"),
+          eq(projectMessages.userId, userId),
+          eq(projectMessages.status, 1),
+        )
+      : and(
+          eq(projectMessages.projectId, projectId),
+          eq(projectMessages.runId, runId),
+          eq(projectMessages.kind, "agent_question"),
+          eq(projectMessages.status, 1),
+        );
+
+    const [existing] = await this.db
+      .select()
+      .from(projectMessages)
+      .where(filter)
+      .orderBy(desc(projectMessages.createdAt), desc(projectMessages.id))
+      .limit(1);
+    if (!existing) return undefined;
+
+    const metadata = {
+      ...((existing.metadata ?? {}) as Record<string, unknown>),
+      selectedOptionId,
+    } as AgentQuestionMetadata;
+
+    const [row] = await this.db
+      .update(projectMessages)
+      .set({ metadata, updatedAt: new Date() })
+      .where(eq(projectMessages.id, existing.id))
+      .returning();
+    return row ? toMessage(row) : undefined;
   }
 
   async getMessage(

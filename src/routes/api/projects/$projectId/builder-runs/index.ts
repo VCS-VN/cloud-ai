@@ -118,6 +118,13 @@ export const Route = createFileRoute(
           planMode,
           project: { status: project.status },
           runId: created.runId,
+          parentMessageId: userMessage.id,
+          persistence: {
+            messageRepository: services.projectService["messageRepository"],
+            projectRepository: services.projectService["projectRepository"],
+            runStore: services.chatHistoryService.runStore,
+            agentRunRepository: services.projectService["agentRunRepository"],
+          },
         });
 
         if (!dispatch.ok) {

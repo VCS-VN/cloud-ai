@@ -411,25 +411,49 @@ async function persistAgentMessage(
       : directive.kind === "agent_question"
         ? directive.metadata
         : null;
-  await persistence.messageRepository.saveMessage(
-    {
-      id: crypto.randomUUID(),
+
+  // Deterministic id (msg-${runId}-{answer|error|question|plan}) so a single run
+  // produces exactly one row per kind even when internal Codex turns + replay +
+  // SSE reconnects all flow through this path. Update first; fall back to
+  // insert when the row does not exist yet.
+  const id = directive.messageId;
+  const updates = {
+    content,
+    processingStatus: "completed" as const,
+    runId,
+    kind,
+    provider: "codex-sdk",
+    metadata,
+    updatedAt: now,
+  };
+  const updated = await persistence.messageRepository
+    .updateMessage(id, updates)
+    .catch(() => undefined);
+  if (updated) return;
+  try {
+    await persistence.messageRepository.saveMessage(
+      {
+        id,
+        userId,
+        projectId,
+        role: "agent",
+        content,
+        status: "completed",
+        processingStatus: "completed",
+        parentMessageId,
+        runId,
+        kind,
+        metadata,
+        provider: "codex-sdk",
+        createdAt: now,
+        updatedAt: now,
+      },
       userId,
-      projectId,
-      role: "agent",
-      content,
-      status: "completed",
-      processingStatus: "completed",
-      parentMessageId,
-      runId,
-      kind,
-      metadata,
-      provider: "codex-sdk",
-      createdAt: now,
-      updatedAt: now,
-    },
-    userId,
-  );
+    );
+  } catch {
+    // Race: another emit raced ahead and inserted; collapse via update.
+    await persistence.messageRepository.updateMessage(id, updates).catch(() => undefined);
+  }
 }
 
 async function persistTimeline(

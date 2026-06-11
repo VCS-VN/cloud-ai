@@ -21,6 +21,7 @@ import {
 } from "@/server/services/builder-run-translator.server";
 import type { BuilderRunEvent } from "@/features/agents/ui/builder-events";
 import type { RunStreamEvent } from "@/shared/project-types";
+import { buildArchivedReplay } from "@/routes/api/projects/$projectId/builder-runs/$runId/stream";
 
 const RUN_ID = "run-2A-test";
 const PROJECT_ID = "p-1";
@@ -127,5 +128,80 @@ describe("Phase 5 (option 2A) — chat-event-channel end-to-end SSE wire", () =>
     const types = captured.map((e) => e.type);
     expect(types.filter((t) => t === "skeleton.update").length).toBeGreaterThanOrEqual(2);
     expect(types[types.length - 1]).toBe("run.completed");
+  });
+});
+
+async function readSseEvents(stream: ReadableStream<Uint8Array>): Promise<RunStreamEvent[]> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const events: RunStreamEvent[] = [];
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+  }
+  buffer += decoder.decode();
+  for (const block of buffer.split("\n\n")) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+    const dataLine = trimmed.split("\n").find((l) => l.startsWith("data:"));
+    if (!dataLine) continue;
+    events.push(JSON.parse(dataLine.slice(5).trim()) as RunStreamEvent);
+  }
+  return events;
+}
+
+describe("buildArchivedReplay — deterministic single-summary replay", () => {
+  it("emits only the last summary with msg-${runId}-answer id", async () => {
+    const stream = buildArchivedReplay(RUN_ID, {
+      status: "completed",
+      progressTimeline: [
+        { at: 1, kind: "summary", text: "interim batch summary 1" },
+        { at: 2, kind: "summary", text: "interim batch summary 2" },
+        { at: 3, kind: "summary", text: "final answer" },
+      ],
+    });
+    const events = await readSseEvents(stream);
+    const created = events.filter((e) => e.type === "message.created") as Array<
+      RunStreamEvent & { messageId: string; content: string }
+    >;
+    expect(created).toHaveLength(1);
+    expect(created[0].messageId).toBe(`msg-${RUN_ID}-answer`);
+    expect(created[0].content).toBe("final answer");
+    expect(events[events.length - 1].type).toBe("run.completed");
+  });
+
+  it("preserves task_plan and task_transition events alongside the single summary", async () => {
+    const stream = buildArchivedReplay(RUN_ID, {
+      status: "completed",
+      progressTimeline: [
+        {
+          at: 0,
+          kind: "task_plan",
+          tasks: [{ id: "t1", title: "Build hero", phase: "build" }],
+        },
+        { at: 1, kind: "task_transition", id: "t1", transition: "started" },
+        { at: 2, kind: "summary", text: "intermediate" },
+        { at: 3, kind: "task_transition", id: "t1", transition: "completed" },
+        { at: 4, kind: "summary", text: "final" },
+      ],
+    });
+    const events = await readSseEvents(stream);
+    const types = events.map((e) => e.type);
+    expect(types).toContain("plan.created");
+    expect(types.filter((t) => t === "plan.task.started")).toHaveLength(1);
+    expect(types.filter((t) => t === "plan.task.completed")).toHaveLength(1);
+    expect(types.filter((t) => t === "message.created")).toHaveLength(1);
+  });
+
+  it("emits no message.created when no summary exists in the timeline", async () => {
+    const stream = buildArchivedReplay(RUN_ID, {
+      status: "failed",
+      progressTimeline: [{ at: 0, kind: "error", failureCode: "preview_failed" }],
+    });
+    const events = await readSseEvents(stream);
+    expect(events.filter((e) => e.type === "message.created")).toHaveLength(0);
+    expect(events[events.length - 1].type).toBe("run.failed");
   });
 });

@@ -145,13 +145,13 @@ async function runTurnAndBridge(
   thread: BoundedCodexThread,
   runId: string,
   emit: EmitFn,
-  input: { prompt: string; signal?: AbortSignal },
+  input: { prompt: string; signal?: AbortSignal; emitAnswer?: boolean },
 ): Promise<{ finalResponse: string; fileChanges: string[] }> {
   const summary = await thread.runTurn(input);
   for (const path of summary.fileChanges) {
     emit({ type: "file_change", runId, path, at: Date.now() });
   }
-  if (summary.finalResponse) {
+  if (summary.finalResponse && input.emitAnswer !== false) {
     emit({
       type: "turn_completed",
       runId,
@@ -160,6 +160,15 @@ async function runTurnAndBridge(
     });
   }
   return { finalResponse: summary.finalResponse, fileChanges: summary.fileChanges };
+}
+
+function emitFinalAnswer(emit: EmitFn, runId: string, finalResponse: string): void {
+  emit({
+    type: "turn_completed",
+    runId,
+    finalResponse: finalResponse || "Done.",
+    at: Date.now(),
+  });
 }
 
 function emitFailure(
@@ -624,14 +633,15 @@ export async function runInitBuilderRun(
       bypassClassifier: true,
       promptOverride: ctx.userPrompt + variantPromptAddendum,
       languageOverride: "en",
-      currentMilestone: "creating_draft",
+      currentMilestone: "loading_context",
     },
     emit,
   );
 
   emitMilestoneInternal(emit, runId, "building_pages");
+  let finalResponse = "";
   try {
-    await runTurnAndBridge(thread, runId, emit, {
+    const initialSummary = await runTurnAndBridge(thread, runId, emit, {
       prompt:
         bundle.prompt +
         variantPromptAddendum +
@@ -641,12 +651,16 @@ export async function runInitBuilderRun(
           .join("\n") +
         "\n</plan>",
       signal: ctx.signal,
+      emitAnswer: false,
     });
+    if (initialSummary.finalResponse) finalResponse = initialSummary.finalResponse;
     for (const batch of plan.batches) {
-      await runTurnAndBridge(thread, runId, emit, {
+      const batchSummary = await runTurnAndBridge(thread, runId, emit, {
         prompt: `Now build batch ${batch.marker} (${batch.kind}). Files in scope: ${batch.files.join(", ")}.`,
         signal: ctx.signal,
+        emitAnswer: false,
       });
+      if (batchSummary.finalResponse) finalResponse = batchSummary.finalResponse;
     }
   } catch (error) {
     if (ctx.signal?.aborted) {
@@ -827,6 +841,7 @@ export async function runInitBuilderRun(
     const handle = getBuilderRunHandle(runId);
     if (handle) fireRemainingTasksComplete(handle, emit);
   }
+  emitFinalAnswer(emit, runId, finalResponse);
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({
     runId,
@@ -1102,11 +1117,14 @@ export async function runNewRouteBuilderRun(
       optionalRouteWarnings: [],
     });
   }
+  let finalResponse = "";
   try {
-    await runTurnAndBridge(thread, runId, emit, {
+    const planningSummary = await runTurnAndBridge(thread, runId, emit, {
       prompt: bundle.prompt + "\n\n<plan_request>Plan the new route changes before mutating any files.</plan_request>",
       signal: ctx.signal,
+      emitAnswer: false,
     });
+    if (planningSummary.finalResponse) finalResponse = planningSummary.finalResponse;
   } catch (error) {
     if (ctx.signal?.aborted) {
       emit({ type: "cancelled", runId, milestone: "cancelled", at: Date.now() });
@@ -1137,10 +1155,12 @@ export async function runNewRouteBuilderRun(
 
   emitMilestoneInternal(emit, runId, "building_pages");
   try {
-    await runTurnAndBridge(thread, runId, emit, {
+    const mutationSummary = await runTurnAndBridge(thread, runId, emit, {
       prompt: "Now apply the planned new-route changes inside the draft workspace.",
       signal: ctx.signal,
+      emitAnswer: false,
     });
+    if (mutationSummary.finalResponse) finalResponse = mutationSummary.finalResponse;
   } catch (error) {
     if (ctx.signal?.aborted) {
       emit({ type: "cancelled", runId, milestone: "cancelled", at: Date.now() });
@@ -1301,6 +1321,7 @@ export async function runNewRouteBuilderRun(
     const handle = getBuilderRunHandle(runId);
     if (handle) fireRemainingTasksComplete(handle, emit);
   }
+  emitFinalAnswer(emit, runId, finalResponse);
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({
     runId,
@@ -1407,8 +1428,14 @@ export async function runSmallUpdateBuilderRun(
   }
 
   emitMilestoneInternal(emit, runId, "building_pages");
+  let finalResponse = "";
   try {
-    await runTurnAndBridge(thread, runId, emit, { prompt: bundle.prompt, signal: ctx.signal });
+    const summary = await runTurnAndBridge(thread, runId, emit, {
+      prompt: bundle.prompt,
+      signal: ctx.signal,
+      emitAnswer: false,
+    });
+    if (summary.finalResponse) finalResponse = summary.finalResponse;
   } catch (error) {
     if (ctx.signal?.aborted) {
       emit({ type: "cancelled", runId, milestone: "cancelled", at: Date.now() });
@@ -1571,6 +1598,7 @@ export async function runSmallUpdateBuilderRun(
     const handle = getBuilderRunHandle(runId);
     if (handle) fireRemainingTasksComplete(handle, emit);
   }
+  emitFinalAnswer(emit, runId, finalResponse);
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({
     runId,

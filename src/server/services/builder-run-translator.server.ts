@@ -38,22 +38,26 @@ export type TerminalKind = "completed" | "failed" | "stopped" | "awaiting_input"
 export type PersistDirective =
   | {
       kind: "answer";
+      messageId: string;
       content: string;
       processingStatus: "completed";
     }
   | {
       kind: "error";
+      messageId: string;
       content: string;
       failureCode: BuilderRunFailureCode;
     }
   | {
       kind: "agent_question";
+      messageId: string;
       question: string;
       options: { id: string; label: string }[];
       metadata: AgentQuestionMetadata | null;
     }
   | {
       kind: "plan";
+      messageId: string;
       content: string;
     };
 
@@ -199,7 +203,7 @@ export function translateBuilderEventToRunStreamEvent(
       ];
       return {
         events,
-        persist: { kind: "answer", content: safe, processingStatus: "completed" },
+        persist: { kind: "answer", messageId, content: safe, processingStatus: "completed" },
         timeline: { kind: "summary", text: safe },
         terminal: null,
       };
@@ -230,6 +234,7 @@ export function translateBuilderEventToRunStreamEvent(
           ],
           persist: {
             kind: "plan",
+            messageId: planMessageId,
             content: planMarkdown,
           },
           timeline: null,
@@ -275,6 +280,7 @@ export function translateBuilderEventToRunStreamEvent(
         ],
         persist: {
           kind: "agent_question",
+          messageId,
           question: event.question,
           options: event.options,
           metadata: questionMetadata,
@@ -309,6 +315,7 @@ export function translateBuilderEventToRunStreamEvent(
         );
       }
       const friendly = friendlyFailureMessage(event.failureCode, locale);
+      const messageId = `msg-${runId}-error`;
       return {
         events: [
           {
@@ -318,7 +325,7 @@ export function translateBuilderEventToRunStreamEvent(
             error: { code: "PROVIDER_STREAM_FAILED", message: friendly },
           },
         ],
-        persist: { kind: "error", content: friendly, failureCode: event.failureCode },
+        persist: { kind: "error", messageId, content: friendly, failureCode: event.failureCode },
         timeline: { kind: "error", failureCode: event.failureCode },
         terminal: "failed",
       };

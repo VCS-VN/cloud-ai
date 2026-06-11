@@ -29,6 +29,7 @@ describe("US5 — skill_clarification renders distinct from design_variant", () 
     ]);
     expect(out.persist).toEqual({
       kind: "agent_question",
+      messageId: "msg-r-question",
       question: "Bạn muốn skill nào?",
       options: [
         { id: "a", label: "Skill A" },

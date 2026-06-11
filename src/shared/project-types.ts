@@ -446,6 +446,7 @@ export interface ProjectMessageRepository {
     >
   ): Promise<Message | undefined>
   bulkUpdateMessageStatusByProject(projectId: string, status: Message['status'], userId?: string): Promise<number>
+  markAgentQuestionAnswered(projectId: string, runId: string, selectedOptionId: string, userId?: string): Promise<Message | undefined>
   getMessage(projectId: string, messageId: string, userId?: string): Promise<Message | undefined>
   listMessages(projectId: string, userId?: string, cursor?: MessageCursor): Promise<MessagePage>
   listMessagesByRunId(runId: string, userId?: string): Promise<Message[]>

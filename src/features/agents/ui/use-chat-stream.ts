@@ -4,6 +4,7 @@ import {
   createInitialChatState,
   runtimeStateReducer,
   CLIENT_SKELETON_LABELS,
+  preserveSelectedOptions,
   type ChatUIState,
 } from "@/features/agents/ui/agent-event-reducer";
 import type {
@@ -32,7 +33,10 @@ function streamActionReducer(state: ChatUIState, action: StreamAction): ChatUISt
     case "runtime":
       return { ...state, runtime: runtimeStateReducer(state.runtime, action.event) };
     case "reset":
-      return createInitialChatState(action.messages);
+      return {
+        ...createInitialChatState(preserveSelectedOptions(action.messages, state.messages)),
+        runtime: state.runtime,
+      };
     case "prepend": {
       const seen = new Set(state.messages.map((m) => m.id));
       const older = action.messages.filter((m) => !seen.has(m.id));

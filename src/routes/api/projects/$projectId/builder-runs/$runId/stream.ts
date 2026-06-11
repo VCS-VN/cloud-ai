@@ -116,7 +116,7 @@ function openChannelStream(runId: string): ReadableStream<Uint8Array> {
   });
 }
 
-type RunForReplay = {
+export type RunForReplay = {
   status: string;
   failureCode?: string;
   progressTimeline?: Array<
@@ -138,7 +138,7 @@ type RunForReplay = {
   >;
 };
 
-function buildArchivedReplay(runId: string, run: RunForReplay): ReadableStream<Uint8Array> {
+export function buildArchivedReplay(runId: string, run: RunForReplay): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -152,26 +152,9 @@ function buildArchivedReplay(runId: string, run: RunForReplay): ReadableStream<U
       const projectId = (run as { projectId?: string }).projectId ?? "";
       enqueue({ type: "run.started", runId, projectId });
       const timeline = run.progressTimeline ?? [];
+      const lastSummary = timeline.findLast((item) => item.kind === "summary");
       for (const item of timeline) {
-        if (item.kind === "summary") {
-          const messageId = `replay-${runId}-summary`;
-          enqueue({
-            type: "message.created",
-            runId,
-            messageId,
-            kind: "answer",
-            content: item.text,
-            processingStatus: "completed",
-            createdAt: new Date(item.at).toISOString(),
-            metadata: null,
-          });
-          enqueue({
-            type: "message.completed",
-            runId,
-            messageId,
-            content: item.text,
-          });
-        } else if (item.kind === "task_plan") {
+        if (item.kind === "task_plan") {
           enqueue({
             type: "plan.created",
             runId,
@@ -194,8 +177,27 @@ function buildArchivedReplay(runId: string, run: RunForReplay): ReadableStream<U
             at: item.at,
           });
         }
-        // milestone/section/error are decorative for archived runs; the
+        // milestone/section/error/summary are decorative for archived runs; the
         // status terminal below is what the UI cares about.
+      }
+      if (lastSummary) {
+        const messageId = `msg-${runId}-answer`;
+        enqueue({
+          type: "message.created",
+          runId,
+          messageId,
+          kind: "answer",
+          content: lastSummary.text,
+          processingStatus: "completed",
+          createdAt: new Date(lastSummary.at).toISOString(),
+          metadata: null,
+        });
+        enqueue({
+          type: "message.completed",
+          runId,
+          messageId,
+          content: lastSummary.text,
+        });
       }
       if (run.status === "completed") {
         enqueue({ type: "run.completed", runId, projectProcessingStatus: "idle" });

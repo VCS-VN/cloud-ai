@@ -110,6 +110,45 @@ export const Route = createFileRoute(
         if (freeText) answer.freeText = freeText;
         if (planAction) answer.planAction = planAction;
 
+        const selectedOptionId = optionId || (freeText ? `__custom:${freeText}` : "");
+        let answeredMessageId = "";
+        if (selectedOptionId) {
+          try {
+            const services = await getProjectServices();
+            const answeredMessage = await services.projectService[
+              "messageRepository"
+            ].markAgentQuestionAnswered(
+              handle.projectId,
+              runId,
+              selectedOptionId,
+              user.id,
+            );
+            if (!answeredMessage) {
+              return jsonResponse(409, {
+                ok: false,
+                code: "answer_persist_failed",
+                message: "Could not save your answer.",
+              });
+            }
+            answeredMessageId = answeredMessage.id;
+          } catch {
+            return jsonResponse(500, {
+              ok: false,
+              code: "answer_persist_failed",
+              message: "Could not save your answer.",
+            });
+          }
+        }
+
+        if (selectedOptionId) {
+          publishChatEvent(runId, {
+            type: "option.selected",
+            runId,
+            messageId: answeredMessageId,
+            optionId: selectedOptionId,
+          });
+        }
+
         try {
           await resumeFn(answer);
         } catch {
@@ -117,19 +156,6 @@ export const Route = createFileRoute(
             ok: false,
             code: "detector_failed",
             message: "Could not resume the run.",
-          });
-        }
-
-        // Publish option.selected so SSE replay (after reconnect / tab refocus)
-        // restores the picker's committed state. Without this, the channel
-        // buffer only contains the original `message.created` agent_question
-        // and replay resurrects the unanswered version.
-        if (optionId || freeText) {
-          publishChatEvent(runId, {
-            type: "option.selected",
-            runId,
-            messageId: `msg-${runId}-question`,
-            optionId: optionId || `__custom:${freeText}`,
           });
         }
 

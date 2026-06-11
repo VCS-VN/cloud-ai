@@ -81,6 +81,7 @@ describe("BuilderRunEvent → RunStreamEvent translator (Phase 1 contract)", () 
     });
     expect(out.persist).toEqual({
       kind: "answer",
+      messageId: "msg-run-1-answer",
       content: "Đã thêm ảnh vào phần hero ở trang chủ.",
       processingStatus: "completed",
     });
@@ -132,6 +133,7 @@ describe("BuilderRunEvent → RunStreamEvent translator (Phase 1 contract)", () 
     });
     expect(out.persist).toEqual({
       kind: "error",
+      messageId: "msg-run-1-error",
       content: "Preview chưa lên được. Hãy thử lại.",
       failureCode: "preview_failed",
     });
@@ -168,6 +170,7 @@ describe("BuilderRunEvent → RunStreamEvent translator (Phase 1 contract)", () 
     ]);
     expect(out.persist).toEqual({
       kind: "agent_question",
+      messageId: "msg-run-1-question",
       question: "Bạn muốn skill nào?",
       options: [{ id: "a", label: "Skill A" }],
       metadata: null,

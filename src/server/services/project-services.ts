@@ -183,7 +183,7 @@ export async function getProjectServices() {
     startPreviewRouterOnce({ runtimeOrchestrator, tokenService: previewTokenService, publicHost: previewRuntimeConfig.publicHost! });
   }
   presenceService.setRuntimeStore(projectStateStore);
-  const projectService = new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore, runtimeService, envWriter, runtimeOrchestrator, runStore);
+  const projectService = new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore, runtimeService, envWriter, runtimeOrchestrator, runStore, agentRunRepo);
 
   return {
     projectService,

@@ -53,6 +53,27 @@ export const CLIENT_SKELETON_LABELS: Record<SkeletonPhase, string> = {
   responding: "Writing a response",
 };
 
+function getSelectedOptionId(message: Message): string | undefined {
+  return message.kind === "agent_question" &&
+    message.metadata &&
+    typeof (message.metadata as { selectedOptionId?: unknown }).selectedOptionId === "string"
+    ? ((message.metadata as { selectedOptionId: string }).selectedOptionId)
+    : undefined;
+}
+
+export function preserveSelectedOptions(incoming: Message[], existing: Message[]): Message[] {
+  return incoming.map((message) => {
+    if (getSelectedOptionId(message)) return message;
+    const previous = existing.find((item) => item.id === message.id);
+    const selectedOptionId = previous ? getSelectedOptionId(previous) : undefined;
+    if (!selectedOptionId) return message;
+    return {
+      ...message,
+      metadata: { ...message.metadata, selectedOptionId } as AgentQuestionMetadata,
+    };
+  });
+}
+
 function upsertMessage(messages: Message[], message: Message): Message[] {
   const idx = messages.findIndex((m) => m.id === message.id);
   if (idx >= 0) {
