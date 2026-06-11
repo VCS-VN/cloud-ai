@@ -215,3 +215,92 @@ export function sectionFraming(
 ): string {
   return locale === "vi" ? `Đang cập nhật ${section}` : `Updating ${section}`;
 }
+
+// --- Live step-progress labels ----------------------------------------------
+// Used by the streaming bridge to fan SDK item.started events into a single
+// ephemeral skeleton.update so the UI never sits frozen during a long codex
+// turn. All output is privacy-safe by construction (verb-token mapping for
+// commands, friendly fallbacks for unknown shapes); the translator still runs
+// `isPrivacySafe` as defense-in-depth.
+
+const COMMAND_VERB_LABELS: Record<
+  string,
+  Record<ProgressLocale, string> | undefined
+> = {
+  pnpm: { vi: "Đang chạy pnpm", en: "Running pnpm" },
+  npm: { vi: "Đang chạy npm", en: "Running npm" },
+  yarn: { vi: "Đang chạy yarn", en: "Running yarn" },
+  node: { vi: "Đang chạy node", en: "Running node" },
+  tsc: { vi: "Đang kiểm tra kiểu", en: "Type-checking" },
+  vite: { vi: "Đang chạy vite", en: "Running vite" },
+  vitest: { vi: "Đang chạy bài kiểm thử", en: "Running tests" },
+  ls: { vi: "Đang đọc thư mục", en: "Reading directory" },
+  cat: { vi: "Đang đọc tệp", en: "Reading file" },
+  grep: { vi: "Đang tìm trong mã nguồn", en: "Searching source" },
+  rg: { vi: "Đang tìm trong mã nguồn", en: "Searching source" },
+  find: { vi: "Đang quét tệp", en: "Scanning files" },
+};
+
+const COMMAND_FALLBACK: Record<ProgressLocale, string> = {
+  vi: "Đang chạy lệnh",
+  en: "Running a command",
+};
+
+const COMMAND_LABEL_MAX = 80;
+
+/**
+ * Friendly localized label for a `command_execution` start. The full command
+ * line can include user-supplied paths and shell snippets, so we strip to the
+ * first whitespace-delimited token (the verb) and look it up in a curated
+ * map. Unknown verbs collapse to the locale fallback. Hard cap 80 chars.
+ */
+export function commandStepLabel(
+  command: string,
+  locale: ProgressLocale = "en",
+): string {
+  const trimmed = command.trim();
+  if (!trimmed) return COMMAND_FALLBACK[locale];
+  const verb = trimmed.split(/\s+/)[0]?.toLowerCase() ?? "";
+  const mapped = COMMAND_VERB_LABELS[verb]?.[locale];
+  const label = mapped ?? COMMAND_FALLBACK[locale];
+  return label.length > COMMAND_LABEL_MAX
+    ? label.slice(0, COMMAND_LABEL_MAX)
+    : label;
+}
+
+const EDIT_FALLBACK: Record<ProgressLocale, string> = {
+  vi: "Đang chỉnh sửa trang",
+  en: "Editing the page",
+};
+
+/**
+ * Friendly localized label for a `file_change` start. Reuses
+ * `fileChangeToSection` on the first path; falls back to a generic phrase
+ * when no SECTION_TABLE entry matches.
+ */
+export function editingStepLabel(
+  paths: string[],
+  locale: ProgressLocale = "en",
+): string {
+  const first = paths[0];
+  if (!first) return EDIT_FALLBACK[locale];
+  const section = fileChangeToSection(first, locale);
+  if (!section) return EDIT_FALLBACK[locale];
+  return locale === "vi" ? `Đang chỉnh sửa ${section}` : `Editing ${section}`;
+}
+
+const MCP_TOOL_FALLBACK: Record<ProgressLocale, string> = {
+  vi: "Đang tải kỹ năng",
+  en: "Loading a skill",
+};
+
+/**
+ * Friendly localized label for an `mcp_tool_call` start. Skill names can be
+ * arbitrary strings so we render a generic phrase rather than echoing them.
+ */
+export function mcpToolStepLabel(
+  _tool: string,
+  locale: ProgressLocale = "en",
+): string {
+  return MCP_TOOL_FALLBACK[locale];
+}

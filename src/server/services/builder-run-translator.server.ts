@@ -175,6 +175,63 @@ export function translateBuilderEventToRunStreamEvent(
         terminal: null,
       };
     }
+    case "step": {
+      // Live step-progress signal during a streamed codex turn. Maps to a
+      // single ephemeral skeleton.update so the UI bar replaces in place
+      // and never accumulates persistent bubbles for transient activity.
+      if (event.status !== "in_progress") {
+        // Completion is implied by the next started event replacing the
+        // bar; emitting a "completed" label would just flicker.
+        return { events: [], persist: null, timeline: null, terminal: null };
+      }
+      if (!isPrivacySafe(event.label)) {
+        return { events: [], persist: null, timeline: null, terminal: null };
+      }
+      const stepPhase: Exclude<SkeletonPhase, "starting"> =
+        event.kind === "command"
+          ? "validating"
+          : event.kind === "mcp_tool"
+            ? "understanding"
+            : "editing";
+      return {
+        events: [
+          {
+            type: "skeleton.update",
+            runId,
+            phase: stepPhase,
+            label: event.label,
+          },
+        ],
+        persist: null,
+        timeline: null,
+        terminal: null,
+      };
+    }
+    case "thinking": {
+      const safe = isPrivacySafe(event.text) ? event.text : null;
+      if (!safe) {
+        return { events: [], persist: null, timeline: null, terminal: null };
+      }
+      const messageId = `msg-${runId}-thinking-${event.at}`;
+      const createdAt = new Date(event.at).toISOString();
+      return {
+        events: [
+          {
+            type: "message.created",
+            runId,
+            messageId,
+            kind: "thinking",
+            content: safe,
+            processingStatus: "completed",
+            createdAt,
+            metadata: null,
+          },
+        ],
+        persist: null,
+        timeline: null,
+        terminal: null,
+      };
+    }
     case "turn_completed": {
       const summary = extractSummary(event.finalResponse, locale);
       const safe = isPrivacySafe(summary)

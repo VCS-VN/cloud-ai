@@ -53,7 +53,7 @@ describe("init-batch-planner", () => {
   it("rejects a plan with a batch larger than the cap", () => {
     const oversized = Array.from({ length: INIT_BATCH_FILE_CAP + 1 }, (_, i) => `src/components/Item${i}.tsx`);
     const result = validatePlan({
-      batches: [{ kind: "foundation_data", marker: "FOUNDATION_DATA", files: oversized }],
+      batches: [{ kind: "foundation_data", marker: "FOUNDATION_DATA", files: oversized, specPaths: [] }],
       totalFiles: oversized.length,
     });
     expect(result.ok).toBe(false);
@@ -67,6 +67,7 @@ describe("init-batch-planner", () => {
           kind: "foundation_data",
           marker: "FOUNDATION_DATA",
           files: ["src/components/Hero.tsx", "package.json"],
+          specPaths: [],
         },
       ],
       totalFiles: 2,
@@ -84,6 +85,24 @@ describe("init-batch-planner", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("carries each page's manifest spec path onto its batch", async () => {
+    const plan = await planInitBatches({ manifest: FULL_MANIFEST });
+    const home = plan.batches.find((b) => b.marker === "HOME_PAGE");
+    expect(home?.specPaths).toEqual(["pages/home.md"]);
+  });
+
+  it("aggregates all foundation spec paths onto the foundation batch", async () => {
+    const plan = await planInitBatches({ manifest: FULL_MANIFEST });
+    const foundation = plan.batches.find((b) => b.kind === "foundation_data");
+    expect(foundation?.specPaths).toEqual([
+      "data/packages.md",
+      "data/provider.md",
+      "data/catalog-data.md",
+      "data/data.md",
+      "data/component.md",
+    ]);
+  });
+
   it("stripBlockedFromBatches removes blocked files but keeps allowed ones", () => {
     const stripped = stripBlockedFromBatches({
       batches: [
@@ -91,6 +110,7 @@ describe("init-batch-planner", () => {
           kind: "page",
           marker: "HOME_PAGE",
           files: ["src/routes/index.tsx", "package.json", "vite.config.ts"],
+          specPaths: [],
         },
       ],
       totalFiles: 3,

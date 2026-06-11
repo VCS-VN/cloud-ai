@@ -8,6 +8,13 @@ import {
 import { getProjectServices } from "@/server/services/project-services";
 import type { RunStreamEvent } from "@/shared/project-types";
 
+// Keep the SSE connection warm. The client arms a 30s idle timeout that resets
+// only on real events (use-chat-stream.ts); a quiet codex phase (large batch
+// build, typecheck/build inside the repair loop) can exceed that and make the
+// client synthesize a false run.failed while the run is still healthy. A
+// sub-30s heartbeat keeps the idle timer from ever firing on a live run.
+const HEARTBEAT_INTERVAL_MS = 15_000;
+
 function formatSse(event: RunStreamEvent): string {
   return `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
 }
@@ -78,40 +85,65 @@ export const Route = createFileRoute(
 
 function openChannelStream(runId: string): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
+  // Hoisted so cancel() (client disconnect) can trigger the same teardown the
+  // start() closure uses on a terminal event / enqueue failure.
+  let cleanup: () => void = () => undefined;
   return new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
-      const send = (event: RunStreamEvent) => {
+      let heartbeat: ReturnType<typeof setInterval> | null = null;
+      // Unsubscribe is routed through a holder rather than referencing the
+      // `subscription` const directly: subscribeChatEvents() replays buffered
+      // events synchronously, so a buffered terminal event runs send()->cleanup()
+      // while `subscription` is still in its temporal dead zone. The holder is a
+      // safe no-op during replay and is swapped for the real unsubscribe once
+      // the subscribe call returns.
+      let unsubscribe: () => void = () => undefined;
+      // Single teardown path: stop the heartbeat, drop the channel listener so
+      // it doesn't leak in channel.subscribers, and close the controller once.
+      // Reused by the terminal-event branch, the enqueue-failure branch, and
+      // cancel(). Idempotent via the `closed` guard.
+      cleanup = () => {
         if (closed) return;
-        try {
-          controller.enqueue(encoder.encode(formatSse(event)));
-        } catch {
-          closed = true;
-          return;
-        }
-        if (isTerminal(event)) {
-          closed = true;
-          subscription.unsubscribe();
-          try {
-            controller.close();
-          } catch {
-            // already closed
-          }
-        }
-      };
-      const subscription = subscribeChatEvents(runId, send);
-      // If the channel was already terminal at subscribe time, every buffered
-      // event has been delivered; close the stream now.
-      if (subscription.terminal) {
+        closed = true;
+        if (heartbeat) clearInterval(heartbeat);
+        heartbeat = null;
+        unsubscribe();
         try {
           controller.close();
         } catch {
           // already closed
         }
+      };
+      const send = (event: RunStreamEvent) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(formatSse(event)));
+        } catch {
+          // Enqueue throws when the client has disconnected — tear down fully
+          // so the channel listener and heartbeat don't leak.
+          cleanup();
+          return;
+        }
+        if (isTerminal(event)) cleanup();
+      };
+      const subscription = subscribeChatEvents(runId, send);
+      unsubscribe = subscription.unsubscribe;
+      // If the channel was already terminal at subscribe time, every buffered
+      // event has been delivered (and a terminal one may have already called
+      // cleanup during replay); close the stream now if it hasn't been.
+      if (subscription.terminal) {
+        cleanup();
+        return;
       }
+      heartbeat = setInterval(() => send({ type: "heartbeat", runId }), HEARTBEAT_INTERVAL_MS);
+      if (typeof heartbeat.unref === "function") heartbeat.unref();
     },
     cancel() {
-      // listener unsubscribes itself on terminal event; nothing to do here
+      // Client disconnected before a terminal event. Without this the channel
+      // listener leaks in channel.subscribers (non-terminal channels never get
+      // an evictAt, so the sweep never reclaims them).
+      cleanup();
     },
   });
 }
@@ -201,21 +233,28 @@ export function buildArchivedReplay(runId: string, run: RunForReplay): ReadableS
       }
       if (run.status === "completed") {
         enqueue({ type: "run.completed", runId, projectProcessingStatus: "idle" });
-      } else if (run.status === "failed" || run.status === "interrupted") {
+      } else if (run.status === "stopped") {
+        enqueue({ type: "run.stopped", runId, projectProcessingStatus: "idle" });
+      } else {
+        // Everything else terminates as a failure. `failed` is an explicit
+        // failure; `streaming`/`awaiting_input` reach this replay path ONLY
+        // because the in-memory channel and run handle are gone (server
+        // restart) — the run can never resume, so it must emit a terminal or
+        // the client reconnect-loops and the project stays `processing`
+        // forever. We frame these as interrupted (safe to retry) rather than a
+        // hard error.
+        const interrupted = run.status !== "failed";
         enqueue({
           type: "run.failed",
           runId,
           projectProcessingStatus: "idle",
           error: {
             code: "PROVIDER_STREAM_FAILED",
-            message:
-              run.status === "interrupted"
-                ? "Phiên xử lý bị gián đoạn. Bạn có thể thử lại an toàn."
-                : "Đã xảy ra lỗi.",
+            message: interrupted
+              ? "Phiên xử lý bị gián đoạn. Bạn có thể thử lại an toàn."
+              : "Đã xảy ra lỗi.",
           },
         });
-      } else if (run.status === "stopped") {
-        enqueue({ type: "run.stopped", runId, projectProcessingStatus: "idle" });
       }
       try {
         controller.close();

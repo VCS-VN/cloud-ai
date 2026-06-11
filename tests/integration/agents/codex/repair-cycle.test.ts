@@ -4,31 +4,43 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import type { CodexEnvAvailable } from "@/server/env/codex";
 
-vi.mock("@openai/codex-sdk", async () => ({
-  Codex: class {
-    startThread() {
-      return {
-        id: "t1",
-        async run() {
-          const root = (globalThis as any).__codexProjectRoot as string | undefined;
-          if (root) {
-            const draftDir = path.join(root, "drafts");
-            const dirs = await fs.readdir(draftDir);
-            if (dirs.length > 0) {
-              const target = path.join(draftDir, dirs[0]);
-              await fs.mkdir(path.join(target, "src/components"), { recursive: true });
-              await fs.writeFile(
-                path.join(target, "src/components/Foo.tsx"),
-                "export const Foo = 1;",
-              );
-            }
-          }
-          return { items: [], finalResponse: "ok", usage: null };
-        },
-      };
+vi.mock("@openai/codex-sdk", async () => {
+  async function seedFoo(): Promise<void> {
+    const root = (globalThis as any).__codexProjectRoot as string | undefined;
+    if (!root) return;
+    const draftDir = path.join(root, "drafts");
+    const dirs = await fs.readdir(draftDir);
+    if (dirs.length > 0) {
+      const target = path.join(draftDir, dirs[0]);
+      await fs.mkdir(path.join(target, "src/components"), { recursive: true });
+      await fs.writeFile(
+        path.join(target, "src/components/Foo.tsx"),
+        "export const Foo = 1;",
+      );
     }
-  },
-}));
+  }
+  return {
+    Codex: class {
+      startThread() {
+        return {
+          id: "t1",
+          async run() {
+            await seedFoo();
+            return { items: [], finalResponse: "ok", usage: null };
+          },
+          async runStreamed() {
+            await seedFoo();
+            return {
+              events: (async function* () {
+                yield { type: "turn.completed", usage: null };
+              })(),
+            };
+          },
+        };
+      }
+    },
+  };
+});
 
 vi.mock("@/features/agents/codex/skills/template-scanner.server", () => ({
   scanActiveTemplates: vi.fn(async () => []),

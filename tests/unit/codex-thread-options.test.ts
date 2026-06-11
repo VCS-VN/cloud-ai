@@ -2,12 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@openai/codex-sdk", () => {
   const startThread = vi.fn(() => ({ id: "thread-mock" }));
-  function Codex(this: unknown) {
+  const codexCtor = vi.fn();
+  function Codex(this: unknown, options: unknown) {
+    codexCtor(options);
     (this as { startThread: typeof startThread }).startThread = startThread;
   }
   return {
     Codex,
     __startThread: startThread,
+    __codexCtor: codexCtor,
   };
 });
 
@@ -17,6 +20,8 @@ import type { CodexEnvAvailable } from "@/server/env/codex";
 
 const startThreadMock = (codexSdk as unknown as { __startThread: ReturnType<typeof vi.fn> })
   .__startThread;
+const codexCtorMock = (codexSdk as unknown as { __codexCtor: ReturnType<typeof vi.fn> })
+  .__codexCtor;
 
 const env: CodexEnvAvailable = {
   available: true,
@@ -87,5 +92,49 @@ describe("createBoundedCodexThread — reasoning effort + sandbox wiring (R1, R2
     createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
     const args = startThreadMock.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
     expect(args?.modelReasoningEffort).toBeUndefined();
+  });
+});
+
+describe("createBoundedCodexThread — HTTP/SSE transport (no WebSocket)", () => {
+  type CodexCtorOptions = {
+    config?: {
+      model_provider?: string;
+      model_providers?: Record<
+        string,
+        { wire_api?: string; base_url?: string; requires_openai_auth?: boolean }
+      >;
+    };
+  };
+
+  it("registers a custom provider with wire_api='responses' and selects it", () => {
+    codexCtorMock.mockClear();
+    createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
+    const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
+    const selected = options?.config?.model_provider;
+    expect(selected).toBeTruthy();
+    const provider = options?.config?.model_providers?.[selected!];
+    // wire_api="responses" is the HTTP/SSE Responses transport; the WebSocket
+    // transport ("responses_websocket") must never be selected.
+    expect(provider?.wire_api).toBe("responses");
+    expect(provider?.wire_api).not.toBe("responses_websocket");
+  });
+
+  it("does not override the reserved built-in 'openai' provider id", () => {
+    codexCtorMock.mockClear();
+    createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
+    const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
+    expect(options?.config?.model_provider).not.toBe("openai");
+    expect(
+      Object.keys(options?.config?.model_providers ?? {}),
+    ).not.toContain("openai");
+  });
+
+  it("points the custom provider at the configured gateway base_url", () => {
+    codexCtorMock.mockClear();
+    createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
+    const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
+    const selected = options?.config?.model_provider;
+    const provider = options?.config?.model_providers?.[selected!];
+    expect(provider?.base_url).toBe(env.baseUrl);
   });
 });

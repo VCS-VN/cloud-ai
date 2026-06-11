@@ -11,7 +11,22 @@ vi.mock("@openai/codex-sdk", async () => {
         return {
           id: "t1",
           async run() {
+            // Simulate non-trivial turn duration so the test's seedDraft
+            // setTimeout(5ms) lands inside the turn (matches the original
+            // flow where the codex CLI takes time before files appear).
+            await new Promise((r) => setTimeout(r, 50));
             return { items: [], finalResponse: "ok", usage: null };
+          },
+          async runStreamed() {
+            // Same delay as run(): the streamed bridge replaced run() in
+            // production, but the test's seedDraft race expects a turn that
+            // is slow enough for the 5ms-deferred seed to land inside it.
+            await new Promise((r) => setTimeout(r, 50));
+            return {
+              events: (async function* () {
+                yield { type: "turn.completed", usage: null };
+              })(),
+            };
           },
         };
       }

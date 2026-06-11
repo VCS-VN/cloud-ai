@@ -58,6 +58,19 @@ export function validateDesignVariants(input: unknown): DesignVariantValidationR
 }
 
 /**
+ * Lightweight question validator: privacy-safe, length-capped. The model
+ * proposes the question wording so it can be tailored to the store concept;
+ * we keep the safety bar low so a flexible question shape doesn't fail the
+ * whole variant turn — fall back to the default in that case.
+ */
+function isUsableQuestion(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > 200) return false;
+  return isPrivacySafe(trimmed);
+}
+
+/**
  * Generate four retail-vibe design variants for an init flow (US4 / R7).
  * Real implementation runs a codex thread with sandbox=read-only and an output
  * schema; this module exposes the validator + helpers used by the driver.
@@ -72,7 +85,7 @@ export type GenerateRetailVariantsInput = {
 };
 
 export type GenerateRetailVariantsResult =
-  | { ok: true; variants: DesignVariant[]; rawResponse: string }
+  | { ok: true; variants: DesignVariant[]; question?: string; rawResponse: string }
   | { ok: false; reason: string };
 
 function stripCodeFence(raw: string): string {
@@ -122,7 +135,12 @@ function normalizeVariantShape(raw: unknown): unknown {
   if (!raw || typeof raw !== "object") return raw;
   const obj = raw as Record<string, unknown>;
   if (Array.isArray(obj.variants)) {
-    return { variants: (obj.variants as unknown[]).map(normalizeVariantShape) };
+    // Preserve a sibling `question` so the model can propose its own wording.
+    const out: Record<string, unknown> = {
+      variants: (obj.variants as unknown[]).map(normalizeVariantShape),
+    };
+    if (typeof obj.question === "string") out.question = obj.question;
+    return out;
   }
   const reshape: Record<string, unknown> = { ...obj };
   if (!reshape.label && typeof obj.name === "string") reshape.label = obj.name;
@@ -138,7 +156,9 @@ function normalizeVariantShape(raw: unknown): unknown {
   return reshape;
 }
 
-function tryParseVariants(rawResponse: string): DesignVariantValidationResult {
+function tryParseVariants(
+  rawResponse: string,
+): DesignVariantValidationResult & { question?: string } {
   let json: unknown;
   try {
     json = JSON.parse(stripCodeFence(rawResponse));
@@ -146,14 +166,25 @@ function tryParseVariants(rawResponse: string): DesignVariantValidationResult {
     return { ok: false, reason: "invalid JSON" };
   }
   const normalized = normalizeVariantShape(json);
-  // Allow the model to wrap the array in an object: { variants: [...] }
-  if (Array.isArray(normalized)) return validateDesignVariants(normalized);
+  // Allow the model to wrap the array in an object: { variants: [...] } or
+  // { question, variants: [...] } so it can also propose the question wording.
+  if (Array.isArray(normalized)) {
+    const result = validateDesignVariants(normalized);
+    return result.ok ? { ...result } : result;
+  }
   if (
     normalized &&
     typeof normalized === "object" &&
     Array.isArray((normalized as { variants?: unknown }).variants)
   ) {
-    return validateDesignVariants((normalized as { variants: unknown[] }).variants);
+    const obj = normalized as { variants: unknown[]; question?: unknown };
+    const result = validateDesignVariants(obj.variants);
+    if (!result.ok) return result;
+    return {
+      ok: true,
+      variants: result.variants,
+      question: isUsableQuestion(obj.question) ? obj.question.trim() : undefined,
+    };
   }
   return { ok: false, reason: "expected an array or { variants: [] } object" };
 }
@@ -169,7 +200,12 @@ export async function generateRetailVariants(
     lastResponse = turn.finalResponse;
     const validation = tryParseVariants(turn.finalResponse);
     if (validation.ok) {
-      return { ok: true, variants: validation.variants, rawResponse: turn.finalResponse };
+      return {
+        ok: true,
+        variants: validation.variants,
+        question: validation.question,
+        rawResponse: turn.finalResponse,
+      };
     }
     lastReason = validation.reason;
   }

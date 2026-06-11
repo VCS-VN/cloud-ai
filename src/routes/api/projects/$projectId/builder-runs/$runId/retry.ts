@@ -1,17 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { requireServerUser } from "@/server/functions/auth";
-import {
-  ActiveRunExistsError,
-  classifyUpdatePrompt,
-  createBuilderRunHandle,
-  newRunId,
-  publishBuilderRunEvent,
-  runInitBuilderRun,
-  runNewRouteBuilderRun,
-  runSmallUpdateBuilderRun,
-} from "@/features/agents/codex/runtime";
-import { getCodexEnv, isCodexFeatureAvailable } from "@/features/agents/codex/runtime/feature-flag.server";
-import type { BuilderRunKind } from "@/features/agents/ui/builder-run-status";
+import { getProjectServices } from "@/server/services/project-services";
+import { startBuilderRunForChat } from "@/server/services/builder-run-dispatcher.server";
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -26,106 +16,142 @@ export const Route = createFileRoute(
 )({
   server: {
     handlers: {
-      POST: async ({ params, request }) => {
+      POST: async ({ params }) => {
         const user = await requireServerUser();
-        const { projectId } = params as { projectId: string };
-        if (!isCodexFeatureAvailable()) {
-          return jsonResponse(503, {
-            ok: false,
-            code: "config_unavailable",
-            message: "AI builder is unavailable. Try again later.",
-          });
-        }
-        const env = getCodexEnv();
-        if (!env.available) {
-          return jsonResponse(503, {
-            ok: false,
-            code: "config_unavailable",
-            message: "AI builder is unavailable. Try again later.",
-          });
-        }
-        const body = (await request.json().catch(() => ({}))) as {
-          prompt?: string;
-          kind?: BuilderRunKind;
-          locale?: string;
+        const { projectId, runId } = params as {
+          projectId: string;
+          runId: string;
         };
-        const prompt = body.prompt?.trim();
+
+        const services = await getProjectServices();
+        const projectRepository = services.projectService["projectRepository"];
+        const messageRepository = services.projectService["messageRepository"];
+        const runStore = services.chatHistoryService.runStore;
+
+        const project = await projectRepository
+          .getProject(projectId, user.id)
+          .catch(() => undefined);
+        if (!project) {
+          return jsonResponse(404, {
+            ok: false,
+            code: "PROJECT_NOT_FOUND",
+            message: "Project not found.",
+          });
+        }
+        if (project.processingStatus === "processing") {
+          return jsonResponse(409, {
+            ok: false,
+            code: "active_run_exists",
+            message: "This project already has an active builder run.",
+          });
+        }
+
+        // Retry replays the original run's prompt. The client sends no body —
+        // load the failed/stopped run to recover its prompt + reasoning effort.
+        const previous = await runStore.load(runId, user.id).catch(() => undefined);
+        if (!previous) {
+          return jsonResponse(404, {
+            ok: false,
+            code: "RUN_NOT_FOUND",
+            message: "The run to retry no longer exists.",
+          });
+        }
+        const prompt = previous.userPrompt?.trim();
         if (!prompt) {
           return jsonResponse(400, {
             ok: false,
             code: "blocked_request",
-            message: "Prompt is required.",
+            message: "The original run has no prompt to retry.",
           });
         }
-        let resolvedKind: BuilderRunKind;
-        if (body.kind === "init") resolvedKind = "init";
-        else if (body.kind === "new_route") resolvedKind = "new_route";
-        else if (body.kind === "update") resolvedKind = "update";
-        else {
-          const classification = classifyUpdatePrompt({ prompt, fileManifest: [] });
-          if (classification.kind === "unsupported") {
-            return jsonResponse(400, {
-              ok: false,
-              code: "blocked_request",
-              message: "Yêu cầu nằm ngoài phạm vi cho phép.",
-            });
-          }
-          resolvedKind = classification.kind === "new_route" ? "new_route" : "update";
-        }
 
-        const newId = newRunId();
-        let handle;
-        try {
-          handle = createBuilderRunHandle({
-            runId: newId,
-            projectId,
+        // Persist a fresh user Message + agent_runs row (linked to the prior
+        // run via retryOfRunId) BEFORE dispatch so chat history survives a
+        // crash mid-dispatch — same ordering as the POST start route.
+        const now = new Date().toISOString();
+        const userMessage = await messageRepository.saveMessage(
+          {
+            id: crypto.randomUUID(),
             userId: user.id,
-          });
-        } catch (error) {
-          if (error instanceof ActiveRunExistsError) {
-            return jsonResponse(409, {
-              ok: false,
-              code: "active_run_exists",
-              message:
-                "Project đang có một phiên builder đang chạy. Hãy đợi hoặc huỷ phiên hiện tại trước khi thử lại.",
-            });
-          }
-          throw error;
-        }
-
-        const runCtx = {
+            projectId,
+            role: "user",
+            content: prompt,
+            status: "completed",
+            processingStatus: "completed",
+            createdAt: now,
+            updatedAt: now,
+          },
+          user.id,
+        );
+        const run = await runStore.create({
           projectId,
           userId: user.id,
-          runId: newId,
-          kind: resolvedKind,
+          parentMessageId: userMessage.id,
+          retryOfRunId: runId,
           userPrompt: prompt,
-          locale: body.locale ?? "vi-VN",
-          env,
-          projectSummary: null,
-          signal: handle.abortController.signal,
-        };
-
-        const driver =
-          resolvedKind === "init"
-            ? runInitBuilderRun
-            : resolvedKind === "new_route"
-              ? runNewRouteBuilderRun
-              : runSmallUpdateBuilderRun;
-
-        void driver(runCtx, (event) => publishBuilderRunEvent(handle, event)).catch(
-          (error) => {
-            publishBuilderRunEvent(handle, {
-              type: "failed",
-              runId: newId,
-              milestone: "failed",
-              failureCode: "codex_runtime_failed",
-              message: error instanceof Error ? error.message : "unexpected error",
-              at: Date.now(),
-            });
-          },
+          reasoningEffort: previous.reasoningEffort,
+          planMode: previous.planMode ?? false,
+          status: "streaming",
+        });
+        const updatedProject = await projectRepository.updateProjectProcessingState(
+          projectId,
+          "processing",
+          user.id,
+          run.id,
+          now,
         );
 
-        return jsonResponse(201, { ok: true, runId: newId });
+        // Dispatch through startBuilderRunForChat so the chat-event-channel
+        // bridge is set up — this is what publishes translated RunStreamEvents
+        // to the SSE channel the client subscribes to. Calling the driver
+        // directly (the old behavior) left the new runId with no channel, so
+        // every live event was lost and the SSE endpoint fell back to an empty
+        // archived replay.
+        const dispatch = await startBuilderRunForChat({
+          projectId,
+          userId: user.id,
+          prompt,
+          locale: "vi",
+          reasoningEffort: previous.reasoningEffort ?? undefined,
+          planMode: previous.planMode ?? false,
+          project: { status: project.status },
+          runId: run.id,
+          parentMessageId: userMessage.id,
+          persistence: {
+            messageRepository,
+            projectRepository,
+            runStore,
+            agentRunRepository: services.projectService["agentRunRepository"],
+          },
+        });
+
+        if (!dispatch.ok) {
+          const httpStatus =
+            dispatch.code === "config_unavailable"
+              ? 503
+              : dispatch.code === "active_run_exists"
+                ? 409
+                : 400;
+          return jsonResponse(httpStatus, {
+            ok: false,
+            code: dispatch.code,
+            message: dispatch.message,
+          });
+        }
+
+        return jsonResponse(201, {
+          ok: true,
+          runId: run.id,
+          userMessage,
+          project: {
+            id: projectId,
+            processingStatus: updatedProject?.processingStatus ?? "processing",
+            activeRunId: run.id,
+          },
+          stream: {
+            url: `/api/projects/${projectId}/builder-runs/${run.id}/stream`,
+          },
+        });
       },
     },
   },

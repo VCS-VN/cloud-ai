@@ -102,6 +102,7 @@ describe("generatePlan retry behavior", () => {
             usage: null,
             fileChanges: [],
             skillToolCalls: [],
+            reasoning: [],
           };
         }
         return {
@@ -109,6 +110,7 @@ describe("generatePlan retry behavior", () => {
           usage: null,
           fileChanges: [],
           skillToolCalls: [],
+          reasoning: [],
         };
       },
     };
@@ -134,6 +136,7 @@ describe("generatePlan retry behavior", () => {
           usage: null,
           fileChanges: [],
           skillToolCalls: [],
+          reasoning: [],
         };
       },
     };

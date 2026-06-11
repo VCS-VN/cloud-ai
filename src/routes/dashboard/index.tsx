@@ -597,14 +597,20 @@ gap-3  */}
         </Link>
         <button
           type="button"
-          className="dashboard-side-profile"
+          className={classnames("dashboard-side-profile", {
+            "gap-3": expanded,
+          })}
           title={userLabel}
           aria-label={userLabel}
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-xs font-semibold text-paper shadow-sm ring-4 ring-paper">
             {initials}
           </span>
-          <span className="dashboard-side-label min-w-0 text-left">
+          <span
+            className={classnames("dashboard-side-label min-w-0 text-left", {
+              hidden: !expanded,
+            })}
+          >
             <span className="block truncate text-ui-sm font-medium text-ink">
               {userLabel}
             </span>

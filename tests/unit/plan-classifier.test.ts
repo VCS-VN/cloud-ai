@@ -90,6 +90,7 @@ describe("classifyPromptComplexity", () => {
         usage: null,
         fileChanges: [],
         skillToolCalls: [],
+        reasoning: [],
       }),
     };
     const out = await classifyPromptComplexity({

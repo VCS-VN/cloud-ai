@@ -1,11 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  type LucideIcon,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
   LogOut,
   Monitor,
   Moon,
@@ -26,13 +22,13 @@ type UserMenuProps = {
   align?: "left" | "right";
 };
 
-const themeOptions: Array<{
+const THEME_OPTIONS: Array<{
   value: AppTheme;
   label: string;
-  icon: LucideIcon;
+  icon: typeof Sun;
 }> = [
-  { value: "dark", label: "Dark", icon: Moon },
   { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
   { value: "system", label: "System", icon: Monitor },
 ];
 
@@ -48,7 +44,6 @@ export function UserMenu({
   const { theme, setTheme } = useTheme();
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -57,15 +52,11 @@ export function UserMenu({
     function handlePointerDown(event: MouseEvent) {
       if (!menuRef.current?.contains(event.target as Node)) {
         setOpen(false);
-        setAppearanceOpen(false);
       }
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpen(false);
-        setAppearanceOpen(false);
-      }
+      if (event.key === "Escape") setOpen(false);
     }
 
     window.addEventListener("mousedown", handlePointerDown);
@@ -82,7 +73,6 @@ export function UserMenu({
     try {
       const result = await logoutFn();
       setOpen(false);
-      setAppearanceOpen(false);
       await navigate({ to: result.redirectTo });
     } finally {
       setLoading(false);
@@ -91,32 +81,26 @@ export function UserMenu({
 
   function closeAndNavigate(to: string) {
     setOpen(false);
-    setAppearanceOpen(false);
     void navigate({ to: to as never });
   }
 
   function handleProfile() {
     if (onProfile) {
       setOpen(false);
-      setAppearanceOpen(false);
       onProfile();
       return;
     }
     closeAndNavigate("/settings/profile");
   }
 
-  const menuPosition = `${placement === "top" ? "bottom-[calc(100%+8px)]" : "top-[calc(100%+8px)]"} ${align === "right" ? "right-0" : "left-0"}`;
+  const panelPosition = `${placement === "top" ? "bottom-[calc(100%+8px)]" : "top-[calc(100%+8px)]"} ${align === "right" ? "right-0" : "left-0"}`;
   const userLabel = user?.displayName || user?.email || "Account";
+  const initials = getInitials(userLabel);
 
   return (
     <div className="relative" ref={menuRef}>
       <Button
         variant="unstyled"
-        className={
-          compact
-            ? "motion-press inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--app-sidebar-border)] bg-[var(--app-sidebar-control)] text-[var(--app-sidebar-text)] outline-none hover:bg-[var(--app-sidebar-control-hover)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
-            : "motion-press inline-flex h-10 items-center gap-1 rounded-md border border-[var(--app-border)] bg-[var(--app-control)] px-1 pr-sm text-body-sm text-[var(--app-icon-muted)] outline-none hover:border-[var(--app-border-strong)] hover:text-[var(--app-icon)] focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
-        }
         type="button"
         onClick={() => setOpen((current) => !current)}
         disabled={loading}
@@ -124,131 +108,142 @@ export function UserMenu({
         aria-expanded={open}
         aria-label={open ? "Close account menu" : "Open account menu"}
         title={user?.email ?? userLabel}
+        className={
+          compact
+            ? "inline-flex h-8 w-8 items-center justify-center rounded-full bg-ink text-paper text-[11px] font-semibold ring-1 ring-hairline transition hover:ring-ink/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40 disabled:cursor-not-allowed disabled:opacity-60"
+            : "inline-flex h-9 items-center gap-2 rounded-full bg-ink text-paper px-2 pr-3 text-[12px] font-semibold ring-1 ring-hairline transition hover:ring-ink/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40 disabled:cursor-not-allowed disabled:opacity-60"
+        }
       >
-        <UserAvatar user={user} size={compact ? "sm" : "xs"} />
+        {user?.photoUrl ? (
+          <img
+            className="h-full w-full rounded-full object-cover"
+            src={user.photoUrl}
+            alt=""
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <span aria-hidden="true">{initials}</span>
+        )}
         {!compact ? (
-          <span className="max-w-[160px] truncate">{userLabel}</span>
+          <span className="max-w-[140px] truncate">{userLabel}</span>
         ) : null}
       </Button>
 
       {open ? (
         <div
-          className={`motion-dialog-in absolute ${menuPosition} z-50 w-[min(320px,calc(100vw-32px))] overflow-hidden rounded-lg border border-[var(--app-dropdown-border)] bg-[var(--app-dropdown-bg)] text-[var(--app-dropdown-text)] shadow-card-hover ring-1 ring-[var(--app-dropdown-border)]`}
           role="menu"
           aria-label="Account menu"
+          className={`absolute ${panelPosition} z-[100] w-72 overflow-hidden rounded-xl border border-hairline bg-surface`}
+          style={{
+            boxShadow:
+              "0 1px 2px rgba(15,15,16,0.04), 0 12px 32px rgba(15,15,16,0.10)",
+          }}
         >
-          <div className="flex items-center gap-2 border-b border-[var(--app-dropdown-border)] p-4">
-            <UserAvatar user={user} size="lg" />
+          <div className="flex items-center gap-3 border-b border-hairline px-4 py-3">
+            {user?.photoUrl ? (
+              <img
+                className="h-10 w-10 shrink-0 rounded-full object-cover"
+                src={user.photoUrl}
+                alt=""
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span
+                aria-hidden="true"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink text-paper text-[12px] font-semibold"
+              >
+                {initials}
+              </span>
+            )}
             <div className="min-w-0">
-              <p className="m-0 truncate text-[16px] font-[720] leading-tight tracking-[-0.02em]">
+              <div className="truncate text-[13px] font-semibold tracking-tight text-ink">
                 {user?.displayName || "Signed in user"}
-              </p>
-              <p className="m-0 mt-xxs truncate text-[13px] leading-5 text-[var(--app-dropdown-muted)]">
+              </div>
+              <div className="truncate text-[11px] text-muted">
                 {user?.email || "No email available"}
-              </p>
+              </div>
             </div>
           </div>
 
-          {appearanceOpen ? (
-            <div className="py-1">
-              <MenuButton
-                icon={ChevronLeft}
-                label="Appearance"
-                onClick={() => setAppearanceOpen(false)}
-              />
-              <div className="my-xs h-px bg-[var(--app-dropdown-border)]" />
-              {themeOptions.map((option) => (
-                <MenuButton
-                  key={option.value}
-                  icon={option.icon}
-                  label={option.label}
-                  selected={theme === option.value}
-                  onClick={() => {
-                    setTheme(option.value);
-                    setAppearanceOpen(false);
-                    setOpen(false);
-                  }}
-                />
-              ))}
+          <nav className="py-1.5">
+            <MenuItem
+              icon={UserRound}
+              label="Profile"
+              onClick={handleProfile}
+            />
+            <MenuItem
+              icon={Settings}
+              label="Settings"
+              onClick={() => closeAndNavigate("/settings")}
+            />
+          </nav>
+
+          <div className="border-t border-hairline px-3 py-2.5">
+            <div className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-subtle">
+              Appearance
             </div>
-          ) : (
-            <div className="py-1">
-              <MenuButton
-                icon={UserRound}
-                label="Profile"
-                onClick={handleProfile}
-              />
-              <MenuButton
-                icon={Settings}
-                label="Settings"
-                onClick={() => closeAndNavigate("/settings")}
-              />
-              <MenuButton
-                icon={Moon}
-                label="Appearance"
-                trailing={<ChevronRight aria-hidden="true" size={18} />}
-                onClick={() => setAppearanceOpen(true)}
-              />
-              <div className="my-xs h-px bg-[var(--app-dropdown-border)]" />
-              <MenuButton
-                icon={LogOut}
-                label={loading ? "Signing out..." : "Sign out"}
-                loading={loading}
-                onClick={() => void handleLogout()}
-              />
+            <div className="grid grid-cols-3 gap-0.5 rounded-md bg-ink/[0.05] p-0.5">
+              {THEME_OPTIONS.map((option) => {
+                const Icon = option.icon;
+                const active = theme === option.value;
+                return (
+                  <Button
+                    key={option.value}
+                    variant="unstyled"
+                    type="button"
+                    onClick={() => setTheme(option.value)}
+                    className={`flex h-7 items-center justify-center gap-1 rounded text-[11.5px] font-medium transition ${
+                      active
+                        ? "bg-surface text-ink shadow-sm"
+                        : "text-muted hover:text-ink"
+                    }`}
+                  >
+                    <Icon aria-hidden="true" className="h-3.5 w-3.5" />
+                    {option.label}
+                  </Button>
+                );
+              })}
             </div>
-          )}
+          </div>
+
+          <div className="border-t border-hairline">
+            <Button
+              variant="unstyled"
+              type="button"
+              role="menuitem"
+              onClick={() => void handleLogout()}
+              disabled={loading}
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[13px] text-ink transition hover:bg-ink/[0.04] disabled:opacity-60"
+            >
+              <LogOut aria-hidden="true" className="h-4 w-4 text-muted" />
+              {loading ? "Signing out..." : "Sign out"}
+            </Button>
+          </div>
         </div>
       ) : null}
     </div>
   );
 }
 
-function MenuButton({
+function MenuItem({
   icon: Icon,
   label,
-  trailing,
-  selected = false,
-  loading = false,
   onClick,
 }: {
-  icon: LucideIcon;
+  icon: typeof UserRound;
   label: string;
-  trailing?: ReactNode;
-  selected?: boolean;
-  loading?: boolean;
   onClick: () => void;
 }) {
   return (
     <Button
       variant="unstyled"
-      className={`flex h-12 w-full items-center gap-2 border-0 px-4 text-left text-[15px] font-[560] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-focus-ring)] ${selected ? "bg-[var(--app-dropdown-control-active)] text-[var(--app-selected-text)] [&_svg]:text-[var(--app-icon-selected)]" : "bg-transparent text-[var(--app-dropdown-text)] hover:bg-[var(--app-dropdown-control-hover)] [&_svg]:text-[var(--app-icon-muted)]"}`}
       type="button"
       role="menuitem"
       onClick={onClick}
-      disabled={loading}
+      className="mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-md px-3 py-2 text-left text-[13px] text-ink transition hover:bg-ink/[0.04]"
     >
-      {loading ? (
-        <Loader2
-          aria-hidden="true"
-          className="shrink-0 animate-spin text-[var(--app-icon-muted)]"
-          size={19}
-        />
-      ) : (
-        <Icon
-          aria-hidden="true"
-          className="shrink-0 text-[var(--app-icon-muted)]"
-          size={19}
-        />
-      )}
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {trailing ??
-        (selected ? (
-          <span
-            className="h-2 w-2 rounded-full bg-[var(--app-accent)]"
-            aria-hidden="true"
-          />
-        ) : null)}
+      <Icon aria-hidden="true" className="h-4 w-4 text-muted" />
+      {label}
     </Button>
   );
 }
@@ -281,7 +276,7 @@ export function UserAvatar({
   if (user?.photoUrl && !failed) {
     return (
       <img
-        className={`${dimensions} shrink-0 rounded-full object-cover ring-1 ring-[var(--app-dropdown-border)]`}
+        className={`${dimensions} shrink-0 rounded-full object-cover ring-1 ring-hairline`}
         src={user.photoUrl}
         alt={`${label} avatar`}
         referrerPolicy="no-referrer"
@@ -292,7 +287,7 @@ export function UserAvatar({
 
   return (
     <span
-      className={`${dimensions} ${textSize} inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--color-block-lilac)] font-[720] text-[rgb(var(--color-ink))] ring-1 ring-[var(--app-dropdown-border)]`}
+      className={`${dimensions} ${textSize} inline-flex shrink-0 items-center justify-center rounded-full bg-ink font-semibold text-paper ring-1 ring-hairline`}
       aria-hidden="true"
     >
       {initials}

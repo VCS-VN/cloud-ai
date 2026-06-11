@@ -57,6 +57,14 @@ export async function runPlanGenerationPhase(
   if (!handle) {
     return { tasks: null };
   }
+  // Idempotent per run: skill clarification can recurse into the driver
+  // (runInitBuilderRun re-invokes itself with an augmented prompt) and call
+  // this phase a second time. The first plan stays authoritative — emitting
+  // a second plan.created replaces the user-visible task list (e.g. 4 → 6
+  // tasks) and is the root cause of the live-buffer duplication.
+  if (handle.taskList && handle.taskList.length > 0) {
+    return { tasks: handle.taskList };
+  }
 
   const prompt = options.promptOverride ?? ctx.userPrompt;
 

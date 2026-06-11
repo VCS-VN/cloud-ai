@@ -13,6 +13,13 @@ vi.mock("@openai/codex-sdk", async () => ({
         async run() {
           return { items: [], finalResponse: "ok", usage: null };
         },
+        async runStreamed() {
+          return {
+            events: (async function* () {
+              yield { type: "turn.completed", usage: null };
+            })(),
+          };
+        },
       };
     }
   },

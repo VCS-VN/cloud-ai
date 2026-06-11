@@ -1,6 +1,8 @@
 import {
   AlertCircle,
   AlertTriangle,
+  Brain,
+  Check,
   CheckCircle2,
   HelpCircle,
   Loader2,
@@ -85,6 +87,9 @@ function AgentBody({
     freeText: string,
   ) => Promise<boolean | void>;
 }) {
+  if (message.kind === "thinking") {
+    return <ThinkingBubble content={message.content} />;
+  }
   if (message.kind === "plan") {
     if (planAwaitingReview && onPlanAction) {
       return (
@@ -292,22 +297,69 @@ export function MessageBubble({
   );
 }
 
+function ThinkingBubble({ content }: { content: string }) {
+  return (
+    <div className="rounded-md border border-dashed border-hairline bg-ink/[0.02] px-3 py-2">
+      <div className="mb-1 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-subtle">
+        <Brain aria-hidden="true" size={11} />
+        Thinking
+      </div>
+      <div className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-muted">
+        {content}
+      </div>
+    </div>
+  );
+}
+
 function CommittedAnswerInline({
   question,
   answer,
+  description,
+  onChange,
 }: {
   question: string;
   answer: string;
+  description?: string;
+  onChange?: () => void;
 }) {
   return (
-    <div className="msg-prose space-y-2" aria-live="polite">
-      {question ? <p className="m-0 leading-snug">{question}</p> : null}
-      <p className="m-0 font-medium">
-        <span className="mr-2 font-mono text-eyebrow uppercase tracking-wide text-muted">
-          Selected:
+    <div
+      className="overflow-hidden rounded-lg border border-hairline bg-surface"
+      aria-live="polite"
+    >
+      {question ? (
+        <div className="px-3.5 pb-2.5 pt-3">
+          <div className="text-[13.5px] font-medium leading-snug text-ink">
+            {question}
+          </div>
+          {description ? (
+            <div className="mt-1 text-[12px] leading-relaxed text-muted">
+              {description}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="flex items-center gap-2 border-t border-hairline bg-emerald-50/30 px-3.5 py-2.5">
+        <Check
+          aria-hidden="true"
+          size={14}
+          className="shrink-0 text-emerald-700"
+          strokeWidth={2.5}
+        />
+        <span className="text-[12px] text-ink">
+          Selected: <span className="font-medium">{answer}</span>
         </span>
-        {answer}
-      </p>
+        {onChange ? (
+          <Button
+            variant="unstyled"
+            type="button"
+            onClick={onChange}
+            className="ml-auto text-[11.5px] text-muted underline-offset-2 hover:text-ink hover:underline"
+          >
+            Change
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }

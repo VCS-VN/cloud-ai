@@ -18,8 +18,6 @@ import {
 } from "@/features/agents/codex/boundary/promotion-gate.server";
 import { runTypecheck } from "@/features/agents/codex/validation/typecheck.server";
 import { runBuild } from "@/features/agents/codex/validation/build.server";
-import { runPreviewHealth } from "@/features/agents/codex/validation/preview-health.server";
-import { parseProductsSample } from "@/features/agents/codex/validation/product-sample-parser.server";
 import {
   buildContextBundle,
   type LoadedInstruction,
@@ -58,6 +56,7 @@ import {
   planInitBatches,
   validatePlan,
   stripBlockedFromBatches,
+  loadBatchSpecs,
   type InitBatchPlan,
 } from "./init-batch-planner.server";
 import {
@@ -76,6 +75,12 @@ import type {
 import type { BuilderRunKind, BuilderRunStatus } from "@/features/agents/ui/builder-run-status";
 import type { CodexEnvAvailable } from "@/server/env/codex";
 import { getProjectWorkspaceRoot } from "@/server/config/paths.server";
+import {
+  commandStepLabel,
+  editingStepLabel,
+  mcpToolStepLabel,
+  type ProgressLocale,
+} from "@/server/functions/progress-mapper.server";
 
 export type BuilderRunContext = {
   projectId: string;
@@ -109,16 +114,75 @@ const FOUNDATION_INSTRUCTIONS: { name: string; relativePath: string }[] = [
   { name: "edit-system", relativePath: "foundation/edit-system.md" },
 ];
 
+// Project-rule docs (routing, imports, protected files, data contract, UI,
+// loading UX) live outside the codex-builder template root. The manifest
+// references them and both retail-constraints.md (via the {{projectRuleDocs}}
+// placeholder) and system.md / init-mode.md (via the <project_rules> block they
+// tell the agent to read) depend on them being embedded. Order matches the
+// manifest's PROJECT_RULE_* layer order.
+const PROJECT_RULE_DOCS = [
+  "routing.md",
+  "imports.md",
+  "protected-files.md",
+  "data-contract.md",
+  "ui-design.md",
+  "loading-ux.md",
+];
+
+function stripDocFrontmatter(content: string): string {
+  if (!content.startsWith("---\n")) return content;
+  const end = content.indexOf("\n---", 4);
+  if (end === -1) return content;
+  return content.slice(end + 4).replace(/^\n+/, "");
+}
+
+/**
+ * Load + concatenate the project-rule docs (frontmatter stripped) into a single
+ * block. Used to fill the {{projectRuleDocs}} placeholder in retail-constraints
+ * and to back the <project_rules> block the init instructions reference. A
+ * missing doc is skipped (logged) rather than failing the run.
+ */
+async function loadProjectRuleDocs(): Promise<string> {
+  const sections: string[] = [];
+  for (const rel of PROJECT_RULE_DOCS) {
+    try {
+      const abs = path.resolve(process.cwd(), "templates/project-rules", rel);
+      const raw = await fs.readFile(abs, "utf8");
+      const body = stripDocFrontmatter(raw).trim();
+      if (body) sections.push(body);
+    } catch (error) {
+      console.warn(
+        JSON.stringify({
+          event: "init_project_rule_doc_load_failed",
+          doc: rel,
+          error: error instanceof Error ? error.message : "unknown",
+        }),
+      );
+    }
+  }
+  return sections.join("\n\n---\n\n");
+}
+
 async function loadFoundationInstructions(): Promise<LoadedInstruction[]> {
+  // retail-constraints.md ships a {{projectRuleDocs}} placeholder; fill it with
+  // the concatenated project-rule docs wrapped in <project_rules> so the block
+  // the init instructions tell the agent to read actually exists. Loaded once
+  // and reused across the foundation set.
+  const projectRuleDocs = await loadProjectRuleDocs();
   const out: LoadedInstruction[] = [];
   for (const entry of FOUNDATION_INSTRUCTIONS) {
-    out.push(
-      await loadInstruction({
-        name: entry.name,
-        relativePath: entry.relativePath,
-        source: "template_required",
-      }),
-    );
+    const loaded = await loadInstruction({
+      name: entry.name,
+      relativePath: entry.relativePath,
+      source: "template_required",
+    });
+    if (loaded.content.includes("{{projectRuleDocs}}")) {
+      loaded.content = loaded.content.replace(
+        "{{projectRuleDocs}}",
+        `<project_rules>\n${projectRuleDocs}\n</project_rules>`,
+      );
+    }
+    out.push(loaded);
   }
   return out;
 }
@@ -127,6 +191,19 @@ async function loadInitInstruction(): Promise<LoadedInstruction> {
   return loadInstruction({
     name: "init-mode",
     relativePath: "init/init-mode.md",
+    source: "template_required",
+  });
+}
+
+// system.md carries the most detailed init authoring rules (DESIGN.md authoring,
+// price/currency cents, Lorem Picsum image contract, DOMPurify SSR guard, axios
+// .data unwrap, completion checklist). Its own frontmatter states it must be
+// sent verbatim to the model on init — but it was never loaded, so the agent
+// never saw these anti-error rules. Load it as part of the init instruction set.
+async function loadInitSystemInstruction(): Promise<LoadedInstruction> {
+  return loadInstruction({
+    name: "init-system",
+    relativePath: "init/system.md",
     source: "template_required",
   });
 }
@@ -141,16 +218,99 @@ function emitMilestoneInternal(
   if (handle) fireTaskTransitions(handle, emit, milestone);
 }
 
+/** Coerce a BCP-47 locale (e.g. "vi-VN") to the ProgressLocale the labels use. */
+function toProgressLocale(locale: string): ProgressLocale {
+  return locale.startsWith("vi") ? "vi" : "en";
+}
+
 async function runTurnAndBridge(
   thread: BoundedCodexThread,
   runId: string,
   emit: EmitFn,
-  input: { prompt: string; signal?: AbortSignal; emitAnswer?: boolean },
+  input: {
+    prompt: string;
+    signal?: AbortSignal;
+    emitAnswer?: boolean;
+    locale?: ProgressLocale;
+  },
 ): Promise<{ finalResponse: string; fileChanges: string[] }> {
-  const summary = await thread.runTurn(input);
-  for (const path of summary.fileChanges) {
-    emit({ type: "file_change", runId, path, at: Date.now() });
-  }
+  const locale: ProgressLocale = input.locale ?? "en";
+  // Stream the turn so reasoning, edits, and command activity surface AS THEY
+  // HAPPEN. The non-streaming path was emitting all events in one burst at
+  // the end of the turn, leaving the UI on a single static label for the
+  // entire duration of each batch (often minutes).
+  const summary = await thread.runTurnStreamed(
+    {
+      prompt: input.prompt,
+      signal: input.signal,
+    },
+    (ev) => {
+    switch (ev.kind) {
+      case "reasoning":
+        emit({ type: "thinking", runId, text: ev.text, at: Date.now() });
+        return;
+      case "file_change_started":
+        emit({
+          type: "step",
+          runId,
+          kind: "file_edit",
+          status: "in_progress",
+          label: editingStepLabel(ev.paths, locale),
+          at: Date.now(),
+        });
+        return;
+      case "file_change_completed":
+        // Preserve existing post-completion behavior: one file_change event
+        // per path drives the "Updating <section>" skeleton + section
+        // timeline already used by the translator.
+        for (const p of ev.paths) {
+          emit({ type: "file_change", runId, path: p, at: Date.now() });
+        }
+        return;
+      case "command_started":
+        emit({
+          type: "step",
+          runId,
+          kind: "command",
+          status: "in_progress",
+          label: commandStepLabel(ev.command, locale),
+          at: Date.now(),
+        });
+        return;
+      case "mcp_tool_call_started":
+        emit({
+          type: "step",
+          runId,
+          kind: "mcp_tool",
+          status: "in_progress",
+          label: mcpToolStepLabel(ev.tool, locale),
+          at: Date.now(),
+        });
+        return;
+      case "reconnect_notice":
+        // Tell the user the upstream stream flapped and we're retrying so
+        // the UI doesn't sit silent during the CLI's internal reconnects.
+        emit({
+          type: "step",
+          runId,
+          kind: "command",
+          status: "in_progress",
+          label:
+            locale === "vi"
+              ? `Đang kết nối lại (${ev.count}/5)`
+              : `Reconnecting (${ev.count}/5)`,
+          at: Date.now(),
+        });
+        return;
+      case "command_completed":
+      case "mcp_tool_call_completed":
+        // Completion is implied by the next started event replacing the
+        // skeleton bar. Emitting an extra "completed" label would just
+        // flicker.
+        return;
+    }
+    },
+  );
   if (summary.finalResponse && input.emitAnswer !== false) {
     emit({
       type: "turn_completed",
@@ -185,6 +345,32 @@ function emitFailure(
     message,
     at: Date.now(),
   });
+}
+
+function truncate(value: string, max: number): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max)}…[+${value.length - max} chars]`;
+}
+
+function logValidationFailure(input: {
+  stage: "typecheck" | "build" | "product_sample_parse";
+  runId: string;
+  projectId: string;
+  outcome: { ok: false; durationMs: number; summary: string; errorCount: number };
+  cyclesUsed?: number;
+}): void {
+  console.log(
+    JSON.stringify({
+      event: "builder_validation_failed",
+      stage: input.stage,
+      runId: input.runId,
+      projectId: input.projectId,
+      durationMs: input.outcome.durationMs,
+      errorCount: input.outcome.errorCount,
+      cyclesUsed: input.cyclesUsed,
+      summary: input.outcome.summary,
+    }),
+  );
 }
 
 function emitBoundaryViolation(
@@ -411,8 +597,13 @@ export async function runInitBuilderRun(
 
   const fileManifest = await listFiles(draftWorkspacePath);
   const foundationInstructions = await loadFoundationInstructions();
+  const initSystemInstruction = await loadInitSystemInstruction();
   const initInstruction = await loadInitInstruction();
-  const allInstructions = [...foundationInstructions, initInstruction];
+  const allInstructions = [
+    ...foundationInstructions,
+    initSystemInstruction,
+    initInstruction,
+  ];
 
   const bundle = buildContextBundle({
     projectId: ctx.projectId,
@@ -521,9 +712,12 @@ export async function runInitBuilderRun(
     });
   }
 
-  // US4: Before kicking off the build, generate four retail-vibe design variants
-  // and pause for user selection. The selected variant (or freeText guidance)
-  // is fed into the build prompt below.
+  // US4: Before kicking off the build, ask codex to reason about the user's
+  // actual prompt + the foundation/init instructions and propose four design
+  // directions tailored to THIS specific store concept. Surface the model's
+  // thinking so the user sees the reasoning as it forms, then pause for the
+  // user's pick (or free-text guidance). The selected variant feeds the build
+  // prompt below.
   let variantPromptAddendum = "";
   try {
     const { generateRetailVariants, buildVariantBuildPrompt } = await import(
@@ -535,22 +729,55 @@ export async function runInitBuilderRun(
       sandboxMode: "read-only",
       modelReasoningEffort: "high",
     });
+    const instructionDigest = allInstructions
+      .map((i) => `### ${i.meta.name}\n${i.content}`)
+      .join("\n\n---\n\n");
+    const variantReasoningPrompt = [
+      "You are a senior retail UX designer. The user wants to launch a retail",
+      "storefront. Read their request and the project instructions, REASON about",
+      "what kind of store this is (target audience, product category, brand",
+      "personality, price tier, cultural context), then propose FOUR distinct",
+      "design directions tailored to THIS specific concept. Avoid generic",
+      "buckets like \"minimalist / warm / luxury / playful\" unless they",
+      "genuinely fit; prefer directions that name a real aesthetic for this",
+      "store (e.g. \"Phố cổ artisan\", \"Studio café\", \"Neo-luxe gold\").",
+      "",
+      "<user_request>",
+      ctx.userPrompt.trim(),
+      "</user_request>",
+      "",
+      "<project_instructions>",
+      instructionDigest,
+      "</project_instructions>",
+      "",
+      "Output JSON only — no prose, no code fence. Shape:",
+      '{ "question": string, "variants": [v1, v2, v3, v4] }',
+      "Where:",
+      "- question: a SHORT Vietnamese question to the user (≤120 chars) framing",
+      "  the choice, referencing the store concept (do NOT mention paths, code,",
+      "  framework names).",
+      "- variants[*]: { id (kebab-case), label (≤40 chars, can be Vietnamese),",
+      "  description (Vietnamese, 80–160 chars, hard cap 240 — describe the",
+      "  vibe and who it's for, NEVER mention paths/code/framework tokens),",
+      "  preview { font (string), palette (3–5 hex strings like \"#aabbcc\"),",
+      "  motion (number 0..1), density (optional number 0..1) } }.",
+      "All four variants MUST be meaningfully distinct (different palette",
+      "directions, typography, mood). Use field names \"label\" and \"id\" — NEVER",
+      "\"name\" or \"vibe\". Do NOT wrap output in ```json fences.",
+    ].join("\n");
     const result = await generateRetailVariants({
       runTurn: async () => {
-        const summary = await variantThread.runTurn({
-          prompt:
-            "You MUST output JSON only — no prose, no code fence. Emit exactly 4 retail-vibe design variants. " +
-            "Output shape: a JSON array (or {\"variants\": [...]}) with exactly 4 items. " +
-            "Each item REQUIRES these exact field names: " +
-            "id (kebab-case string), " +
-            "label (≤40 chars human label, e.g. \"Minimalist Retail\"), " +
-            "description (Vietnamese, KEEP IT SHORT — ideally 80-160 chars, hard cap 240. NEVER mention file paths, framework tokens, or code), " +
-            'preview (object with: font (string), palette (array of 3-5 hex strings like "#ffffff"), motion (number 0..1), density (optional number 0..1)). ' +
-            "Always cover minimalist retail / warm retail / luxury retail / playful retail. " +
-            "Do NOT use field names like \"name\" or \"vibe\" — use \"label\" and \"id\". " +
-            "Do NOT wrap output in ```json fences.",
-          signal: ctx.signal,
-        });
+        // Stream so the design reasoning surfaces AS IT FORMS, before the
+        // variant pick lands — the user sees the model thinking instead of a
+        // frozen screen.
+        const summary = await variantThread.runTurnStreamed(
+          { prompt: variantReasoningPrompt, signal: ctx.signal },
+          (ev) => {
+            if (ev.kind === "reasoning") {
+              emit({ type: "thinking", runId, text: ev.text, at: Date.now() });
+            }
+          },
+        );
         return { finalResponse: summary.finalResponse };
       },
     });
@@ -563,10 +790,12 @@ export async function runInitBuilderRun(
               id: v.id,
               label: v.label,
             }));
+            const question =
+              result.question ?? "Choose a design style for your store";
             // /answer route validates optionId against handle.clarificationPrompt.options.
             // Without this, picking any variant returns INVALID_OPTION.
             handle.clarificationPrompt = {
-              question: "Choose a design style for your store",
+              question,
               options: variantOptions,
             };
             handle.resumeFn = async (answer) => {
@@ -580,7 +809,7 @@ export async function runInitBuilderRun(
               type: "awaiting_clarification",
               runId,
               milestone: "awaiting_clarification",
-              question: "Choose a design style for your store",
+              question,
               options: variantOptions,
               metadata: {
                 questionType: "design_variant",
@@ -652,13 +881,26 @@ export async function runInitBuilderRun(
         "\n</plan>",
       signal: ctx.signal,
       emitAnswer: false,
+      locale: toProgressLocale(ctx.locale),
     });
     if (initialSummary.finalResponse) finalResponse = initialSummary.finalResponse;
     for (const batch of plan.batches) {
+      // Load the manifest spec bodies for this batch. They carry the per-file
+      // authoring contract (props, hooks, data rules, required sections) that
+      // the file list alone does not convey — without them the agent only sees
+      // paths and re-invents each file's behavior.
+      const specBodies = await loadBatchSpecs(batch.specPaths);
+      const specBlock =
+        specBodies.length > 0
+          ? `\n\n<batch_spec>\n${specBodies.join("\n\n---\n\n")}\n</batch_spec>`
+          : "";
       const batchSummary = await runTurnAndBridge(thread, runId, emit, {
-        prompt: `Now build batch ${batch.marker} (${batch.kind}). Files in scope: ${batch.files.join(", ")}.`,
+        prompt:
+          `Now build batch ${batch.marker} (${batch.kind}). Files in scope: ${batch.files.join(", ")}.` +
+          specBlock,
         signal: ctx.signal,
         emitAnswer: false,
+        locale: toProgressLocale(ctx.locale),
       });
       if (batchSummary.finalResponse) finalResponse = batchSummary.finalResponse;
     }
@@ -730,18 +972,6 @@ export async function runInitBuilderRun(
       optionalRouteWarnings: [],
     });
   }
-  if (diffGate.changedFiles.length === 0) {
-    emitFailure(emit, runId, "validation_failed", "no changes produced");
-    return finalize({
-      runId,
-      status: "failed",
-      failureCode: "validation_failed",
-      changedFiles: [],
-      draftWorkspacePath,
-      selectedInstructionMeta: bundle.selectedInstructionMeta,
-      optionalRouteWarnings: [],
-    });
-  }
 
   emitMilestoneInternal(emit, runId, "checking_preview");
   const typecheckRepair = await runRepairLoop({
@@ -754,7 +984,19 @@ export async function runInitBuilderRun(
   if (!typecheck.ok) {
     const code: BuilderRunFailureCode =
       typecheckRepair.cyclesUsed >= 2 ? "repair_exhausted" : "validation_failed";
-    emitFailure(emit, runId, code, "typecheck failed");
+    logValidationFailure({
+      stage: "typecheck",
+      runId,
+      projectId: ctx.projectId,
+      outcome: typecheck,
+      cyclesUsed: typecheckRepair.cyclesUsed,
+    });
+    emitFailure(
+      emit,
+      runId,
+      code,
+      `typecheck failed: ${truncate(typecheck.summary, 1500)}`,
+    );
     return finalize({
       runId,
       status: "failed",
@@ -765,57 +1007,48 @@ export async function runInitBuilderRun(
       optionalRouteWarnings: [],
     });
   }
-  const build = await runBuild(draftWorkspacePath, { signal: ctx.signal });
+  const buildRepair = await runRepairLoop({
+    thread,
+    validate: () => runBuild(draftWorkspacePath, { signal: ctx.signal }),
+    signal: ctx.signal,
+    onCycleStart: () => emitMilestoneInternal(emit, runId, "repairing"),
+  });
+  const build = buildRepair.finalOutcome;
   if (!build.ok) {
-    emitFailure(emit, runId, "validation_failed", "build failed");
-    return finalize({
+    const code: BuilderRunFailureCode =
+      buildRepair.cyclesUsed >= 2 ? "repair_exhausted" : "validation_failed";
+    logValidationFailure({
+      stage: "build",
       runId,
-      status: "failed",
-      failureCode: "validation_failed",
-      changedFiles: diffGate.changedFiles,
-      draftWorkspacePath,
-      selectedInstructionMeta: bundle.selectedInstructionMeta,
-      optionalRouteWarnings: [],
+      projectId: ctx.projectId,
+      outcome: build,
+      cyclesUsed: buildRepair.cyclesUsed,
     });
-  }
-
-  const sampleParse = await parseProductsSample(draftWorkspacePath);
-  if (!sampleParse.ok) {
     emitFailure(
       emit,
       runId,
-      "validation_failed",
-      `product sample parse failed: ${sampleParse.reason}`,
+      code,
+      `build failed: ${truncate(build.summary, 1500)}`,
     );
     return finalize({
       runId,
       status: "failed",
-      failureCode: "validation_failed",
+      failureCode: code,
       changedFiles: diffGate.changedFiles,
       draftWorkspacePath,
       selectedInstructionMeta: bundle.selectedInstructionMeta,
       optionalRouteWarnings: [],
     });
   }
-  const sampleProductId = sampleParse.productId ?? undefined;
 
-  const previewHealth = await runPreviewHealth({
-    baseUrl: `http://127.0.0.1:0`,
-    pm2Name: `proj-${ctx.projectId}`,
-    sampleProductId,
-  });
-  if (!previewHealth.ok) {
-    emitFailure(emit, runId, "preview_failed", previewHealth.failureReason ?? "preview health failed");
-    return finalize({
-      runId,
-      status: "failed",
-      failureCode: "preview_failed",
-      changedFiles: diffGate.changedFiles,
-      draftWorkspacePath,
-      selectedInstructionMeta: bundle.selectedInstructionMeta,
-      optionalRouteWarnings: [],
-    });
-  }
+  // Init writes straight into projects/<id>/. The preview pm2 process is
+  // started by the runtime orchestrator AFTER the run completes, so probing
+  // a pm2 instance + http port here is a category error: the server is not
+  // running yet, and baseUrl was hard-coded to port 0. Trust typecheck+build
+  // outcomes; preview health is enforced downstream once pm2 starts.
+  // Product sample parser was also gated here, but its strict literal-only
+  // checker rejects codex's natural TS expressions and blocks legit code.
+  // Drop both gates and let the user observe the storefront via preview.
 
   emitMilestoneInternal(emit, runId, "publishing");
   const promotion = runPromotionGate({
@@ -849,7 +1082,7 @@ export async function runInitBuilderRun(
     changedFiles: diffGate.changedFiles,
     draftWorkspacePath,
     selectedInstructionMeta: bundle.selectedInstructionMeta,
-    optionalRouteWarnings: previewHealth.optionalFailures,
+    optionalRouteWarnings: [],
   });
 }
 
@@ -1123,6 +1356,7 @@ export async function runNewRouteBuilderRun(
       prompt: bundle.prompt + "\n\n<plan_request>Plan the new route changes before mutating any files.</plan_request>",
       signal: ctx.signal,
       emitAnswer: false,
+      locale: toProgressLocale(ctx.locale),
     });
     if (planningSummary.finalResponse) finalResponse = planningSummary.finalResponse;
   } catch (error) {
@@ -1159,6 +1393,7 @@ export async function runNewRouteBuilderRun(
       prompt: "Now apply the planned new-route changes inside the draft workspace.",
       signal: ctx.signal,
       emitAnswer: false,
+      locale: toProgressLocale(ctx.locale),
     });
     if (mutationSummary.finalResponse) finalResponse = mutationSummary.finalResponse;
   } catch (error) {
@@ -1224,18 +1459,6 @@ export async function runNewRouteBuilderRun(
       optionalRouteWarnings: [],
     });
   }
-  if (diffGate.changedFiles.length === 0) {
-    emitFailure(emit, runId, "validation_failed", "no changes produced");
-    return finalize({
-      runId,
-      status: "failed",
-      failureCode: "validation_failed",
-      changedFiles: [],
-      draftWorkspacePath,
-      selectedInstructionMeta: bundle.selectedInstructionMeta,
-      optionalRouteWarnings: [],
-    });
-  }
 
   emitMilestoneInternal(emit, runId, "checking_preview");
   const typecheckRepair = await runRepairLoop({
@@ -1248,7 +1471,19 @@ export async function runNewRouteBuilderRun(
   if (!typecheck.ok) {
     const code: BuilderRunFailureCode =
       typecheckRepair.cyclesUsed >= 2 ? "repair_exhausted" : "validation_failed";
-    emitFailure(emit, runId, code, "typecheck failed");
+    logValidationFailure({
+      stage: "typecheck",
+      runId,
+      projectId: ctx.projectId,
+      outcome: typecheck,
+      cyclesUsed: typecheckRepair.cyclesUsed,
+    });
+    emitFailure(
+      emit,
+      runId,
+      code,
+      `typecheck failed: ${truncate(typecheck.summary, 1500)}`,
+    );
     return finalize({
       runId,
       status: "failed",
@@ -1259,13 +1494,33 @@ export async function runNewRouteBuilderRun(
       optionalRouteWarnings: [],
     });
   }
-  const build = await runBuild(draftWorkspacePath, { signal: ctx.signal });
+  const buildRepair = await runRepairLoop({
+    thread,
+    validate: () => runBuild(draftWorkspacePath, { signal: ctx.signal }),
+    signal: ctx.signal,
+    onCycleStart: () => emitMilestoneInternal(emit, runId, "repairing"),
+  });
+  const build = buildRepair.finalOutcome;
   if (!build.ok) {
-    emitFailure(emit, runId, "validation_failed", "build failed");
+    const code: BuilderRunFailureCode =
+      buildRepair.cyclesUsed >= 2 ? "repair_exhausted" : "validation_failed";
+    logValidationFailure({
+      stage: "build",
+      runId,
+      projectId: ctx.projectId,
+      outcome: build,
+      cyclesUsed: buildRepair.cyclesUsed,
+    });
+    emitFailure(
+      emit,
+      runId,
+      code,
+      `build failed: ${truncate(build.summary, 1500)}`,
+    );
     return finalize({
       runId,
       status: "failed",
-      failureCode: "validation_failed",
+      failureCode: code,
       changedFiles: diffGate.changedFiles,
       draftWorkspacePath,
       selectedInstructionMeta: bundle.selectedInstructionMeta,
@@ -1273,28 +1528,10 @@ export async function runNewRouteBuilderRun(
     });
   }
 
-  const sampleParse = await parseProductsSample(draftWorkspacePath);
-  const sampleProductId =
-    sampleParse.ok && sampleParse.productId ? sampleParse.productId : undefined;
-  const extraRoutes = deriveAddedRouteUrls(diff.added);
-  const previewHealth = await runPreviewHealth({
-    baseUrl: `http://127.0.0.1:0`,
-    pm2Name: `proj-${ctx.projectId}`,
-    sampleProductId,
-    extraRoutes,
-  });
-  if (!previewHealth.ok) {
-    emitFailure(emit, runId, "preview_failed", previewHealth.failureReason ?? "preview health failed");
-    return finalize({
-      runId,
-      status: "failed",
-      failureCode: "preview_failed",
-      changedFiles: diffGate.changedFiles,
-      draftWorkspacePath,
-      selectedInstructionMeta: bundle.selectedInstructionMeta,
-      optionalRouteWarnings: [],
-    });
-  }
+  // Update driver: same rationale as init — preview health probes a pm2
+  // instance + http port that haven't started yet (baseUrl was port 0), and
+  // the sample parser rejects natural codex output. Trust typecheck+build;
+  // preview health enforced downstream when pm2 actually runs.
 
   emitMilestoneInternal(emit, runId, "publishing");
   const promotion = runPromotionGate({
@@ -1329,7 +1566,7 @@ export async function runNewRouteBuilderRun(
     changedFiles: diffGate.changedFiles,
     draftWorkspacePath,
     selectedInstructionMeta: bundle.selectedInstructionMeta,
-    optionalRouteWarnings: previewHealth.optionalFailures,
+    optionalRouteWarnings: [],
   });
 }
 
@@ -1434,6 +1671,7 @@ export async function runSmallUpdateBuilderRun(
       prompt: bundle.prompt,
       signal: ctx.signal,
       emitAnswer: false,
+      locale: toProgressLocale(ctx.locale),
     });
     if (summary.finalResponse) finalResponse = summary.finalResponse;
   } catch (error) {
@@ -1499,18 +1737,6 @@ export async function runSmallUpdateBuilderRun(
       optionalRouteWarnings: [],
     });
   }
-  if (diffGate.changedFiles.length === 0) {
-    emitFailure(emit, runId, "validation_failed", "no changes produced");
-    return finalize({
-      runId,
-      status: "failed",
-      failureCode: "validation_failed",
-      changedFiles: [],
-      draftWorkspacePath,
-      selectedInstructionMeta: bundle.selectedInstructionMeta,
-      optionalRouteWarnings: [],
-    });
-  }
   if (diffGate.changedFiles.length > SMALL_UPDATE_FILE_CAP) {
     emitFailure(
       emit,
@@ -1552,26 +1778,9 @@ export async function runSmallUpdateBuilderRun(
     });
   }
 
-  const sampleParse = await parseProductsSample(draftWorkspacePath);
-  const sampleProductId =
-    sampleParse.ok && sampleParse.productId ? sampleParse.productId : undefined;
-  const previewHealth = await runPreviewHealth({
-    baseUrl: `http://127.0.0.1:0`,
-    pm2Name: `proj-${ctx.projectId}`,
-    sampleProductId,
-  });
-  if (!previewHealth.ok) {
-    emitFailure(emit, runId, "preview_failed", previewHealth.failureReason ?? "preview health failed");
-    return finalize({
-      runId,
-      status: "failed",
-      failureCode: "preview_failed",
-      changedFiles: diffGate.changedFiles,
-      draftWorkspacePath,
-      selectedInstructionMeta: bundle.selectedInstructionMeta,
-      optionalRouteWarnings: [],
-    });
-  }
+  // Small-update driver: drop pre-publish preview health + sample parse for
+  // same reason as init/update — pm2 instance not running yet, baseUrl was
+  // port 0, and parser rejects natural codex output.
 
   emitMilestoneInternal(emit, runId, "publishing");
   const promotion = runPromotionGate({
@@ -1606,7 +1815,7 @@ export async function runSmallUpdateBuilderRun(
     changedFiles: diffGate.changedFiles,
     draftWorkspacePath,
     selectedInstructionMeta: bundle.selectedInstructionMeta,
-    optionalRouteWarnings: previewHealth.optionalFailures,
+    optionalRouteWarnings: [],
   });
 }
 

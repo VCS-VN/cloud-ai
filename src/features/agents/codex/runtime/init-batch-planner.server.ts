@@ -8,6 +8,11 @@ export type InitBatch = {
   kind: InitBatchKind;
   marker: string;
   files: string[];
+  // Manifest-relative spec paths (e.g. "data/packages.md", "pages/home.md")
+  // whose bodies describe HOW to author the files in scope. The driver loads
+  // these and appends them to the batch prompt so the agent receives the
+  // per-file authoring contract, not just a list of paths.
+  specPaths: string[];
 };
 
 export type InitBatchPlan = {
@@ -63,13 +68,48 @@ const FOUNDATION_MARKER_TO_FILES: Record<string, string[]> = {
 
 export type ManifestSource = { layers?: ManifestEntry[] };
 
+const INIT_TEMPLATES_DIR = "templates/codex-builder/init";
+
 async function readManifest(): Promise<ManifestSource> {
-  const target = path.resolve(
-    process.cwd(),
-    "templates/codex-builder/init/manifest.json",
-  );
+  const target = path.resolve(process.cwd(), INIT_TEMPLATES_DIR, "manifest.json");
   const raw = await fs.readFile(target, "utf8");
   return JSON.parse(raw) as ManifestSource;
+}
+
+function stripFrontmatter(content: string): string {
+  if (!content.startsWith("---\n")) return content;
+  const end = content.indexOf("\n---", 4);
+  if (end === -1) return content;
+  return content.slice(end + 4).replace(/^\n+/, "");
+}
+
+/**
+ * Load the manifest spec bodies for a batch (frontmatter stripped). The spec
+ * `.md` files describe HOW to author each file in scope — the per-file
+ * authoring contract the agent needs. Paths are manifest-relative (e.g.
+ * "pages/home.md") and resolved under the init templates dir. A missing or
+ * unreadable spec is skipped (logged) rather than failing the run, since the
+ * file list itself is still valid.
+ */
+export async function loadBatchSpecs(specPaths: string[]): Promise<string[]> {
+  const bodies: string[] = [];
+  for (const rel of specPaths) {
+    try {
+      const abs = path.resolve(process.cwd(), INIT_TEMPLATES_DIR, rel);
+      const raw = await fs.readFile(abs, "utf8");
+      const body = stripFrontmatter(raw).trim();
+      if (body) bodies.push(body);
+    } catch (error) {
+      console.warn(
+        JSON.stringify({
+          event: "init_batch_spec_load_failed",
+          specPath: rel,
+          error: error instanceof Error ? error.message : "unknown",
+        }),
+      );
+    }
+  }
+  return bodies;
 }
 
 export type PlanBuildInput = {
@@ -86,12 +126,14 @@ export async function planInitBatches(
     .sort((a, b) => a.order - b.order);
 
   const foundationFiles: string[] = [];
+  const foundationSpecPaths: string[] = [];
   const pageBatches: InitBatch[] = [];
 
   for (const layer of layers) {
     if (FOUNDATION_MARKERS.has(layer.marker)) {
       const files = FOUNDATION_MARKER_TO_FILES[layer.marker] ?? [];
       foundationFiles.push(...files);
+      if (layer.file) foundationSpecPaths.push(layer.file);
       continue;
     }
     if (PAGE_MARKER_TO_FILES[layer.marker]) {
@@ -99,6 +141,7 @@ export async function planInitBatches(
         kind: "page",
         marker: layer.marker,
         files: PAGE_MARKER_TO_FILES[layer.marker],
+        specPaths: layer.file ? [layer.file] : [],
       });
     }
   }
@@ -109,6 +152,7 @@ export async function planInitBatches(
       kind: "foundation_data",
       marker: FOUNDATION_BATCH_MARKER,
       files: foundationFiles,
+      specPaths: foundationSpecPaths,
     });
   }
   for (const page of pageBatches) batches.push(page);
@@ -118,6 +162,7 @@ export async function planInitBatches(
       kind: "polish",
       marker: POLISH_BATCH_MARKER,
       files: [POLISH_PLACEHOLDER],
+      specPaths: [],
     });
   }
 

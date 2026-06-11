@@ -105,7 +105,11 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
         activeRun: {
           runId: event.runId,
           status: "streaming",
-          skeleton: null,
+          // Seed a default skeleton so the processing affordance shows
+          // immediately. Without this the panel renders nothing between
+          // run.started and the first skeleton.update (seconds during init),
+          // leaving the user unsure the agent is working.
+          skeleton: { phase: "starting", label: CLIENT_SKELETON_LABELS.starting },
           tasks: null,
           taskStatuses: {},
         },

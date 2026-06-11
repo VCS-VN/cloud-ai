@@ -44,6 +44,7 @@ import { PreviewInitPanel } from "@/components/projects/PreviewInitPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  CLIENT_SKELETON_LABELS,
   createInitialChatState,
   type DevRuntimeUIState,
 } from "@/features/agents/ui/agent-event-reducer";
@@ -447,9 +448,12 @@ function ProjectDetailPage() {
           : currentProject,
       );
       if (project?.id) {
-        void queryClient.invalidateQueries({
-          queryKey: ["project", project.id],
-        });
+        // Refresh derived data the run may have changed. Do NOT call
+        // router.invalidate() here — it re-runs the route loader, which
+        // returns a new workspace reference and triggers the reset
+        // useEffect at line 342, wiping preview/file/code state and
+        // looking like a page reload mid-handling. setProject above
+        // already keeps the project status in sync.
         void queryClient.invalidateQueries({
           queryKey: ["project-files", project.id],
         });
@@ -459,10 +463,9 @@ function ProjectDetailPage() {
         void queryClient.invalidateQueries({
           queryKey: ["project-runs", project.id],
         });
-        void router.invalidate();
       }
     }
-  }, [chatState.activeRun?.runId, project?.id, queryClient, router]);
+  }, [chatState.activeRun?.runId, project?.id, queryClient]);
 
   const handleSaveProjectSettings = useCallback(
     async (settings: { name?: string; selectedStoreSlug?: string | null }) => {
@@ -839,7 +842,19 @@ function ProjectDetailPage() {
                 <div className="min-h-0 flex-1 overflow-hidden">
                   <ProjectMessagesPanel
                     messages={messages}
-                    skeleton={chatState.activeRun?.skeleton ?? null}
+                    skeleton={
+                      chatState.activeRun?.skeleton ??
+                      // Fallback: if the project is processing but the SSE
+                      // stream hasn't reconnected yet (page reload, brief
+                      // network blip), still show a generic processing
+                      // affordance so the user sees the agent is working.
+                      (isProcessing
+                        ? {
+                            phase: "starting",
+                            label: CLIENT_SKELETON_LABELS.starting,
+                          }
+                        : null)
+                    }
                     loadingOlder={loadingOlder}
                     hasMore={hasMoreMessages}
                     onLoadOlder={loadOlderMessages}

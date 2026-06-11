@@ -28,7 +28,33 @@ export type CodexTurnSummary = {
   usage: Usage | null;
   fileChanges: string[];
   skillToolCalls: { name: string; result: ProjectReadSkillResult }[];
+  reasoning: string[];
 };
+
+/**
+ * Per-item progress signal fired by `runTurnStreamed` as the codex turn unfolds.
+ * Decoupled from the SDK's ThreadItem shape so the bridge can stay typed
+ * without leaking SDK types into UI/translator layers.
+ */
+export type CodexProgressEvent =
+  | { kind: "reasoning"; text: string }
+  | { kind: "file_change_started"; paths: string[] }
+  | { kind: "file_change_completed"; paths: string[]; failed: boolean }
+  | { kind: "command_started"; command: string }
+  | {
+      kind: "command_completed";
+      command: string;
+      exitCode: number | null;
+      failed: boolean;
+    }
+  | { kind: "mcp_tool_call_started"; server: string; tool: string }
+  | {
+      kind: "mcp_tool_call_completed";
+      server: string;
+      tool: string;
+      failed: boolean;
+    }
+  | { kind: "reconnect_notice"; count: number };
 
 const MAX_RETRY_ATTEMPTS = 10;
 const BASE_RETRY_DELAY_MS = 1000;
@@ -89,6 +115,30 @@ export class GatewaySoftError extends Error {
   }
 }
 
+/**
+ * Thrown when a streamed turn finished only because the CLI's upstream
+ * WebSocket reconnect attempts were exhausted, leaving a stub turn: one
+ * preamble `agent_message`, no file changes, no skill calls, no reasoning.
+ * The codex CLI emits "Reconnecting... N/5 (stream disconnected before
+ * completion: WebSocket protocol error: Handshake not finished)" `error`
+ * events, then closes the turn with whatever partial text it had instead of
+ * doing the work. Accepting that as success silently drops the build. We
+ * throw so runTurnStreamed's retry loop respawns a FRESH CLI process (fresh
+ * WS) and re-runs the turn.
+ */
+export class StreamReconnectError extends Error {
+  constructor(public readonly reconnectCount: number) {
+    super(`stream_reconnect_degenerate_turn: ${reconnectCount} reconnects, no work produced`);
+    this.name = "StreamReconnectError";
+  }
+}
+
+// The CLI surfaces upstream WS reconnect notices as `error` events with this
+// canonical phrasing: "Reconnecting... N/M (...)". The two captures expose
+// the reconnect count and total so the post-loop gate can detect a budget
+// exhaustion (N === M) and force a retry on a fresh CLI process.
+const RECONNECT_NOTICE_RE = /\breconnecting\.{0,3}\s*(\d+)\s*\/\s*(\d+)/i;
+
 export class BoundedCodexThread {
   private readonly thread: Thread;
   private readonly skillToolCallbacks?: ProjectReadSkillCallbacks;
@@ -145,11 +195,15 @@ export class BoundedCodexThread {
     const turn = await this.thread.run(input.prompt, { signal: input.signal });
     const fileChanges: string[] = [];
     const skillToolCalls: { name: string; result: ProjectReadSkillResult }[] = [];
+    const reasoning: string[] = [];
     const itemTypeCounts: Record<string, number> = {};
     for (const item of turn.items) {
       itemTypeCounts[item.type] = (itemTypeCounts[item.type] ?? 0) + 1;
       if (item.type === "file_change") {
         for (const change of item.changes) fileChanges.push(change.path);
+      }
+      if (item.type === "reasoning" && typeof item.text === "string" && item.text.trim().length > 0) {
+        reasoning.push(item.text);
       }
       if (item.type === "mcp_tool_call" && item.tool === PROJECT_READ_SKILL_TOOL_NAME) {
         const args = (item.arguments ?? {}) as { name?: unknown };
@@ -193,6 +247,7 @@ export class BoundedCodexThread {
         fileChangesCount: fileChanges.length,
         fileChangesPreview: fileChanges.slice(0, 5),
         skillToolCallsCount: skillToolCalls.length,
+        reasoningCount: reasoning.length,
       }),
     );
     return {
@@ -200,6 +255,274 @@ export class BoundedCodexThread {
       usage: turn.usage,
       fileChanges,
       skillToolCalls,
+      reasoning,
+    };
+  }
+
+  /**
+   * Streaming sibling of `runTurn`. Consumes the SDK's `runStreamed` event
+   * generator, firing `onProgress` as items land so the UI shows live
+   * step-progress instead of a frozen screen between turn start and end.
+   * Returns the SAME CodexTurnSummary as `runTurn` (same retry loop, same
+   * soft-gateway gate, same skill-tool side effects), so downstream callers
+   * are agnostic to which path produced the summary.
+   */
+  async runTurnStreamed(
+    input: CodexTurnInput,
+    onProgress: (event: CodexProgressEvent) => void,
+  ): Promise<CodexTurnSummary> {
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+      if (input.signal?.aborted) {
+        throw new DOMException("Aborted", "AbortError");
+      }
+      try {
+        const summary = await this.runTurnStreamedOnce(input, onProgress);
+        if (attempt > 0) {
+          console.log(
+            JSON.stringify({
+              event: "codex_turn_retry_succeeded",
+              attempt,
+              previousFailures: attempt,
+            }),
+          );
+        }
+        return summary;
+      } catch (error) {
+        lastError = error;
+        if (isAbortError(error)) throw error;
+        const isLastAttempt = attempt === MAX_RETRY_ATTEMPTS - 1;
+        const waitMs = isLastAttempt ? 0 : computeBackoffDelay(attempt);
+        console.warn(
+          JSON.stringify({
+            event: "codex_turn_failed",
+            attempt: attempt + 1,
+            maxAttempts: MAX_RETRY_ATTEMPTS,
+            isLastAttempt,
+            waitMs,
+            rawMessage: error instanceof Error ? error.message : String(error),
+            rawName: error instanceof Error ? error.name : undefined,
+          }),
+        );
+        if (isLastAttempt) break;
+        await delay(waitMs, input.signal);
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(typeof lastError === "string" ? lastError : "codex turn ended unexpectedly");
+  }
+
+  private async runTurnStreamedOnce(
+    input: CodexTurnInput,
+    onProgress: (event: CodexProgressEvent) => void,
+  ): Promise<CodexTurnSummary> {
+    const stream = await this.thread.runStreamed(input.prompt, {
+      signal: input.signal,
+    });
+    const fileChanges: string[] = [];
+    const skillToolCalls: { name: string; result: ProjectReadSkillResult }[] = [];
+    const reasoning: string[] = [];
+    const itemTypeCounts: Record<string, number> = {};
+    // Turn.finalResponse from the non-streaming path is the last agent_message
+    // text; mirror that convention here so the soft-gateway gate behaves
+    // identically (R1 parity).
+    let finalResponse = "";
+    let usage: Usage | null = null;
+    let itemCount = 0;
+    // Track the CLI's upstream WebSocket reconnect notices so we can detect
+    // a "fake completion" (turn closes after exhausting reconnects with
+    // only a preamble agent_message). See StreamReconnectError comment.
+    let reconnectCount = 0;
+    // Track whether the CLI surfaced its terminal reconnect notice (the
+    // "N/5" with N === total). If it did, the upstream WS is dead and the
+    // turn cannot recover — even if partial reasoning/edits leaked through
+    // before the cap. We force a retry with a fresh CLI process so the
+    // turn restarts cleanly instead of completing on a half-built result.
+    let reconnectExhausted = false;
+
+    for await (const event of stream.events) {
+      if (event.type === "turn.completed") {
+        usage = event.usage;
+        continue;
+      }
+      if (event.type === "turn.failed") {
+        throw new Error(event.error.message);
+      }
+      if (event.type === "error") {
+        // CLI's upstream-WS reconnect notice — phrased as "Reconnecting...
+        // N/5 (stream disconnected before completion: WebSocket protocol
+        // error: Handshake not finished)". Match the SDK's non-streaming
+        // `run()` (dist/index.js:101-113) which silently ignores these so
+        // the in-flight turn isn't aborted on transient flaps. We DO count
+        // them so the post-loop gate can refuse to accept a stub turn that
+        // only "completed" because reconnects ran out.
+        const reconnectMatch = RECONNECT_NOTICE_RE.exec(event.message ?? "");
+        if (reconnectMatch) {
+          reconnectCount += 1;
+          onProgress({ kind: "reconnect_notice", count: reconnectCount });
+          // The phrasing is "Reconnecting... N/M (...)". When N === M the CLI
+          // has exhausted its reconnect budget; the stream will not recover.
+          const current = Number(reconnectMatch[1]);
+          const total = Number(reconnectMatch[2]);
+          if (
+            Number.isFinite(current) &&
+            Number.isFinite(total) &&
+            current >= total
+          ) {
+            reconnectExhausted = true;
+          }
+        }
+        console.warn(
+          JSON.stringify({
+            event: "codex_turn_stream_error_ignored",
+            message: event.message,
+            reconnectCount,
+          }),
+        );
+        continue;
+      }
+      if (event.type === "item.started") {
+        const item = event.item;
+        if (item.type === "command_execution") {
+          onProgress({ kind: "command_started", command: item.command });
+        } else if (item.type === "file_change") {
+          onProgress({
+            kind: "file_change_started",
+            paths: item.changes.map((c) => c.path),
+          });
+        } else if (item.type === "mcp_tool_call") {
+          onProgress({
+            kind: "mcp_tool_call_started",
+            server: item.server,
+            tool: item.tool,
+          });
+        }
+        continue;
+      }
+      if (event.type !== "item.completed") {
+        continue;
+      }
+      const item = event.item;
+      itemCount += 1;
+      itemTypeCounts[item.type] = (itemTypeCounts[item.type] ?? 0) + 1;
+      if (item.type === "agent_message") {
+        finalResponse = item.text;
+      } else if (
+        item.type === "reasoning" &&
+        typeof item.text === "string" &&
+        item.text.trim().length > 0
+      ) {
+        reasoning.push(item.text);
+        onProgress({ kind: "reasoning", text: item.text });
+      } else if (item.type === "file_change") {
+        const paths = item.changes.map((c) => c.path);
+        for (const p of paths) fileChanges.push(p);
+        onProgress({
+          kind: "file_change_completed",
+          paths,
+          failed: item.status === "failed",
+        });
+      } else if (item.type === "command_execution") {
+        onProgress({
+          kind: "command_completed",
+          command: item.command,
+          exitCode: typeof item.exit_code === "number" ? item.exit_code : null,
+          failed: item.status === "failed",
+        });
+      } else if (item.type === "mcp_tool_call") {
+        if (item.tool === PROJECT_READ_SKILL_TOOL_NAME) {
+          const args = (item.arguments ?? {}) as { name?: unknown };
+          const result = projectReadSkill({ name: args.name }, this.skillToolCallbacks);
+          skillToolCalls.push({
+            name: typeof args.name === "string" ? args.name : "<invalid>",
+            result,
+          });
+        }
+        onProgress({
+          kind: "mcp_tool_call_completed",
+          server: item.server,
+          tool: item.tool,
+          failed: item.status === "failed",
+        });
+      }
+    }
+
+    // Identical soft-gateway gate to runTurnOnce: a status-200 gateway error
+    // string with no file change and no skill call is not a real answer.
+    if (
+      fileChanges.length === 0 &&
+      skillToolCalls.length === 0 &&
+      isSoftGatewayError(finalResponse)
+    ) {
+      console.warn(
+        JSON.stringify({
+          event: "codex_turn_soft_gateway_error",
+          finalResponsePreview: finalResponse.slice(0, 240),
+          itemCount,
+          itemTypeCounts,
+        }),
+      );
+      throw new GatewaySoftError(finalResponse);
+    }
+    // Degenerate-reconnect gate: when the CLI surfaced one or more upstream
+    // WS reconnect notices AND the turn produced no concrete work (no file
+    // change, no skill call, no reasoning), the "completion" is the CLI
+    // giving up after exhausting its reconnect budget. Empirically the
+    // tail-event is a single short `agent_message` describing the work it
+    // INTENDED to do — never the work itself. Throw so the outer retry
+    // spawns a fresh CLI process (fresh upstream WS) and tries again.
+    // We DON'T gate on "no edits" alone — legitimate planning/reasoning
+    // turns produce zero edits, and integration mocks emit empty streams.
+    // The reconnect-counter is the precise discriminator.
+    //
+    // Two retry triggers:
+    //   1. reconnectExhausted: the CLI hit its terminal "N/N" reconnect
+    //      notice — the upstream WS is dead, the turn cannot recover, retry
+    //      regardless of whatever partial reasoning/edits leaked first.
+    //   2. reconnectCount > 0 && noWork: transient flaps that left the turn
+    //      with nothing concrete (the stub-completion case from the log).
+    const noWork =
+      fileChanges.length === 0 &&
+      skillToolCalls.length === 0 &&
+      reasoning.length === 0;
+    if (reconnectExhausted || (reconnectCount > 0 && noWork)) {
+      console.warn(
+        JSON.stringify({
+          event: "codex_turn_reconnect_stub",
+          reconnectCount,
+          reconnectExhausted,
+          itemCount,
+          itemTypeCounts,
+          fileChangesCount: fileChanges.length,
+          reasoningCount: reasoning.length,
+          finalResponseLength: finalResponse.length,
+          finalResponsePreview: finalResponse.slice(0, 240),
+        }),
+      );
+      throw new StreamReconnectError(reconnectCount);
+    }
+    console.log(
+      JSON.stringify({
+        event: "codex_turn_completed",
+        promptLength: input.prompt.length,
+        finalResponseLength: finalResponse.length,
+        finalResponsePreview: finalResponse.slice(0, 240),
+        itemCount,
+        itemTypeCounts,
+        fileChangesCount: fileChanges.length,
+        fileChangesPreview: fileChanges.slice(0, 5),
+        skillToolCallsCount: skillToolCalls.length,
+        reasoningCount: reasoning.length,
+        streamed: true,
+      }),
+    );
+    return {
+      finalResponse,
+      usage,
+      fileChanges,
+      skillToolCalls,
+      reasoning,
     };
   }
 
@@ -232,9 +555,36 @@ export function createBoundedCodexThread(
   const sandboxMode: CodexSandboxMode = sandboxDisabled
     ? "danger-full-access"
     : input.sandboxMode ?? "workspace-write";
+  // Force the HTTP+SSE Responses transport instead of the CLI's default
+  // WebSocket streaming. The WS path flaps under our gateway ("WebSocket
+  // protocol error: Handshake not finished" → "Reconnecting... N/5"), which
+  // produced degenerate stub turns. The Responses HTTP transport still streams
+  // (SSE), so we keep live progress without the WS handshake instability.
+  //
+  // Mechanism (verified against codex CLI 0.137.0): the built-in `openai`
+  // provider id is reserved and cannot be overridden, so we register a custom
+  // provider that points at the same gateway with `wire_api="responses"` (the
+  // HTTP/SSE wire API — `responses_websocket` is the WS one) and select it via
+  // `model_provider`. `requires_openai_auth=true` makes it reuse the
+  // CODEX_API_KEY the SDK injects from `apiKey`; base_url is set explicitly so
+  // the provider targets our gateway rather than api.openai.com. The
+  // `responses_websockets` feature flag is `removed` in this CLI version, so
+  // wire_api on the provider is the supported lever for transport selection.
+  const responsesProvider: Record<string, string | boolean> = {
+    name: "OpenAI Responses HTTP",
+    wire_api: "responses",
+    requires_openai_auth: true,
+  };
+  if (input.env.baseUrl) responsesProvider.base_url = input.env.baseUrl;
   const codex = new Codex({
     apiKey: input.env.apiKey,
     baseUrl: input.env.baseUrl,
+    config: {
+      model_provider: "openai-responses-http",
+      model_providers: {
+        "openai-responses-http": responsesProvider,
+      },
+    },
     env: {
       ...process.env,
       CODEX_HOME: input.env.codexHome,

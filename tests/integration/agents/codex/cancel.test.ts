@@ -24,6 +24,25 @@ vi.mock("@openai/codex-sdk", async () => ({
           });
           return { items: [], finalResponse: "ok", usage: null };
         },
+        async runStreamed(_input: unknown, opts?: { signal?: AbortSignal }) {
+          // Mirror run()'s cancel semantics: reject the stream when aborted so
+          // the streamed bridge surfaces the AbortError the orchestrator
+          // listens for.
+          await new Promise<void>((resolve, reject) => {
+            const onAbort = () => reject(new Error("aborted"));
+            if (opts?.signal?.aborted) return reject(new Error("aborted"));
+            opts?.signal?.addEventListener("abort", onAbort, { once: true });
+            setTimeout(() => {
+              opts?.signal?.removeEventListener("abort", onAbort);
+              resolve();
+            }, 30);
+          });
+          return {
+            events: (async function* () {
+              yield { type: "turn.completed", usage: null };
+            })(),
+          };
+        },
       };
     }
   },

@@ -21,6 +21,7 @@ type StreamAction =
   | { kind: "run"; event: RunStreamEvent }
   | { kind: "runtime"; event: RuntimeStreamEvent }
   | { kind: "reset"; messages: Message[] }
+  | { kind: "clear-run" }
   | { kind: "prepend"; messages: Message[] }
   | { kind: "optimistic"; userMessage: Message }
   | { kind: "rollback"; tempId: string }
@@ -33,10 +34,21 @@ function streamActionReducer(state: ChatUIState, action: StreamAction): ChatUISt
     case "runtime":
       return { ...state, runtime: runtimeStateReducer(state.runtime, action.event) };
     case "reset":
+      // Loads/replaces message history (initial fetch, project switch,
+      // pagination top-up). It must NOT touch run lifecycle: `run.started`
+      // from the SSE stream may have already seeded `activeRun`, and the
+      // async messages fetch resolves AFTER that. Clearing activeRun here
+      // wiped the in-flight run, so every later skeleton.update was dropped
+      // (the reducer guards `if (!state.activeRun)`) and the route read the
+      // runId→null transition as "run ended", flipping the project to idle.
+      // activeRun is cleared explicitly via "clear-run" on project switch.
       return {
         ...createInitialChatState(preserveSelectedOptions(action.messages, state.messages)),
         runtime: state.runtime,
+        activeRun: state.activeRun,
       };
+    case "clear-run":
+      return { ...state, activeRun: null };
     case "prepend": {
       const seen = new Set(state.messages.map((m) => m.id));
       const older = action.messages.filter((m) => !seen.has(m.id));
@@ -202,8 +214,13 @@ export function useChatStream({
     [projectId, closeRunSource],
   );
 
-  // Initial chat-history fetch.
+  // Initial chat-history fetch. Keyed on projectId, so this also fires on a
+  // genuine project switch — clear any stale run from the previous project
+  // synchronously here (reset no longer owns run lifecycle). On mount this is
+  // a no-op (activeRun starts null); the resume effect's `run.started` then
+  // re-seeds activeRun for a project that's actually processing.
   useEffect(() => {
+    dispatch({ kind: "clear-run" });
     let cancelled = false;
     fetch(`/api/projects/${projectId}/messages?limit=50`)
       .then((resp) => (resp.ok ? resp.json() : null))

@@ -897,4 +897,31 @@
     @apply w-12 h-12 rounded-lg bg-chalk shrink-0 flex items-center justify-center font-mono text-caption font-semibold text-ink;
   }
 
+  /* ─── Skeleton shimmer (ephemeral agent-working text) ──────── */
+  .skeleton-shimmer {
+    color: rgb(var(--color-muted) / 0.55);
+    background: linear-gradient(
+      90deg,
+      rgb(var(--color-muted) / 0.45) 0%,
+      rgb(var(--color-muted) / 0.45) 35%,
+      rgb(var(--color-ink) / 0.85) 50%,
+      rgb(var(--color-muted) / 0.45) 65%,
+      rgb(var(--color-muted) / 0.45) 100%
+    );
+    background-size: 220% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: skeleton-shimmer-sweep 1.8s linear infinite;
+  }
+
+  @keyframes skeleton-shimmer-sweep {
+    0% {
+      background-position: 120% 0;
+    }
+    100% {
+      background-position: -20% 0;
+    }
+  }
+
 }

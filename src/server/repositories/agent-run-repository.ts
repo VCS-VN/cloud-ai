@@ -155,7 +155,16 @@ export class PgAgentRunRepository {
     const [row] = await this.db.select().from(agentRuns).where(eq(agentRuns.id, runId));
     if (!row) return;
     const existing = (row.progressTimeline as AgentRunProgressTimelineEvent[] | null) ?? [];
-    const next = [...existing, event];
+    // task_plan is idempotent per run: skill clarification can recurse into the
+    // driver and re-fire plan generation, persisting two task_plan entries.
+    // Archived replay then emits two plan.created events and the reducer's
+    // last-replace shows the second plan (e.g. 4 → 6 tasks after a reload).
+    // Drop prior task_plan entries before appending the new one.
+    const filtered =
+      event.kind === "task_plan"
+        ? existing.filter((item) => item.kind !== "task_plan")
+        : existing;
+    const next = [...filtered, event];
     const trimmed =
       next.length > MAX_PROGRESS_TIMELINE_EVENTS
         ? next.slice(next.length - MAX_PROGRESS_TIMELINE_EVENTS)

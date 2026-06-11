@@ -6,34 +6,49 @@ import type { CodexEnvAvailable } from "@/server/env/codex";
 
 vi.mock("@openai/codex-sdk", async () => {
   let callCount = 0;
+  // Shared turn logic: turn 1 is planning (discovers draft root, no edits),
+  // turn 2 is the mutation that writes the new route file. The bridge now
+  // streams turns, so this runs from runStreamed; run() delegates for the
+  // non-streaming callers (repair loop, classifier).
+  async function doTurn(): Promise<void> {
+    callCount++;
+    const draftRoot = (globalThis as any).__codexDraftRoot as string | undefined;
+    if (callCount === 2 && draftRoot) {
+      const fs = await import("node:fs/promises");
+      const path = await import("node:path");
+      await fs.mkdir(path.join(draftRoot, "src/routes"), { recursive: true });
+      await fs.writeFile(
+        path.join(draftRoot, "src/routes/about.tsx"),
+        "export const About = () => null;",
+      );
+    }
+    if (!draftRoot) {
+      const fs = await import("node:fs/promises");
+      const path = await import("node:path");
+      const root = (globalThis as any).__codexProjectRoot as string;
+      const draftDir = path.join(root, "drafts");
+      const dirs = await fs.readdir(draftDir);
+      if (dirs.length > 0) {
+        (globalThis as any).__codexDraftRoot = path.join(draftDir, dirs[0]);
+      }
+    }
+  }
   return {
     Codex: class {
       startThread() {
         return {
           id: "t1",
           async run() {
-            callCount++;
-            const draftRoot = (globalThis as any).__codexDraftRoot as string | undefined;
-            if (callCount === 2 && draftRoot) {
-              const fs = await import("node:fs/promises");
-              const path = await import("node:path");
-              await fs.mkdir(path.join(draftRoot, "src/routes"), { recursive: true });
-              await fs.writeFile(
-                path.join(draftRoot, "src/routes/about.tsx"),
-                "export const About = () => null;",
-              );
-            }
-            if (!draftRoot) {
-              const fs = await import("node:fs/promises");
-              const path = await import("node:path");
-              const root = (globalThis as any).__codexProjectRoot as string;
-              const draftDir = path.join(root, "drafts");
-              const dirs = await fs.readdir(draftDir);
-              if (dirs.length > 0) {
-                (globalThis as any).__codexDraftRoot = path.join(draftDir, dirs[0]);
-              }
-            }
+            await doTurn();
             return { items: [], finalResponse: "ok", usage: null };
+          },
+          async runStreamed() {
+            await doTurn();
+            return {
+              events: (async function* () {
+                yield { type: "turn.completed", usage: null };
+              })(),
+            };
           },
         };
       }
@@ -135,10 +150,10 @@ describe("new-route builder run", () => {
       .map((e) => e.milestone);
     expect(milestones).toContain("planning");
     expect(buildSpy).toHaveBeenCalled();
-    if (outcome.status === "done") {
-      expect(previewSpy).toHaveBeenCalled();
-      const previewArg = (previewSpy.mock.calls[0] as unknown as [{ extraRoutes?: string[] }])[0];
-      expect(previewArg.extraRoutes).toContain("/about");
-    }
+    // Preview health is no longer probed pre-publish (builder-run.server.ts
+    // dropped the gate because pm2 hasn't started yet — preview health
+    // runs downstream once the runtime orchestrator brings pm2 up).
+    expect(previewSpy).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("done");
   });
 });
