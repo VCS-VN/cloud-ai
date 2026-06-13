@@ -158,10 +158,29 @@ const NAMED_COLORS: Record<string, string> = {
 // turn frequently returns one of these forms and the strict hex regex was
 // discarding otherwise-good variants (see design_variants_generation_failed:
 // "Invalid string: must match pattern /^#(?:[0-9a-fA-F]{6|8})$/").
+function clampByte(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(255, Math.round(n)));
+}
+
+function toHexByte(n: number): string {
+  return clampByte(n).toString(16).padStart(2, "0");
+}
+
 function normalizeHexColor(value: unknown): string | null {
   if (typeof value !== "string") return null;
   let s = value.trim().toLowerCase();
   if (NAMED_COLORS[s]) return NAMED_COLORS[s];
+  // rgb(…) / rgba(…) → #rrggbb (alpha dropped; preview tokens don't need it)
+  const rgbMatch = s.match(/^rgba?\(\s*([0-9.]+)[,\s]+([0-9.]+)[,\s]+([0-9.]+)/);
+  if (rgbMatch) {
+    return (
+      "#" +
+      toHexByte(Number(rgbMatch[1])) +
+      toHexByte(Number(rgbMatch[2])) +
+      toHexByte(Number(rgbMatch[3]))
+    );
+  }
   if (!s.startsWith("#")) s = "#" + s;
   // #abc → #aabbcc
   if (/^#[0-9a-f]{3}$/.test(s)) {
@@ -175,14 +194,25 @@ function normalizeHexColor(value: unknown): string | null {
   return null;
 }
 
+// Neutral fallback colors used to pad a palette back up to the schema's .min(3)
+// when the model returned an unsalvageable entry. Decorative preview metadata —
+// a stray bad color must NEVER sink the whole variant question (the symptom in
+// design_variants_generation_failed). Better a slightly-off swatch than no
+// variant choice at all.
+const PALETTE_PAD = ["#1f2937", "#9ca3af", "#f3f4f6"];
+
 // Normalize a palette array: coerce each entry to valid hex, drop the ones that
-// can't be salvaged. Returns the cleaned array (may be shorter); the schema's
-// .min(3) still rejects a palette too damaged to use, but a single stray entry
-// no longer sinks the whole variant.
+// can't be salvaged, then pad up to 3 with neutral defaults so a damaged palette
+// can't fail the schema's .min(3) and sink the variant question. Caps at 5 to
+// respect .max(5).
 function normalizePalette(value: unknown): unknown {
   if (!Array.isArray(value)) return value;
   const cleaned = value.map(normalizeHexColor).filter((c): c is string => c !== null);
-  return cleaned;
+  for (const pad of PALETTE_PAD) {
+    if (cleaned.length >= 3) break;
+    if (!cleaned.includes(pad)) cleaned.push(pad);
+  }
+  return cleaned.slice(0, 5);
 }
 
 function normalizeVariantShape(raw: unknown): unknown {

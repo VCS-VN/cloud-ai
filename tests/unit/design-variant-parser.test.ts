@@ -105,6 +105,30 @@ describe("generateRetailVariants — robust parser (regression)", () => {
     }
   });
 
+  it("parses rgb()/rgba() colors and pads unsalvageable palettes to .min(3)", async () => {
+    // The model sometimes returns rgb()/rgba() or outright garbage. A damaged
+    // palette must never sink the whole variant question (decorative metadata),
+    // so unsalvageable entries are dropped and the palette padded to 3 with
+    // neutral defaults.
+    const mixed = `[
+      { "id": "a", "label": "A", "description": "x.", "preview": { "font": "Inter", "palette": ["rgb(255, 0, 0)", "rgba(0,128,0,0.5)", "not-a-color"], "motion": 0.2 } },
+      { "id": "b", "label": "B", "description": "y.", "preview": { "font": "Lora", "palette": ["garbage", "???", "nope"], "motion": 0.4 } },
+      { "id": "c", "label": "C", "description": "z.", "preview": { "font": "Playfair", "palette": ["#0e0e0e", "#bfa269", "#f4f1ec"], "motion": 0.3 } },
+      { "id": "d", "label": "D", "description": "w.", "preview": { "font": "Quicksand", "palette": ["#fef08a", "#34d399", "#fb7185"], "motion": 0.7 } }
+    ]`;
+    const result = await generateRetailVariants({
+      runTurn: async () => ({ finalResponse: mixed }),
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // rgb(255,0,0) → #ff0000, rgba(0,128,0,..) → #008000, garbage dropped then
+      // padded to 3 with the first neutral default.
+      expect(result.variants[0].preview.palette).toEqual(["#ff0000", "#008000", "#1f2937"]);
+      // All-garbage palette → padded entirely to the 3 neutral defaults.
+      expect(result.variants[1].preview.palette).toEqual(["#1f2937", "#9ca3af", "#f3f4f6"]);
+    }
+  });
+
   it("retries once on invalid JSON, then fails with reason", async () => {
     let calls = 0;
     const result = await generateRetailVariants({
