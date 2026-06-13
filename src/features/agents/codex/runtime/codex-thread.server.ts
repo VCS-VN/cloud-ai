@@ -620,25 +620,42 @@ export function createBoundedCodexThread(
   const sandboxMode: CodexSandboxMode = sandboxDisabled
     ? "danger-full-access"
     : input.sandboxMode ?? "workspace-write";
-  // Transport: use codex's DEFAULT (WebSocket) streaming — do NOT override
-  // model_provider/wire_api.
+  // Transport: force the HTTP `responses` wire_api (SSE streaming). The provider
+  // (xapi.labpinky.com) has NO WebSocket endpoint — codex's default WS transport
+  // hits `wss://.../v1/responses` → 404, exhausts reconnects, and the turn dies.
+  // `responses` is the HTTP/SSE wire API: it still streams progress (SSE), it
+  // just talks HTTP instead of WS.
   //
-  // History (why this matters): we briefly forced the HTTP `responses` wire_api
-  // to dodge a WS handshake flap. That flap came from an OLD relay
-  // (9router/localhost) that is no longer in use. On the real provider the HTTP
-  // path is architecturally broken for build turns: `responses` is stateless,
-  // so codex replays the whole transcript into input[] on every model
-  // round-trip within a turn. The replayed reasoning item carries no `content`
-  // unless the provider echoes `reasoning.encrypted_content`, and the provider
-  // rejects it with `content is required (input[N].content)`. Runtime confirmed
-  // this twice (normal build AND the no-reasoning fallback both died there): the
-  // model keeps emitting reasoning items regardless of effort, so NO client
-  // config avoids the replay. WebSocket is STATEFUL — the server holds the
-  // transcript, reasoning is never replayed — which is why build worked under
-  // WS before the transport was switched. Keep the default.
+  // Match the EXACT shape the working codex CLI uses (verified from the user's
+  // ~/.codex/config.toml, which runs multi-step builds fine against the same
+  // provider+model): a custom provider with ONLY `base_url` + `wire_api` +
+  // `env_key`. The SDK injects the key as the CODEX_API_KEY env var (exec.ts),
+  // so `env_key="CODEX_API_KEY"` authenticates exactly like the CLI.
+  //
+  // Do NOT set `requires_openai_auth=true` or `model_supports_reasoning_summaries`.
+  // Those were the regression: `requires_openai_auth` makes codex treat the
+  // provider as real OpenAI and apply OpenAI reasoning-replay semantics
+  // (include:["reasoning.encrypted_content"]). A non-OpenAI relay/qwen provider
+  // doesn't echo that back, so the replayed reasoning item arrives empty and the
+  // provider rejects the turn with `content is required (input[N].content)`. The
+  // CLI's generic-provider config sends include:[] / reasoning:null and never
+  // replays encrypted reasoning — which is why the CLI works and our override
+  // broke. (Captured request bodies confirm both shapes.)
+  const responsesProvider: Record<string, string | boolean> = {
+    name: "Cloud AI Responses HTTP",
+    wire_api: "responses",
+    env_key: "CODEX_API_KEY",
+  };
+  if (input.env.baseUrl) responsesProvider.base_url = input.env.baseUrl;
   const codex = new Codex({
     apiKey: input.env.apiKey,
     baseUrl: input.env.baseUrl,
+    config: {
+      model_provider: "cloud-ai-responses-http",
+      model_providers: {
+        "cloud-ai-responses-http": responsesProvider,
+      },
+    },
     env: {
       ...process.env,
       CODEX_HOME: input.env.codexHome,

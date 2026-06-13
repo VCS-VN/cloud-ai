@@ -95,19 +95,73 @@ describe("createBoundedCodexThread — reasoning effort + sandbox wiring (R1, R2
   });
 });
 
-describe("createBoundedCodexThread — default WebSocket transport (no override)", () => {
-  type CodexCtorOptions = { config?: unknown };
+describe("createBoundedCodexThread — HTTP/SSE responses transport", () => {
+  type CodexCtorOptions = {
+    config?: {
+      model_provider?: string;
+      model_providers?: Record<
+        string,
+        {
+          wire_api?: string;
+          base_url?: string;
+          env_key?: string;
+          requires_openai_auth?: boolean;
+        }
+      >;
+      model_supports_reasoning_summaries?: boolean;
+    };
+  };
 
-  it("does NOT pass a config override (uses codex's default WebSocket transport)", () => {
-    // The HTTP `responses` wire_api override was reverted: it forced a stateless
-    // transport that replayed reasoning items into input[] and broke every
-    // multi-round-trip build turn (`content is required (input[N].content)`).
-    // Runtime confirmed this twice (normal build AND the no-reasoning fallback).
-    // WebSocket is stateful, so reasoning is never replayed — keep the default
-    // and pass no provider/wire_api override.
+  it("forces wire_api='responses' (HTTP/SSE) because the provider has no WebSocket endpoint", () => {
+    // The provider (xapi.labpinky.com) returns 404 for wss://.../v1/responses, so
+    // codex's default WebSocket transport never connects. `responses` is the
+    // HTTP/SSE wire API — it still streams progress, just over HTTP.
     codexCtorMock.mockClear();
     createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
     const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
-    expect(options?.config).toBeUndefined();
+    const selected = options?.config?.model_provider;
+    expect(selected).toBeTruthy();
+    const provider = options?.config?.model_providers?.[selected!];
+    expect(provider?.wire_api).toBe("responses");
+    expect(provider?.wire_api).not.toBe("responses_websocket");
+  });
+
+  it("does not override the reserved built-in 'openai' provider id", () => {
+    codexCtorMock.mockClear();
+    createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
+    const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
+    expect(options?.config?.model_provider).not.toBe("openai");
+    expect(Object.keys(options?.config?.model_providers ?? {})).not.toContain("openai");
+  });
+
+  it("points the custom provider at the configured gateway base_url", () => {
+    codexCtorMock.mockClear();
+    createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
+    const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
+    const selected = options?.config?.model_provider;
+    const provider = options?.config?.model_providers?.[selected!];
+    expect(provider?.base_url).toBe(env.baseUrl);
+  });
+
+  it("authenticates via env_key (like the working CLI), NOT requires_openai_auth", () => {
+    // The regression: requires_openai_auth=true makes codex treat the provider as
+    // real OpenAI and apply OpenAI reasoning-replay semantics (it requests
+    // include:["reasoning.encrypted_content"]). A non-OpenAI relay doesn't echo
+    // that back, so replayed reasoning arrives empty → `content is required`. The
+    // working CLI config uses env_key only; match it exactly.
+    codexCtorMock.mockClear();
+    createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
+    const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
+    const selected = options?.config?.model_provider;
+    const provider = options?.config?.model_providers?.[selected!];
+    expect(provider?.env_key).toBe("CODEX_API_KEY");
+    expect(provider?.requires_openai_auth).toBeUndefined();
+  });
+
+  it("does NOT set model_supports_reasoning_summaries (avoids requesting encrypted reasoning replay)", () => {
+    codexCtorMock.mockClear();
+    createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
+    const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
+    expect(options?.config?.model_supports_reasoning_summaries).toBeUndefined();
   });
 });
