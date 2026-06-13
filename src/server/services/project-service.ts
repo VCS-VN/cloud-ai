@@ -8,10 +8,15 @@ import {
   type DevRuntime,
 } from "@/features/projects/legacy/project-state.schema";
 import type { RuntimeService } from "@/features/runtime/legacy/runtime-service.server";
-import type { RuntimeOrchestrator } from "@/features/runtime/legacy/runtime-orchestrator.server";
+import type { RuntimeOrchestrator, PreviewStatus } from "@/features/runtime/legacy/runtime-orchestrator.server";
 import type { ProjectRunStore } from "@/features/projects/legacy/project-run-store.server";
 import type { PgAgentRunRepository } from "@/server/repositories/agent-run-repository";
-import { reserveRunProducer } from "@/server/functions/project-message-stream";
+import type { DevStoppedEvent } from "@/features/runtime/legacy/runtime-events";
+import {
+  publishRuntimeEvent,
+  reserveRunProducer,
+  scheduleDelayedRuntimeEvent,
+} from "@/server/functions/project-message-stream";
 import type {
   Project,
   ProjectFileNode,
@@ -24,6 +29,15 @@ import type {
   ProjectRepository,
   ProjectSettingsInput,
 } from "@/shared/project-types";
+
+/**
+ * Delay (ms) before publishing a runtime event after preview spawn/stop
+ * succeeds. PM2 needs time to settle after `pm2 start`/`pm2 stop` before
+ * the process status is reliably queryable, so we wait before notifying
+ * subscribers. The client polls the runtime state endpoint every 3s as a
+ * fallback (see project detail route), so the event is an optimization.
+ */
+const PREVIEW_EVENT_SETTLE_DELAY_MS = 5000;
 
 function assertPrompt(prompt: string) {
   const trimmed = prompt.trim();
@@ -99,7 +113,17 @@ export class ProjectService {
   }
 
   async listProjects(userId?: string): Promise<Project[]> {
-    return this.projectRepository.listProjects(userId);
+    const projects = await this.projectRepository.listProjects(userId);
+    if (!this.runtimeOrchestrator || projects.length === 0) return projects;
+    // Enrich each project with preview status derived from the live PM2
+    // process list (source of truth) via a single batched call.
+    const statusMap = await this.runtimeOrchestrator.getPreviewStatusMap(
+      projects.map((p) => p.id),
+    );
+    return projects.map((p) => ({
+      ...p,
+      previewStatus: statusMap[p.id] ?? 'stopped',
+    }));
   }
 
   async createProjectFromPrompt(
@@ -127,6 +151,17 @@ export class ProjectService {
 
     await this.projectRepository.saveProject(project, userId);
     await this.workspaceService.ensureWorkspace(project.id);
+    await this.envWriter
+      ?.ensureDefaultEnv(project.id, project.selectedStoreSlug ?? null)
+      .catch((err) =>
+        console.warn(
+          JSON.stringify({
+            event: "generated_project_env_create_failed",
+            projectId: project.id,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        ),
+      );
 
     const userMessage = await this.messageRepository.saveMessage(
       {
@@ -288,38 +323,38 @@ export class ProjectService {
     );
     if (!project) throw new Error("Project not found.");
     if (settings.selectedStoreSlug !== undefined) {
-      await this.envWriter
-        ?.syncStoreSlug(projectId, project.selectedStoreSlug ?? null)
-        .catch((err) =>
+      let envSynced = false;
+      if (this.envWriter) {
+        try {
+          await this.envWriter.syncStoreSlug(
+            projectId,
+            project.selectedStoreSlug ?? null,
+          );
+          envSynced = true;
+        } catch (err) {
           console.warn(
             JSON.stringify({
               event: "generated_project_env_sync_failed",
               projectId,
               error: err instanceof Error ? err.message : String(err),
             }),
-          ),
-        );
-      if (previousStoreSlug !== normalizeSelectedStoreSlug(project.selectedStoreSlug)) {
-        void this.restartPreviewAfterStoreChange(projectId, userId);
+          );
+        }
+      }
+      if (
+        envSynced &&
+        previousStoreSlug !== normalizeSelectedStoreSlug(project.selectedStoreSlug)
+      ) {
+        publishRuntimeEvent(projectId, {
+          type: "preview_reload_requested",
+          projectId,
+          reason: "store_slug_synced",
+          delayMs: 5000,
+          at: new Date().toISOString(),
+        });
       }
     }
     return project;
-  }
-
-  private async restartPreviewAfterStoreChange(projectId: string, userId?: string) {
-    if (!this.runtimeOrchestrator) return;
-    try {
-      const workspaceRoot = await this.workspaceService.ensureWorkspace(projectId);
-      await this.runtimeOrchestrator.restartPreview({ projectId, userId, workspaceRoot });
-    } catch (err) {
-      console.warn(
-        JSON.stringify({
-          event: "preview_restart_after_store_change_failed",
-          projectId,
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      );
-    }
   }
 
   async getDevRuntimeState(
@@ -346,7 +381,39 @@ export class ProjectService {
     if (!project) throw new Error("Project not found.");
     const workspaceRoot = await this.workspaceService.ensureWorkspace(projectId);
     if (this.runtimeOrchestrator) {
-      return this.runtimeOrchestrator.startPreview({ projectId, userId, workspaceRoot });
+      const runId = crypto.randomUUID();
+      publishRuntimeEvent(projectId, { type: "dev_starting", projectId, runId });
+      const result = await this.runtimeOrchestrator.startPreview({
+        projectId,
+        userId,
+        workspaceRoot,
+      });
+      if (result.success) {
+        // Wait for the PM2 process to settle before notifying subscribers.
+        // The client polls the runtime state endpoint every 3s as a fallback,
+        // so this delayed event is an optimization to reduce the window in
+        // which the UI shows a stale status.
+        scheduleDelayedRuntimeEvent(
+          projectId,
+          {
+            type: "dev_ready",
+            projectId,
+            runId,
+            previewUrl: result.previewUrl,
+            port: result.port,
+          },
+          PREVIEW_EVENT_SETTLE_DELAY_MS,
+        );
+      } else {
+        publishRuntimeEvent(projectId, {
+          type: "dev_error",
+          projectId,
+          runId,
+          error: result.error,
+          tier: result.errorTier,
+        });
+      }
+      return result;
     }
 
     if (!this.processManager || !this.projectStateStore || !this.runtimeService) {
@@ -383,6 +450,7 @@ export class ProjectService {
       runId,
       requestedPort: reconciled.requestedPort,
     })) {
+      publishRuntimeEvent(projectId, event);
       if (event.type === "dev_ready") {
         return {
           success: true,
@@ -413,6 +481,60 @@ export class ProjectService {
       error: runtime.lastError ?? "Preview did not become ready.",
       errorTier: runtime.lastErrorTier ?? "system",
     };
+  }
+
+  async stopPreview(
+    projectId: string,
+    userId?: string,
+  ) {
+    if (this.runtimeOrchestrator) {
+      const result = await this.runtimeOrchestrator.stopPreview(projectId, userId);
+      if (result.success) {
+        scheduleDelayedRuntimeEvent(
+          projectId,
+          { type: "dev_stopped", projectId } as DevStoppedEvent,
+          PREVIEW_EVENT_SETTLE_DELAY_MS,
+        );
+      }
+      return result;
+    }
+    let stopError: unknown = null;
+    try {
+      await this.processManager?.stop(projectId);
+    } catch (error) {
+      stopError = error;
+    }
+    try {
+      await this.projectStateStore?.patchDevRuntime(projectId, {
+        status: "stopped",
+        pid: null,
+        lastError: null,
+        lastErrorTier: null,
+      }, userId);
+    } catch (error) {
+      const stopMessage = stopError instanceof Error ? stopError.message : null;
+      const dbMessage = error instanceof Error ? error.message : "Preview database update failed.";
+      return {
+        success: false as const,
+        error: stopMessage ? `${stopMessage}; ${dbMessage}` : dbMessage,
+        pm2StopAttempted: true as const,
+        databaseUpdateAttempted: true as const,
+      };
+    }
+    if (stopError) {
+      return {
+        success: false as const,
+        error: stopError instanceof Error ? stopError.message : "Preview process stop failed.",
+        pm2StopAttempted: true as const,
+        databaseUpdateAttempted: true as const,
+      };
+    }
+    scheduleDelayedRuntimeEvent(
+      projectId,
+      { type: "dev_stopped", projectId } as DevStoppedEvent,
+      PREVIEW_EVENT_SETTLE_DELAY_MS,
+    );
+    return { success: true as const };
   }
 
   private async readReconciledDevRuntime(

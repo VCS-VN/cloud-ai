@@ -36,6 +36,7 @@ import {
   RefreshCw,
   Settings,
   Smartphone,
+  Square,
   Tablet,
   TriangleAlert,
 } from "lucide-react";
@@ -73,7 +74,7 @@ import {
   getProjectWorkspace,
   updateProjectSettings,
 } from "@/server/functions/projects";
-import { getDevRuntimeState, startPreview } from "@/server/functions/preview";
+import { getDevRuntimeState, startPreview, stopPreview } from "@/server/functions/preview";
 import type {
   ComposerReasoningEffort,
   Message,
@@ -139,6 +140,7 @@ function ProjectDetailPage() {
   const saveProjectSettings = useServerFn(updateProjectSettings);
   const getRuntimeState = useServerFn(getDevRuntimeState);
   const startProjectPreview = useServerFn(startPreview);
+  const stopProjectPreview = useServerFn(stopPreview);
   const { workspace } = Route.useLoaderData();
   const router = useRouter();
   const { user } = Route.useRouteContext();
@@ -147,11 +149,12 @@ function ProjectDetailPage() {
   );
   const [draft, setDraft] = useState("");
   const [reasoningEffort, setReasoningEffort] =
-    useState<ComposerReasoningEffort>("medium");
+    useState<ComposerReasoningEffort>("high");
   const [planModeEnabled, setPlanModeEnabled] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | undefined>();
   const [previewStarting, setPreviewStarting] = useState(false);
+  const [previewStopping, setPreviewStopping] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsSaveError, setSettingsSaveError] = useState<string | null>(
@@ -198,6 +201,16 @@ function ProjectDetailPage() {
     latestWidth: number;
     maxWidth: number;
   } | null>(null);
+  const previewStartPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const previewStopPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Polling constants for preview start/stop confirmation.
+  // After starting/stopping a preview, the server publishes a runtime event
+  // after a 5s settle delay. As a reliable fallback, the client polls the
+  // runtime state endpoint every 3s and stops once the expected status is
+  // confirmed.
+  const PREVIEW_POLL_INTERVAL_MS = 3000;
+  const PREVIEW_POLL_TIMEOUT_MS = 30_000;
   useEffect(() => {
     if (!settingsOpen) {
       setSettingsProjectName(project?.name ?? "");
@@ -212,13 +225,14 @@ function ProjectDetailPage() {
   });
   const { state: chatState } = agentStream;
   const messages = chatState.messages;
+  const hasRecordedActiveRun = Boolean(project?.activeRunId);
   // The live run is the source of truth for "agent is working right now".
   // On first load before the stream connects, fall back to project state so the
   // UI shows processing for a run that's already in flight.
   const streamConnected = chatState.activeRun !== null;
   const isProcessing = streamConnected
     ? chatState.activeRun!.status === "streaming"
-    : project?.processingStatus === "processing";
+    : project?.processingStatus === "processing" && hasRecordedActiveRun;
 
   const messagesQuery = useInfiniteQuery({
     queryKey: getProjectMessagesQueryKey(project?.id),
@@ -259,7 +273,16 @@ function ProjectDetailPage() {
     const snapshot = runtimeQuery.data ?? workspace?.devRuntime;
     if (snapshot) runtime = toRuntimeUIState(snapshot);
     if (manualRuntime) runtime = manualRuntime;
-    if (chatState.runtime.status !== "idle") runtime = chatState.runtime;
+    if (chatState.runtime.status !== "idle") {
+      runtime = chatState.runtime;
+    } else if (chatState.runtime.previewReloadRequestedAt) {
+      runtime = {
+        ...runtime,
+        previewReloadRequestedAt: chatState.runtime.previewReloadRequestedAt,
+        previewReloadDelayMs: chatState.runtime.previewReloadDelayMs,
+        previewReloadReason: chatState.runtime.previewReloadReason,
+      };
+    }
     return runtime;
   }, [
     chatState.runtime,
@@ -340,11 +363,37 @@ function ProjectDetailPage() {
     if (savedVisible === "false") setChatVisible(false);
   }, []);
 
+  // Clean up preview polling intervals on unmount so they don't leak across
+  // project switches or navigation away from the detail page.
+  useEffect(() => {
+    return () => {
+      if (previewStartPollRef.current) {
+        clearInterval(previewStartPollRef.current);
+        previewStartPollRef.current = null;
+      }
+      if (previewStopPollRef.current) {
+        clearInterval(previewStopPollRef.current);
+        previewStopPollRef.current = null;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     agentStream.reset(workspace?.messages ?? []);
     setProject(workspace?.project);
     setSendError(undefined);
     setPreviewStarting(false);
+    setPreviewStopping(false);
+    // Stop any in-flight preview polling when the workspace reference
+    // changes (project switch, run completion refresh).
+    if (previewStartPollRef.current) {
+      clearInterval(previewStartPollRef.current);
+      previewStartPollRef.current = null;
+    }
+    if (previewStopPollRef.current) {
+      clearInterval(previewStopPollRef.current);
+      previewStopPollRef.current = null;
+    }
     setPreviewStartError(null);
     setPreviewTokenState({ status: "idle", error: null, refreshedAt: null });
     setManualRuntime(null);
@@ -388,6 +437,29 @@ function ProjectDetailPage() {
     detailMode,
     project?.id,
     refreshPreviewToken,
+    runtimeState.previewUrl,
+    runtimeState.status,
+  ]);
+
+  useEffect(() => {
+    if (!runtimeState.previewReloadRequestedAt) return;
+    const delayMs = runtimeState.previewReloadDelayMs ?? 5000;
+    const timer = window.setTimeout(() => {
+      setPreviewReloadKey((current) => current + 1);
+      if (
+        project?.id &&
+        runtimeState.status === "running" &&
+        runtimeState.previewUrl
+      ) {
+        void refreshPreviewToken(project.id);
+      }
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [
+    project?.id,
+    refreshPreviewToken,
+    runtimeState.previewReloadDelayMs,
+    runtimeState.previewReloadRequestedAt,
     runtimeState.previewUrl,
     runtimeState.status,
   ]);
@@ -447,6 +519,17 @@ function ProjectDetailPage() {
             }
           : currentProject,
       );
+      // Auto-start the preview when the run completed successfully (init or an
+      // edit). On failure/stop we leave the preview alone so the user never sees
+      // a broken storefront — they read the error and retry/refine instead.
+      if (
+        chatState.lastRunOutcome === "completed" &&
+        project?.id &&
+        runtimeState.status !== "running" &&
+        !previewStarting
+      ) {
+        void handleStartPreview();
+      }
       if (project?.id) {
         // Refresh derived data the run may have changed. Do NOT call
         // router.invalidate() here — it re-runs the route loader, which
@@ -465,7 +548,21 @@ function ProjectDetailPage() {
         });
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatState.activeRun?.runId, project?.id, queryClient]);
+
+  useEffect(() => {
+    if (project?.processingStatus !== "processing" || project.activeRunId) return;
+    setProject((currentProject) =>
+      currentProject?.processingStatus === "processing" && !currentProject.activeRunId
+        ? {
+            ...currentProject,
+            processingStatus: "idle",
+            activeRunId: undefined,
+          }
+        : currentProject,
+    );
+  }, [project?.activeRunId, project?.processingStatus]);
 
   const handleSaveProjectSettings = useCallback(
     async (settings: { name?: string; selectedStoreSlug?: string | null }) => {
@@ -730,7 +827,6 @@ function ProjectDetailPage() {
     if (
       !isProjectPreviewStartAvailable({
         projectStatus: project.status,
-        projectProcessingStatus: project.processingStatus,
         runtimeStatus: runtimeState.status,
         previewUrl: runtimeState.previewUrl,
       })
@@ -742,12 +838,20 @@ function ProjectDetailPage() {
     setPreviewCommittedPath("/");
     setPreviewPathError(null);
     setPreviewReloadKey(0);
+    // Optimistic: show starting immediately. The server confirms via the
+    // delayed runtime event (5s) and the polling loop below.
     setManualRuntime((current) => ({
       ...(current ?? createInitialChatState().runtime),
       status: "starting",
       error: null,
       errorTier: null,
     }));
+
+    // Clear any leftover polling from a previous attempt.
+    if (previewStartPollRef.current) {
+      clearInterval(previewStartPollRef.current);
+      previewStartPollRef.current = null;
+    }
 
     try {
       const result = await startProjectPreview({
@@ -765,6 +869,8 @@ function ProjectDetailPage() {
         }));
         return;
       }
+      // Optimistic: mark running so the iframe can mount while polling
+      // confirms the real status from the server.
       setManualRuntime((current) => ({
         ...(current ?? createInitialChatState().runtime),
         status: "running",
@@ -774,7 +880,38 @@ function ProjectDetailPage() {
         errorTier: null,
       }));
       await refreshPreviewToken(project.id);
-      await router.invalidate();
+
+      // Poll the server every 3s until the runtime is confirmed running,
+      // then stop polling. Fallback for the delayed runtime event.
+      const projectId = project.id;
+      const startedAt = Date.now();
+      previewStartPollRef.current = setInterval(async () => {
+        if (Date.now() - startedAt > PREVIEW_POLL_TIMEOUT_MS) {
+          if (previewStartPollRef.current) {
+            clearInterval(previewStartPollRef.current);
+            previewStartPollRef.current = null;
+          }
+          return;
+        }
+        try {
+          const state = await getRuntimeState({ data: { projectId } });
+          if (state.status === "running") {
+            // Confirmed — stop polling and sync the query cache.
+            if (previewStartPollRef.current) {
+              clearInterval(previewStartPollRef.current);
+              previewStartPollRef.current = null;
+            }
+            await queryClient.invalidateQueries({
+              queryKey: ["project-runtime", projectId],
+            });
+            // The confirmed state now comes from runtimeQuery via the SSE
+            // event + polling; clear manualRuntime so we stop overriding it.
+            setManualRuntime(null);
+          }
+        } catch {
+          // Ignore transient polling errors; keep polling until timeout.
+        }
+      }, PREVIEW_POLL_INTERVAL_MS);
     } catch (cause) {
       const message =
         cause instanceof Error ? cause.message : "Unable to start preview.";
@@ -789,13 +926,89 @@ function ProjectDetailPage() {
       setPreviewStarting(false);
     }
   }, [
-    project,
+    getRuntimeState,
+    project?.id,
     previewStarting,
+    queryClient,
     refreshPreviewToken,
-    router,
     runtimeState.previewUrl,
     runtimeState.status,
     startProjectPreview,
+    project,
+  ]);
+
+  const handleStopPreview = useCallback(async () => {
+    if (!project?.id || previewStopping || runtimeState.status !== "running") return;
+    setPreviewStopping(true);
+    setPreviewStartError(null);
+    setPreviewTokenState({ status: "idle", error: null, refreshedAt: null });
+    // Optimistic: show stopped immediately while polling confirms.
+    setManualRuntime((current) => ({
+      ...(current ?? createInitialChatState().runtime),
+      status: "stopped",
+      previewUrl: null,
+      previewPort: null,
+      error: null,
+      errorTier: null,
+    }));
+
+    // Clear any leftover polling from a previous attempt.
+    if (previewStopPollRef.current) {
+      clearInterval(previewStopPollRef.current);
+      previewStopPollRef.current = null;
+    }
+
+    try {
+      const result = await stopProjectPreview({
+        data: { projectId: project.id },
+      });
+      if (!result.success) {
+        setPreviewStartError(result.error);
+      }
+
+      // Poll the server every 3s until the runtime is confirmed stopped,
+      // then stop polling.
+      const projectId = project.id;
+      const startedAt = Date.now();
+      previewStopPollRef.current = setInterval(async () => {
+        if (Date.now() - startedAt > PREVIEW_POLL_TIMEOUT_MS) {
+          if (previewStopPollRef.current) {
+            clearInterval(previewStopPollRef.current);
+            previewStopPollRef.current = null;
+          }
+          return;
+        }
+        try {
+          const state = await getRuntimeState({ data: { projectId } });
+          if (state.status === "stopped") {
+            if (previewStopPollRef.current) {
+              clearInterval(previewStopPollRef.current);
+              previewStopPollRef.current = null;
+            }
+            await queryClient.invalidateQueries({
+              queryKey: ["project-runtime", projectId],
+            });
+            setManualRuntime(null);
+          }
+        } catch {
+          // Ignore transient polling errors.
+        }
+      }, PREVIEW_POLL_INTERVAL_MS);
+    } catch (cause) {
+      const message =
+        cause instanceof Error ? cause.message : "Unable to stop preview.";
+      setPreviewStartError(message);
+      await queryClient.invalidateQueries({ queryKey: ["project-runtime", project.id] });
+    } finally {
+      setPreviewStopping(false);
+    }
+  }, [
+    getRuntimeState,
+    project?.id,
+    previewStopping,
+    queryClient,
+    runtimeState.status,
+    stopProjectPreview,
   ]);
 
   return (
@@ -809,8 +1022,11 @@ function ProjectDetailPage() {
             processing={isProcessing}
             detailMode={detailMode}
             chatVisible={chatVisible}
+            previewRunning={runtimeState.status === "running"}
+            previewStopping={previewStopping}
             user={user}
             onModeChange={setDetailMode}
+            onStopPreview={handleStopPreview}
             onOpenSettings={() => setSettingsOpen(true)}
             onToggleChat={toggleChat}
           />
@@ -948,11 +1164,12 @@ function ProjectDetailPage() {
               previewControlsLoading={previewControlsLoading}
               activePreviewUrl={activePreviewUrl}
               runtimeState={runtimeState}
+              previewStopping={previewStopping}
               projectStatus={project.status}
-              projectProcessingStatus={project.processingStatus}
               onPathChange={handlePreviewPathChange}
               onPathSubmit={handlePreviewReload}
               onPathReset={handlePreviewPathReset}
+              onStopPreview={handleStopPreview}
             />
             <div className="min-h-0 flex-1 overflow-hidden p-2 lg:p-3">
               <div className="project-preview-frame">
@@ -964,7 +1181,6 @@ function ProjectDetailPage() {
                     projectId={project?.id ?? ""}
                     previewStarting={previewStarting}
                     projectStatus={project.status}
-                    projectProcessingStatus={project.processingStatus}
                     previewTokenState={previewTokenState}
                     onRefreshPreviewToken={() =>
                       project?.id
@@ -1148,7 +1364,7 @@ function ChatHeader({
                   className="animate-spin text-[rgb(var(--color-paper))]"
                   size={12}
                 />
-                Generating
+                Agent working
               </span>
             ) : null}
             <span className="rounded-pill bg-[rgb(var(--color-chalk))] px-1 py-xxs">
@@ -1186,11 +1402,12 @@ function PreviewToolbar({
   previewControlsLoading,
   activePreviewUrl,
   runtimeState,
+  previewStopping,
   projectStatus,
-  projectProcessingStatus,
   onPathChange,
   onPathSubmit,
   onPathReset,
+  onStopPreview,
 }: {
   previewDraftPath: string;
   previewPathError: string | null;
@@ -1198,15 +1415,15 @@ function PreviewToolbar({
   previewControlsLoading: boolean;
   activePreviewUrl: string | null;
   runtimeState: DevRuntimeUIState;
+  previewStopping: boolean;
   projectStatus: Project["status"];
-  projectProcessingStatus: Project["processingStatus"];
   onPathChange: (path: string) => void;
   onPathSubmit: () => void;
   onPathReset: () => void;
+  onStopPreview: () => void;
 }) {
   const previewTemporarilyUnavailable = isProjectPreviewTemporarilyUnavailable({
     projectStatus,
-    projectProcessingStatus,
   });
   const pathInputId = "preview-path";
   const [activeDevice, setActiveDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
@@ -1292,7 +1509,7 @@ function PreviewToolbar({
           variant="unstyled"
           type="button"
           onClick={onPathSubmit}
-          disabled={!previewReady || previewControlsLoading}
+          disabled={!previewReady || previewControlsLoading || previewStopping}
           aria-label="Reload preview"
           title="Reload preview"
           className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted hover:text-ink hover:bg-ink/[0.04] transition-colors duration-base"
@@ -1301,6 +1518,21 @@ function PreviewToolbar({
             <Loader2 aria-hidden="true" className="animate-spin" size={14} />
           ) : (
             <RefreshCw aria-hidden="true" size={14} />
+          )}
+        </Button>
+        <Button
+          variant="unstyled"
+          type="button"
+          onClick={onStopPreview}
+          disabled={runtimeState.status !== "running" || previewStopping}
+          aria-label="Stop preview"
+          title="Stop preview"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-danger-bg hover:text-danger-fg disabled:cursor-not-allowed disabled:opacity-50 transition-colors duration-base"
+        >
+          {previewStopping ? (
+            <Loader2 aria-hidden="true" className="animate-spin" size={14} />
+          ) : (
+            <Square aria-hidden="true" size={13} />
           )}
         </Button>
         <Button
@@ -1345,7 +1577,6 @@ function PreviewWorkspace({
   projectId,
   previewStarting,
   projectStatus,
-  projectProcessingStatus,
   previewTokenState,
   previewStartError,
   onStartPreview,
@@ -1357,7 +1588,6 @@ function PreviewWorkspace({
   projectId: string;
   previewStarting: boolean;
   projectStatus: Project["status"];
-  projectProcessingStatus: Project["processingStatus"];
   previewTokenState: PreviewTokenState;
   previewStartError: string | null;
   onStartPreview: () => void;
@@ -1366,7 +1596,6 @@ function PreviewWorkspace({
   const showIframe = !!previewUrl;
   const previewTemporarilyUnavailable = isProjectPreviewTemporarilyUnavailable({
     projectStatus,
-    projectProcessingStatus,
   });
   const showInitPanel =
     !previewTemporarilyUnavailable &&
@@ -1474,6 +1703,9 @@ function toRuntimeUIState(
         ? new Date(runtime.installCompletedAt).getTime() -
           new Date(runtime.installStartedAt).getTime()
         : null,
+    previewReloadRequestedAt: null,
+    previewReloadDelayMs: null,
+    previewReloadReason: null,
   };
 }
 

@@ -4,6 +4,7 @@ import {
   isPrivacySafe,
   phaseLabel,
   sectionFraming,
+  THINKING_LABEL,
   type ProgressLocale,
 } from "@/server/functions/progress-mapper.server";
 import { friendlyFailureMessage as friendlyFailureFromModule } from "@/server/functions/friendly-errors.server";
@@ -16,8 +17,10 @@ import type {
 import type {
   AgentQuestionMetadata,
   DesignVariant,
+  PlanTask,
   RunStreamEvent,
   SkeletonPhase,
+  TaskEstimate,
 } from "@/shared/project-types";
 
 export type BuilderTranslatorContext = {
@@ -69,6 +72,7 @@ export type ProgressTimelineDirective =
   | {
       kind: "task_plan";
       tasks: Array<{ id: string; title: string; phase: "prep" | "build" | "verify" }>;
+      estimate: TaskEstimate;
     }
   | {
       kind: "task_transition";
@@ -99,6 +103,22 @@ const MILESTONE_TO_SKELETON: Record<
   failed: "responding",
   cancelled: "responding",
 };
+
+const TASK_PHASE_SECONDS: Record<PlanTask["phase"], number> = {
+  prep: 90,
+  build: 240,
+  verify: 120,
+};
+
+export function estimatePlanTasks(tasks: PlanTask[]): TaskEstimate {
+  const perTaskSeconds = Object.fromEntries(
+    tasks.map((task) => [task.id, TASK_PHASE_SECONDS[task.phase]]),
+  );
+  return {
+    totalSeconds: Object.values(perTaskSeconds).reduce((sum, seconds) => sum + seconds, 0),
+    perTaskSeconds,
+  };
+}
 
 function buildAgentQuestionMetadata(
   raw: BuilderRunClarificationMetadata | undefined,
@@ -208,23 +228,21 @@ export function translateBuilderEventToRunStreamEvent(
       };
     }
     case "thinking": {
-      const safe = isPrivacySafe(event.text) ? event.text : null;
-      if (!safe) {
-        return { events: [], persist: null, timeline: null, terminal: null };
-      }
-      const messageId = `msg-${runId}-thinking-${event.at}`;
-      const createdAt = new Date(event.at).toISOString();
+      // Reasoning text from the model almost always contains file paths,
+      // framework tokens, or code identifiers, which would fail
+      // isPrivacySafe and get silently dropped — leaving the user with no
+      // visible "thinking" indicator at all. Instead of surfacing the raw
+      // text (privacy concern) or dropping it entirely (UX concern), emit
+      // an ephemeral skeleton.update with a locale-aware "Thinking…"
+      // label. The shimmer shows the user the model is reasoning; the
+      // actual reasoning content stays on the server.
       return {
         events: [
           {
-            type: "message.created",
+            type: "skeleton.update",
             runId,
-            messageId,
-            kind: "thinking",
-            content: safe,
-            processingStatus: "completed",
-            createdAt,
-            metadata: null,
+            phase: "understanding",
+            label: THINKING_LABEL[locale] ?? THINKING_LABEL.en,
           },
         ],
         persist: null,
@@ -396,17 +414,19 @@ export function translateBuilderEventToRunStreamEvent(
       };
     }
     case "plan.created": {
+      const estimate = estimatePlanTasks(event.tasks);
       return {
         events: [
           {
             type: "plan.created",
             runId,
             tasks: event.tasks,
+            estimate,
             at: event.at,
           },
         ],
         persist: null,
-        timeline: { kind: "task_plan", tasks: event.tasks },
+        timeline: { kind: "task_plan", tasks: event.tasks, estimate },
         terminal: null,
       };
     }

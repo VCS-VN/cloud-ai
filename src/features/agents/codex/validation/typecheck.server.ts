@@ -38,6 +38,7 @@ export async function runProcess(
     });
     let stdout = "";
     let stderr = "";
+    let timedOut = false;
     child.stdout.on("data", (chunk) => {
       stdout += String(chunk);
     });
@@ -45,6 +46,7 @@ export async function runProcess(
       stderr += String(chunk);
     });
     const timer = setTimeout(() => {
+      timedOut = true;
       child.kill("SIGKILL");
     }, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
     if (opts.signal) {
@@ -59,7 +61,9 @@ export async function runProcess(
         resolve({ ok: true, durationMs });
         return;
       }
-      const summary = summarizeOutput(stdout, stderr);
+      const summary = timedOut
+        ? `process_timed_out_after_${opts.timeoutMs ?? DEFAULT_TIMEOUT_MS}ms`
+        : summarizeOutput(stdout, stderr);
       resolve({
         ok: false,
         durationMs,

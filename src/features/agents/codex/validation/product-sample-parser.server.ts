@@ -113,7 +113,7 @@ export async function parseProductsSample(
 ): Promise<ProductSampleParseResult> {
   const target = path.join(
     draftWorkspacePath,
-    "src/shared/sample-data/products.ts",
+    "src/data/products.ts",
   );
   let source: string;
   try {
@@ -197,5 +197,5 @@ export async function parseProductsSample(
   };
 }
 
-export const PRODUCT_SAMPLE_RELATIVE_PATH = "src/shared/sample-data/products.ts";
+export const PRODUCT_SAMPLE_RELATIVE_PATH = "src/data/products.ts";
 export const PICSUM_SEED_ALLOWLIST = PICSUM_ALLOWLIST_PREFIX;

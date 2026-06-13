@@ -65,6 +65,13 @@ vi.mock(
 );
 
 vi.mock(
+  "@/features/agents/codex/validation/root-style-contract.server",
+  async () => ({
+    runRootStyleContract: vi.fn(async () => ({ ok: true, durationMs: 10 })),
+  }),
+);
+
+vi.mock(
   "@/features/agents/codex/validation/preview-health.server",
   async () => ({
     runPreviewHealth: vi.fn(async () => ({
@@ -77,6 +84,26 @@ vi.mock(
     CORE_HARD_GATE_ROUTES: ["/", "/products", "/cart", "/checkout"],
   }),
 );
+
+vi.mock("@/features/agents/codex/runtime/init-settings-seed.server", () => {
+  class InitSettingsSeedError extends Error {
+    constructor(
+      public readonly code: string,
+      message: string,
+      public readonly targetPath?: string,
+    ) {
+      super(message);
+      this.name = "InitSettingsSeedError";
+    }
+  }
+  return {
+    InitSettingsSeedError,
+    seedInitSettingsFiles: vi.fn(async () => undefined),
+    installInitWorkspaceDependencies: vi.fn(async () => undefined),
+    reassertRuntimeOwnedFiles: vi.fn(async () => []),
+    injectDesignPaletteIntoAppCss: vi.fn(async () => false),
+  };
+});
 
 let tmpRoot: string;
 
@@ -111,32 +138,6 @@ describe("init builder run integration", () => {
     const projectId = "proj-1";
     const projectDir = path.join(tmpRoot, projectId);
     await fs.mkdir(path.join(projectDir, "published"), { recursive: true });
-    const seedDraftAfterCreate = async () => {
-      const draftDir = path.join(projectDir, "drafts");
-      for (let i = 0; i < 50; i++) {
-        try {
-          const dirs = await fs.readdir(draftDir);
-          if (dirs.length > 0) {
-            const target = path.join(draftDir, dirs[0]);
-            await fs.mkdir(path.join(target, "src/shared/sample-data"), {
-              recursive: true,
-            });
-            await fs.writeFile(
-              path.join(target, "src/shared/sample-data/products.ts"),
-              `export const productsListSample = { total: 1, data: [{ id: "p1", store: { slug: "s1" } }] };`,
-            );
-            await fs.writeFile(
-              path.join(target, "src/components/SiteHeader.tsx"),
-              "export {};",
-            );
-            return;
-          }
-        } catch {
-          // draft dir not created yet
-        }
-        await new Promise((r) => setTimeout(r, 5));
-      }
-    };
 
     const ctx = {
       projectId,
@@ -152,10 +153,7 @@ describe("init builder run integration", () => {
     const events: any[] = [];
     const emit = (event: any) => events.push(event);
 
-    const seedPromise = seedDraftAfterCreate();
-
     const outcome = await runInitBuilderRun(ctx, emit);
-    await seedPromise;
 
     expect(outcome.status === "done" || outcome.status === "failed").toBe(true);
     expect(events.length).toBeGreaterThan(0);
@@ -164,6 +162,7 @@ describe("init builder run integration", () => {
       .map((e) => e.milestone);
     expect(milestones).toContain("loading_context");
     expect(milestones).toContain("planning");
-    expect(milestones).toContain("creating_draft");
+    expect(milestones).not.toContain("creating_draft");
+    expect(milestones).toContain("building_pages");
   });
 });

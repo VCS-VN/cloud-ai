@@ -16,6 +16,14 @@ const VI: Record<BuilderRunFailureCode, string> = {
   interrupted_by_restart: "Phiên xử lý bị gián đoạn. Bạn có thể thử lại an toàn.",
   provider_drops_reasoning:
     "Nhà cung cấp AI không giữ lại phần suy luận giữa các bước nên không thể dựng nhiều bước. Cần bật lưu reasoning ở provider, rồi thử lại.",
+  provider_gateway_soft_error:
+    "Nhà cung cấp AI đang lỗi tạm thời hoặc quá tải. Hãy thử chạy lại sau ít phút.",
+  build_produced_no_files:
+    "Trình tạo kết thúc mà không tạo được file nào cho storefront. Hãy thử lại.",
+  apply_patch_unavailable:
+    "Máy chủ chưa bật chế độ ghi file cho trình tạo (sandbox chặn apply_patch). Cần đặt CODEX_DISABLE_SANDBOX=true trong môi trường rồi khởi động lại.",
+  files_corrupted:
+    "Một số file bị ghi lặp nội dung và không tự sửa được. Hãy thử tạo lại.",
 };
 
 const EN: Record<BuilderRunFailureCode, string> = {
@@ -32,6 +40,14 @@ const EN: Record<BuilderRunFailureCode, string> = {
   interrupted_by_restart: "The session was interrupted. You can retry safely.",
   provider_drops_reasoning:
     "The AI provider does not preserve reasoning between steps, so multi-step builds cannot run. Enable reasoning retention on the provider, then retry.",
+  provider_gateway_soft_error:
+    "The AI provider is temporarily unavailable or overloaded. Retry in a moment.",
+  build_produced_no_files:
+    "The builder finished without creating any storefront files. Try again.",
+  apply_patch_unavailable:
+    "The host has not enabled file writes for the builder (the sandbox blocks apply_patch). Set CODEX_DISABLE_SANDBOX=true in the environment and restart.",
+  files_corrupted:
+    "Some files were written with duplicated content and could not be auto-repaired. Try recreating the project.",
 };
 
 export function friendlyFailureMessage(

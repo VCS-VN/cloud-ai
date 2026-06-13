@@ -212,6 +212,7 @@ export type AgentRunFailureCode =
   | "repair_exhausted"
   | "required_skill_unavailable"
   | "skill_unavailable"
+  | "provider_gateway_soft_error"
   | "interrupted_by_restart";
 
 export type AgentRunKind = "init" | "update" | "new_route";
@@ -226,12 +227,17 @@ export type AgentRunPlannedTask = {
   phase: AgentRunTaskPhase;
 };
 
+export type AgentRunTaskEstimate = {
+  totalSeconds: number;
+  perTaskSeconds: Record<string, number>;
+};
+
 export type AgentRunProgressTimelineEvent =
   | { at: number; kind: "milestone"; milestone: string }
   | { at: number; kind: "section"; section: string; locale: "vi" | "en" }
   | { at: number; kind: "summary"; text: string }
   | { at: number; kind: "error"; failureCode: AgentRunFailureCode }
-  | { at: number; kind: "task_plan"; tasks: AgentRunPlannedTask[] }
+  | { at: number; kind: "task_plan"; tasks: AgentRunPlannedTask[]; estimate?: AgentRunTaskEstimate }
   | {
       at: number;
       kind: "task_transition";

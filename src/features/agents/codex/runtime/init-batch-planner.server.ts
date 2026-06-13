@@ -22,9 +22,6 @@ export type InitBatchPlan = {
 
 export const INIT_BATCH_FILE_CAP = 40;
 export const FOUNDATION_BATCH_MARKER = "FOUNDATION_DATA";
-export const POLISH_BATCH_MARKER = "POLISH";
-
-const POLISH_PLACEHOLDER = "src/styles/polish.css";
 
 type ManifestEntry = {
   marker: string;
@@ -33,38 +30,51 @@ type ManifestEntry = {
   type?: "dynamic";
 };
 
-const FOUNDATION_MARKERS = new Set([
-  "PACKAGES",
-  "PROVIDER",
-  "CATALOG_DATA",
-  "DATA",
-  "COMPONENT",
-]);
-
-const PAGE_MARKER_TO_FILES: Record<string, string[]> = {
-  HOME_PAGE: ["src/routes/index.tsx"],
-  PRODUCTS_PAGE: ["src/routes/products/index.tsx"],
-  PRODUCT_DETAIL_PAGE: ["src/routes/products/$productId.tsx"],
-  CART_PAGE: ["src/routes/cart.tsx"],
-  CHECKOUT_PAGE: ["src/routes/checkout.tsx"],
-  ORDERS_PAGE: ["src/routes/orders.tsx"],
-  ORDER_DETAIL_PAGE: ["src/routes/orders/$orderId.tsx"],
+// Ordered phases the AGENT must author. Each entry becomes ONE batch, emitted
+// in array order. Required commerce routes are seeded before this loop.
+//
+// Everything that is fixed plumbing — data entities (src/data/*), lib helpers
+// (format-money), the 5 store hooks (src/services/store/*), the 3 providers
+// (src/app/*-provider), apiClient, website-config, cart-selection, providers
+// wrapper — is now SEEDED as a runtime-owned file before the agent loop (see
+// init-settings-seed.server.ts). The model (esp. cloud-ai) could not be trusted
+// to emit these turn-by-turn: it narrated intent and ran zero commands, dead-
+// ending batches; and when it did write them the contracts were wrong (react-
+// query v5 onSuccess, lodash not in deps, wrong cart shape). Seeding removes
+// those batches entirely. The agent now only authors what genuinely needs the
+// brief: DESIGN.md (visual identity), storefront components, and final polish.
+type InitPhase = {
+  marker: string;
+  files: string[];
+  // Manifest-relative spec bodies describing HOW to author the files in scope.
+  specPaths?: string[];
 };
 
-const FOUNDATION_MARKER_TO_FILES: Record<string, string[]> = {
-  PACKAGES: ["src/lib/format-money.ts"],
-  PROVIDER: [
-    "src/app/store-provider.tsx",
-    "src/app/cart-provider.tsx",
-    "src/app/auth-provider.tsx",
-  ],
-  CATALOG_DATA: ["src/data/sample-store.ts"],
-  DATA: [
-    "src/shared/sample-data/products.ts",
-    "src/shared/sample-data/categories.ts",
-  ],
-  COMPONENT: ["src/components/SiteHeader.tsx", "src/components/SiteFooter.tsx"],
-};
+const INIT_PHASES: readonly InitPhase[] = [
+  {
+    marker: "DESIGN_DOC",
+    files: ["DESIGN.md"],
+    // DESIGN.md authoring rules live inline in system.md; no separate spec body.
+  },
+  {
+    marker: "COMPONENTS",
+    files: [
+      "src/components/layout/site-header.tsx",
+      "src/components/layout/site-footer.tsx",
+      "src/components/store/product-card.tsx",
+      "src/components/store/product-grid.tsx",
+      "src/components/store/cart-item.tsx",
+      "src/components/store/order-card.tsx",
+      "src/components/store/not-found.tsx",
+      // The homepage is the only route the agent authors. All other commerce
+      // routes are seeded runtime-owned and reverted if touched; home carries
+      // the storefront's visual identity, so it ships in this batch alongside
+      // the components that compose it.
+      "src/routes/index.tsx",
+    ],
+    specPaths: ["data/component.md", "pages/home.md"],
+  },
+];
 
 export type ManifestSource = { layers?: ManifestEntry[] };
 
@@ -125,45 +135,24 @@ export async function planInitBatches(
     .slice()
     .sort((a, b) => a.order - b.order);
 
-  const foundationFiles: string[] = [];
-  const foundationSpecPaths: string[] = [];
-  const pageBatches: InitBatch[] = [];
-
-  for (const layer of layers) {
-    if (FOUNDATION_MARKERS.has(layer.marker)) {
-      const files = FOUNDATION_MARKER_TO_FILES[layer.marker] ?? [];
-      foundationFiles.push(...files);
-      if (layer.file) foundationSpecPaths.push(layer.file);
-      continue;
-    }
-    if (PAGE_MARKER_TO_FILES[layer.marker]) {
-      pageBatches.push({
-        kind: "page",
-        marker: layer.marker,
-        files: PAGE_MARKER_TO_FILES[layer.marker],
-        specPaths: layer.file ? [layer.file] : [],
-      });
-    }
-  }
+  void layers;
 
   const batches: InitBatch[] = [];
-  if (!input.pagesOnly && foundationFiles.length > 0) {
-    batches.push({
-      kind: "foundation_data",
-      marker: FOUNDATION_BATCH_MARKER,
-      files: foundationFiles,
-      specPaths: foundationSpecPaths,
-    });
-  }
-  for (const page of pageBatches) batches.push(page);
-
+  // Init is now a small sequence of dependency-ordered phases, each emitted as
+  // its own batch so the model finishes each instead of dead-ending on one large
+  // batch. Fixed plumbing and required commerce routes are seeded first. The
+  // agent only authors DESIGN.md + the storefront components; the polish batch
+  // was dropped — it targeted a never-written placeholder and added a turn
+  // without producing files.
   if (!input.pagesOnly) {
-    batches.push({
-      kind: "polish",
-      marker: POLISH_BATCH_MARKER,
-      files: [POLISH_PLACEHOLDER],
-      specPaths: [],
-    });
+    for (const phase of INIT_PHASES) {
+      batches.push({
+        kind: "foundation_data",
+        marker: phase.marker,
+        files: [...phase.files],
+        specPaths: phase.specPaths ? [...phase.specPaths] : [],
+      });
+    }
   }
 
   let totalFiles = 0;

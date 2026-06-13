@@ -30,6 +30,8 @@ export const BUILDER_RUN_LOCALE_VI = {
     required_skill_unavailable:
       "Không thể tiếp tục vì thiếu hướng dẫn bắt buộc cho agent.",
     skill_unavailable: "Skill được yêu cầu hiện chưa có sẵn.",
+    provider_gateway_soft_error:
+      "Nhà cung cấp AI đang lỗi tạm thời hoặc quá tải. Hãy thử chạy lại sau ít phút.",
   } as Record<BuilderRunFailureCode, string>,
   clarification: {
     questionScaffold: "Bạn muốn ưu tiên hướng tiếp cận nào cho yêu cầu này?",
@@ -74,6 +76,8 @@ export const BUILDER_RUN_LOCALE_EN = {
     required_skill_unavailable:
       "Cannot continue because a required agent instruction is unavailable.",
     skill_unavailable: "The requested skill is not available.",
+    provider_gateway_soft_error:
+      "The AI provider is temporarily unavailable or overloaded. Retry in a moment.",
   } as Record<BuilderRunFailureCode, string>,
   clarification: {
     questionScaffold: "Which approach should we take for this request?",

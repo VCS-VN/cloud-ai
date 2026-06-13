@@ -26,3 +26,11 @@ export const startPreview = createServerFn({ method: "POST" })
     const { projectService } = await loadProjectServices();
     return projectService.startPreview(data.projectId, user.id);
   });
+
+export const stopPreview = createServerFn({ method: "POST" })
+  .inputValidator(validateProjectInput)
+  .handler(async ({ data }) => {
+    const user = await requireServerUser();
+    const { projectService } = await loadProjectServices();
+    return projectService.stopPreview(data.projectId, user.id);
+  });

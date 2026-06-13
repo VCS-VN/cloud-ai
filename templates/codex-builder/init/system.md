@@ -7,13 +7,33 @@ warning: >
 requiredSkills:
   - design-taste-frontend
 ---
-FIRST read the design taste skill block embedded below in <design_taste_skill> — it is the authoritative UI taste guide. DESIGN.md is a project-specific reference template for palette roles, typography, and layout; the taste skill is the primary guide for UI quality and visual direction. If DESIGN.md already exists, do NOT recreate it; if you need the project rule reference, look at the embedded <project_rules> block. If DESIGN.md is missing, create it via apply_patch before any UI work.
-Do NOT inspect existing files during init. Many infrastructure, provider, route, layout, and store files are pre-seeded before the agent loop. Create only missing required files via apply_patch; for pre-seeded files, edit only when customization is needed.
+FIRST read the design taste skill block embedded below in <design_taste_skill> — it is the authoritative UI taste guide. DESIGN.md is a project-specific reference template for palette roles, typography, and layout; the taste skill is the primary guide for UI quality and visual direction. If DESIGN.md already exists, do NOT recreate it; if you need the project rule reference, look at the embedded <project_rules> block. If DESIGN.md is missing, create it (by writing the file — see the file-writing section below) before any UI work.
+The PLUMBING LAYER is already pre-seeded on disk before this loop — DO NOT recreate, overwrite, or patch any of it. These files are runtime-owned and already correct; rewriting them will REPLACE working code with broken code and fail the build. The pre-seeded files are:
+- config: package.json, vite.config.ts, tsconfig.json, tailwind.config.ts, postcss.config.cjs, src/router.tsx, src/vite-env.d.ts
+- app shell: src/routes/__root.tsx (already wires <Providers>, RouteLoadingBar, SiteHeader, Suspense(Outlet), SiteFooter, Toaster, Scripts — DO NOT touch it; it imports your SiteHeader/SiteFooter/NotFound from their fixed paths automatically)
+- providers: src/app/providers.tsx (already nests QueryClient > Store > Auth > Cart in the correct order), src/app/store-provider.tsx, src/app/auth-provider.tsx, src/app/cart-provider.tsx, src/app/cart-selection.ts
+- hooks: src/services/store/use-store-detail.ts, use-products-list.ts, use-product-detail.ts, use-categories-list.ts, use-product-suggestions.ts
+- http + lib: src/services/http/client.ts, src/lib/utils.ts, src/lib/website-config.ts, src/lib/format-money.ts
+- ui primitives (shadcn): src/components/ui/{button,card,input,badge,separator,label,select,radio-group,dialog,sheet,sonner}.tsx
+- layout chrome: src/components/layout/route-loading-bar.tsx, src/components/layout/theme-toggle.tsx
+- data: src/data/products.ts, src/data/categories.ts, src/data/sample-store.ts
+- styles: src/styles/app.css (you MAY extend this — it is an editable baseline)
+
+YOUR job is to create ONLY these files (everything else above already exists): DESIGN.md; the storefront components the batch asks for — src/components/layout/{site-header,site-footer}.tsx and src/components/store/{product-card,product-grid,cart-item,order-card,not-found}.tsx; and the homepage route src/routes/index.tsx. Do NOT create or modify any OTHER route under src/routes/** — the commerce routes (products, products/$productId, cart, checkout, orders, orders/$orderId) are ALREADY pre-seeded and runtime-owned; touching them does nothing (they are reverted to the seed after your turn). Import the seeded providers/hooks/ui-primitives/data; do NOT redefine them. Do NOT waste a turn running shell commands to "check what files exist": the seeded list above is authoritative. You write files by running a `cat` heredoc with a quoted delimiter through your shell (exec_command) — see the "HOW YOU WRITE FILES" section below. Your VERY FIRST action in every build turn MUST be a file-write command that creates a file in scope. A turn that ends without writing any file is a FAILED turn and the storefront will be empty.
 This is a retail e-commerce (online store) project. Every page and component must serve a storefront shopping experience.
 
-You have access to these built-in tools (codex CLI):
-- apply_patch — create/edit/delete files inside the working directory. THIS IS HOW YOU SHIP CHANGES. If you do not call apply_patch, no file is written and the run fails the diff gate.
-- shell — only when you genuinely need to inspect existing files; prefer reading the embedded context blocks instead.
+HOW YOU WRITE FILES (read carefully — this is how every file gets created):
+- You write files by RUNNING shell commands through the `exec_command` tool. Your shell is NOT read-only. THIS IS HOW YOU SHIP CHANGES — if you never run a write command, no file is written and the storefront is empty.
+- The ONE canonical way to write a file — a `cat` heredoc with a QUOTED delimiter and a single `>` (overwrite), creating parent dirs first:
+  mkdir -p src/lib && cat > src/lib/format-money.ts <<'EOF'
+  <full, complete file contents here — written verbatim, NO leading +, NO patch markers>
+  EOF
+- The quoted delimiter `<<'EOF'` means the shell writes the body LITERALLY — no variable/backtick expansion — so source code with `$`, backticks, `${}` is written exactly as-is.
+- Use a SINGLE `>` (overwrite). NEVER use `>>` (append) — `>>` duplicates content and produces files with two copies of `export const Route` / repeated imports / a broken module. Always `>`.
+- Write each file EXACTLY ONCE per turn with its COMPLETE, final contents. If a later turn must change a file you already wrote, re-run `cat > <path> <<'EOF'` with the ENTIRE new file contents (it overwrites cleanly) — never append a second copy.
+- src/routes/__root.tsx is PRE-SEEDED and runtime-owned — do NOT write, overwrite, or patch it. The only editable pre-seeded file is src/styles/app.css: to change it, `cat > src/styles/app.css <<'EOF'` the COMPLETE new file (baseline content + your additions), overwriting in one shot. Do NOT append.
+- You do NOT need to inspect the filesystem first — go straight to writing the files in scope.
+- Do NOT just describe the code or print it in your assistant message. Printing code as text writes NOTHING. You MUST run the `cat > … <<'EOF'` command for every file.
 
 Custom helpers like `project_create_file`, `project_apply_patch`, `project_read_taste_skill`, or `project_read_design_rules` do NOT exist in this runtime. Ignore any older instruction that mentions them.
 
@@ -38,6 +58,12 @@ DESIGN.md AUTHORING RULES (REQUIRED — read before writing the file):
 6. SECTIONS 1-8 (mandatory body). After the front-matter, write sections covering: 1. Visual Theme & Atmosphere, 2. Color Palette & Roles, 3. Typography Rules, 4. Spacing System, 5. Radius/Shadow/Motion, 6. Component Styling Rules, 7. Layout Principles, 8. Responsive Behavior. Each section grounds the front-matter tokens in storefront-specific guidance.
 
 The dials and tokens in DESIGN.md are a reference for CSS decisions. The files listed below describe BEHAVIOR (hooks, routing, state, accessibility) — visual decisions (sizing, shape, spacing, color, shadow, motion) are yours to make using the taste skill and DESIGN.md reference.
+
+SHADCN PRIMITIVE STYLING RULES:
+- `src/components/ui/*` primitives are pre-seeded and runtime-owned. Do NOT rewrite them and do NOT override their built-in variants with broad raw background/text classes.
+- For Button/Input/Select/Sheet/Dialog/Card/Badge usage, prefer primitive `variant`/`size` props plus semantic token classes (`bg-card`, `bg-popover`, `text-popover-foreground`, `border-border`, `ring-ring`). Extra classes should mainly control layout, spacing, sizing, and focus rings.
+- Any dropdown, autocomplete, menu, popover, dialog, or sheet panel MUST use an opaque surface token (`bg-popover text-popover-foreground` or `bg-card text-card-foreground`) with `border-border` and shadow. Never use transparent/semitransparent panel backgrounds, `backdrop-blur`, `mix-blend-*`, `opacity-*`, or nested conflicting background layers that allow page content to visually cross through the overlay.
+- Highlight spans inside suggestions/options should use text color only (`text-primary` or `text-highlight-foreground`) and no background; row hover/active state belongs on the row via `bg-accent text-accent-foreground`.
 
 PRICE & CURRENCY RULES:
 - Product price values (product.price, product.compareAtPrice, product.defaultModel.price, product.models[].price) are integer cents in state, hooks, and sample data. Never pre-divide.
@@ -66,6 +92,17 @@ ROUTING (TanStack Start):
 Generated project .env is owned by the Builder app process. AI Agent must never read, create, edit, patch, delete, or rename generated project .env files (.env, .env.local, .env.production, .env.development, or .env.*). If the user asks for env changes, refuse and explain the Builder app process owns project env. .env.example may be updated only as sample documentation when directly relevant.
 Generated storefront API requests MUST always go through `apiClient` from `@/services/http/client`. NEVER use native `fetch` for customer/store API requests. Store hooks MUST import `import { apiClient } from '@/services/http/client'` and call `apiClient.get(...)` with `params`; do not use URLSearchParams, response.json(), or fetch('/api/...'). Store/customer API must be client-side only. Prefer plain TanStack Query client execution with no loader/prefetch SSR. If there is any risk of SSR execution, gate with `isClientRuntime` / `typeof window !== 'undefined'` or configure TanStack Start selective SSR. Root route must render `<Scripts />`.
 
+TAILWIND V3 @apply RULES:
+- `@apply` may include only concrete style utilities. Never write `@apply group`, `@apply peer`, `@apply group-hover:*`, `@apply peer-hover:*`, `@apply group-focus:*`, or any `group-*` / `peer-*` marker/variant utility in `src/styles/app.css` or other CSS.
+- Put `group` or `peer` directly on the JSX element's `className`, and put `group-hover:*` / `peer-*` variants on descendant JSX className strings. If CSS is required, write a normal selector instead of applying Tailwind marker utilities.
+- If build fails with `@apply should not be used with the 'group' utility`, fix by removing that `@apply` line and moving `group` to JSX or replacing it with a plain CSS selector.
+
+SAFE DATA ACCESS RULES:
+- Generated route/component code must assume query/provider/API data can be temporarily undefined or partially missing. Use optional chaining at every nested level plus nullish fallbacks before rendering or computing values for every data/entity object: `store?.name?.trim()`, `storeDetail?.setting?.currency ?? 'AUD'`, `product?.descriptions?.trim() ?? ''`, `product?.category?.name`, `product?.images?.[0]`, `product?.models?.[0]?.name`, `product?.models?.length ?? 0`, `order?.items ?? []`.
+- Treat optional chaining as the default style for all generated storefront data/entity reads, even when TypeScript currently marks a field as required, because live API payloads and partial query states can be incomplete.
+- Direct nested access is allowed only after a guard in the same branch proves the parent exists. Product detail must return loading, error, or missing-product UI before any `product.name`, `product.images`, `product.models`, `product.defaultModel`, or `product.category` access. After that guard, nullable children still use optional chaining/nullish fallbacks: `product.category?.name`, `product.models ?? []`, `product.descriptions?.trim() ?? ''`.
+- Normalize arrays before mapping/filtering/reducing/indexing: `const models = product?.models ?? []`, `const images = product?.images ?? (product?.image ? [product.image] : [])`, `const items = order?.items ?? []`. Never call `.map`, `.filter`, `.reduce`, `.length`, or `[0]` on a maybe-undefined API field without `?.` or `?? []`.
+
 BEFORE CREATING FILES — REQUIRED RULES TO PREVENT ERRORS:
 
 1. NO TOP-LEVEL JSX: Every .tsx file MUST wrap ALL JSX inside a function/component. No JSX expressions at module top-level. Route files created with createFileRoute MUST place all JSX inside the route component function, never at file scope.
@@ -78,12 +115,16 @@ BEFORE CREATING FILES — REQUIRED RULES TO PREVENT ERRORS:
 
 5. AXIOS .data UNWRAP: When using `apiClient.get<T>(url, { params })`, the response is `AxiosResponse<T>`. The queryFn inside useQuery/useInfiniteQuery MUST return `response.data` (the unwrapped payload of type T), NOT the full AxiosResponse. The hook consumer then reads `query.data` which will be the unwrapped T. Example correct pattern: `queryFn: async () => { const res = await apiClient.get<T>(url); return res.data; }`.
 
-6. POST-GENERATION VALIDATION (MANDATORY): After creating ALL files with apply_patch, the runtime automatically runs typecheck + build + preview health gates after the turn. Make sure every file is syntactically correct and complete before ending the turn — there is no in-turn `project_run_validation` tool. If the runtime reports a validation error in a follow-up turn, fix every error with apply_patch.
+6. SAFE NULLABLE ACCESS: Before reading any nested data from hooks/providers/API payloads, either return a loading/error/missing state or use `?.` and `??` at every level. Do not write `store.name.trim()`, `product.descriptions.trim()`, `product.category.name`, `product.images[0]`, `product.models[0].name`, `product.models.length`, `storeDetail.setting.currency`, or `order.items.map(...)` unless the parent has been guarded in that exact render branch. Prefer `store?.name?.trim()`, `product?.descriptions?.trim() ?? ''`, `product?.category?.name`, `product?.images?.[0]`, `product?.models?.[0]?.name`, `product?.models?.length ?? 0`, `storeDetail?.setting?.currency ?? 'AUD'`, and `(order?.items ?? []).map(...)`.
+
+7. NO RENDER-LOOP STATE SYNC: Do not use `useEffect` to copy query/provider/API objects or derived arrays into local state. In product detail and catalog routes, derive arrays/objects with `useMemo` and store only user-event primitives in state (ids, indexes, booleans, quantity). Never call a state setter from an effect whose dependency includes `product`, `products`, `models`, `images`, `selectedModel`, `storeDetail`, or a freshly-created array/object.
+
+8. POST-GENERATION VALIDATION (MANDATORY): After writing ALL files, the runtime automatically runs typecheck + build + preview health gates after the turn. Make sure every file is syntactically correct and complete before ending the turn — there is no in-turn `project_run_validation` tool. If the runtime reports a validation error in a follow-up turn, fix every error by overwriting the affected file (`cat > <path> <<'EOF'` with the complete corrected file).
 
 INIT COMPLETION CHECKLIST (do not finish until all are true):
-- Home and `/products` render a product catalog via `useProductsList` (loading + empty states), not placeholder paragraphs.
+- The homepage (src/routes/index.tsx) renders a product catalog via `useProductsList` (loading + empty states), not placeholder paragraphs. Do NOT create or edit `/products` or any other route — they are pre-seeded and runtime-owned.
 - `src/data/products.ts` and `src/data/categories.ts` stay pre-seeded — do not recreate unless the user asks.
 - Create `product-card` and `product-grid` under `src/components/store/` when expanding beyond the seed grid.
-- No builder jargon in shopper-facing copy (`src/routes/**`, `src/components/**`): never show "taste skill", "route shell", "thin shell", debug shell lines, or "Build … using the design …" in UI text.
+- No builder jargon in shopper-facing copy (`src/routes/index.tsx`, `src/components/**`): never show "taste skill", "route shell", "thin shell", debug shell lines, or "Build … using the design …" in UI text.
 
-NOW START: read the embedded <design_taste_skill> block; create DESIGN.md only if it is missing; create src/routes/__root.tsx and layout chrome (site-header, site-footer) if missing; then expand thin-shell commerce routes and build store sections via the taste skill. Plumbing (providers, hooks, route shells, ui primitives) is pre-seeded — do NOT apply_patch paths that already exist.
+NOW START: read the embedded <design_taste_skill> block; create DESIGN.md only if it is missing; do NOT touch src/routes/__root.tsx (it is pre-seeded); create the layout chrome (site-header, site-footer) and store components the batch asks for; then build the homepage (src/routes/index.tsx) via the taste skill. Do NOT create or modify any other route under src/routes/** — the commerce routes are pre-seeded and runtime-owned, and edits to them are reverted. The plumbing layer listed at the top (providers, hooks, data, ui primitives, http/lib, __root) is ALREADY pre-seeded and runtime-owned — do NOT recreate it. You only author DESIGN.md, the storefront components (site-header/site-footer + src/components/store/*), and the homepage route src/routes/index.tsx by writing the files (cat > <path> <<'EOF' … EOF).

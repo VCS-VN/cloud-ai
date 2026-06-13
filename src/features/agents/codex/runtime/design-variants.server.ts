@@ -335,3 +335,121 @@ export function buildVariantBuildPrompt(input: {
     .filter(Boolean)
     .join("\n");
 }
+
+// ── Style-direction detection ───────────────────────────────────────────────
+// Before generating four variants and pausing for a pick, check whether the
+// user's prompt ALREADY carries a clear design direction (named aesthetic,
+// palette, typography, or a strong vibe). If it does, the variant question is
+// redundant — we extract the direction and feed it straight into the build,
+// skipping the pause. If the prompt is vague, we fall back to the variant flow.
+
+export type DetectedStyle = {
+  // Short human label for the detected direction (e.g. "Neo-luxe gold").
+  label: string;
+  // One-line summary of the aesthetic, audience, and mood.
+  summary: string;
+  // Optional concrete tokens the prompt named. Absent fields are left for the
+  // taste skill + DESIGN.md authoring step to decide.
+  palette?: string[];
+  font?: string;
+  motion?: number;
+};
+
+const detectedStyleSchema = z.object({
+  hasStyleDirection: z.boolean(),
+  style: z
+    .object({
+      label: z.string().min(1).max(80),
+      summary: z.string().min(1).max(400),
+      palette: z.array(z.string()).max(8).optional(),
+      font: z.string().min(1).max(80).optional(),
+      motion: z.number().min(0).max(1).optional(),
+    })
+    .optional(),
+});
+
+export type DetectStyleDirectionResult =
+  | { ok: true; hasStyleDirection: false }
+  | { ok: true; hasStyleDirection: true; style: DetectedStyle }
+  | { ok: false; reason: string };
+
+export type DetectStyleDirectionInput = {
+  runTurn: () => Promise<{ finalResponse: string }>;
+  retryOnInvalidJson?: number;
+};
+
+function tryParseDetectedStyle(rawResponse: string): DetectStyleDirectionResult {
+  let json: unknown;
+  try {
+    json = JSON.parse(stripCodeFence(rawResponse));
+  } catch {
+    return { ok: false, reason: "invalid JSON" };
+  }
+  const parsed = detectedStyleSchema.safeParse(json);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      reason: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
+    };
+  }
+  if (!parsed.data.hasStyleDirection || !parsed.data.style) {
+    return { ok: true, hasStyleDirection: false };
+  }
+  const s = parsed.data.style;
+  const palette = s.palette
+    ? s.palette.map(normalizeHexColor).filter((c): c is string => c !== null)
+    : undefined;
+  return {
+    ok: true,
+    hasStyleDirection: true,
+    style: {
+      label: s.label,
+      summary: s.summary,
+      palette: palette && palette.length > 0 ? palette : undefined,
+      font: s.font,
+      motion: s.motion,
+    },
+  };
+}
+
+/**
+ * Detect whether the user's prompt already specifies a design direction.
+ * Runs one codex turn (injected via `runTurn` for testability) that returns
+ * `{ hasStyleDirection, style? }`. A parse/validation failure returns
+ * `{ ok: false }` so the caller can fall back to the variant flow rather than
+ * blocking the run.
+ */
+export async function detectStyleDirection(
+  input: DetectStyleDirectionInput,
+): Promise<DetectStyleDirectionResult> {
+  const maxRetries = input.retryOnInvalidJson ?? 1;
+  let lastReason = "no attempt";
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const turn = await input.runTurn();
+    const result = tryParseDetectedStyle(turn.finalResponse);
+    if (result.ok) return result;
+    lastReason = result.reason;
+  }
+  return { ok: false, reason: lastReason };
+}
+
+/**
+ * Build the prompt fragment that applies a detected style direction to the
+ * init build, in place of the variant addendum. Mirrors buildVariantBuildPrompt
+ * so the downstream build turn consumes the same shape. Always reasserts the
+ * taste skill so a named direction is executed with quality, not slop.
+ */
+export function buildDetectedStyleBuildPrompt(style: DetectedStyle): string {
+  return [
+    `The user's prompt already specifies a design direction — use it directly; do NOT ask the user to choose a style.`,
+    `Design direction: ${style.label}`,
+    `Summary: ${style.summary}`,
+    style.palette && style.palette.length > 0 ? `Palette: ${style.palette.join(", ")}` : "",
+    style.font ? `Font: ${style.font}` : "",
+    style.motion !== undefined ? `Motion intensity: ${style.motion}` : "",
+    "",
+    `Apply this direction across all built pages. Where the prompt leaves a token unspecified (palette role, type scale, spacing, motion), decide it with the embedded design taste skill and record it in DESIGN.md — never fall back to generic defaults or slop. The taste skill governs quality even when the direction is fixed.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}

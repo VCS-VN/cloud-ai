@@ -5,45 +5,25 @@ target: src/styles/app.css
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --color-paper: 250 248 244;
-  --color-chalk: 255 255 255;
-  --color-surface: 244 241 235;
-  --color-hairline: 224 218 208;
-  --color-ink: 24 24 27;
-  --color-deep: 9 9 11;
-  --color-muted: 82 82 91;
-  --color-subtle: 113 113 122;
-  --color-accent: 28 97 231;
-  --color-accent-foreground: 255 255 255;
-  --color-success: 22 163 74;
-  --color-warning: 217 119 6;
-  --color-danger: 220 38 38;
+@layer base {
+  /* DESIGN_TOKENS_START */
+  :root {
+    --background: #ffffff; --foreground: #111827; --card: #ffffff; --card-foreground: #111827; --popover: #ffffff; --popover-foreground: #111827; --primary: #111827; --primary-foreground: #ffffff; --secondary: #f3f4f6; --secondary-foreground: #111827; --muted: #f3f4f6; --muted-foreground: #6b7280; --accent: #f3f4f6; --accent-foreground: #111827; --destructive: #dc2626; --destructive-foreground: #ffffff; --border: #e5e7eb; --input: #e5e7eb; --ring: #111827; --highlight: #fde68a; --highlight-foreground: #1f1300; --success: #16a34a; --warning: #d97706; --error: #dc2626; --deep: #111827; --deep-foreground: #ffffff; --radius: 0.75rem;
+  }
+  .dark {
+    --background: #0b0f19; --foreground: #f3f4f6; --card: #151b27; --card-foreground: #f3f4f6; --popover: #151b27; --popover-foreground: #f3f4f6; --primary: #f3f4f6; --primary-foreground: #111827; --secondary: #1f2837; --secondary-foreground: #f3f4f6; --muted: #1f2837; --muted-foreground: #9ca3af; --accent: #1f2837; --accent-foreground: #f3f4f6; --destructive: #f87171; --destructive-foreground: #1b0a0a; --border: #2a3340; --input: #2a3340; --ring: #cbd5e1; --highlight: #f4b400; --highlight-foreground: #1f1300; --success: #22c55e; --warning: #f59e0b; --error: #f87171; --deep: #0b0f19; --deep-foreground: #f3f4f6; --radius: 0.75rem;
+  }
+  /* DESIGN_TOKENS_END */
 
-  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
-  --font-display: Inter, ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  * {
+    @apply border-border;
+  }
 
-  --radius-card: 1rem;
-  --radius-button: 0.75rem;
-  --radius-input: 0.75rem;
-  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.05), 0 16px 40px rgb(15 23 42 / 0.08);
-  --shadow-card-hover: 0 1px 2px rgb(15 23 42 / 0.06), 0 24px 60px rgb(15 23 42 / 0.12);
-}
-
-html {
-  background: rgb(var(--color-paper));
-  color: rgb(var(--color-ink));
-  font-family: var(--font-sans);
-}
-
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-  background: rgb(var(--color-paper));
-}
-
-* {
-  box-sizing: border-box;
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
 }

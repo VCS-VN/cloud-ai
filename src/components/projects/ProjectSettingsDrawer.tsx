@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProjectSettingsGeneralTab } from "@/components/projects/ProjectSettingsGeneralTab";
@@ -39,16 +39,44 @@ export function ProjectSettingsDrawer({
   onSave?: (settings: { name?: string; selectedStoreSlug?: string | null }) => void | Promise<void>;
 }) {
   const [activeTab, setActiveTab] = useState<ProjectSettingsTab>("general");
+  const [mounted, setMounted] = useState(open);
+  const [visible, setVisible] = useState(false);
   const currentProjectName = projectName ?? project?.name ?? "";
   const savedProjectName = project?.name ?? "";
   const currentSelectedStoreSlug = selectedStoreSlug ?? null;
   const savedSelectedStoreSlug = project?.selectedStoreSlug ?? null;
   const hasChanges = currentSelectedStoreSlug !== savedSelectedStoreSlug || currentProjectName.trim() !== savedProjectName;
 
-  if (!open) return null;
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      const frame = window.requestAnimationFrame(() => setVisible(true));
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    setVisible(false);
+    const timer = window.setTimeout(() => setMounted(false), 220);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  useEffect(() => {
+    if (!mounted) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onOpenChange(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mounted, onOpenChange]);
+
+  if (!mounted) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-[color-mix(in_srgb,var(--color-overlay-scrim)_52%,transparent)] backdrop-blur-[2px] transition-opacity duration-200" role="dialog" aria-modal="true" aria-label="Project settings">
+    <div
+      className={`fixed inset-0 z-[80] flex justify-end bg-ink/20 backdrop-blur-sm transition-opacity duration-200 ease-standard ${visible ? "opacity-100" : "opacity-0"}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Project settings"
+    >
       <Button
         variant="unstyled"
         className="absolute inset-0 cursor-default"
@@ -56,19 +84,19 @@ export function ProjectSettingsDrawer({
         aria-label="Close project settings"
         onClick={() => onOpenChange(false)}
       />
-      <aside className="relative flex h-full w-full max-w-[400px] flex-col border-l border-[var(--app-border)] bg-[var(--app-bg)] shadow-2xl transition-transform duration-300 ease-out">
-        <header className="flex items-start justify-between gap-sm border-b border-[var(--app-border)] p-sm">
+      <aside className={`relative flex h-full w-full max-w-[420px] flex-col overflow-hidden border-l border-hairline bg-paper text-ink shadow-2xl transition-transform duration-300 ease-standard ${visible ? "translate-x-0" : "translate-x-full"}`}>
+        <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-hairline bg-paper px-5">
           <div className="min-w-0">
-            <p className="m-0 text-[12px] uppercase tracking-[0.08em] text-[var(--app-muted)]">
+            <p className="m-0 text-eyebrow font-mono uppercase tracking-wide text-subtle">
               Project settings
             </p>
-            <h2 className="m-0 mt-xs truncate text-[18px] font-[580] leading-6 tracking-[-0.03em] text-[var(--app-text)]">
+            <h2 className="m-0 mt-0.5 truncate text-ui font-semibold tracking-tight text-ink">
               {project?.name ?? "Loading project"}
             </h2>
           </div>
           <Button
             variant="unstyled"
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--app-border)] bg-[var(--app-control)] text-[var(--app-icon-muted)] transition-colors duration-200 hover:text-[var(--app-icon)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)]"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-hairline bg-surface text-muted transition-colors duration-base hover:border-hairline-soft hover:text-ink focus-ring"
             type="button"
             onClick={() => onOpenChange(false)}
             aria-label="Close settings"
@@ -77,14 +105,14 @@ export function ProjectSettingsDrawer({
           </Button>
         </header>
 
-        <div className="border-b border-[var(--app-border)] px-sm pt-xs">
-          <div className="inline-flex rounded-pill bg-[var(--app-control)] p-xxs">
+        <div className="shrink-0 border-b border-hairline bg-paper px-5 py-3">
+          <div className="inline-flex rounded-lg border border-hairline bg-chalk p-0.5">
             <ProjectSettingsTabButton active={activeTab === "general"} onClick={() => setActiveTab("general")}>General</ProjectSettingsTabButton>
             <ProjectSettingsTabButton active={activeTab === "info"} onClick={() => setActiveTab("info")}>Info</ProjectSettingsTabButton>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-sm">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-stone-50 p-5">
           {activeTab === "general" ? (
             <ProjectSettingsGeneralTab
               project={project}
@@ -103,24 +131,24 @@ export function ProjectSettingsDrawer({
           )}
         </div>
 
-        <footer className="space-y-sm border-t border-[var(--app-border)] p-sm">
+        <footer className="shrink-0 space-y-3 border-t border-hairline bg-paper px-5 py-4">
           {saveError ? (
-            <p className="m-0 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] px-sm py-xs text-[13px] leading-5 text-[var(--app-danger-text)]">
+            <p className="m-0 rounded-md border border-danger-bg bg-danger-bg px-3 py-2 text-ui-sm leading-5 text-danger-fg">
               {saveError}
             </p>
           ) : null}
           {saveSuccess ? (
-            <p className="m-0 rounded-md border border-[var(--app-border)] bg-[var(--color-block-lime)] px-sm py-xs text-[13px] leading-5 text-[var(--app-on-color-block)]">
+            <p className="m-0 rounded-md border border-success-bg bg-success-bg px-3 py-2 text-ui-sm leading-5 text-success-fg">
               {saveSuccess}
             </p>
           ) : null}
-          <div className="flex items-center justify-end gap-sm">
-            <span className="text-[13px] text-[var(--app-muted)]">
+          <div className="flex items-center justify-between gap-3">
+            <span className="min-w-0 truncate text-ui-sm text-muted">
               {hasChanges ? "Unsaved changes" : "No changes to save"}
             </span>
             <Button
               variant="unstyled"
-              className="rounded-pill bg-[var(--color-primary)] px-md py-xs text-[14px] font-[560] text-[var(--color-on-primary)] transition-opacity duration-200 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 shrink-0 items-center rounded-md bg-ink px-4 text-ui-sm font-semibold text-paper transition-colors duration-base hover:bg-deep disabled:cursor-not-allowed disabled:opacity-40"
               type="button"
               disabled={!hasChanges || saving}
               onClick={() => {
@@ -149,7 +177,7 @@ function ProjectSettingsTabButton({
   return (
     <Button
       variant="unstyled"
-      className={`rounded-pill px-sm py-xxs text-[13px] font-[560] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] ${active ? "bg-[var(--app-selected-bg)] text-[var(--app-selected-text)]" : "text-[var(--app-muted)] hover:text-[var(--app-text)]"}`}
+      className={`inline-flex h-7 items-center rounded-md px-3 text-eyebrow font-medium transition-all duration-base focus-ring ${active ? "bg-surface text-ink shadow-sm" : "text-muted hover:bg-ink/[0.035] hover:text-ink"}`}
       type="button"
       onClick={onClick}
       aria-pressed={active}

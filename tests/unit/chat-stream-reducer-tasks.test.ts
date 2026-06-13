@@ -20,17 +20,27 @@ const TASKS = [
   { id: "b", title: "Build the home page", phase: "build" as const },
   { id: "c", title: "Validate the preview", phase: "verify" as const },
 ];
+const ESTIMATE = {
+  totalSeconds: 450,
+  perTaskSeconds: { a: 90, b: 240, c: 120 },
+};
+
+function planCreatedEvent() {
+  return {
+    type: "plan.created" as const,
+    runId: "r1",
+    tasks: TASKS,
+    estimate: ESTIMATE,
+    at: 1,
+  };
+}
 
 describe("chatStateReducer — task events", () => {
   it("plan.created seeds tasks and all-pending statuses", () => {
     const state = withActiveRun();
-    const next = chatStateReducer(state, {
-      type: "plan.created",
-      runId: "r1",
-      tasks: TASKS,
-      at: 1,
-    });
+    const next = chatStateReducer(state, planCreatedEvent());
     expect(next.activeRun?.tasks).toEqual(TASKS);
+    expect(next.activeRun?.taskEstimate).toEqual(ESTIMATE);
     expect(next.activeRun?.taskStatuses).toEqual({
       a: "pending",
       b: "pending",
@@ -39,12 +49,7 @@ describe("chatStateReducer — task events", () => {
   });
 
   it("plan.task.started flips a task to active", () => {
-    let state = chatStateReducer(withActiveRun(), {
-      type: "plan.created",
-      runId: "r1",
-      tasks: TASKS,
-      at: 1,
-    });
+    let state = chatStateReducer(withActiveRun(), planCreatedEvent());
     state = chatStateReducer(state, {
       type: "plan.task.started",
       runId: "r1",
@@ -56,12 +61,7 @@ describe("chatStateReducer — task events", () => {
   });
 
   it("plan.task.completed flips a task to done", () => {
-    let state = chatStateReducer(withActiveRun(), {
-      type: "plan.created",
-      runId: "r1",
-      tasks: TASKS,
-      at: 1,
-    });
+    let state = chatStateReducer(withActiveRun(), planCreatedEvent());
     state = chatStateReducer(state, {
       type: "plan.task.completed",
       runId: "r1",
@@ -72,12 +72,7 @@ describe("chatStateReducer — task events", () => {
   });
 
   it("plan.task.paused → plan.task.resumed cycle", () => {
-    let state = chatStateReducer(withActiveRun(), {
-      type: "plan.created",
-      runId: "r1",
-      tasks: TASKS,
-      at: 1,
-    });
+    let state = chatStateReducer(withActiveRun(), planCreatedEvent());
     state = chatStateReducer(state, {
       type: "plan.task.started",
       runId: "r1",
@@ -101,12 +96,7 @@ describe("chatStateReducer — task events", () => {
   });
 
   it("run.completed clears activeRun (drops tasks with the run)", () => {
-    let state = chatStateReducer(withActiveRun(), {
-      type: "plan.created",
-      runId: "r1",
-      tasks: TASKS,
-      at: 1,
-    });
+    let state = chatStateReducer(withActiveRun(), planCreatedEvent());
     state = chatStateReducer(state, {
       type: "run.completed",
       runId: "r1",
@@ -117,12 +107,7 @@ describe("chatStateReducer — task events", () => {
 
   it("plan events without an active run are ignored", () => {
     const state = createInitialChatState();
-    const next = chatStateReducer(state, {
-      type: "plan.created",
-      runId: "r1",
-      tasks: TASKS,
-      at: 1,
-    });
+    const next = chatStateReducer(state, planCreatedEvent());
     expect(next.activeRun).toBeNull();
   });
 });

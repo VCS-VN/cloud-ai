@@ -1,7 +1,7 @@
 import { execFile, type ChildProcess } from "node:child_process";
 import type { ProjectStateStore } from "@/features/projects/legacy/project-state-store.server";
 import type { DevRuntime } from "@/features/projects/legacy/project-state.schema";
-import type { Pm2Driver, PreviewPm2Process } from "./pm2-driver.server";
+import type { Pm2Driver, PreviewPm2Process, PreviewPm2Status } from "./pm2-driver.server";
 import type { CloudflareDnsClient, CloudflareDnsResult } from "./cloudflare-dns.server";
 import { getPreviewRuntimeConfig } from "./preview-runtime-config.server";
 import type { PortAllocator } from "./port-allocator.server";
@@ -10,7 +10,7 @@ import { waitForPreviewHealthy } from "./preview-health.server";
 
 export type RuntimeOrchestratorDeps = {
   projectStateStore: ProjectStateStore;
-  pm2Driver: Pick<Pm2Driver, "describe" | "start"> & Partial<Pick<Pm2Driver, "delete">>;
+  pm2Driver: Pick<Pm2Driver, "describe" | "start" | "list"> & Partial<Pick<Pm2Driver, "delete" | "stop">>;
   portAllocator: PortAllocator;
   runInstall?: (input: { projectId: string; workspaceRoot: string; signal?: AbortSignal }) => Promise<InstallRunResult>;
   healthCheck?: (url: string) => Promise<boolean>;
@@ -45,6 +45,19 @@ export type TeardownPreviewRuntimeResult =
   | { success: true }
   | { success: false; error: string; operatorAttentionRequired: true };
 
+export type StopPreviewRuntimeResult =
+  | { success: true }
+  | { success: false; error: string; pm2StopAttempted: true; databaseUpdateAttempted: true };
+
+export type PreviewStatus = "running" | "starting" | "error" | "stopped";
+
+export function pm2StatusToPreviewStatus(status: PreviewPm2Status): PreviewStatus {
+  if (status === "online") return "running";
+  if (status === "launching") return "starting";
+  if (status === "errored") return "error";
+  return "stopped";
+}
+
 export type EvictionCandidate = {
   projectId: string;
   userId?: string;
@@ -74,6 +87,30 @@ export class RuntimeOrchestrator {
     const pm2 = await this.deps.pm2Driver.describe(projectId);
     const normalized = this.mergeLiveStatus(runtime, pm2);
     return { ...normalized, pm2 };
+  }
+
+  /**
+   * Returns a map of projectId -> "running" | "starting" | "error" | "stopped"
+   * derived from the live PM2 process list (source of truth). Cheaper than
+   * calling getRuntimeState per project because it issues a single `pm2 list`
+   * instead of N `pm2 describe` calls. Used to enrich the project list view.
+   */
+  async getPreviewStatusMap(projectIds: string[]): Promise<Record<string, PreviewStatus>> {
+    if (projectIds.length === 0) return {};
+    const processes = await this.deps.pm2Driver.list();
+    const byProjectId = new Map<string, PreviewPm2Process>();
+    for (const proc of processes) {
+      // PM2 process name is `proj-<projectId>`.
+      if (proc.name.startsWith("proj-")) {
+        byProjectId.set(proc.name.slice("proj-".length), proc);
+      }
+    }
+    const result: Record<string, PreviewStatus> = {};
+    for (const projectId of projectIds) {
+      const proc = byProjectId.get(projectId);
+      result[projectId] = proc ? pm2StatusToPreviewStatus(proc.status) : "stopped";
+    }
+    return result;
   }
 
   async touchLastAccessed(projectId: string, userId?: string): Promise<void> {
@@ -139,14 +176,43 @@ export class RuntimeOrchestrator {
     return stopped;
   }
 
-  async stopPreview(projectId: string, userId?: string): Promise<void> {
-    await this.deps.pm2Driver.delete?.(projectId);
-    await this.deps.projectStateStore.patchDevRuntime(projectId, {
-      status: "stopped",
-      pid: null,
-      lastError: null,
-      lastErrorTier: null,
-    }, userId);
+  async stopPreview(projectId: string, userId?: string): Promise<StopPreviewRuntimeResult> {
+    let stopError: unknown = null;
+    try {
+      await this.deps.pm2Driver.stop?.(projectId);
+    } catch (error) {
+      stopError = error;
+    }
+
+    try {
+      await this.deps.projectStateStore.patchDevRuntime(projectId, {
+        status: "stopped",
+        pid: null,
+        lastError: null,
+        lastErrorTier: null,
+      }, userId);
+    } catch (error) {
+      const stopMessage = stopError instanceof Error ? stopError.message : null;
+      const dbMessage = error instanceof Error ? error.message : "Preview database update failed.";
+      return {
+        success: false,
+        error: stopMessage ? `${stopMessage}; ${dbMessage}` : dbMessage,
+        pm2StopAttempted: true,
+        databaseUpdateAttempted: true,
+      };
+    }
+
+    if (stopError) {
+      const message = stopError instanceof Error ? stopError.message : "Preview PM2 stop failed.";
+      return {
+        success: false,
+        error: message,
+        pm2StopAttempted: true,
+        databaseUpdateAttempted: true,
+      };
+    }
+
+    return { success: true };
   }
 
   async restartPreview(input: ScheduleEnsureRunningInput): Promise<void> {
@@ -346,28 +412,75 @@ export class RuntimeOrchestrator {
 }
 
 export function mergeLiveStatus(runtime: DevRuntime, pm2: PreviewPm2Process): DevRuntime {
-  if (runtime.status === "running" && pm2.status !== "online") {
-    return {
-      ...runtime,
-      status: pm2.status === "missing" ? "stopped" : "error",
-      pid: null,
-      lastError: pm2.status === "missing" ? "Preview process is not running." : "Preview process is not healthy.",
-      lastErrorTier: "system",
-    };
+  // PM2 is the source of truth for whether a preview is running.
+  // The DB record may lag (stale "running" after a crash, or stale "stopped"
+  // after a server restart that auto-resumed the process), so we derive the
+  // canonical status from the live PM2 process and only keep previewUrl/port
+  // from the DB when they are still present.
+  switch (pm2.status) {
+    case "online":
+      if (runtime.previewUrl && runtime.port) {
+        return {
+          ...runtime,
+          status: "running",
+          pid: pm2.pid,
+          lastError: null,
+          lastErrorTier: null,
+        };
+      }
+      // Process is online but we have no recorded preview URL/port yet — it is
+      // still booting. Treat as starting so the UI shows a loading state
+      // instead of a stale stopped/error.
+      return {
+        ...runtime,
+        status: "starting",
+        pid: pm2.pid,
+        lastError: null,
+        lastErrorTier: null,
+      };
+    case "launching":
+      return {
+        ...runtime,
+        status: "starting",
+        pid: pm2.pid,
+        lastError: null,
+        lastErrorTier: null,
+      };
+    case "errored":
+      return {
+        ...runtime,
+        status: "error",
+        pid: null,
+        lastError: runtime.lastError ?? "Preview process errored.",
+        lastErrorTier: "system",
+      };
+    case "missing":
+      // No PM2 instance exists. Anything the DB claims as "running" is stale.
+      if (runtime.status === "running" || runtime.status === "starting" || runtime.status === "fixing") {
+        return {
+          ...runtime,
+          status: "stopped",
+          pid: null,
+          lastError: null,
+          lastErrorTier: null,
+        };
+      }
+      return runtime;
+    case "stopped":
+      // PM2 process exists but is stopped (e.g. manually stopped via pm2 CLI).
+      if (runtime.status === "running" || runtime.status === "starting" || runtime.status === "fixing") {
+        return {
+          ...runtime,
+          status: "stopped",
+          pid: null,
+          lastError: null,
+          lastErrorTier: null,
+        };
+      }
+      return runtime;
+    default:
+      return runtime;
   }
-  if (runtime.status === "running" && pm2.status === "online" && runtime.previewUrl && runtime.port) {
-    return { ...runtime, status: "running", pid: pm2.pid };
-  }
-  if (
-    runtime.enabled &&
-    pm2.status === "online" &&
-    runtime.previewUrl &&
-    runtime.port &&
-    runtime.status !== "running"
-  ) {
-    return { ...runtime, status: "running", pid: pm2.pid, lastError: null, lastErrorTier: null };
-  }
-  return runtime;
 }
 
 async function defaultRunInstall(input: { workspaceRoot: string; signal?: AbortSignal }): Promise<InstallRunResult> {

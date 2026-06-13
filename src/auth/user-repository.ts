@@ -14,6 +14,9 @@ function rowToAuthUser(row: typeof users.$inferSelect): AuthUser {
     emailVerified: row.emailVerified,
     displayName: row.displayName ?? undefined,
     photoUrl: row.photoUrl ?? undefined,
+    bio: row.bio ?? undefined,
+    coverImage: row.coverImage ?? undefined,
+    dateOfBirth: row.dateOfBirth ?? undefined,
     provider: row.provider === 'GITHUB' ? 'GITHUB' : row.provider === 'MONMI_OAUTH' ? 'MONMI_OAUTH' : 'GOOGLE',
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -129,6 +132,32 @@ export class UserRepository {
       .set({ apiKey: null, updatedAt: new Date() })
       .where(eq(users.id, id))
   }
+
+  async updateProfile(
+    id: string,
+    fields: {
+      displayName: string | null
+      bio: string | null
+      photoUrl: string | null
+      coverImage: string | null
+      dateOfBirth: string | null
+    }
+  ): Promise<AuthUser> {
+    const [row] = await getDb()
+      .update(users)
+      .set({
+        displayName: fields.displayName,
+        bio: fields.bio,
+        photoUrl: fields.photoUrl,
+        coverImage: fields.coverImage,
+        dateOfBirth: fields.dateOfBirth,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, id))
+      .returning()
+    if (!row) throw new AuthError('unauthorized')
+    return rowToAuthUser(row)
+  }
 }
 
 export function toAuthUserSummary(user: AuthUser): AuthUserSummary {
@@ -139,6 +168,9 @@ export function toAuthUserSummary(user: AuthUser): AuthUserSummary {
     emailVerified: true as const,
     displayName: user.displayName,
     photoUrl: user.photoUrl,
+    bio: user.bio,
+    coverImage: user.coverImage,
+    dateOfBirth: user.dateOfBirth,
     provider: user.provider
   }
 }

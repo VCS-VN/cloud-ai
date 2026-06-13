@@ -80,6 +80,18 @@ export class AuthService {
     return user
   }
 
+  async updateProfile(fields: {
+    displayName: string | null
+    bio: string | null
+    photoUrl: string | null
+    coverImage: string | null
+    dateOfBirth: string | null
+  }) {
+    const current = await this.requireActionUser()
+    const updated = await this.users.updateProfile(current.id, fields)
+    return toAuthUserSummary(updated)
+  }
+
   async requireMerchantApiKey() {
     const session = await this.sessions.readSession()
     if (!session) throw new AuthError('unauthorized')

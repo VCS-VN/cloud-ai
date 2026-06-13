@@ -93,6 +93,17 @@ describe("createBoundedCodexThread — reasoning effort + sandbox wiring (R1, R2
     const args = startThreadMock.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
     expect(args?.modelReasoningEffort).toBeUndefined();
   });
+
+  it("honors per-thread model override for lightweight repair turns", () => {
+    startThreadMock.mockClear();
+    createBoundedCodexThread({
+      env,
+      draftWorkspacePath: "/tmp/draft",
+      model: "repair-model",
+    });
+    const args = startThreadMock.mock.calls[0]?.[0];
+    expect(args).toMatchObject({ model: "repair-model" });
+  });
 });
 
 describe("createBoundedCodexThread — HTTP/SSE responses transport", () => {

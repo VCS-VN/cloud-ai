@@ -18,6 +18,9 @@ import {
 } from "@/features/agents/codex/runtime";
 import { getCodexEnv, isCodexFeatureAvailable } from "@/features/agents/codex/runtime/feature-flag.server";
 import type { BuilderRunEvent } from "@/features/agents/ui/builder-events";
+import {
+  shouldForceTerminalOnDriverResolve,
+} from "@/features/agents/ui/builder-run-status";
 import type {
   AgentMessageKind,
   ComposerReasoningEffort,
@@ -275,12 +278,14 @@ export async function startBuilderRunForChat(
   // run.started fires immediately so SSE consumers see the run is alive
   publishChatEvent(runId, emitRunStarted(translatorCtx));
 
-  const bridgeSubscriber = async (event: BuilderRunEvent) => {
+  const handleBridgeEvent = async (event: BuilderRunEvent) => {
     try {
       const outcome = translateBuilderEventToRunStreamEvent(event, translatorCtx);
-      for (const e of outcome.events) {
-        publishChatEvent(runId, e);
-      }
+      // Persist BEFORE publishing the translated events. A terminal event marks
+      // the SSE channel evictable the moment it is published, so the DB writes
+      // (agent_runs.status + project.processingStatus=idle) must already be
+      // committed — otherwise a refresh that falls through to the archived
+      // replay path reads stale "streaming"/"processing" state and the UI hangs.
       if (ctxPersistence && outcome.persist) {
         await persistAgentMessage(
           ctxPersistence,
@@ -306,6 +311,9 @@ export async function startBuilderRunForChat(
           event.type === "failed" ? event.failureCode : undefined,
         ).catch(() => undefined);
       }
+      for (const e of outcome.events) {
+        publishChatEvent(runId, e);
+      }
     } catch (error) {
       console.error(
         JSON.stringify({
@@ -317,12 +325,23 @@ export async function startBuilderRunForChat(
       );
     }
   };
+
+  // Serialize the bridge. Each builder event must be translated, persisted, and
+  // published in arrival order — a previous fire-and-forget (`void
+  // bridgeSubscriber`) let a fast terminal event race ahead of the answer
+  // message it should follow, so the SSE channel evicted before the message was
+  // published and the client never saw the terminal (project stuck processing).
+  // Chaining on a single tail promise guarantees one-at-a-time, in-order work.
+  let bridgeQueue: Promise<void> = Promise.resolve();
+  const enqueueBridgeEvent = (event: BuilderRunEvent) => {
+    bridgeQueue = bridgeQueue.then(() => handleBridgeEvent(event));
+  };
   // Replay any events that already arrived between handle creation and now.
   for (const buffered of handle.events) {
-    void bridgeSubscriber(buffered);
+    enqueueBridgeEvent(buffered);
   }
   handle.subscribers.add((event) => {
-    void bridgeSubscriber(event);
+    enqueueBridgeEvent(event);
   });
 
   console.log(
@@ -346,6 +365,9 @@ export async function startBuilderRunForChat(
           eventType: event.type,
           milestone: "milestone" in event ? event.milestone : undefined,
           failureCode: event.type === "failed" ? event.failureCode : undefined,
+          stepKind: event.type === "step" ? event.kind : undefined,
+          stepStatus: event.type === "step" ? event.status : undefined,
+          stepLabel: event.type === "step" ? event.label : undefined,
         }),
       );
       publishBuilderRunEvent(handle, event);
@@ -353,11 +375,22 @@ export async function startBuilderRunForChat(
     driver,
   )
     .then(() => {
+      if (shouldForceTerminalOnDriverResolve(handle.status)) {
+        publishBuilderRunEvent(handle, {
+          type: "failed",
+          runId,
+          milestone: "failed",
+          failureCode: "codex_runtime_failed",
+          message: "Builder driver ended before emitting a terminal event.",
+          at: Date.now(),
+        });
+      }
       console.log(
         JSON.stringify({
           event: "builder_run_driver_resolved",
           projectId: input.projectId,
           runId,
+          status: handle.status,
         }),
       );
     })
@@ -477,27 +510,64 @@ async function persistRunTerminal(
   failureCode?: string,
 ): Promise<void> {
   const run = await persistence.runStore.load(runId, userId).catch(() => undefined);
-  if (!run) return;
+  if (!run) {
+    await clearProjectProcessingState(persistence, projectId, runId, userId, terminal);
+    return;
+  }
   if (terminal === "completed" && run.status === "streaming") {
     await persistence.runStore.update(run, { status: "completed" });
-    await persistence.projectRepository
-      .updateProjectProcessingState(projectId, "idle", userId)
-      .catch(() => undefined);
   } else if (terminal === "failed" && run.status === "streaming") {
     await persistence.runStore.fail(run, {
       code: failureCode ?? "PROVIDER_STREAM_FAILED",
       message: failureCode ?? "failed",
       recoverable: true,
     });
-    await persistence.projectRepository
-      .updateProjectProcessingState(projectId, "idle", userId)
-      .catch(() => undefined);
   } else if (terminal === "stopped" && run.status === "streaming") {
     await persistence.runStore.stop(run);
-    await persistence.projectRepository
-      .updateProjectProcessingState(projectId, "idle", userId)
-      .catch(() => undefined);
   } else if (terminal === "awaiting_input" && run.status !== "awaiting_input") {
     await persistence.runStore.update(run, { status: "awaiting_input" });
   }
+  if (terminal === "completed" || terminal === "failed" || terminal === "stopped") {
+    await clearProjectProcessingState(persistence, projectId, runId, userId, terminal);
+  }
 }
+
+async function clearProjectProcessingState(
+  persistence: BuilderRunPersistence,
+  projectId: string,
+  runId: string,
+  userId: string | undefined,
+  terminal: TerminalKind,
+): Promise<void> {
+  try {
+    const project = await persistence.projectRepository.updateProjectProcessingState(
+      projectId,
+      "idle",
+      userId,
+    );
+    if (!project) {
+      console.warn(
+        JSON.stringify({
+          event: "builder_run_project_idle_update_missed",
+          projectId,
+          runId,
+          terminal,
+        }),
+      );
+    }
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: "builder_run_project_idle_update_failed",
+        projectId,
+        runId,
+        terminal,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
+}
+
+export const __builderRunDispatcherTestables = {
+  persistRunTerminal,
+};

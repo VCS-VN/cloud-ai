@@ -129,41 +129,45 @@ export function PlanChecklist({ tasks, statuses, runClosed }: PlanChecklistProps
         {liveAnnouncement}
       </p>
 
-      {expanded ? (
-        <ul id={listId} role="list" className="plan-checklist-body">
-          {tasks.map((task, index) => {
-            const status = statuses[task.id] ?? "pending";
-            const isActive = status === "active";
-            return (
-              <li
-                key={task.id}
-                role="listitem"
-                aria-busy={isActive && !runClosed}
-                className={`plan-task-row ${isActive ? "plan-task-row-active" : ""} ${status === "pending" ? "plan-task-row-pending" : ""}`}
-              >
-                <StatusIcon
-                  status={status}
-                  animate={isActive && !runClosed}
-                  index={index}
-                />
-                <span className="sr-only">{STATUS_LABEL[status]}.</span>
-                <span className="min-w-0 flex-1">
-                  <span
-                    className={`block plan-task-title ${isActive ? "plan-task-title-active" : ""} ${status === "done" ? "plan-task-title-done" : ""}`}
-                  >
-                    {task.title}
+      <div
+        className={`plan-checklist-collapse ${expanded ? "" : "plan-checklist-collapse-closed"}`}
+      >
+        <div className="plan-checklist-collapse-inner">
+          <ul id={listId} role="list" className="plan-checklist-body">
+            {tasks.map((task, index) => {
+              const status = statuses[task.id] ?? "pending";
+              const isActive = status === "active";
+              return (
+                <li
+                  key={task.id}
+                  role="listitem"
+                  aria-busy={isActive && !runClosed}
+                  className={`plan-task-row ${isActive ? "plan-task-row-active" : ""} ${status === "pending" ? "plan-task-row-pending" : ""}`}
+                >
+                  <StatusIcon
+                    status={status}
+                    animate={isActive && !runClosed}
+                    index={index}
+                  />
+                  <span className="sr-only">{STATUS_LABEL[status]}.</span>
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={`block plan-task-title ${isActive ? "plan-task-title-active" : ""} ${status === "done" ? "plan-task-title-done" : ""}`}
+                    >
+                      {task.title}
+                    </span>
+                    <span
+                      className={`block plan-task-meta ${isActive ? "plan-task-meta-active" : ""}`}
+                    >
+                      {STATUS_LABEL[status]}
+                    </span>
                   </span>
-                  <span
-                    className={`block plan-task-meta ${isActive ? "plan-task-meta-active" : ""}`}
-                  >
-                    {STATUS_LABEL[status]}
-                  </span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
     </section>
   );
 }

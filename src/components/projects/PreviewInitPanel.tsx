@@ -17,7 +17,9 @@ export function PreviewInitPanel({
   onRetry,
 }: PreviewInitPanelProps) {
   const handleStartClick = () => {
-    if (isLoading) return;
+    if (isLoading) {
+      return;
+    }
     onStartPreview();
   };
 
@@ -46,9 +48,7 @@ export function PreviewInitPanel({
           <p className="mb-1 text-[13px] font-semibold leading-5 text-danger-fg">
             Preview failed
           </p>
-          <p className="text-sm leading-5 text-danger-fg">
-            {error}
-          </p>
+          <p className="text-sm leading-5 text-danger-fg">{error}</p>
           {onRetry && (
             <Button
               variant="unstyled"

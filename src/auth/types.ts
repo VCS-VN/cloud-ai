@@ -23,6 +23,9 @@ export type OAuthUserProfile = {
 export type AuthUser = FirebaseUserProfile & {
   id: string
   apiKey?: string
+  bio?: string
+  coverImage?: string
+  dateOfBirth?: string
   createdAt: Date
   updatedAt: Date
   lastLoginAt: Date
@@ -34,7 +37,18 @@ export type AuthUserSummary = {
   emailVerified: true
   displayName?: string
   photoUrl?: string
+  bio?: string
+  coverImage?: string
+  dateOfBirth?: string
   provider: AuthProvider
+}
+
+export type UpdateProfileInput = {
+  displayName?: string
+  photoUrl?: string
+  bio?: string
+  coverImage?: string
+  dateOfBirth?: string
 }
 
 export type CurrentUserResult = {

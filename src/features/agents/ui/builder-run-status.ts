@@ -23,3 +23,8 @@ export const TERMINAL_BUILDER_RUN_STATUSES: BuilderRunStatus[] = [
 export function isTerminalBuilderRunStatus(status: BuilderRunStatus): boolean {
   return TERMINAL_BUILDER_RUN_STATUSES.includes(status);
 }
+
+export function shouldForceTerminalOnDriverResolve(status: BuilderRunStatus): boolean {
+  if (status === "awaiting_clarification") return false;
+  return !isTerminalBuilderRunStatus(status);
+}

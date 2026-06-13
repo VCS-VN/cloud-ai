@@ -16,12 +16,25 @@ export const Route = createFileRoute(
 )({
   server: {
     handlers: {
-      POST: async ({ params }) => {
+      POST: async ({ params, request }) => {
         const user = await requireServerUser();
         const { projectId, runId } = params as {
           projectId: string;
           runId: string;
         };
+
+        // The retry client may send an optional JSON body with a locale hint.
+        // When absent (or when parsing fails), default to "en" so the task list
+        // and fallback messages are not stuck in Vietnamese.
+        let retryLocale = "en";
+        try {
+          const body = await request.json().catch(() => null);
+          if (body && typeof body.locale === "string") {
+            retryLocale = body.locale;
+          }
+        } catch {
+          // Body may not be JSON or may be empty — keep the default.
+        }
 
         const services = await getProjectServices();
         const projectRepository = services.projectService["projectRepository"];
@@ -111,7 +124,7 @@ export const Route = createFileRoute(
           projectId,
           userId: user.id,
           prompt,
-          locale: "vi",
+          locale: retryLocale,
           reasoningEffort: previous.reasoningEffort ?? undefined,
           planMode: previous.planMode ?? false,
           project: { status: project.status },

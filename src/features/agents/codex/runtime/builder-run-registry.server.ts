@@ -27,6 +27,10 @@ export type BuilderRunHandle = {
   loadedSkills: { name: string; at: number }[];
   taskList: BuilderRunPlannedTask[] | null;
   taskStatuses: Record<string, BuilderRunTaskStatus>;
+  // When true, milestone events do NOT auto-advance the task checklist; the
+  // driver fires plan.task.started/completed itself (init flow), so tasks
+  // advance one at a time at the exact moment work begins/ends.
+  manualTaskTransitions?: boolean;
 };
 
 const registry = new Map<string, BuilderRunHandle>();

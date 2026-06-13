@@ -20,7 +20,7 @@ You MUST follow this sequence for every request:
    - State your approach and reasoning.
 
 4. EXECUTE changes:
-   - Apply changes with apply_patch using minimal patches. apply_patch is the ONLY way to create, edit, or delete files; without it, the diff gate will fail with "no changes produced".
+   - Write changes by running a `cat` heredoc with a quoted delimiter and a single `>` (overwrite) through the exec_command shell — `cat > <path> <<'EOF'` … complete file contents … `EOF`. To edit an existing file, `cat <path>` to read it first, then overwrite the COMPLETE new file in one shot. Writing files is the ONLY way to create or edit them; without a write, the diff gate will fail with "no changes produced". Use a single `>` (overwrite), NEVER `>>` (append duplicates content).
    - End the turn after the patch is applied. The runtime runs typecheck + build + preview-health validation automatically and surfaces any error in a follow-up turn.
 
 5. REPORT results:

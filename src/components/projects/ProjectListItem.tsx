@@ -1,7 +1,7 @@
 import { Clock3, ExternalLink, Heart, Loader2, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import type { Project } from '@/shared/project-types'
+import type { Project, PreviewRunningStatus } from '@/shared/project-types'
 
 type ProjectListItemProps = {
   project: Project
@@ -54,6 +54,7 @@ export function ProjectListItem({ project, selected = false, variant = 'grid', o
               Edited {editedDate}
             </span>
           </span>
+          <PreviewStatusBadge selected={selected} previewStatus={project.previewStatus} />
           <ProjectStatusBadge selected={selected} status={statusText} />
           <ExternalLink aria-hidden="true" className={selected ? 'text-[var(--app-icon-selected)]' : 'text-[var(--app-icon-subtle)]'} size={15} />
         </Button>
@@ -82,12 +83,26 @@ export function ProjectListItem({ project, selected = false, variant = 'grid', o
                 Edited {editedDate}
               </span>
               <ProjectStatusBadge selected={selected} status={statusText} />
+              <PreviewStatusBadge selected={selected} previewStatus={project.previewStatus} />
             </span>
           </span>
         </span>
       </Button>
       {onDelete ? <div className="absolute right-xs top-xs opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"><DeleteButton confirming={confirmingDelete} deleting={deleting} onCancel={() => setConfirmingDelete(false)} onDelete={handleDelete} /></div> : null}
     </article>
+  )
+}
+
+function PreviewStatusBadge({ selected, previewStatus }: { selected: boolean; previewStatus?: PreviewRunningStatus }) {
+  if (previewStatus !== 'running') return null
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-xxs rounded-pill px-xs py-xxs text-[11px] font-[520] leading-none ${selected ? 'bg-[rgb(255_255_255_/_0.18)] text-current' : 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200'}`}
+      aria-label="Preview running"
+    >
+      <span className={`h-[6px] w-[6px] rounded-full ${selected ? 'bg-current' : 'bg-emerald-500'} animate-pulse`} aria-hidden="true" />
+      Live
+    </span>
   )
 }
 

@@ -3,6 +3,7 @@ import {
   chatStateReducer,
   createInitialChatState,
   preserveSelectedOptions,
+  runtimeStateReducer,
 } from "@/features/agents/ui/agent-event-reducer";
 import type { Message } from "@/shared/project-types";
 
@@ -109,6 +110,33 @@ describe("agent-event-reducer selected answer persistence", () => {
     expect(next.messages[0]).toMatchObject({
       id: "msg-run-1-answer",
       content: "Final answer",
+    });
+  });
+});
+
+describe("runtimeStateReducer preview reload events", () => {
+  it("records preview reload requests without changing preview status", () => {
+    const initial = {
+      ...createInitialChatState().runtime,
+      status: "running" as const,
+      previewUrl: "http://127.0.0.1:5173",
+      previewPort: 5173,
+    };
+
+    const next = runtimeStateReducer(initial, {
+      type: "preview_reload_requested",
+      projectId: "p1",
+      reason: "store_slug_synced",
+      delayMs: 5000,
+      at: "2026-06-15T00:00:00.000Z",
+    });
+
+    expect(next).toMatchObject({
+      status: "running",
+      previewUrl: "http://127.0.0.1:5173",
+      previewReloadRequestedAt: "2026-06-15T00:00:00.000Z",
+      previewReloadDelayMs: 5000,
+      previewReloadReason: "store_slug_synced",
     });
   });
 });

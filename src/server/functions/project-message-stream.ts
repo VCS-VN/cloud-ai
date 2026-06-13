@@ -166,7 +166,9 @@ function getOrCreateRuntimeHub(projectId: string): RuntimeHub {
 
 export function publishRuntimeEvent(projectId: string, event: RuntimeStreamEvent) {
   const hub = getOrCreateRuntimeHub(projectId);
-  if (event.type !== "heartbeat") hub.snapshot = event;
+  if (event.type !== "heartbeat" && event.type !== "preview_reload_requested") {
+    hub.snapshot = event;
+  }
   for (const subscriber of hub.subscribers) {
     try {
       subscriber(event);
@@ -174,6 +176,22 @@ export function publishRuntimeEvent(projectId: string, event: RuntimeStreamEvent
       // ignore broken subscriber
     }
   }
+}
+
+/**
+ * Publishes a runtime event after a delay. Used for preview start/stop so the
+ * server pushes the event only after the PM2 process has had time to settle
+ * (spawn + health check), avoiding a race where the client sees the event
+ * before the process is actually reachable.
+ */
+export function scheduleDelayedRuntimeEvent(
+  projectId: string,
+  event: RuntimeStreamEvent,
+  delayMs: number,
+): ReturnType<typeof setTimeout> {
+  return setTimeout(() => {
+    publishRuntimeEvent(projectId, event);
+  }, delayMs);
 }
 
 export function subscribeRuntime(

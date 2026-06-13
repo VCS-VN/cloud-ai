@@ -20,18 +20,28 @@ export type WrapSelectedSkillInput = {
   score: number;
 };
 
-const CLOSING_TAG = "</selected_skill>";
+const SELECTED_SKILL_CLOSING_TAG = "</selected_skill>";
+const DESIGN_TASTE_SKILL_NAME = "design-taste-frontend";
+const DESIGN_TASTE_CLOSING_TAG = "</design_taste_skill>";
 
-function sanitizeBody(body: string, skillName: string): string {
-  if (!body.includes(CLOSING_TAG)) return body;
+function sanitizeBody(body: string, skillName: string, closingTag: string): string {
+  if (!body.includes(closingTag)) return body;
   console.warn(
-    `[skills/injection] Skill "${skillName}" body contained literal "${CLOSING_TAG}"; stripping to preserve wrapper boundary.`,
+    `[skills/injection] Skill "${skillName}" body contained literal "${closingTag}"; stripping to preserve wrapper boundary.`,
   );
-  return body.split(CLOSING_TAG).join("");
+  return body.split(closingTag).join("");
 }
 
 export function wrapSelectedSkill(input: WrapSelectedSkillInput): string {
-  const safeBody = sanitizeBody(input.body, input.meta.name);
+  const tagName =
+    input.meta.name === DESIGN_TASTE_SKILL_NAME
+      ? "design_taste_skill"
+      : "selected_skill";
+  const closingTag =
+    tagName === "design_taste_skill"
+      ? DESIGN_TASTE_CLOSING_TAG
+      : SELECTED_SKILL_CLOSING_TAG;
+  const safeBody = sanitizeBody(input.body, input.meta.name, closingTag);
   const attrs = [
     `name="${input.meta.name}"`,
     `version="${input.meta.version}"`,
@@ -39,7 +49,7 @@ export function wrapSelectedSkill(input: WrapSelectedSkillInput): string {
     `source="${input.source}"`,
     `score="${Math.trunc(input.score)}"`,
   ].join(" ");
-  return `<selected_skill ${attrs}>\n${safeBody}\n</selected_skill>`;
+  return `<${tagName} ${attrs}>\n${safeBody}\n</${tagName}>`;
 }
 
 type Resolved = {

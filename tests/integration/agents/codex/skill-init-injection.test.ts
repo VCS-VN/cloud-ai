@@ -5,6 +5,8 @@ import os from "node:os";
 import type { CodexEnvAvailable } from "@/server/env/codex";
 
 const captured = vi.hoisted(() => ({
+  prompts: [] as string[],
+  lifecycle: [] as string[],
   selectSkillsCalls: [] as Array<{
     picked: Array<{ name: string; score: number; source: string }>;
     pending: unknown[];
@@ -13,43 +15,112 @@ const captured = vi.hoisted(() => ({
 }));
 
 vi.mock("@openai/codex-sdk", async () => {
-  let callCount = 0;
+  async function writeRequestedFiles(prompt: string) {
+    const root = (globalThis as { __codexProjectRoot?: string })
+      .__codexProjectRoot;
+    if (!root) return;
+
+    const filesMatch = prompt.match(/Files in scope: ([^\n]+)\./);
+    if (!filesMatch) return;
+
+    const batchMatch = prompt.match(/Now build batch ([^\s]+) /);
+    if (batchMatch) captured.lifecycle.push(`batch:${batchMatch[1]}`);
+
+    const fsM = await import("node:fs/promises");
+    const pathM = await import("node:path");
+    const files = filesMatch[1]
+      .split(",")
+      .map((file) => file.trim())
+      .filter(Boolean);
+
+    for (const rel of files) {
+      if (rel === "src/styles/polish.css") continue;
+      const target = pathM.join(root, rel);
+      await fsM.mkdir(pathM.dirname(target), { recursive: true });
+      const body =
+        rel === "DESIGN.md"
+          ? "# Design\n\n- Primary: #111111\n- Accent: #f97316\n"
+          : rel.endsWith(".tsx")
+            ? "export default function MockFile() { return null; }\n"
+            : "export {};\n";
+      await fsM.writeFile(target, body);
+    }
+  }
+
   return {
     Codex: class {
       startThread() {
         return {
           id: "t1",
-          async run() {
-            callCount++;
-            const fsM = await import("node:fs/promises");
-            const pathM = await import("node:path");
-            const root = (globalThis as { __codexProjectRoot?: string })
-              .__codexProjectRoot;
-            if (root) {
-              const draftDir = pathM.join(root, "drafts");
-              try {
-                const dirs = await fsM.readdir(draftDir);
-                if (dirs.length > 0 && callCount === 2) {
-                  const target = pathM.join(draftDir, dirs[0]);
-                  await fsM.mkdir(
-                    pathM.join(target, "src/shared/sample-data"),
-                    { recursive: true },
-                  );
-                  await fsM.writeFile(
-                    pathM.join(target, "src/shared/sample-data/products.ts"),
-                    `export const productsListSample = { total: 1, data: [{ id: "p1", store: { slug: "s1" } }] };`,
-                  );
-                }
-              } catch {
-                // ignore
-              }
-            }
+          async run(prompt: string) {
+            captured.prompts.push(prompt);
             return { items: [], finalResponse: "ok", usage: null };
           },
-          async runStreamed() {
+          async runStreamed(prompt: string) {
+            captured.prompts.push(prompt);
+            await writeRequestedFiles(prompt);
+            const finalResponse = prompt.includes("Output JSON only")
+              ? JSON.stringify({
+                  question: "Chọn hướng style cho store?",
+                  variants: [
+                    {
+                      id: "editorial-retail",
+                      label: "Editorial retail",
+                      description:
+                        "Bố cục editorial sắc nét cho storefront hiện đại.",
+                      preview: {
+                        font: "Inter",
+                        palette: ["#111111", "#f97316", "#f8fafc"],
+                        motion: 0.4,
+                        density: 0.5,
+                      },
+                    },
+                    {
+                      id: "studio-minimal",
+                      label: "Studio minimal",
+                      description:
+                        "Không gian tối giản, nhiều khoảng thở và ảnh sản phẩm lớn.",
+                      preview: {
+                        font: "Inter",
+                        palette: ["#fafafa", "#1f2937", "#22c55e"],
+                        motion: 0.2,
+                        density: 0.35,
+                      },
+                    },
+                    {
+                      id: "market-bold",
+                      label: "Market bold",
+                      description:
+                        "Màu mạnh, nhịp nhanh, hợp catalog khuyến mãi năng động.",
+                      preview: {
+                        font: "Inter",
+                        palette: ["#0f172a", "#eab308", "#ffffff"],
+                        motion: 0.7,
+                        density: 0.75,
+                      },
+                    },
+                    {
+                      id: "premium-calm",
+                      label: "Premium calm",
+                      description:
+                        "Tông trầm cao cấp, tập trung cảm giác tin cậy và tinh gọn.",
+                      preview: {
+                        font: "Inter",
+                        palette: ["#18181b", "#d4af37", "#f4f4f5"],
+                        motion: 0.3,
+                        density: 0.45,
+                      },
+                    },
+                  ],
+                })
+              : "ok";
             return {
               events: (async function* () {
-                /* empty */
+                yield {
+                  type: "item.completed",
+                  item: { type: "agent_message", text: finalResponse },
+                };
+                yield { type: "turn.completed", usage: null };
               })(),
             };
           },
@@ -76,7 +147,14 @@ vi.mock("@/features/agents/codex/validation/typecheck.server", () => ({
 }));
 
 vi.mock("@/features/agents/codex/validation/build.server", () => ({
-  runBuild: vi.fn(async () => ({ ok: true, durationMs: 5 })),
+  runBuild: vi.fn(async () => {
+    captured.lifecycle.push("build");
+    return { ok: true, durationMs: 5 };
+  }),
+}));
+
+vi.mock("@/features/agents/codex/validation/root-style-contract.server", () => ({
+  runRootStyleContract: vi.fn(async () => ({ ok: true, durationMs: 5 })),
 }));
 
 vi.mock("@/features/agents/codex/validation/preview-health.server", () => ({
@@ -103,6 +181,27 @@ vi.mock(
     })),
   }),
 );
+
+vi.mock("@/features/agents/codex/runtime/init-settings-seed.server", () => {
+  class InitSettingsSeedError extends Error {
+    constructor(
+      public readonly code: string,
+      message: string,
+      public readonly targetPath?: string,
+    ) {
+      super(message);
+      this.name = "InitSettingsSeedError";
+    }
+  }
+  return {
+    InitSettingsSeedError,
+    seedInitSettingsFiles: vi.fn(async () => undefined),
+    installInitWorkspaceDependencies: vi.fn(async () => undefined),
+    reassertRuntimeOwnedFiles: vi.fn(async () => []),
+    injectDesignPaletteIntoAppCss: vi.fn(async () => false),
+    enforceTailwindDirectivesAtTop: vi.fn(async () => false),
+  };
+});
 
 vi.mock("@/features/agents/codex/skills/template-scanner.server", () => ({
   scanActiveTemplates: vi.fn(async () => [
@@ -146,6 +245,8 @@ let tmpRoot: string;
 let skillsRoot: string;
 
 beforeEach(async () => {
+  captured.prompts.length = 0;
+  captured.lifecycle.length = 0;
   captured.selectSkillsCalls.length = 0;
   const { resetRegistryForTest, loadRegistry } = await import(
     "@/features/agents/codex/skills/registry.server"
@@ -237,9 +338,7 @@ describe("US1 skill init injection", () => {
         events.push(e as { type: string; milestone?: string }),
       );
 
-      // Run completes (status terminal — done or failed both acceptable;
-      // the goal is that selection ran and skills were injected).
-      expect(["done", "failed"]).toContain(outcome.status);
+      expect(outcome.status).toBe("done");
 
       // Assertion 2: no awaiting_clarification milestone fired.
       const milestoneNames = events
@@ -259,7 +358,30 @@ describe("US1 skill init injection", () => {
       expect(sel.picked[0].source).toBe("template_required");
       expect(sel.picked[0].score).toBe(100);
 
-      // Assertion 4: registry stored a sha256 hash for the skill.
+      // Assertion 4: the Codex SDK prompt includes the skill block using the
+      // tag that the UI authoring instructions reference.
+      const buildPrompt = captured.prompts.find((prompt) =>
+        prompt.includes("Skill body for design-taste-frontend."),
+      );
+      expect(buildPrompt).toBeDefined();
+      expect(buildPrompt).toContain(
+        `<design_taste_skill name="design-taste-frontend"`,
+      );
+      expect(buildPrompt).toContain("Skill body for design-taste-frontend.");
+      expect(buildPrompt).toContain("</design_taste_skill>");
+      expect(buildPrompt).not.toContain(
+        `<selected_skill name="design-taste-frontend"`,
+      );
+
+      // Assertion 5: init generates all batches before the single build gate.
+      expect(captured.lifecycle).toEqual([
+        "batch:DESIGN_DOC",
+        "batch:COMPONENTS",
+        "batch:POLISH",
+        "build",
+      ]);
+
+      // Assertion 6: registry stored a sha256 hash for the skill.
       const skill = getSkill("design-taste-frontend");
       expect(skill).not.toBeNull();
       expect(skill?.hash).toMatch(/^[a-f0-9]{64}$/);

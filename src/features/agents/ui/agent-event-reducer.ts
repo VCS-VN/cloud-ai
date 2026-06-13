@@ -18,12 +18,19 @@ export type DevRuntimeUIState = {
   fixAttempt: number | null;
   fixChangedFiles: string[];
   durationMs: number | null;
+  previewReloadRequestedAt: string | null;
+  previewReloadDelayMs: number | null;
+  previewReloadReason: "store_slug_synced" | null;
 };
 
 export type ChatUIState = {
   messages: Message[];
   activeRun: RunUIState | null;
   runtime: DevRuntimeUIState;
+  // Terminal outcome of the most recently cleared run. Lets the route decide
+  // whether to auto-start the preview (only on "completed"). Reset to null when
+  // a new run starts.
+  lastRunOutcome: "completed" | "failed" | "stopped" | null;
 };
 
 const INITIAL_RUNTIME: DevRuntimeUIState = {
@@ -35,10 +42,13 @@ const INITIAL_RUNTIME: DevRuntimeUIState = {
   fixAttempt: null,
   fixChangedFiles: [],
   durationMs: null,
+  previewReloadRequestedAt: null,
+  previewReloadDelayMs: null,
+  previewReloadReason: null,
 };
 
 export function createInitialChatState(messages: Message[] = []): ChatUIState {
-  return { messages, activeRun: null, runtime: { ...INITIAL_RUNTIME } };
+  return { messages, activeRun: null, runtime: { ...INITIAL_RUNTIME }, lastRunOutcome: null };
 }
 
 export const CLIENT_SKELETON_LABELS: Record<SkeletonPhase, string> = {
@@ -102,6 +112,7 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
     case "run.started":
       return {
         ...state,
+        lastRunOutcome: null,
         activeRun: {
           runId: event.runId,
           status: "streaming",
@@ -112,6 +123,7 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
           skeleton: { phase: "starting", label: CLIENT_SKELETON_LABELS.starting },
           tasks: null,
           taskStatuses: {},
+          taskEstimate: null,
         },
       };
 
@@ -209,6 +221,7 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
           skeleton: { phase: "starting", label: CLIENT_SKELETON_LABELS.starting },
           tasks: state.activeRun?.tasks ?? null,
           taskStatuses: state.activeRun?.taskStatuses ?? {},
+          taskEstimate: state.activeRun?.taskEstimate ?? null,
         },
         messages: messages.map((m) =>
           m.id === messageId
@@ -225,6 +238,7 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
         activeRun: {
           ...state.activeRun,
           tasks: event.tasks,
+          taskEstimate: event.estimate,
           taskStatuses: Object.fromEntries(
             event.tasks.map((t) => [t.id, "pending" as const]),
           ),
@@ -257,8 +271,9 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
     }
 
     case "run.completed":
+      return { ...state, activeRun: null, lastRunOutcome: "completed" };
     case "run.stopped":
-      return { ...state, activeRun: null };
+      return { ...state, activeRun: null, lastRunOutcome: "stopped" };
 
     case "run.failed":
       return finalizeFailure(state, event.error);
@@ -278,7 +293,7 @@ function finalizeFailure(state: ChatUIState, error: StreamError): ChatUIState {
       ? { ...m, processingStatus: "failed" as const }
       : m,
   );
-  return { ...state, messages, activeRun: null };
+  return { ...state, messages, activeRun: null, lastRunOutcome: "failed" };
 }
 
 /** Reducer for the project-level runtime channel (dev preview lifecycle). */
@@ -307,6 +322,15 @@ export function runtimeStateReducer(
       return { ...runtime, fixChangedFiles: dev.changedFiles };
     case "dev_fix_failed":
       return { ...runtime, status: "error", error: dev.reason };
+    case "dev_stopped":
+      return { ...runtime, status: "stopped", previewUrl: null, previewPort: null, error: null, errorTier: null, previewReloadRequestedAt: null, previewReloadDelayMs: null, previewReloadReason: null };
+    case "preview_reload_requested":
+      return {
+        ...runtime,
+        previewReloadRequestedAt: dev.at,
+        previewReloadDelayMs: dev.delayMs,
+        previewReloadReason: dev.reason,
+      };
     default:
       return runtime;
   }

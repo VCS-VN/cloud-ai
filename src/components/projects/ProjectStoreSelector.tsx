@@ -24,6 +24,7 @@ export function ProjectStoreSelector({
   loading = false,
   error,
   onSearchChange,
+  onOpenChange,
   onSelectStore,
 }: {
   stores: StoreOption[];
@@ -32,29 +33,34 @@ export function ProjectStoreSelector({
   loading?: boolean;
   error?: string | null;
   onSearchChange: (value: string) => void;
+  onOpenChange?: (open: boolean) => void;
   onSelectStore: (storeId: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const selectedStore = stores.find((store) => store.slug === selectedStoreSlug);
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  };
 
   return (
-    <div className="space-y-sm">
+    <div className="rounded-xl border border-hairline bg-surface p-4 shadow-sm">
       <label
-        className="block text-[14px] font-[580] text-[var(--app-text)]"
+        className="mb-2 block text-eyebrow font-mono uppercase tracking-wide text-subtle"
         htmlFor="project-store-combobox"
       >
         Store
       </label>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
           <Button
             id="project-store-combobox"
             variant="outline"
             role="combobox"
             aria-expanded={open}
-            className="w-full justify-between font-normal text-[15px]"
+            className="w-full justify-between"
           >
-            <span className={cn(!selectedStore && "text-[var(--app-muted)]")}>
+            <span className={cn("min-w-0 truncate", !selectedStore && "text-muted")}>
               {selectedStore
                 ? selectedStore.displayName
                 : selectedStoreSlug
@@ -65,7 +71,7 @@ export function ProjectStoreSelector({
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          className="w-[var(--radix-popover-trigger-width)] p-0"
+          className="z-[100] w-[var(--radix-popover-trigger-width)] p-0"
           align="start"
         >
           <Command shouldFilter={false}>
@@ -76,7 +82,7 @@ export function ProjectStoreSelector({
             />
             <CommandList>
               {loading ? (
-                <div className="py-md text-center text-[14px] text-[var(--app-muted)]">
+                <div className="py-6 text-center text-ui-sm text-muted">
                   Loading stores...
                 </div>
               ) : (
@@ -92,7 +98,7 @@ export function ProjectStoreSelector({
                             value={store.slug}
                             onSelect={() => {
                               onSelectStore(isSelected ? null : store.slug);
-                              setOpen(false);
+                              handleOpenChange(false);
                             }}
                           >
                             <Check
@@ -114,7 +120,7 @@ export function ProjectStoreSelector({
         </PopoverContent>
       </Popover>
       {error ? (
-        <p className="m-0 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] px-md py-xs text-[13px] text-[var(--app-danger-text)]">
+        <p className="m-0 mt-3 rounded-md border border-danger-bg bg-danger-bg px-3 py-2 text-ui-sm text-danger-fg">
           {error}
         </p>
       ) : null}

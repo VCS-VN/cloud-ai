@@ -10,6 +10,7 @@ import {
   Pencil,
   Settings,
   Share2,
+  Square,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import type { AuthUserSummary } from "@/auth/types";
@@ -22,8 +23,11 @@ type ProjectDetailTopBarProps = {
   processing: boolean;
   detailMode: "preview" | "code";
   chatVisible: boolean;
+  previewRunning: boolean;
+  previewStopping: boolean;
   user?: AuthUserSummary;
   onModeChange: (mode: "preview" | "code") => void;
+  onStopPreview: () => void;
   onOpenSettings: () => void;
   onToggleChat: () => void;
 };
@@ -40,8 +44,11 @@ export function ProjectDetailTopBar({
   processing,
   detailMode,
   chatVisible,
+  previewRunning,
+  previewStopping,
   user,
   onModeChange,
+  onStopPreview,
   onOpenSettings,
   onToggleChat,
 }: ProjectDetailTopBarProps) {
@@ -134,6 +141,22 @@ export function ProjectDetailTopBar({
         >
           <Settings aria-hidden="true" size={14} />
           Settings
+        </Button>
+        <Button
+          variant="unstyled"
+          type="button"
+          onClick={onStopPreview}
+          disabled={!previewRunning || previewStopping}
+          className="project-topbar-iconbtn text-danger-fg disabled:text-muted"
+          aria-label="Stop preview"
+          title="Stop preview"
+        >
+          {previewStopping ? (
+            <Loader2 aria-hidden="true" size={14} className="animate-spin" />
+          ) : (
+            <Square aria-hidden="true" size={13} />
+          )}
+          Stop
         </Button>
         <Button
           variant="unstyled"

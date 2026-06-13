@@ -54,6 +54,12 @@ export function parseViteError(line: string): { hasError: boolean; error?: strin
   return { hasError: false };
 }
 
+export function buildDevServerArgs(requestedPort?: number | null): string[] {
+  return requestedPort
+    ? ["dev", "--port", String(requestedPort), "--host", "127.0.0.1"]
+    : ["dev", "--host", "127.0.0.1"];
+}
+
 function runPnpm(args: string[], workspaceRoot: string, signal?: AbortSignal): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     let child: ChildProcess | null = null;
@@ -137,7 +143,7 @@ ${install.stderr}`,
   ): Promise<DevProcessHandle> {
     await this.stop(projectId);
 
-    const args = requestedPort ? ["dev", "--", "--port", String(requestedPort)] : ["dev"];
+    const args = buildDevServerArgs(requestedPort);
     const child = spawn("pnpm", args, {
       cwd: workspaceRoot,
       stdio: ["ignore", "pipe", "pipe"],

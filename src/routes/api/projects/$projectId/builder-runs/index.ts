@@ -49,7 +49,7 @@ export const Route = createFileRoute(
 
         const reasoningEffort = parseReasoningEffort(body.reasoningEffort);
         const planMode = body.planMode === true;
-        const locale = typeof body.locale === "string" ? body.locale : "vi-VN";
+        const locale = typeof body.locale === "string" ? body.locale : "en";
 
         const services = await getProjectServices();
         const project = await services.projectService["projectRepository"]

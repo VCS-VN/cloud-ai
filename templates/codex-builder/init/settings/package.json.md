@@ -7,9 +7,9 @@ target: package.json
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite dev --host 0.0.0.0",
-    "build": "vite build",
-    "typecheck": "tsc --noEmit"
+    "dev": "tsr generate && vite dev",
+    "build": "tsr generate && vite build && tsc --noEmit",
+    "typecheck": "tsr generate && tsc --noEmit"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -28,6 +28,7 @@ target: package.json
     "clsx": "^2.1.1",
     "dompurify": "^3.4.2",
     "jotai": "^2.15.1",
+    "lodash": "^4.17.21",
     "lucide-react": "^1.14.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
@@ -35,7 +36,9 @@ target: package.json
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@tanstack/router-cli": "1.77.7",
     "@tanstack/router-plugin": "^1.167.22",
+    "@types/lodash": "^4.17.24",
     "@types/node": "25.6.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",

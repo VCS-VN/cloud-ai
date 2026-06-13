@@ -5,6 +5,7 @@ const codexSchema = z.object({
   CODEX_HOME: z.string().min(1).optional(),
   CODEX_API_KEY: z.string().min(1).optional(),
   CODEX_MODEL: z.string().min(1).optional(),
+  CODEX_REPAIR_MODEL: z.string().min(1).optional(),
   CODEX_BASE_URL: z.string().url().optional(),
   SKILLS_ROOT: z.string().min(1).optional(),
   MAX_SKILL_CHARS: z.coerce.number().int().positive().optional(),
@@ -21,6 +22,7 @@ export type CodexEnvAvailable = {
   codexHome: string;
   apiKey: string;
   model: string;
+  repairModel?: string;
   baseUrl: string | undefined;
   skillsRoot: string;
   maxSkillChars: number;
@@ -69,6 +71,7 @@ export function loadCodexEnv(env: NodeJS.ProcessEnv = process.env): CodexEnv {
     codexHome: v.CODEX_HOME ?? defaultCodexHome(),
     apiKey: v.CODEX_API_KEY!,
     model: v.CODEX_MODEL!,
+    repairModel: v.CODEX_REPAIR_MODEL,
     baseUrl: v.CODEX_BASE_URL,
     skillsRoot: v.SKILLS_ROOT ?? defaultSkillsRoot(),
     maxSkillChars: v.MAX_SKILL_CHARS ?? DEFAULT_MAX_SKILL_CHARS,
@@ -83,6 +86,7 @@ export function redactCodexEnv(env: CodexEnv): Record<string, unknown> {
     available: true,
     codexHome: env.codexHome,
     model: env.model,
+    repairModel: env.repairModel,
     baseUrl: env.baseUrl,
     skillsRoot: env.skillsRoot,
     maxSkillChars: env.maxSkillChars,

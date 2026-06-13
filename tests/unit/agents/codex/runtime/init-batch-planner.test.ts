@@ -16,7 +16,11 @@ const FULL_MANIFEST: ManifestSource = {
     { marker: "COMPONENT", file: "data/component.md", order: 60 },
     { marker: "HOME_PAGE", file: "pages/home.md", order: 70 },
     { marker: "PRODUCTS_PAGE", file: "pages/products.md", order: 80 },
-    { marker: "PRODUCT_DETAIL_PAGE", file: "pages/product-detail.md", order: 90 },
+    {
+      marker: "PRODUCT_DETAIL_PAGE",
+      file: "pages/product-detail.md",
+      order: 90,
+    },
     { marker: "CART_PAGE", file: "pages/cart.md", order: 100 },
     { marker: "CHECKOUT_PAGE", file: "pages/checkout.md", order: 110 },
     { marker: "ORDERS_PAGE", file: "pages/orders.md", order: 120 },
@@ -25,35 +29,86 @@ const FULL_MANIFEST: ManifestSource = {
 };
 
 describe("init-batch-planner", () => {
-  it("orders foundation_data first, then pages, then polish", async () => {
+  it("emits only foundation_data phases (DESIGN_DOC, COMPONENTS); no page/polish batches", async () => {
     const plan = await planInitBatches({ manifest: FULL_MANIFEST });
     const kinds = plan.batches.map((b) => b.kind);
     expect(kinds[0]).toBe("foundation_data");
-    expect(kinds[kinds.length - 1]).toBe("polish");
-    const pageRange = kinds.slice(1, -1);
-    for (const kind of pageRange) expect(kind).toBe("page");
+    expect(kinds).not.toContain("page");
+    expect(kinds).not.toContain("polish");
+    for (const kind of kinds) expect(kind).toBe("foundation_data");
   });
 
-  it("includes all 7 page batches in manifest order", async () => {
+  it("emits only the agent-authored phases (DESIGN_DOC, COMPONENTS); plumbing is seeded", async () => {
     const plan = await planInitBatches({ manifest: FULL_MANIFEST });
-    const pageMarkers = plan.batches
-      .filter((b) => b.kind === "page")
+    const foundationMarkers = plan.batches
+      .filter((b) => b.kind === "foundation_data")
       .map((b) => b.marker);
-    expect(pageMarkers).toEqual([
-      "HOME_PAGE",
-      "PRODUCTS_PAGE",
-      "PRODUCT_DETAIL_PAGE",
-      "CART_PAGE",
-      "CHECKOUT_PAGE",
-      "ORDERS_PAGE",
-      "ORDER_DETAIL_PAGE",
-    ]);
+    expect(foundationMarkers).toEqual(["DESIGN_DOC", "COMPONENTS"]);
+  });
+
+  it("places DESIGN_DOC before COMPONENTS (components honor the design doc)", async () => {
+    const plan = await planInitBatches({ manifest: FULL_MANIFEST });
+    const markers = plan.batches.map((b) => b.marker);
+    expect(markers.indexOf("DESIGN_DOC")).toBeLessThan(
+      markers.indexOf("COMPONENTS"),
+    );
+  });
+
+  it("does NOT put seeded plumbing (data entities, hooks, providers) in agent batches", async () => {
+    const plan = await planInitBatches({ manifest: FULL_MANIFEST });
+    const files = plan.batches.flatMap((b) => b.files);
+    // These are now runtime-seeded — the agent must not be asked to write them.
+    expect(files).not.toContain("src/data/products.ts");
+    expect(files).not.toContain("src/lib/format-money.ts");
+    expect(files).not.toContain("src/app/store-provider.tsx");
+    for (const hook of [
+      "use-store-detail",
+      "use-products-list",
+      "use-product-detail",
+      "use-categories-list",
+      "use-product-suggestions",
+    ]) {
+      expect(files).not.toContain(`src/services/store/${hook}.ts`);
+    }
+    // Components remain agent work, at the nested layout/ + store/ paths.
+    expect(files).toContain("src/components/layout/site-header.tsx");
+    expect(files).not.toContain("src/components/SiteHeader.tsx");
+  });
+
+  it("emits ONLY the home route; other commerce routes are seeded runtime-owned", async () => {
+    const plan = await planInitBatches({ manifest: FULL_MANIFEST });
+    const pageBatches = plan.batches.filter((b) => b.kind === "page");
+    expect(pageBatches).toHaveLength(0);
+    const files = plan.batches.flatMap((b) => b.files);
+    // Home is the one route the agent authors.
+    expect(files).toContain("src/routes/index.tsx");
+    // The remaining commerce routes are pre-seeded and must NOT be agent batches.
+    for (const route of [
+      "src/routes/products/index.tsx",
+      "src/routes/products/$productId.tsx",
+      "src/routes/cart.tsx",
+      "src/routes/checkout.tsx",
+      "src/routes/orders.tsx",
+      "src/routes/orders/$orderId.tsx",
+    ]) {
+      expect(files).not.toContain(route);
+    }
   });
 
   it("rejects a plan with a batch larger than the cap", () => {
-    const oversized = Array.from({ length: INIT_BATCH_FILE_CAP + 1 }, (_, i) => `src/components/Item${i}.tsx`);
+    const oversized = Array.from(
+      { length: INIT_BATCH_FILE_CAP + 1 },
+      (_, i) => `src/components/Item${i}.tsx`,
+    );
     const result = validatePlan({
-      batches: [{ kind: "foundation_data", marker: "FOUNDATION_DATA", files: oversized, specPaths: [] }],
+      batches: [
+        {
+          kind: "foundation_data",
+          marker: "FOUNDATION_DATA",
+          files: oversized,
+          specPaths: [],
+        },
+      ],
       totalFiles: oversized.length,
     });
     expect(result.ok).toBe(false);
@@ -85,22 +140,22 @@ describe("init-batch-planner", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("carries each page's manifest spec path onto its batch", async () => {
+  it("carries the matching spec path onto each foundation phase batch", async () => {
     const plan = await planInitBatches({ manifest: FULL_MANIFEST });
-    const home = plan.batches.find((b) => b.marker === "HOME_PAGE");
-    expect(home?.specPaths).toEqual(["pages/home.md"]);
-  });
-
-  it("aggregates all foundation spec paths onto the foundation batch", async () => {
-    const plan = await planInitBatches({ manifest: FULL_MANIFEST });
-    const foundation = plan.batches.find((b) => b.kind === "foundation_data");
-    expect(foundation?.specPaths).toEqual([
-      "data/packages.md",
-      "data/provider.md",
-      "data/catalog-data.md",
-      "data/data.md",
-      "data/component.md",
-    ]);
+    const specByMarker = Object.fromEntries(
+      plan.batches
+        .filter((b) => b.kind === "foundation_data")
+        .map((b) => [b.marker, b.specPaths]),
+    );
+    // Only DESIGN_DOC + COMPONENTS remain for the agent; all fixed plumbing
+    // (data entities, lib helpers, hooks, providers) is seeded before the loop.
+    expect(specByMarker.COMPONENTS).toEqual(["data/component.md", "pages/home.md"]);
+    // DESIGN_DOC has no separate spec body (rules inline in system.md).
+    expect(specByMarker.DESIGN_DOC).toEqual([]);
+    // The seeded phases must NOT appear as agent batches anymore.
+    expect(specByMarker.DATA_ENTITIES).toBeUndefined();
+    expect(specByMarker.LIB_PROVIDERS).toBeUndefined();
+    expect(specByMarker.HOOKS).toBeUndefined();
   });
 
   it("stripBlockedFromBatches removes blocked files but keeps allowed ones", () => {

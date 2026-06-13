@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { translateBuilderEventToRunStreamEvent } from "@/server/services/builder-run-translator.server";
+import { estimatePlanTasks, translateBuilderEventToRunStreamEvent } from "@/server/services/builder-run-translator.server";
 
 const CTX = { runId: "r1", projectId: "p1", locale: "en" as const };
 
@@ -13,14 +13,16 @@ describe("translator: plan event pass-through", () => {
       { type: "plan.created", runId: "r1", tasks, at: 1000 },
       CTX,
     );
+    const estimate = estimatePlanTasks(tasks);
     expect(out.events).toHaveLength(1);
     expect(out.events[0]).toMatchObject({
       type: "plan.created",
       runId: "r1",
       tasks,
+      estimate,
       at: 1000,
     });
-    expect(out.timeline).toEqual({ kind: "task_plan", tasks });
+    expect(out.timeline).toEqual({ kind: "task_plan", tasks, estimate });
     expect(out.terminal).toBeNull();
     expect(out.persist).toBeNull();
   });

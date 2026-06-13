@@ -164,6 +164,8 @@ export type PwaConfig = {
   offlineFallbackEnabled: boolean
 }
 
+export type PreviewRunningStatus = 'running' | 'starting' | 'error' | 'stopped'
+
 export type Project = {
   id: string
   userId?: string
@@ -178,6 +180,12 @@ export type Project = {
   createdAt: string
   selectedStoreSlug?: string | null
   pwa: PwaConfig
+  /**
+   * Preview status derived from the live PM2 process (source of truth).
+   * Populated by ProjectService.listProjects when the runtime orchestrator
+   * is available. Absent on records that were never previewed.
+   */
+  previewStatus?: PreviewRunningStatus
 }
 
 export type Message = {
@@ -245,12 +253,18 @@ export type PlanTask = {
   phase: PlanTaskPhase
 }
 
+export type TaskEstimate = {
+  totalSeconds: number
+  perTaskSeconds: Record<string, number>
+}
+
 export type RunUIState = {
   runId: string
   status: AgentRunStatus
   skeleton: SkeletonState | null
   tasks: PlanTask[] | null
   taskStatuses: Record<string, PlanTaskStatus>
+  taskEstimate: TaskEstimate | null
   error?: StreamError
 }
 
@@ -328,6 +342,7 @@ export type PlanCreatedEvent = {
   type: 'plan.created'
   runId: string
   tasks: PlanTask[]
+  estimate: TaskEstimate
   at: number
 }
 

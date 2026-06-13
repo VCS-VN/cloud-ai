@@ -14,6 +14,7 @@ const ALL_CODES: BuilderRunFailureCode[] = [
   "repair_exhausted",
   "required_skill_unavailable",
   "skill_unavailable",
+  "provider_gateway_soft_error",
   "interrupted_by_restart",
 ];
 

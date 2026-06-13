@@ -12,7 +12,17 @@ const TaskSchema = z.object({
   title: z
     .string()
     .min(1)
-    .max(80)
+    // Title is a display-only label, not code. The model (esp. cloud-ai) often
+    // overshoots the ≤80 char guidance; truncating is harmless and keeps the
+    // whole plan instead of rejecting it over one long title. Trim at a word
+    // boundary near 80 when possible so the label reads cleanly.
+    .transform((s) => {
+      const t = s.trim();
+      if (t.length <= 80) return t;
+      const cut = t.slice(0, 80);
+      const lastSpace = cut.lastIndexOf(" ");
+      return (lastSpace >= 60 ? cut.slice(0, lastSpace) : cut).trimEnd();
+    })
     .refine(isPrivacySafe, { message: "title must be privacy-safe" }),
   phase: z.enum(["prep", "build", "verify"]),
 });
@@ -60,13 +70,22 @@ const PLANNER_PROMPT = (language: string) => `You are a task planner. Output ONL
 Return:
 {
   "tasks": [
-    { "id": "<unique-slug>", "title": "<≤80 chars in language: ${language}>", "phase": "prep" | "build" | "verify" }
+    { "id": "<unique-slug>", "title": "<3-7 word goal in language: ${language}>", "phase": "prep" | "build" | "verify" }
+  ]
+}
+
+Good titles (short, 3-7 words):
+{
+  "tasks": [
+    { "id": "setup-structure", "title": "Set up project structure", "phase": "prep" },
+    { "id": "build-storefront", "title": "Build storefront pages", "phase": "build" },
+    { "id": "verify-preview", "title": "Verify preview runs", "phase": "verify" }
   ]
 }
 
 Rules:
 - 2 to 8 tasks total. Pick the smallest number that captures the work.
-- Title is a short, human-readable goal — NO file paths, NO framework names, NO code identifiers, NO file extensions.
+- Title is a SHORT human-readable goal of 3 to 7 words (hard cap 80 characters) — like the examples above. Do NOT write a sentence, do NOT append "with …" clauses describing details, theme, or stack. Keep it terse: verb + object. NO file paths, NO framework names, NO code identifiers, NO file extensions.
 - Title must be in language code "${language}". If "${language}" is unknown, use English.
 - "phase" buckets the task: "prep" (research/setup), "build" (main change), "verify" (validation).
 - When possible, distribute tasks across phases. For trivial requests, you may skew toward "build" only.

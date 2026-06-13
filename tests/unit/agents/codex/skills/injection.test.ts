@@ -74,6 +74,25 @@ describe("wrapSelectedSkill", () => {
 
     warnSpy.mockRestore();
   });
+
+  it("wraps design-taste-frontend with the tag referenced by UI instructions", () => {
+    const skill = fakeSkill("design-taste-frontend", { version: "1.0.0" });
+
+    const out = wrapSelectedSkill({
+      meta: skill.meta,
+      body: "TASTE BODY",
+      hash: "taste-hash",
+      source: "template_required",
+      score: 100,
+    });
+
+    expect(out.startsWith(
+      `<design_taste_skill name="design-taste-frontend" version="1.0.0" hash="taste-hash" source="template_required" score="100">`,
+    )).toBe(true);
+    expect(out).toContain("TASTE BODY");
+    expect(out.endsWith("</design_taste_skill>")).toBe(true);
+    expect(out).not.toContain("<selected_skill");
+  });
 });
 
 describe("buildSelectedSkillBlocks", () => {

@@ -358,6 +358,22 @@
     @apply -rotate-90;
   }
 
+  /* Expand/collapse uses the grid-template-rows 1fr→0fr technique so the body
+     height animates smoothly without measuring content (no framer-motion in
+     this project — pure CSS, matching the duration-base/ease-standard tokens). */
+  .plan-checklist-collapse {
+    @apply grid transition-[grid-template-rows] duration-base ease-standard;
+    grid-template-rows: 1fr;
+  }
+
+  .plan-checklist-collapse-closed {
+    grid-template-rows: 0fr;
+  }
+
+  .plan-checklist-collapse-inner {
+    @apply min-h-0 overflow-hidden;
+  }
+
   .plan-checklist-body {
     @apply max-h-48 overflow-y-auto border-t border-hairline bg-chalk/35;
   }
@@ -900,14 +916,12 @@
   /* ─── Skeleton shimmer (ephemeral agent-working text) ──────── */
   .skeleton-shimmer {
     color: rgb(var(--color-muted) / 0.55);
-    background: linear-gradient(
-      90deg,
-      rgb(var(--color-muted) / 0.45) 0%,
-      rgb(var(--color-muted) / 0.45) 35%,
-      rgb(var(--color-ink) / 0.85) 50%,
-      rgb(var(--color-muted) / 0.45) 65%,
-      rgb(var(--color-muted) / 0.45) 100%
-    );
+    background: linear-gradient(90deg,
+        rgb(var(--color-muted) / 0.45) 0%,
+        rgb(var(--color-muted) / 0.45) 35%,
+        rgb(var(--color-ink) / 0.85) 50%,
+        rgb(var(--color-muted) / 0.45) 65%,
+        rgb(var(--color-muted) / 0.45) 100%);
     background-size: 220% 100%;
     background-clip: text;
     -webkit-background-clip: text;
@@ -919,6 +933,7 @@
     0% {
       background-position: 120% 0;
     }
+
     100% {
       background-position: -20% 0;
     }

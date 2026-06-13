@@ -9,7 +9,7 @@
  * event in the default case, the chat panel stays empty, and the UI can only
  * see the project's processing flag from REST polling.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   publishChatEvent,
   resetChatChannelsForTest,
@@ -22,6 +22,7 @@ import {
 import type { BuilderRunEvent } from "@/features/agents/ui/builder-events";
 import type { RunStreamEvent } from "@/shared/project-types";
 import { buildArchivedReplay } from "@/routes/api/projects/$projectId/builder-runs/$runId/stream";
+import { reconcileArchivedReplayProjectState } from "@/routes/api/projects/$projectId/builder-runs/$runId/stream";
 
 const RUN_ID = "run-2A-test";
 const PROJECT_ID = "p-1";
@@ -203,5 +204,49 @@ describe("buildArchivedReplay — deterministic single-summary replay", () => {
     const events = await readSseEvents(stream);
     expect(events.filter((e) => e.type === "message.created")).toHaveLength(0);
     expect(events[events.length - 1].type).toBe("run.failed");
+  });
+});
+
+describe("reconcileArchivedReplayProjectState", () => {
+  it("clears project processing for already-terminal archived runs", async () => {
+    const updateProjectProcessingState = vi.fn().mockResolvedValue({
+      id: PROJECT_ID,
+      processingStatus: "idle",
+    });
+
+    await reconcileArchivedReplayProjectState({
+      projectRepository: { updateProjectProcessingState },
+      projectId: PROJECT_ID,
+      runId: RUN_ID,
+      userId: "user-1",
+      runStatus: "completed",
+    });
+
+    expect(updateProjectProcessingState).toHaveBeenCalledWith(
+      PROJECT_ID,
+      "idle",
+      "user-1",
+    );
+  });
+
+  it("clears project processing for stranded live statuses replayed as terminal", async () => {
+    const updateProjectProcessingState = vi.fn().mockResolvedValue({
+      id: PROJECT_ID,
+      processingStatus: "idle",
+    });
+
+    await reconcileArchivedReplayProjectState({
+      projectRepository: { updateProjectProcessingState },
+      projectId: PROJECT_ID,
+      runId: RUN_ID,
+      userId: "user-1",
+      runStatus: "streaming",
+    });
+
+    expect(updateProjectProcessingState).toHaveBeenCalledWith(
+      PROJECT_ID,
+      "idle",
+      "user-1",
+    );
   });
 });

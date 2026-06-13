@@ -17,12 +17,13 @@ export function ProjectSettingsInfoTab({
 }) {
   const loadStores = useServerFn(getStores);
   const [search, setSearch] = useState("");
+  const [selectorOpen, setSelectorOpen] = useState(false);
   const [page] = useState(1);
   const debouncedSearch = useDebouncedValue(search, 800);
 
   const storesQuery = useQuery<StoreListResult>({
     queryKey: ["project-settings-stores", page, debouncedSearch],
-    enabled: active,
+    enabled: active && selectorOpen,
     queryFn: () =>
       loadStores({
         data: {
@@ -41,6 +42,7 @@ export function ProjectSettingsInfoTab({
       loading={storesQuery.isLoading || storesQuery.isFetching}
       error={storesQuery.error ? "Unable to load stores. Please try again." : null}
       onSearchChange={setSearch}
+      onOpenChange={setSelectorOpen}
       onSelectStore={(storeId) => onSelectedStoreChange?.(storeId)}
     />
   );

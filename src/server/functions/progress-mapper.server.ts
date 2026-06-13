@@ -189,6 +189,11 @@ const SUMMARY_FALLBACK: Record<ProgressLocale, string> = {
   en: "Done with your request.",
 };
 
+export const THINKING_LABEL: Record<ProgressLocale, string> = {
+  vi: "Đang suy nghĩ",
+  en: "Thinking",
+};
+
 const SUMMARY_MAX_LENGTH = 400;
 
 /**

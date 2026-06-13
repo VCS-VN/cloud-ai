@@ -7,6 +7,7 @@ import {
 } from "@/server/services/chat-event-channel.server";
 import { getProjectServices } from "@/server/services/project-services";
 import type { RunStreamEvent } from "@/shared/project-types";
+import { estimatePlanTasks } from "@/server/services/builder-run-translator.server";
 
 // Keep the SSE connection warm. The client arms a 30s idle timeout that resets
 // only on real events (use-chat-stream.ts); a quiet codex phase (large batch
@@ -35,7 +36,10 @@ export const Route = createFileRoute(
     handlers: {
       GET: async ({ params }) => {
         const user = await requireServerUser();
-        const { runId } = params as unknown as { runId: string };
+        const { projectId, runId } = params as unknown as {
+          projectId: string;
+          runId: string;
+        };
 
         const handle = getBuilderRunHandle(runId);
         if (handle && handle.userId && handle.userId !== user.id) {
@@ -71,6 +75,13 @@ export const Route = createFileRoute(
             { status: 404, headers: { "Content-Type": "application/json" } },
           );
         }
+        await reconcileArchivedReplayProjectState({
+          projectRepository: services.projectRepository,
+          projectId,
+          runId,
+          userId: user.id,
+          runStatus: run.status,
+        });
         return new Response(buildArchivedReplay(runId, run), {
           headers: {
             "Content-Type": "text/event-stream",
@@ -82,6 +93,60 @@ export const Route = createFileRoute(
     },
   },
 });
+
+export async function reconcileArchivedReplayProjectState(input: {
+  projectRepository: {
+    updateProjectProcessingState: (
+      projectId: string,
+      processingStatus: "idle",
+      userId?: string,
+    ) => Promise<unknown>;
+  };
+  projectId: string;
+  runId: string;
+  userId?: string;
+  runStatus: string;
+}): Promise<void> {
+  if (
+    ![
+      "completed",
+      "failed",
+      "stopped",
+      "interrupted",
+      "streaming",
+      "awaiting_input",
+    ].includes(input.runStatus)
+  ) {
+    return;
+  }
+  try {
+    const project = await input.projectRepository.updateProjectProcessingState(
+      input.projectId,
+      "idle",
+      input.userId,
+    );
+    if (!project) {
+      console.warn(
+        JSON.stringify({
+          event: "archived_run_project_idle_update_missed",
+          projectId: input.projectId,
+          runId: input.runId,
+          runStatus: input.runStatus,
+        }),
+      );
+    }
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: "archived_run_project_idle_update_failed",
+        projectId: input.projectId,
+        runId: input.runId,
+        runStatus: input.runStatus,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
+}
 
 function openChannelStream(runId: string): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -160,6 +225,7 @@ export type RunForReplay = {
         at: number;
         kind: "task_plan";
         tasks: Array<{ id: string; title: string; phase: "prep" | "build" | "verify" }>;
+        estimate?: { totalSeconds: number; perTaskSeconds: Record<string, number> };
       }
     | {
         at: number;
@@ -191,6 +257,7 @@ export function buildArchivedReplay(runId: string, run: RunForReplay): ReadableS
             type: "plan.created",
             runId,
             tasks: item.tasks,
+            estimate: item.estimate ?? estimatePlanTasks(item.tasks),
             at: item.at,
           });
         } else if (item.kind === "task_transition") {

@@ -13,9 +13,11 @@ export type CodexReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhig
 export type CodexThreadInput = {
   env: CodexEnvAvailable;
   draftWorkspacePath: string;
+  model?: string;
   skillToolCallbacks?: ProjectReadSkillCallbacks;
   sandboxMode?: CodexSandboxMode;
   modelReasoningEffort?: CodexReasoningEffort;
+  maxRetryAttempts?: number;
 };
 
 export type CodexTurnInput = {
@@ -65,6 +67,27 @@ function computeBackoffDelay(attempt: number): number {
   // Bounded by MAX_RETRY_DELAY_MS so we never wait longer than 60s between attempts.
   const exp = Math.min(BASE_RETRY_DELAY_MS * Math.pow(2, attempt), MAX_RETRY_DELAY_MS);
   return Math.floor(Math.random() * exp);
+}
+
+// CODEX_LOG_REQUEST_BODY=true dumps the prompt we hand to the SDK on every turn
+// (the JS-level "request body" that goes INTO codex). Off by default — opt in via
+// .env only when debugging. NOTE: this is the prompt, not the wire payload codex
+// sends to the provider; for the raw Responses-API HTTP body set RUST_LOG (e.g.
+// RUST_LOG=codex_core=trace), which the SDK forwards to the codex binary.
+function shouldLogRequestBody(): boolean {
+  return process.env.CODEX_LOG_REQUEST_BODY === "true";
+}
+
+function logRequestBody(path: "runTurn" | "runTurnStreamed", prompt: string): void {
+  if (!shouldLogRequestBody()) return;
+  console.log(
+    JSON.stringify({
+      event: "codex_request_body",
+      path,
+      promptLength: prompt.length,
+      prompt,
+    }),
+  );
 }
 
 function isAbortError(error: unknown): boolean {
@@ -155,6 +178,24 @@ function isReasoningReplayError(text: string | null | undefined): boolean {
   return REASONING_REPLAY_RE.test(text);
 }
 
+// When the codex CLI's bwrap sandbox cannot create user/network namespaces
+// (Ubuntu 24+ default, Docker default seccomp, locked-down VPS), apply_patch
+// becomes a silent no-op: the CLI never exposes a working file-write tool, so
+// the model gives up and narrates the code as plain text instead — e.g.
+// "Since the apply_patch function isn't available in this environment, I'll
+// provide you with the code...". This is DETERMINISTIC for that host: retrying
+// the same turn just produces the same fallback narration and never writes a
+// file. Detect the phrasing (combined with zero file writes) and fail fast
+// with an actionable error pointing at CODEX_DISABLE_SANDBOX=true, instead of
+// burning retries on a turn that physically cannot ship a file.
+const APPLY_PATCH_UNAVAILABLE_RE =
+  /apply[_ ]patch\b[\s\S]{0,60}?\b(?:isn'?t|is not|not|un)(?:\s+|-)?(?:available|work|working|present|enabled|accessible|supported|functioning)|(?:cannot|can'?t|unable to)\s+(?:use|call|access|run|invoke)\s+apply[_ ]patch/i;
+
+function isApplyPatchUnavailable(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return APPLY_PATCH_UNAVAILABLE_RE.test(text);
+}
+
 /**
  * Thrown when the provider rejects a replayed reasoning item with
  * `content is required (input[N].content)`. See REASONING_REPLAY_RE. This is a
@@ -174,18 +215,46 @@ export class ReasoningReplayError extends Error {
   }
 }
 
+/**
+ * Thrown when the model reports that apply_patch is unavailable and the turn
+ * wrote zero files. The root cause is the codex CLI's bwrap sandbox failing to
+ * create user/network namespaces on the host (Ubuntu 24+, Docker, locked-down
+ * VPS), which turns apply_patch into a no-op so no file-write tool ever works.
+ * This is a host/sandbox config gap, not a transient fault — retrying replays
+ * the same broken environment. Fail fast with an actionable message pointing at
+ * CODEX_DISABLE_SANDBOX=true.
+ */
+export class ApplyPatchUnavailableError extends Error {
+  constructor(public readonly preview: string) {
+    super(
+      "apply_patch_unavailable: the codex CLI could not expose a working " +
+        "apply_patch tool, so the model narrated code as text instead of " +
+        "writing files. This host's bwrap sandbox likely cannot create " +
+        "user/network namespaces (Ubuntu 24+, Docker, locked-down VPS). Set " +
+        "CODEX_DISABLE_SANDBOX=true in the environment and restart.",
+    );
+    this.name = "ApplyPatchUnavailableError";
+  }
+}
+
 export class BoundedCodexThread {
   private readonly thread: Thread;
   private readonly skillToolCallbacks?: ProjectReadSkillCallbacks;
+  private readonly maxRetryAttempts: number;
 
-  constructor(thread: Thread, skillToolCallbacks?: ProjectReadSkillCallbacks) {
+  constructor(
+    thread: Thread,
+    skillToolCallbacks?: ProjectReadSkillCallbacks,
+    maxRetryAttempts: number = MAX_RETRY_ATTEMPTS,
+  ) {
     this.thread = thread;
     this.skillToolCallbacks = skillToolCallbacks;
+    this.maxRetryAttempts = Math.max(1, Math.floor(maxRetryAttempts));
   }
 
   async runTurn(input: CodexTurnInput): Promise<CodexTurnSummary> {
     let lastError: unknown = null;
-    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+    for (let attempt = 0; attempt < this.maxRetryAttempts; attempt++) {
       if (input.signal?.aborted) {
         throw new DOMException("Aborted", "AbortError");
       }
@@ -207,13 +276,16 @@ export class BoundedCodexThread {
         // Deterministic provider capability gap — retrying replays the same
         // broken transcript. Surface it immediately instead of looping.
         if (error instanceof ReasoningReplayError) throw error;
-        const isLastAttempt = attempt === MAX_RETRY_ATTEMPTS - 1;
+        // Deterministic host/sandbox gap — retrying replays the same broken
+        // environment (apply_patch is a no-op). Surface it immediately.
+        if (error instanceof ApplyPatchUnavailableError) throw error;
+        const isLastAttempt = attempt === this.maxRetryAttempts - 1;
         const waitMs = isLastAttempt ? 0 : computeBackoffDelay(attempt);
         console.warn(
           JSON.stringify({
             event: "codex_turn_failed",
             attempt: attempt + 1,
-            maxAttempts: MAX_RETRY_ATTEMPTS,
+            maxAttempts: this.maxRetryAttempts,
             isLastAttempt,
             waitMs,
             rawMessage: error instanceof Error ? error.message : String(error),
@@ -230,6 +302,7 @@ export class BoundedCodexThread {
   }
 
   private async runTurnOnce(input: CodexTurnInput): Promise<CodexTurnSummary> {
+    logRequestBody("runTurn", input.prompt);
     const turn = await this.thread.run(input.prompt, { signal: input.signal });
     const fileChanges: string[] = [];
     const skillToolCalls: { name: string; result: ProjectReadSkillResult }[] = [];
@@ -274,6 +347,22 @@ export class BoundedCodexThread {
       );
       throw new GatewaySoftError(turn.finalResponse ?? "");
     }
+    // apply_patch-unavailable gate: the model wrote zero files AND narrated
+    // that apply_patch is unavailable. The CLI's bwrap sandbox failed to expose
+    // a working file-write tool (Ubuntu 24+/Docker/VPS namespace block), so the
+    // model fell back to printing code as text. Deterministic for the host —
+    // fail fast with an actionable error instead of retrying a broken env.
+    if (fileChanges.length === 0 && isApplyPatchUnavailable(turn.finalResponse)) {
+      console.warn(
+        JSON.stringify({
+          event: "codex_turn_apply_patch_unavailable",
+          finalResponsePreview: (turn.finalResponse ?? "").slice(0, 240),
+          itemCount: turn.items.length,
+          itemTypeCounts,
+        }),
+      );
+      throw new ApplyPatchUnavailableError(turn.finalResponse ?? "");
+    }
     console.log(
       JSON.stringify({
         event: "codex_turn_completed",
@@ -310,7 +399,7 @@ export class BoundedCodexThread {
     onProgress: (event: CodexProgressEvent) => void,
   ): Promise<CodexTurnSummary> {
     let lastError: unknown = null;
-    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+    for (let attempt = 0; attempt < this.maxRetryAttempts; attempt++) {
       if (input.signal?.aborted) {
         throw new DOMException("Aborted", "AbortError");
       }
@@ -332,13 +421,16 @@ export class BoundedCodexThread {
         // Deterministic provider capability gap — retrying replays the same
         // broken transcript. Surface it immediately instead of looping.
         if (error instanceof ReasoningReplayError) throw error;
-        const isLastAttempt = attempt === MAX_RETRY_ATTEMPTS - 1;
+        // Deterministic host/sandbox gap — retrying replays the same broken
+        // environment (apply_patch is a no-op). Surface it immediately.
+        if (error instanceof ApplyPatchUnavailableError) throw error;
+        const isLastAttempt = attempt === this.maxRetryAttempts - 1;
         const waitMs = isLastAttempt ? 0 : computeBackoffDelay(attempt);
         console.warn(
           JSON.stringify({
             event: "codex_turn_failed",
             attempt: attempt + 1,
-            maxAttempts: MAX_RETRY_ATTEMPTS,
+            maxAttempts: this.maxRetryAttempts,
             isLastAttempt,
             waitMs,
             rawMessage: error instanceof Error ? error.message : String(error),
@@ -358,6 +450,7 @@ export class BoundedCodexThread {
     input: CodexTurnInput,
     onProgress: (event: CodexProgressEvent) => void,
   ): Promise<CodexTurnSummary> {
+    logRequestBody("runTurnStreamed", input.prompt);
     const stream = await this.thread.runStreamed(input.prompt, {
       signal: input.signal,
     });
@@ -381,6 +474,11 @@ export class BoundedCodexThread {
     // before the cap. We force a retry with a fresh CLI process so the
     // turn restarts cleanly instead of completing on a half-built result.
     let reconnectExhausted = false;
+    // Capture each command_execution (command text + exit code) so we can see
+    // WHAT the model ran when a turn reports command_execution items but writes
+    // no file. This is the discriminator between "apply_patch heredoc failed to
+    // parse / wrong binary" and "model ran a no-op command".
+    const commandLog: { command: string; exitCode: number | null; failed: boolean }[] = [];
 
     for await (const event of stream.events) {
       if (event.type === "turn.completed") {
@@ -489,6 +587,11 @@ export class BoundedCodexThread {
           failed: item.status === "failed",
         });
       } else if (item.type === "command_execution") {
+        commandLog.push({
+          command: item.command,
+          exitCode: typeof item.exit_code === "number" ? item.exit_code : null,
+          failed: item.status === "failed",
+        });
         onProgress({
           kind: "command_completed",
           command: item.command,
@@ -529,6 +632,27 @@ export class BoundedCodexThread {
         }),
       );
       throw new GatewaySoftError(finalResponse);
+    }
+    // apply_patch-unavailable gate (parity with runTurnOnce): the model wrote
+    // zero files AND narrated that apply_patch is unavailable/not working. The
+    // host's bwrap sandbox cannot expose a working file-write tool, so the turn
+    // physically cannot ship a file. Deterministic for this host — fail fast
+    // with an actionable error instead of retrying the same broken environment.
+    if (
+      fileChanges.length === 0 &&
+      skillToolCalls.length === 0 &&
+      isApplyPatchUnavailable(finalResponse)
+    ) {
+      console.warn(
+        JSON.stringify({
+          event: "codex_turn_apply_patch_unavailable",
+          finalResponsePreview: finalResponse.slice(0, 240),
+          itemCount,
+          itemTypeCounts,
+          streamed: true,
+        }),
+      );
+      throw new ApplyPatchUnavailableError(finalResponse);
     }
     // Degenerate-reconnect gate: when the CLI surfaced one or more upstream
     // WS reconnect notices AND the turn produced no concrete work (no file
@@ -579,6 +703,12 @@ export class BoundedCodexThread {
         fileChangesPreview: fileChanges.slice(0, 5),
         skillToolCallsCount: skillToolCalls.length,
         reasoningCount: reasoning.length,
+        commandCount: commandLog.length,
+        commandLog: commandLog.slice(0, 20).map((c) => ({
+          command: c.command.slice(0, 200),
+          exitCode: c.exitCode,
+          failed: c.failed,
+        })),
         streamed: true,
       }),
     );
@@ -594,6 +724,7 @@ export class BoundedCodexThread {
   async *runStreamed(
     input: CodexTurnInput,
   ): AsyncGenerator<ThreadEvent> {
+    logRequestBody("runTurnStreamed", input.prompt);
     const stream = await this.thread.runStreamed(input.prompt, {
       signal: input.signal,
     });
@@ -641,10 +772,17 @@ export function createBoundedCodexThread(
   // CLI's generic-provider config sends include:[] / reasoning:null and never
   // replays encrypted reasoning — which is why the CLI works and our override
   // broke. (Captured request bodies confirm both shapes.)
-  const responsesProvider: Record<string, string | boolean> = {
+  const responsesProvider: Record<string, string | boolean | number> = {
     name: "Cloud AI Responses HTTP",
     wire_api: "responses",
     env_key: "CODEX_API_KEY",
+    // Force pure HTTP/SSE. Codex 0.133 defaults to a WebSocket transport for
+    // wire_api=responses and only falls back to HTTP after the WS flaps — which
+    // is the "stream disconnected before completion → Reconnecting N/5 → dead"
+    // signature against gateways (episcloud) that don't speak codex's WS
+    // protocol. supports_websockets=false makes codex use the SSE endpoint the
+    // provider actually serves (the same one curl/Postman hit).
+    supports_websockets: false,
   };
   if (input.env.baseUrl) responsesProvider.base_url = input.env.baseUrl;
   const codex = new Codex({
@@ -662,7 +800,7 @@ export function createBoundedCodexThread(
     } as Record<string, string>,
   });
   const thread = codex.startThread({
-    model: input.env.model,
+    model: input.model ?? input.env.model,
     workingDirectory: input.draftWorkspacePath,
     sandboxMode,
     modelReasoningEffort: input.modelReasoningEffort,
@@ -671,7 +809,7 @@ export function createBoundedCodexThread(
     approvalPolicy: "never",
     additionalDirectories: [],
   });
-  return new BoundedCodexThread(thread, input.skillToolCallbacks);
+  return new BoundedCodexThread(thread, input.skillToolCallbacks, input.maxRetryAttempts);
 }
 
 export function summarizeUsage(usage: Usage | null): {

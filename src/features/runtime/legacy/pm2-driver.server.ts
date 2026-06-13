@@ -35,6 +35,10 @@ function normalizeStatus(status?: string): PreviewPm2Status {
   return "missing";
 }
 
+export function buildPreviewPm2Args(port: number): string[] {
+  return ["dev", "--port", String(port), "--host", "127.0.0.1"];
+}
+
 export class Pm2Driver {
   private connected = false;
 
@@ -84,14 +88,16 @@ export class Pm2Driver {
     const name = toProcessName(input.projectId);
     const env = {
       ...input.env,
+      VITE_PROJECT_ID: input.projectId,
       VITE_PORT: String(input.port),
+      ...(config.publicHost ? { VITE_PREVIEW_PUBLIC_HOST: config.publicHost } : {}),
       ...(input.previewHost ? { VITE_PREVIEW_HOST: input.previewHost } : {}),
     };
     await new Promise<void>((resolve, reject) => {
       const startOptions = {
         name,
         script: "pnpm",
-        args: ["dev", "--", "--port", String(input.port), "--host", "127.0.0.1"],
+        args: buildPreviewPm2Args(input.port),
         cwd: input.workspaceRoot,
         env,
         autorestart: true,

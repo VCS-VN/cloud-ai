@@ -64,6 +64,19 @@ export type DevFixFailedEvent = {
   reason: string;
 };
 
+export type DevStoppedEvent = {
+  type: "dev_stopped";
+  projectId: string;
+};
+
+export type PreviewReloadRequestedEvent = {
+  type: "preview_reload_requested";
+  projectId: string;
+  reason: "store_slug_synced";
+  delayMs: number;
+  at: string;
+};
+
 export type DevRuntimeEvent =
   | DevInstallStartedEvent
   | DevInstallCompletedEvent
@@ -73,4 +86,6 @@ export type DevRuntimeEvent =
   | DevErrorEvent
   | DevFixAttemptEvent
   | DevFixAppliedEvent
-  | DevFixFailedEvent;
+  | DevFixFailedEvent
+  | DevStoppedEvent
+  | PreviewReloadRequestedEvent;

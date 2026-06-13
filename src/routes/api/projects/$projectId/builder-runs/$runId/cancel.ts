@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { requireServerUser } from "@/server/functions/auth";
 import { cancelBuilderRun } from "@/features/agents/codex/runtime";
+import { stopPersistedRunIfActive } from "@/server/services/cancel-run-reconciliation.server";
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -17,9 +18,13 @@ export const Route = createFileRoute(
     handlers: {
       POST: async ({ params }) => {
         const user = await requireServerUser();
-        const { runId } = params as unknown as { runId: string };
+        const { projectId, runId } = params as unknown as { projectId: string; runId: string };
         const result = cancelBuilderRun({ runId, userId: user.id });
+        const reconciled = await stopPersistedRunIfActive(projectId, runId, user.id);
         if (!result.ok) {
+          if (result.reason === "not_found" && reconciled) {
+            return jsonResponse(200, { ok: true, recoveredPersistedRun: true });
+          }
           if (result.reason === "not_found") {
             return jsonResponse(404, { ok: false, code: "not_found", message: "Run not found." });
           }
@@ -32,7 +37,11 @@ export const Route = createFileRoute(
             message: "Run already finished.",
           });
         }
-        return jsonResponse(200, { ok: true, alreadyCancelled: result.alreadyCancelled === true });
+        return jsonResponse(200, {
+          ok: true,
+          alreadyCancelled: result.alreadyCancelled === true,
+          reconciledPersistedRun: reconciled,
+        });
       },
     },
   },

@@ -46,6 +46,7 @@ function streamActionReducer(state: ChatUIState, action: StreamAction): ChatUISt
         ...createInitialChatState(preserveSelectedOptions(action.messages, state.messages)),
         runtime: state.runtime,
         activeRun: state.activeRun,
+        lastRunOutcome: state.lastRunOutcome,
       };
     case "clear-run":
       return { ...state, activeRun: null };
@@ -57,6 +58,7 @@ function streamActionReducer(state: ChatUIState, action: StreamAction): ChatUISt
     case "optimistic":
       return {
         ...state,
+        lastRunOutcome: null,
         messages: upsertById(state.messages, action.userMessage),
         activeRun: {
           runId: action.userMessage.id,
@@ -64,6 +66,7 @@ function streamActionReducer(state: ChatUIState, action: StreamAction): ChatUISt
           skeleton: { phase: "starting", label: CLIENT_SKELETON_LABELS.starting },
           tasks: null,
           taskStatuses: {},
+          taskEstimate: null,
         },
       };
     case "rollback":
@@ -123,6 +126,7 @@ export function useChatStream({
   );
 
   const runSourceRef = useRef<EventSource | null>(null);
+  const runtimeSourceRef = useRef<EventSource | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retriedRef = useRef(false);
   const currentRunRef = useRef<string | null>(null);
@@ -133,6 +137,40 @@ export function useChatStream({
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = null;
   }, []);
+
+  const closeRuntimeSource = useCallback(() => {
+    runtimeSourceRef.current?.close();
+    runtimeSourceRef.current = null;
+  }, []);
+
+  const connectRuntime = useCallback(() => {
+    if (!projectId) return;
+    closeRuntimeSource();
+    const source = new EventSource(`/api/projects/${projectId}/runtime/stream`);
+    runtimeSourceRef.current = source;
+
+    const onAny = (raw: MessageEvent) => {
+      const event = JSON.parse(raw.data) as RuntimeStreamEvent;
+      dispatch({ kind: "runtime", event });
+    };
+
+    for (const type of [
+      "dev_install_started",
+      "dev_install_completed",
+      "dev_install_failed",
+      "dev_starting",
+      "dev_ready",
+      "dev_error",
+      "dev_fix_attempt",
+      "dev_fix_applied",
+      "dev_fix_failed",
+      "dev_stopped",
+      "preview_reload_requested",
+      "heartbeat",
+    ]) {
+      source.addEventListener(type, onAny as EventListener);
+    }
+  }, [projectId, closeRuntimeSource]);
 
   const connectRun = useCallback(
     (runId: string) => {
@@ -221,6 +259,8 @@ export function useChatStream({
   // re-seeds activeRun for a project that's actually processing.
   useEffect(() => {
     dispatch({ kind: "clear-run" });
+    closeRuntimeSource();
+    connectRuntime();
     let cancelled = false;
     fetch(`/api/projects/${projectId}/messages?limit=50`)
       .then((resp) => (resp.ok ? resp.json() : null))
@@ -231,8 +271,9 @@ export function useChatStream({
       .catch(() => undefined);
     return () => {
       cancelled = true;
+      closeRuntimeSource();
     };
-  }, [projectId]);
+  }, [projectId, closeRuntimeSource, connectRuntime]);
 
   // Resume an in-flight run on mount.
   useEffect(() => {
@@ -262,7 +303,13 @@ export function useChatStream({
             prompt: input.prompt,
             reasoningEffort: input.reasoningEffort,
             planMode: input.planMode ?? false,
-            locale: "vi-VN",
+            // Detect the browser locale so the server picks the right task-list
+            // language and fallback messages. Falls back to "en" when the
+            // navigator API is unavailable (SSR / non-browser env).
+            locale:
+              typeof navigator !== "undefined" && navigator.language
+                ? navigator.language
+                : "en",
           }),
         });
         const json = (await resp.json().catch(() => null)) as
@@ -315,7 +362,16 @@ export function useChatStream({
     async (runId: string): Promise<SendPromptResult> => {
       const resp = await fetch(
         `/api/projects/${projectId}/builder-runs/${runId}/retry`,
-        { method: "POST" },
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            locale:
+              typeof navigator !== "undefined" && navigator.language
+                ? navigator.language
+                : "en",
+          }),
+        },
       );
       const json = (await resp.json().catch(() => null)) as
         | { ok: true; runId: string; userMessage: Message }

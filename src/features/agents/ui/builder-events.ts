@@ -23,6 +23,10 @@ export type BuilderRunFailureCode =
   | "required_skill_unavailable"
   | "skill_unavailable"
   | "provider_drops_reasoning"
+  | "provider_gateway_soft_error"
+  | "build_produced_no_files"
+  | "apply_patch_unavailable"
+  | "files_corrupted"
   | "interrupted_by_restart";
 
 export type BuilderRunClarificationOption = {

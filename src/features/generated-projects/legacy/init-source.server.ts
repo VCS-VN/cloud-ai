@@ -152,7 +152,7 @@ export function renderInfrastructureFiles(
     },
     {
       path: "vite.config.ts",
-      content: `import { fileURLToPath, URL } from 'node:url'\nimport { defineConfig } from 'vite'\nimport { tanstackStart } from '@tanstack/react-start/plugin/vite'\nimport viteReact from '@vitejs/plugin-react'\n\nconst previewHost = process.env.VITE_PREVIEW_HOST?.trim()\nconst previewPort = Number(process.env.VITE_PORT) || 5173\n\nexport default defineConfig({\n  resolve: {\n    alias: {\n      '@': fileURLToPath(new URL('./src', import.meta.url)),\n    },\n  },\n  server: {\n    host: '127.0.0.1',\n    port: previewPort,\n    strictPort: true,\n    allowedHosts: previewHost ? [previewHost] : true,\n    hmr: previewHost\n      ? { protocol: 'wss', host: previewHost, clientPort: 443 }\n      : true,\n  },\n  plugins: [tanstackStart(), viteReact()],\n})\n`,
+      content: `import { fileURLToPath, URL } from 'node:url'\nimport { defineConfig } from 'vite'\nimport { tanstackStart } from '@tanstack/react-start/plugin/vite'\nimport viteReact from '@vitejs/plugin-react'\n\nconst previewProjectId = process.env.VITE_PROJECT_ID?.trim()\nconst previewDomain = process.env.VITE_PREVIEW_PUBLIC_HOST?.trim()\nconst previewHost = \`\${previewProjectId}-preview.\${previewDomain}\`\nconst previewPort = Number(process.env.VITE_PORT) || 5173\n\nexport default defineConfig({\n  resolve: {\n    alias: {\n      '@': fileURLToPath(new URL('./src', import.meta.url)),\n    },\n  },\n  server: {\n    host: '127.0.0.1',\n    port: previewPort,\n    strictPort: true,\n    allowedHosts: [previewHost],\n    hmr: { protocol: 'wss', host: previewHost, clientPort: 443 },\n  },\n  plugins: [tanstackStart(), viteReact()],\n})\n`,
     },
     {
       path: "tsconfig.json",

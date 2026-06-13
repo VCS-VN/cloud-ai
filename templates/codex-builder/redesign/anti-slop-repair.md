@@ -7,5 +7,5 @@ Violations to fix:
 
 1. Re-read DESIGN.md tokens via shell (e.g. `cat DESIGN.md`).
 2. Inspect each listed file via shell (`cat <path>`) before patching.
-3. Replace off-palette colors with the matching DESIGN.md role utility via apply_patch.
+3. Replace off-palette colors with the matching DESIGN.md role utility by re-writing each affected file in full (`cat <path>` to read, then `cat > <path> <<'EOF'` … `EOF`).
 4. End the turn after patches; the runtime runs validation automatically and reports any remaining errors in a follow-up turn.
