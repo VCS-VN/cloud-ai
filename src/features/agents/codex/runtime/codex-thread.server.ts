@@ -16,6 +16,15 @@ export type CodexThreadInput = {
   skillToolCallbacks?: ProjectReadSkillCallbacks;
   sandboxMode?: CodexSandboxMode;
   modelReasoningEffort?: CodexReasoningEffort;
+  // When true, suppress reasoning entirely: don't request
+  // reasoning.encrypted_content and pin effort to "minimal". On the stateless
+  // HTTP responses transport, a provider that strips reasoning.encrypted_content
+  // rejects replayed reasoning items with `content is required`. A turn that
+  // produces NO reasoning items has nothing to replay, so it survives such a
+  // provider. Used by the build-phase fallback after a ReasoningReplayError:
+  // we keep reasoning on variant/planning (single round-trip, never replayed)
+  // and only drop it on the multi-round-trip build turns that actually break.
+  disableReasoning?: boolean;
 };
 
 export type CodexTurnInput = {
@@ -667,7 +676,9 @@ export function createBoundedCodexThread(
       },
       // Makes codex request include:["reasoning.encrypted_content"] so replayed
       // reasoning items keep their content on the stateless responses transport.
-      model_supports_reasoning_summaries: true,
+      // When disableReasoning is set we flip this off so codex stops emitting
+      // (and replaying) reasoning items at all — see the type comment.
+      model_supports_reasoning_summaries: !input.disableReasoning,
     },
     env: {
       ...process.env,
@@ -678,7 +689,9 @@ export function createBoundedCodexThread(
     model: input.env.model,
     workingDirectory: input.draftWorkspacePath,
     sandboxMode,
-    modelReasoningEffort: input.modelReasoningEffort,
+    modelReasoningEffort: input.disableReasoning
+      ? "minimal"
+      : input.modelReasoningEffort,
     skipGitRepoCheck: true,
     networkAccessEnabled: false,
     approvalPolicy: "never",

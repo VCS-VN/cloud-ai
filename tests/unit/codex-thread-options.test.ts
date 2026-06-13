@@ -150,4 +150,18 @@ describe("createBoundedCodexThread — HTTP/SSE transport (no WebSocket)", () =>
     const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
     expect(options?.config?.model_supports_reasoning_summaries).toBe(true);
   });
+
+  it("disableReasoning suppresses reasoning so a stripping provider has nothing to replay", () => {
+    // Verified empirically (captured request body, codex 0.137.0): with
+    // disableReasoning the request carries include:[] / reasoning:null, i.e. no
+    // reasoning item is produced, so the build turn survives a provider that
+    // strips reasoning.encrypted_content. This is the build-phase fallback path.
+    codexCtorMock.mockClear();
+    startThreadMock.mockClear();
+    createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft", disableReasoning: true });
+    const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
+    expect(options?.config?.model_supports_reasoning_summaries).toBe(false);
+    const args = startThreadMock.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(args?.modelReasoningEffort).toBe("minimal");
+  });
 });
