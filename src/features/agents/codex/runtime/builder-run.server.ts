@@ -877,13 +877,8 @@ export async function runInitBuilderRun(
 
   emitMilestoneInternal(emit, runId, "building_pages");
   let finalResponse = "";
-
-  // The full build sequence (initial turn + every batch) against one thread.
-  // Extracted so we can re-run it on a fresh no-reasoning thread if the
-  // provider rejects replayed reasoning (see fallback below).
-  const runBuildSequence = async (buildThread: BoundedCodexThread): Promise<void> => {
-    finalResponse = "";
-    const initialSummary = await runTurnAndBridge(buildThread, runId, emit, {
+  try {
+    const initialSummary = await runTurnAndBridge(thread, runId, emit, {
       prompt:
         bundle.prompt +
         variantPromptAddendum +
@@ -907,7 +902,7 @@ export async function runInitBuilderRun(
         specBodies.length > 0
           ? `\n\n<batch_spec>\n${specBodies.join("\n\n---\n\n")}\n</batch_spec>`
           : "";
-      const batchSummary = await runTurnAndBridge(buildThread, runId, emit, {
+      const batchSummary = await runTurnAndBridge(thread, runId, emit, {
         prompt:
           `Now build batch ${batch.marker} (${batch.kind}). Files in scope: ${batch.files.join(", ")}.` +
           specBlock,
@@ -916,40 +911,6 @@ export async function runInitBuilderRun(
         locale: toProgressLocale(ctx.locale),
       });
       if (batchSummary.finalResponse) finalResponse = batchSummary.finalResponse;
-    }
-  };
-
-  try {
-    try {
-      await runBuildSequence(thread);
-    } catch (error) {
-      // Provider strips reasoning.encrypted_content → replayed reasoning items
-      // are rejected with `content is required` on the stateless HTTP transport.
-      // Rather than hard-fail (no code produced), re-run the build ONCE on a
-      // fresh thread with reasoning suppressed: a turn that emits no reasoning
-      // item has nothing to replay, so it survives such a provider. We keep
-      // reasoning on variant/planning (single round-trip, never replayed); only
-      // the multi-round-trip build degrades. This is strictly better than the
-      // previous hard-fail — worst case it fails again the same way.
-      if (error instanceof ReasoningReplayError && !ctx.signal?.aborted) {
-        console.warn(
-          JSON.stringify({
-            event: "init_build_reasoning_replay_fallback",
-            runId,
-            projectId: ctx.projectId,
-          }),
-        );
-        emit({ type: "thinking", runId, text: "Đang dựng lại không kèm reasoning…", at: Date.now() });
-        const fallbackThread = createBoundedCodexThread({
-          env: ctx.env,
-          draftWorkspacePath,
-          skillToolCallbacks: buildSkillToolCallbacks(runId),
-          disableReasoning: true,
-        });
-        await runBuildSequence(fallbackThread);
-      } else {
-        throw error;
-      }
     }
   } catch (error) {
     if (ctx.signal?.aborted) {

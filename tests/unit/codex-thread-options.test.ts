@@ -95,73 +95,19 @@ describe("createBoundedCodexThread — reasoning effort + sandbox wiring (R1, R2
   });
 });
 
-describe("createBoundedCodexThread — HTTP/SSE transport (no WebSocket)", () => {
-  type CodexCtorOptions = {
-    config?: {
-      model_provider?: string;
-      model_providers?: Record<
-        string,
-        { wire_api?: string; base_url?: string; requires_openai_auth?: boolean }
-      >;
-      model_supports_reasoning_summaries?: boolean;
-    };
-  };
+describe("createBoundedCodexThread — default WebSocket transport (no override)", () => {
+  type CodexCtorOptions = { config?: unknown };
 
-  it("registers a custom provider with wire_api='responses' and selects it", () => {
+  it("does NOT pass a config override (uses codex's default WebSocket transport)", () => {
+    // The HTTP `responses` wire_api override was reverted: it forced a stateless
+    // transport that replayed reasoning items into input[] and broke every
+    // multi-round-trip build turn (`content is required (input[N].content)`).
+    // Runtime confirmed this twice (normal build AND the no-reasoning fallback).
+    // WebSocket is stateful, so reasoning is never replayed — keep the default
+    // and pass no provider/wire_api override.
     codexCtorMock.mockClear();
     createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
     const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
-    const selected = options?.config?.model_provider;
-    expect(selected).toBeTruthy();
-    const provider = options?.config?.model_providers?.[selected!];
-    // wire_api="responses" is the HTTP/SSE Responses transport; the WebSocket
-    // transport ("responses_websocket") must never be selected.
-    expect(provider?.wire_api).toBe("responses");
-    expect(provider?.wire_api).not.toBe("responses_websocket");
-  });
-
-  it("does not override the reserved built-in 'openai' provider id", () => {
-    codexCtorMock.mockClear();
-    createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
-    const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
-    expect(options?.config?.model_provider).not.toBe("openai");
-    expect(
-      Object.keys(options?.config?.model_providers ?? {}),
-    ).not.toContain("openai");
-  });
-
-  it("points the custom provider at the configured gateway base_url", () => {
-    codexCtorMock.mockClear();
-    createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
-    const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
-    const selected = options?.config?.model_provider;
-    const provider = options?.config?.model_providers?.[selected!];
-    expect(provider?.base_url).toBe(env.baseUrl);
-  });
-
-  it("sets model_supports_reasoning_summaries so codex requests reasoning.encrypted_content", () => {
-    // Verified empirically (captured request body, codex 0.137.0): without this
-    // flag a custom provider sends include:[] / reasoning:null, so replayed
-    // reasoning items lose their content on the stateless responses transport
-    // and the provider rejects the turn with `content is required`. With it,
-    // codex emits include:["reasoning.encrypted_content"] + reasoning:{summary}.
-    codexCtorMock.mockClear();
-    createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
-    const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
-    expect(options?.config?.model_supports_reasoning_summaries).toBe(true);
-  });
-
-  it("disableReasoning suppresses reasoning so a stripping provider has nothing to replay", () => {
-    // Verified empirically (captured request body, codex 0.137.0): with
-    // disableReasoning the request carries include:[] / reasoning:null, i.e. no
-    // reasoning item is produced, so the build turn survives a provider that
-    // strips reasoning.encrypted_content. This is the build-phase fallback path.
-    codexCtorMock.mockClear();
-    startThreadMock.mockClear();
-    createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft", disableReasoning: true });
-    const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
-    expect(options?.config?.model_supports_reasoning_summaries).toBe(false);
-    const args = startThreadMock.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-    expect(args?.modelReasoningEffort).toBe("minimal");
+    expect(options?.config).toBeUndefined();
   });
 });

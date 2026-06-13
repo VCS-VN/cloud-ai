@@ -16,15 +16,6 @@ export type CodexThreadInput = {
   skillToolCallbacks?: ProjectReadSkillCallbacks;
   sandboxMode?: CodexSandboxMode;
   modelReasoningEffort?: CodexReasoningEffort;
-  // When true, suppress reasoning entirely: don't request
-  // reasoning.encrypted_content and pin effort to "minimal". On the stateless
-  // HTTP responses transport, a provider that strips reasoning.encrypted_content
-  // rejects replayed reasoning items with `content is required`. A turn that
-  // produces NO reasoning items has nothing to replay, so it survives such a
-  // provider. Used by the build-phase fallback after a ReasoningReplayError:
-  // we keep reasoning on variant/planning (single round-trip, never replayed)
-  // and only drop it on the multi-round-trip build turns that actually break.
-  disableReasoning?: boolean;
 };
 
 export type CodexTurnInput = {
@@ -629,57 +620,25 @@ export function createBoundedCodexThread(
   const sandboxMode: CodexSandboxMode = sandboxDisabled
     ? "danger-full-access"
     : input.sandboxMode ?? "workspace-write";
-  // Force the HTTP+SSE Responses transport instead of the CLI's default
-  // WebSocket streaming (per the explicit decision to stop using WebSocket).
-  // `responses` still streams over SSE, so live progress is preserved.
+  // Transport: use codex's DEFAULT (WebSocket) streaming — do NOT override
+  // model_provider/wire_api.
   //
-  // Mechanism (verified against codex CLI 0.137.0): the built-in `openai`
-  // provider id is reserved and cannot be overridden, so we register a custom
-  // provider that points at the same gateway with `wire_api="responses"` (the
-  // HTTP/SSE wire API — `responses_websocket` is the WS one) and select it via
-  // `model_provider`. `requires_openai_auth=true` makes it reuse the
-  // CODEX_API_KEY the SDK injects from `apiKey`; base_url is set explicitly so
-  // the provider targets our gateway rather than api.openai.com.
-  //
-  // IMPORTANT operational requirement for multi-round-trip turns (build /
-  // apply_patch): `responses` is stateless, so codex replays the full
-  // transcript into input[] on every model round-trip within a turn. A
-  // replayed reasoning item carries no `content` unless the provider echoes
-  // `reasoning.encrypted_content`. A provider that strips it rejects the turn
-  // with `content is required (input[N].content)`.
-  //
-  // TWO conditions must BOTH hold for build turns to survive over HTTP:
-  //   1. codex must ASK the provider to return reasoning.encrypted_content, and
-  //   2. the provider must actually echo it back.
-  // (1) is the client-side half and it is NOT automatic for a custom provider:
-  // captured request bodies (codex 0.137.0, custom provider) showed
-  // `store:false`, `include:[]`, `reasoning:null` — codex never requested the
-  // encrypted reasoning, so even a provider that preserves it never gets asked.
-  // Empirically the lever that flips this is `model_supports_reasoning_summaries
-  // = true`: with it, codex emits `include:["reasoning.encrypted_content"]` and
-  // `reasoning:{summary:"auto"}`. We set it here so the replayed reasoning items
-  // round-trip with their encrypted payload intact. The provider still owns
-  // half (2): it MUST echo `reasoning.encrypted_content` back.
-  const responsesProvider: Record<string, string | boolean> = {
-    name: "OpenAI Responses HTTP",
-    wire_api: "responses",
-    requires_openai_auth: true,
-  };
-  if (input.env.baseUrl) responsesProvider.base_url = input.env.baseUrl;
+  // History (why this matters): we briefly forced the HTTP `responses` wire_api
+  // to dodge a WS handshake flap. That flap came from an OLD relay
+  // (9router/localhost) that is no longer in use. On the real provider the HTTP
+  // path is architecturally broken for build turns: `responses` is stateless,
+  // so codex replays the whole transcript into input[] on every model
+  // round-trip within a turn. The replayed reasoning item carries no `content`
+  // unless the provider echoes `reasoning.encrypted_content`, and the provider
+  // rejects it with `content is required (input[N].content)`. Runtime confirmed
+  // this twice (normal build AND the no-reasoning fallback both died there): the
+  // model keeps emitting reasoning items regardless of effort, so NO client
+  // config avoids the replay. WebSocket is STATEFUL — the server holds the
+  // transcript, reasoning is never replayed — which is why build worked under
+  // WS before the transport was switched. Keep the default.
   const codex = new Codex({
     apiKey: input.env.apiKey,
     baseUrl: input.env.baseUrl,
-    config: {
-      model_provider: "openai-responses-http",
-      model_providers: {
-        "openai-responses-http": responsesProvider,
-      },
-      // Makes codex request include:["reasoning.encrypted_content"] so replayed
-      // reasoning items keep their content on the stateless responses transport.
-      // When disableReasoning is set we flip this off so codex stops emitting
-      // (and replaying) reasoning items at all — see the type comment.
-      model_supports_reasoning_summaries: !input.disableReasoning,
-    },
     env: {
       ...process.env,
       CODEX_HOME: input.env.codexHome,
@@ -689,9 +648,7 @@ export function createBoundedCodexThread(
     model: input.env.model,
     workingDirectory: input.draftWorkspacePath,
     sandboxMode,
-    modelReasoningEffort: input.disableReasoning
-      ? "minimal"
-      : input.modelReasoningEffort,
+    modelReasoningEffort: input.modelReasoningEffort,
     skipGitRepoCheck: true,
     networkAccessEnabled: false,
     approvalPolicy: "never",
