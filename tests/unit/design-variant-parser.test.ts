@@ -82,6 +82,29 @@ describe("generateRetailVariants — robust parser (regression)", () => {
     }
   });
 
+  it("normalizes salvageable palette colors (#abc shorthand, bare hex, color names)", async () => {
+    // Mirrors the real failure (design_variants_generation_failed): the model
+    // returned 3-digit shorthand / bare hex / a color name, and the strict hex
+    // regex discarded the whole variant turn. normalizeHexColor should salvage
+    // each so the variant survives.
+    const messy = `[
+      { "id": "a", "label": "A", "description": "x.", "preview": { "font": "Inter", "palette": ["#abc", "aabbcc", "gold"], "motion": 0.2 } },
+      { "id": "b", "label": "B", "description": "y.", "preview": { "font": "Lora", "palette": ["#FFF", "#a05a2c", "navy"], "motion": 0.4 } },
+      { "id": "c", "label": "C", "description": "z.", "preview": { "font": "Playfair", "palette": ["#0e0e0e", "#bfa269", "#f4f1ec"], "motion": 0.3 } },
+      { "id": "d", "label": "D", "description": "w.", "preview": { "font": "Quicksand", "palette": ["#fef08a", "#34d399", "#fb7185"], "motion": 0.7 } }
+    ]`;
+    const result = await generateRetailVariants({
+      runTurn: async () => ({ finalResponse: messy }),
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // #abc → #aabbcc, bare aabbcc → #aabbcc, gold → #ffd700
+      expect(result.variants[0].preview.palette).toEqual(["#aabbcc", "#aabbcc", "#ffd700"]);
+      // #FFF → #ffffff, navy → #000080
+      expect(result.variants[1].preview.palette).toEqual(["#ffffff", "#a05a2c", "#000080"]);
+    }
+  });
+
   it("retries once on invalid JSON, then fails with reason", async () => {
     let calls = 0;
     const result = await generateRetailVariants({

@@ -127,6 +127,64 @@ function stripCodeFence(raw: string): string {
   return trimmed; // unbalanced — let JSON.parse fail with a clearer error
 }
 
+// Common CSS color names the model sometimes emits instead of hex. Mapped to
+// 6-digit hex so the variant survives validation instead of being discarded.
+const NAMED_COLORS: Record<string, string> = {
+  white: "#ffffff",
+  black: "#000000",
+  red: "#ff0000",
+  green: "#008000",
+  blue: "#0000ff",
+  yellow: "#ffff00",
+  orange: "#ffa500",
+  purple: "#800080",
+  pink: "#ffc0cb",
+  brown: "#a52a2a",
+  gray: "#808080",
+  grey: "#808080",
+  beige: "#f5f5dc",
+  cream: "#fffdd0",
+  gold: "#ffd700",
+  silver: "#c0c0c0",
+  navy: "#000080",
+  teal: "#008080",
+  olive: "#808000",
+  maroon: "#800000",
+};
+
+// Coerce a model-provided color into a #RRGGBB / #RRGGBBAA hex string, or return
+// null if it can't be salvaged. Handles: missing `#`, 3-digit shorthand
+// (#abc → #aabbcc), uppercase, and a handful of CSS color names. The variant
+// turn frequently returns one of these forms and the strict hex regex was
+// discarding otherwise-good variants (see design_variants_generation_failed:
+// "Invalid string: must match pattern /^#(?:[0-9a-fA-F]{6|8})$/").
+function normalizeHexColor(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  let s = value.trim().toLowerCase();
+  if (NAMED_COLORS[s]) return NAMED_COLORS[s];
+  if (!s.startsWith("#")) s = "#" + s;
+  // #abc → #aabbcc
+  if (/^#[0-9a-f]{3}$/.test(s)) {
+    s = "#" + s.slice(1).split("").map((c) => c + c).join("");
+  }
+  // #abcd → #aabbccdd (4-digit shorthand with alpha)
+  if (/^#[0-9a-f]{4}$/.test(s)) {
+    s = "#" + s.slice(1).split("").map((c) => c + c).join("");
+  }
+  if (/^#(?:[0-9a-f]{6}|[0-9a-f]{8})$/.test(s)) return s;
+  return null;
+}
+
+// Normalize a palette array: coerce each entry to valid hex, drop the ones that
+// can't be salvaged. Returns the cleaned array (may be shorter); the schema's
+// .min(3) still rejects a palette too damaged to use, but a single stray entry
+// no longer sinks the whole variant.
+function normalizePalette(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  const cleaned = value.map(normalizeHexColor).filter((c): c is string => c !== null);
+  return cleaned;
+}
+
 function normalizeVariantShape(raw: unknown): unknown {
   // Tolerate model field-name drift: accept both `label`/`name` and
   // `id`/`vibe`. Also auto-truncate `description` to 240 chars before
@@ -152,6 +210,14 @@ function normalizeVariantShape(raw: unknown): unknown {
   }
   if (typeof reshape.label === "string" && reshape.label.length > 40) {
     reshape.label = reshape.label.slice(0, 40).trimEnd();
+  }
+  // Coerce palette entries to valid hex before validation: the model often
+  // returns #abc shorthand, bare "aabbcc" (no #), or a CSS color name, any of
+  // which the strict hex regex would reject and sink the whole variant turn.
+  if (reshape.preview && typeof reshape.preview === "object" && !Array.isArray(reshape.preview)) {
+    const preview = { ...(reshape.preview as Record<string, unknown>) };
+    if ("palette" in preview) preview.palette = normalizePalette(preview.palette);
+    reshape.preview = preview;
   }
   return reshape;
 }
