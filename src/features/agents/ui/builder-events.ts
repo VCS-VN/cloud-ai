@@ -22,6 +22,7 @@ export type BuilderRunFailureCode =
   | "repair_exhausted"
   | "required_skill_unavailable"
   | "skill_unavailable"
+  | "provider_drops_reasoning"
   | "interrupted_by_restart";
 
 export type BuilderRunClarificationOption = {

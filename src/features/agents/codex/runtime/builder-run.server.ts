@@ -43,6 +43,7 @@ import {
 } from "./builder-run-registry.server";
 import {
   createBoundedCodexThread,
+  ReasoningReplayError,
   type BoundedCodexThread,
 } from "./codex-thread.server";
 import {
@@ -723,12 +724,6 @@ export async function runInitBuilderRun(
     const { generateRetailVariants, buildVariantBuildPrompt } = await import(
       "./design-variants.server"
     );
-    const variantThread = createBoundedCodexThread({
-      env: ctx.env,
-      draftWorkspacePath,
-      sandboxMode: "read-only",
-      modelReasoningEffort: "high",
-    });
     const instructionDigest = allInstructions
       .map((i) => `### ${i.meta.name}\n${i.content}`)
       .join("\n\n---\n\n");
@@ -767,6 +762,19 @@ export async function runInitBuilderRun(
     ].join("\n");
     const result = await generateRetailVariants({
       runTurn: async () => {
+        // Fresh thread per attempt. The retry path must NOT resume the prior
+        // thread: on the HTTP `responses` transport a resumed turn replays the
+        // whole transcript into input[], and the replayed reasoning item has no
+        // content/encrypted_content unless the provider preserves it — relays
+        // that don't reject it with `content is required (input[N].content)`,
+        // which is exactly what burned the variant retry loop. A new thread is
+        // a clean single round-trip with no replay.
+        const variantThread = createBoundedCodexThread({
+          env: ctx.env,
+          draftWorkspacePath,
+          sandboxMode: "read-only",
+          modelReasoningEffort: "high",
+        });
         // Stream so the design reasoning surfaces AS IT FORMS, before the
         // variant pick lands — the user sees the model thinking instead of a
         // frozen screen.
@@ -917,16 +925,19 @@ export async function runInitBuilderRun(
         optionalRouteWarnings: [],
       });
     }
-    emitFailure(
-      emit,
-      runId,
-      "codex_runtime_failed",
-      "codex turn ended unexpectedly",
-    );
+    const failureCode: BuilderRunFailureCode =
+      error instanceof ReasoningReplayError
+        ? "provider_drops_reasoning"
+        : "codex_runtime_failed";
+    const failureMessage =
+      error instanceof ReasoningReplayError
+        ? "Nhà cung cấp AI không giữ lại reasoning giữa các bước nên không thể dựng code. Cần bật reasoning.encrypted_content (hoặc lưu response) ở provider."
+        : "codex turn ended unexpectedly";
+    emitFailure(emit, runId, failureCode, failureMessage);
     return finalize({
       runId,
       status: "failed",
-      failureCode: "codex_runtime_failed",
+      failureCode,
       changedFiles: [],
       draftWorkspacePath,
       selectedInstructionMeta: bundle.selectedInstructionMeta,

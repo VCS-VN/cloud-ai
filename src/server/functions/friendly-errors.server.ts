@@ -14,6 +14,8 @@ const VI: Record<BuilderRunFailureCode, string> = {
   required_skill_unavailable: "Thiếu hướng dẫn bắt buộc.",
   skill_unavailable: "Skill được yêu cầu chưa có sẵn.",
   interrupted_by_restart: "Phiên xử lý bị gián đoạn. Bạn có thể thử lại an toàn.",
+  provider_drops_reasoning:
+    "Nhà cung cấp AI không giữ lại phần suy luận giữa các bước nên không thể dựng nhiều bước. Cần bật lưu reasoning ở provider, rồi thử lại.",
 };
 
 const EN: Record<BuilderRunFailureCode, string> = {
@@ -28,6 +30,8 @@ const EN: Record<BuilderRunFailureCode, string> = {
   required_skill_unavailable: "Required guidance is missing.",
   skill_unavailable: "The requested skill is not available.",
   interrupted_by_restart: "The session was interrupted. You can retry safely.",
+  provider_drops_reasoning:
+    "The AI provider does not preserve reasoning between steps, so multi-step builds cannot run. Enable reasoning retention on the provider, then retry.",
 };
 
 export function friendlyFailureMessage(

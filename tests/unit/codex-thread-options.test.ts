@@ -103,6 +103,7 @@ describe("createBoundedCodexThread — HTTP/SSE transport (no WebSocket)", () =>
         string,
         { wire_api?: string; base_url?: string; requires_openai_auth?: boolean }
       >;
+      model_supports_reasoning_summaries?: boolean;
     };
   };
 
@@ -136,5 +137,17 @@ describe("createBoundedCodexThread — HTTP/SSE transport (no WebSocket)", () =>
     const selected = options?.config?.model_provider;
     const provider = options?.config?.model_providers?.[selected!];
     expect(provider?.base_url).toBe(env.baseUrl);
+  });
+
+  it("sets model_supports_reasoning_summaries so codex requests reasoning.encrypted_content", () => {
+    // Verified empirically (captured request body, codex 0.137.0): without this
+    // flag a custom provider sends include:[] / reasoning:null, so replayed
+    // reasoning items lose their content on the stateless responses transport
+    // and the provider rejects the turn with `content is required`. With it,
+    // codex emits include:["reasoning.encrypted_content"] + reasoning:{summary}.
+    codexCtorMock.mockClear();
+    createBoundedCodexThread({ env, draftWorkspacePath: "/tmp/draft" });
+    const options = codexCtorMock.mock.calls[0]?.[0] as CodexCtorOptions | undefined;
+    expect(options?.config?.model_supports_reasoning_summaries).toBe(true);
   });
 });

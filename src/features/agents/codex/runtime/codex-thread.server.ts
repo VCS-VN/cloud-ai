@@ -139,6 +139,41 @@ export class StreamReconnectError extends Error {
 // exhaustion (N === M) and force a retry on a fresh CLI process.
 const RECONNECT_NOTICE_RE = /\breconnecting\.{0,3}\s*(\d+)\s*\/\s*(\d+)/i;
 
+// On the HTTP `responses` transport, codex replays the full transcript into
+// input[] on every model round-trip within a turn. A replayed reasoning item
+// carries no `content` unless the provider echoes `reasoning.encrypted_content`.
+// A provider that strips it rejects the turn with `content is required
+// (input[N].content)`. This is DETERMINISTIC for that provider — retrying the
+// same turn just replays the same broken transcript, so the 10x backoff loop
+// only prolongs a frozen UI before the inevitable failure. Detect it and fail
+// fast with an actionable message instead.
+const REASONING_REPLAY_RE =
+  /content is required[^]*input\[\d+\]\.content|input\[\d+\]\.content[^]*content is required/i;
+
+function isReasoningReplayError(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return REASONING_REPLAY_RE.test(text);
+}
+
+/**
+ * Thrown when the provider rejects a replayed reasoning item with
+ * `content is required (input[N].content)`. See REASONING_REPLAY_RE. This is a
+ * provider capability gap (it strips `reasoning.encrypted_content` and does not
+ * support store + previous_response_id), not a transient fault — runTurn must
+ * NOT retry it.
+ */
+export class ReasoningReplayError extends Error {
+  constructor(public readonly preview: string) {
+    super(
+      "provider_drops_reasoning_content: the provider rejected a replayed " +
+        "reasoning item (content is required). It must preserve " +
+        "reasoning.encrypted_content (or support store + previous_response_id) " +
+        "for multi-step build turns over the HTTP responses transport.",
+    );
+    this.name = "ReasoningReplayError";
+  }
+}
+
 export class BoundedCodexThread {
   private readonly thread: Thread;
   private readonly skillToolCallbacks?: ProjectReadSkillCallbacks;
@@ -169,6 +204,9 @@ export class BoundedCodexThread {
       } catch (error) {
         lastError = error;
         if (isAbortError(error)) throw error;
+        // Deterministic provider capability gap — retrying replays the same
+        // broken transcript. Surface it immediately instead of looping.
+        if (error instanceof ReasoningReplayError) throw error;
         const isLastAttempt = attempt === MAX_RETRY_ATTEMPTS - 1;
         const waitMs = isLastAttempt ? 0 : computeBackoffDelay(attempt);
         console.warn(
@@ -291,6 +329,9 @@ export class BoundedCodexThread {
       } catch (error) {
         lastError = error;
         if (isAbortError(error)) throw error;
+        // Deterministic provider capability gap — retrying replays the same
+        // broken transcript. Surface it immediately instead of looping.
+        if (error instanceof ReasoningReplayError) throw error;
         const isLastAttempt = attempt === MAX_RETRY_ATTEMPTS - 1;
         const waitMs = isLastAttempt ? 0 : computeBackoffDelay(attempt);
         console.warn(
@@ -347,9 +388,33 @@ export class BoundedCodexThread {
         continue;
       }
       if (event.type === "turn.failed") {
+        // Same deterministic provider gap surfaced as a terminal turn.failed
+        // rather than a mid-stream `error` event. Fail fast, do not retry.
+        if (isReasoningReplayError(event.error.message)) {
+          console.warn(
+            JSON.stringify({
+              event: "codex_turn_reasoning_replay_rejected",
+              message: event.error.message,
+            }),
+          );
+          throw new ReasoningReplayError(event.error.message ?? "");
+        }
         throw new Error(event.error.message);
       }
       if (event.type === "error") {
+        // Deterministic provider failure: a replayed reasoning item was
+        // rejected with `content is required (input[N].content)`. Retrying
+        // replays the same broken transcript, so fail fast with an actionable
+        // error instead of burning the 10x backoff loop on a frozen UI.
+        if (isReasoningReplayError(event.message)) {
+          console.warn(
+            JSON.stringify({
+              event: "codex_turn_reasoning_replay_rejected",
+              message: event.message,
+            }),
+          );
+          throw new ReasoningReplayError(event.message ?? "");
+        }
         // CLI's upstream-WS reconnect notice — phrased as "Reconnecting...
         // N/5 (stream disconnected before completion: WebSocket protocol
         // error: Handshake not finished)". Match the SDK's non-streaming
@@ -556,10 +621,8 @@ export function createBoundedCodexThread(
     ? "danger-full-access"
     : input.sandboxMode ?? "workspace-write";
   // Force the HTTP+SSE Responses transport instead of the CLI's default
-  // WebSocket streaming. The WS path flaps under our gateway ("WebSocket
-  // protocol error: Handshake not finished" → "Reconnecting... N/5"), which
-  // produced degenerate stub turns. The Responses HTTP transport still streams
-  // (SSE), so we keep live progress without the WS handshake instability.
+  // WebSocket streaming (per the explicit decision to stop using WebSocket).
+  // `responses` still streams over SSE, so live progress is preserved.
   //
   // Mechanism (verified against codex CLI 0.137.0): the built-in `openai`
   // provider id is reserved and cannot be overridden, so we register a custom
@@ -567,9 +630,27 @@ export function createBoundedCodexThread(
   // HTTP/SSE wire API — `responses_websocket` is the WS one) and select it via
   // `model_provider`. `requires_openai_auth=true` makes it reuse the
   // CODEX_API_KEY the SDK injects from `apiKey`; base_url is set explicitly so
-  // the provider targets our gateway rather than api.openai.com. The
-  // `responses_websockets` feature flag is `removed` in this CLI version, so
-  // wire_api on the provider is the supported lever for transport selection.
+  // the provider targets our gateway rather than api.openai.com.
+  //
+  // IMPORTANT operational requirement for multi-round-trip turns (build /
+  // apply_patch): `responses` is stateless, so codex replays the full
+  // transcript into input[] on every model round-trip within a turn. A
+  // replayed reasoning item carries no `content` unless the provider echoes
+  // `reasoning.encrypted_content`. A provider that strips it rejects the turn
+  // with `content is required (input[N].content)`.
+  //
+  // TWO conditions must BOTH hold for build turns to survive over HTTP:
+  //   1. codex must ASK the provider to return reasoning.encrypted_content, and
+  //   2. the provider must actually echo it back.
+  // (1) is the client-side half and it is NOT automatic for a custom provider:
+  // captured request bodies (codex 0.137.0, custom provider) showed
+  // `store:false`, `include:[]`, `reasoning:null` — codex never requested the
+  // encrypted reasoning, so even a provider that preserves it never gets asked.
+  // Empirically the lever that flips this is `model_supports_reasoning_summaries
+  // = true`: with it, codex emits `include:["reasoning.encrypted_content"]` and
+  // `reasoning:{summary:"auto"}`. We set it here so the replayed reasoning items
+  // round-trip with their encrypted payload intact. The provider still owns
+  // half (2): it MUST echo `reasoning.encrypted_content` back.
   const responsesProvider: Record<string, string | boolean> = {
     name: "OpenAI Responses HTTP",
     wire_api: "responses",
@@ -584,6 +665,9 @@ export function createBoundedCodexThread(
       model_providers: {
         "openai-responses-http": responsesProvider,
       },
+      // Makes codex request include:["reasoning.encrypted_content"] so replayed
+      // reasoning items keep their content on the stateless responses transport.
+      model_supports_reasoning_summaries: true,
     },
     env: {
       ...process.env,
