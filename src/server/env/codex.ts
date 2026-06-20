@@ -52,6 +52,7 @@ function defaultSkillsRoot(): string {
 
 export function loadCodexEnv(env: NodeJS.ProcessEnv = process.env): CodexEnv {
   const parsed = codexSchema.safeParse(env);
+  console.log("🚀 ~ loadCodexEnv ~ parsed:", JSON.stringify(parsed));
   if (!parsed.success) {
     return {
       available: false,
