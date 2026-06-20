@@ -60,6 +60,46 @@ afterEach(() => {
 });
 
 describe("BoundedCodexThread.runTurnStreamed", () => {
+  it("logs the SDK request payload before calling runStreamed when enabled", async () => {
+    const previous = process.env.CODEX_LOG_REQUEST_BODY;
+    process.env.CODEX_LOG_REQUEST_BODY = "true";
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const controller = new AbortController();
+    const thread = makeStreamingThread([[agentMessage("All done"), TURN_COMPLETED]]);
+    const bounded = new BoundedCodexThread(
+      thread as never,
+      undefined,
+      undefined,
+      "test-model",
+    );
+
+    try {
+      await bounded.runTurnStreamed(
+        { prompt: "stream payload", signal: controller.signal },
+        () => undefined,
+      );
+    } finally {
+      if (previous === undefined) delete process.env.CODEX_LOG_REQUEST_BODY;
+      else process.env.CODEX_LOG_REQUEST_BODY = previous;
+    }
+
+    const requestLog = logSpy.mock.calls
+      .map(([line]) => JSON.parse(String(line)) as Record<string, unknown>)
+      .find((entry) => entry.event === "codex_sdk_request_payload");
+    expect(requestLog).toMatchObject({
+      path: "runTurnStreamed",
+      model: "test-model",
+      promptLength: "stream payload".length,
+      payload: {
+        prompt: "stream payload",
+        options: { signal: "present" },
+      },
+    });
+    expect(thread.runStreamed).toHaveBeenCalledWith("stream payload", {
+      signal: controller.signal,
+    });
+  });
+
   it("fires onProgress for reasoning + file change, returns the summary", async () => {
     const thread = makeStreamingThread([
       [

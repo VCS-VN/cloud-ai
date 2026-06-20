@@ -391,8 +391,25 @@ export function translateBuilderEventToRunStreamEvent(
       }
       const friendly = friendlyFailureMessage(event.failureCode, locale);
       const messageId = `msg-${runId}-error`;
+      const createdAt = new Date(event.at).toISOString();
       return {
         events: [
+          {
+            type: "message.created",
+            runId,
+            messageId,
+            kind: "error",
+            content: friendly,
+            processingStatus: "completed",
+            createdAt,
+            metadata: null,
+          },
+          {
+            type: "message.completed",
+            runId,
+            messageId,
+            content: friendly,
+          },
           {
             type: "run.failed",
             runId,

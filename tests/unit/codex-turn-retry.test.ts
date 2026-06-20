@@ -33,6 +33,38 @@ afterEach(() => {
 });
 
 describe("BoundedCodexThread.runTurn retry semantics", () => {
+  it("logs the SDK request payload before calling run when enabled", async () => {
+    const previous = process.env.CODEX_LOG_REQUEST_BODY;
+    process.env.CODEX_LOG_REQUEST_BODY = "true";
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const controller = new AbortController();
+    const thread = makeThread(() => SUCCESS_TURN);
+    const bounded = new BoundedCodexThread(thread as never, undefined, undefined, "test-model");
+
+    try {
+      await bounded.runTurn({ prompt: "payload prompt", signal: controller.signal });
+    } finally {
+      if (previous === undefined) delete process.env.CODEX_LOG_REQUEST_BODY;
+      else process.env.CODEX_LOG_REQUEST_BODY = previous;
+    }
+
+    const requestLog = logSpy.mock.calls
+      .map(([line]) => JSON.parse(String(line)) as Record<string, unknown>)
+      .find((entry) => entry.event === "codex_sdk_request_payload");
+    expect(requestLog).toMatchObject({
+      path: "runTurn",
+      model: "test-model",
+      promptLength: "payload prompt".length,
+      payload: {
+        prompt: "payload prompt",
+        options: { signal: "present" },
+      },
+    });
+    expect(thread.run).toHaveBeenCalledWith("payload prompt", {
+      signal: controller.signal,
+    });
+  });
+
   it("returns the first successful result without delay", async () => {
     const thread = makeThread(() => SUCCESS_TURN);
     const bounded = new BoundedCodexThread(thread as never);

@@ -69,25 +69,45 @@ function computeBackoffDelay(attempt: number): number {
   return Math.floor(Math.random() * exp);
 }
 
-// CODEX_LOG_REQUEST_BODY=true dumps the prompt we hand to the SDK on every turn
-// (the JS-level "request body" that goes INTO codex). Off by default — opt in via
-// .env only when debugging. NOTE: this is the prompt, not the wire payload codex
-// sends to the provider; for the raw Responses-API HTTP body set RUST_LOG (e.g.
-// RUST_LOG=codex_core=trace), which the SDK forwards to the codex binary.
+// CODEX_LOG_REQUEST_BODY=true dumps the JS-level payload we hand to the SDK on
+// every turn. Off by default — opt in via .env only when debugging. NOTE: this is
+// the app -> SDK payload, not the wire payload codex sends to the provider; for
+// the raw Responses-API HTTP body set RUST_LOG (e.g. RUST_LOG=codex_core=trace),
+// which the SDK forwards to the codex binary.
 function shouldLogRequestBody(): boolean {
   return process.env.CODEX_LOG_REQUEST_BODY === "true";
 }
 
-function logRequestBody(path: "runTurn" | "runTurnStreamed", prompt: string): void {
+type CodexSdkRequestPayload = {
+  prompt: string;
+  options: {
+    signal: "present" | "absent";
+  };
+};
+
+function buildRequestPayload(input: CodexTurnInput): CodexSdkRequestPayload {
+  return {
+    prompt: input.prompt,
+    options: {
+      signal: input.signal ? "present" : "absent",
+    },
+  };
+}
+
+function logRequestPayload(
+  path: "runTurn" | "runTurnStreamed",
+  payload: CodexSdkRequestPayload,
+  model?: string,
+): void {
   if (!shouldLogRequestBody()) return;
-  console.log(
-    JSON.stringify({
-      event: "codex_request_body",
-      path,
-      promptLength: prompt.length,
-      prompt,
-    }),
-  );
+  const base: Record<string, unknown> = {
+    event: "codex_sdk_request_payload",
+    path,
+    promptLength: payload.prompt.length,
+    payload,
+  };
+  if (model) base.model = model;
+  console.log(JSON.stringify(base));
 }
 
 function isAbortError(error: unknown): boolean {
@@ -241,15 +261,18 @@ export class BoundedCodexThread {
   private readonly thread: Thread;
   private readonly skillToolCallbacks?: ProjectReadSkillCallbacks;
   private readonly maxRetryAttempts: number;
+  private readonly model: string;
 
   constructor(
     thread: Thread,
     skillToolCallbacks?: ProjectReadSkillCallbacks,
     maxRetryAttempts: number = MAX_RETRY_ATTEMPTS,
+    model?: string,
   ) {
     this.thread = thread;
     this.skillToolCallbacks = skillToolCallbacks;
     this.maxRetryAttempts = Math.max(1, Math.floor(maxRetryAttempts));
+    this.model = model ?? (thread as unknown as { model?: string }).model ?? "unknown";
   }
 
   async runTurn(input: CodexTurnInput): Promise<CodexTurnSummary> {
@@ -302,8 +325,9 @@ export class BoundedCodexThread {
   }
 
   private async runTurnOnce(input: CodexTurnInput): Promise<CodexTurnSummary> {
-    logRequestBody("runTurn", input.prompt);
-    const turn = await this.thread.run(input.prompt, { signal: input.signal });
+    const payload = buildRequestPayload(input);
+    logRequestPayload("runTurn", payload, this.model);
+    const turn = await this.thread.run(payload.prompt, { signal: input.signal });
     const fileChanges: string[] = [];
     const skillToolCalls: { name: string; result: ProjectReadSkillResult }[] = [];
     const reasoning: string[] = [];
@@ -450,8 +474,9 @@ export class BoundedCodexThread {
     input: CodexTurnInput,
     onProgress: (event: CodexProgressEvent) => void,
   ): Promise<CodexTurnSummary> {
-    logRequestBody("runTurnStreamed", input.prompt);
-    const stream = await this.thread.runStreamed(input.prompt, {
+    const payload = buildRequestPayload(input);
+    logRequestPayload("runTurnStreamed", payload, this.model);
+    const stream = await this.thread.runStreamed(payload.prompt, {
       signal: input.signal,
     });
     const fileChanges: string[] = [];
@@ -724,8 +749,9 @@ export class BoundedCodexThread {
   async *runStreamed(
     input: CodexTurnInput,
   ): AsyncGenerator<ThreadEvent> {
-    logRequestBody("runTurnStreamed", input.prompt);
-    const stream = await this.thread.runStreamed(input.prompt, {
+    const payload = buildRequestPayload(input);
+    logRequestPayload("runTurnStreamed", payload, this.model);
+    const stream = await this.thread.runStreamed(payload.prompt, {
       signal: input.signal,
     });
     for await (const event of stream.events) {
@@ -799,8 +825,9 @@ export function createBoundedCodexThread(
       CODEX_HOME: input.env.codexHome,
     } as Record<string, string>,
   });
+  const model = input.model ?? input.env.model;
   const thread = codex.startThread({
-    model: input.model ?? input.env.model,
+    model,
     workingDirectory: input.draftWorkspacePath,
     sandboxMode,
     modelReasoningEffort: input.modelReasoningEffort,
@@ -809,7 +836,7 @@ export function createBoundedCodexThread(
     approvalPolicy: "never",
     additionalDirectories: [],
   });
-  return new BoundedCodexThread(thread, input.skillToolCallbacks, input.maxRetryAttempts);
+  return new BoundedCodexThread(thread, input.skillToolCallbacks, input.maxRetryAttempts, model);
 }
 
 export function summarizeUsage(usage: Usage | null): {
