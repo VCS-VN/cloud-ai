@@ -49,16 +49,20 @@ function createService(input: {
       input.restartPreview ??
       vi.fn().mockResolvedValue(undefined),
   };
+  const workspaceService = {
+    ensureWorkspace: vi.fn().mockResolvedValue("/tmp/test-workspace"),
+  };
 
   return {
     projectRepository,
     envWriter,
     runtimeOrchestrator,
+    workspaceService,
     service: new ProjectService(
       projectRepository as never,
       {} as never,
       {} as never,
-      {} as never,
+      workspaceService as never,
       undefined,
       undefined,
       undefined,
@@ -93,7 +97,12 @@ describe("ProjectService settings runtime events", () => {
     }
 
     expect(syncStoreSlug).toHaveBeenCalledWith(projectId, "new-store");
-    expect(restartPreview).not.toHaveBeenCalled();
+    expect(restartPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId,
+        workspaceRoot: "/tmp/test-workspace",
+      }),
+    );
     expect(received).toEqual(["preview_reload_requested"]);
   });
 

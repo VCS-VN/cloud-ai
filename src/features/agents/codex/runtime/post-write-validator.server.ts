@@ -17,7 +17,9 @@ export type ValidationIssueCode =
   | "brand_name_hardcoded"
   | "lucide_brand_icon_imported"
   | "tailwind_apply_group_misuse"
-  | "direct_data_import_in_ui";
+  | "direct_data_import_in_ui"
+  | "product_descriptions_unsanitized"
+  | "dompurify_ssr_unsafe";
 
 export type ValidationIssue = {
   code: ValidationIssueCode;
@@ -117,6 +119,8 @@ export async function validateWrittenFiles(input: {
     issues.push(...scanLucideBrandIcons(rel, content));
     issues.push(...scanTailwindApplyGroup(rel, content));
     issues.push(...scanDirectDataImport(rel, content));
+    issues.push(...scanProductDescriptionsSanitize(rel, content));
+    issues.push(...scanDompurifySsrGuard(rel, content));
   }
   return issues;
 }
@@ -220,6 +224,64 @@ function scanDirectDataImport(rel: string, content: string): ValidationIssue[] {
     });
   }
   return out;
+}
+
+// `product.descriptions` is an HTML string. Any UI that renders it must pass
+// the value through DOMPurify.sanitize first; rendering raw — either as JSX
+// text or via dangerouslySetInnerHTML with the raw string — leaks an XSS
+// surface and is the bug we keep seeing on first-pass generations.
+const DESCRIPTIONS_REFERENCE_RE = /\bproduct(?:\?\.|\.)descriptions\b/;
+const DOMPURIFY_SANITIZE_RE = /DOMPurify\s*\.\s*sanitize\s*\(/;
+const SSR_GUARD_RE = /typeof\s+window\s*!==\s*["']undefined["']/;
+
+function scanProductDescriptionsSanitize(rel: string, content: string): ValidationIssue[] {
+  if (!/\.(tsx?|jsx?)$/.test(rel)) return [];
+  if (!DESCRIPTIONS_REFERENCE_RE.test(content)) return [];
+  // The hooks file legitimately references the type field without rendering
+  // it. We only care about UI files that pull the value into JSX. Catch the
+  // two render patterns: raw JSX text and dangerouslySetInnerHTML on the raw
+  // string. If neither pattern appears AND no sanitize call exists, the file
+  // either type-references descriptions only (OK) or punts on rendering (also
+  // OK — we let downstream review catch missing UX, not the security gate).
+  const rendersAsJsxText = /\{[^}]*\bproduct(?:\?\.|\.)descriptions[^}]*\}/.test(
+    content,
+  );
+  const usesDangerously = /dangerouslySetInnerHTML/.test(content);
+  if (!rendersAsJsxText && !usesDangerously) return [];
+  if (DOMPURIFY_SANITIZE_RE.test(content)) return [];
+  const match = DESCRIPTIONS_REFERENCE_RE.exec(content);
+  return [
+    {
+      code: "product_descriptions_unsanitized",
+      path: rel,
+      line: match ? findLine(content, match) : undefined,
+      message:
+        "product.descriptions is rendered without DOMPurify.sanitize. " +
+        "Import DOMPurify, compute `sanitizedDescriptions` with the SSR guard " +
+        "(typeof window !== 'undefined' ? DOMPurify.sanitize(html) : escapeHtml(html)), " +
+        "and render via dangerouslySetInnerHTML on a wrapping <div>.",
+      evidence: match?.[0],
+    },
+  ];
+}
+
+function scanDompurifySsrGuard(rel: string, content: string): ValidationIssue[] {
+  if (!/\.(tsx?|jsx?)$/.test(rel)) return [];
+  if (!DOMPURIFY_SANITIZE_RE.test(content)) return [];
+  if (SSR_GUARD_RE.test(content)) return [];
+  const match = DOMPURIFY_SANITIZE_RE.exec(content);
+  return [
+    {
+      code: "dompurify_ssr_unsafe",
+      path: rel,
+      line: match ? findLine(content, match) : undefined,
+      message:
+        "DOMPurify.sanitize called without an SSR guard. DOMPurify touches " +
+        "`window` and crashes during SSR — gate the call with " +
+        "`typeof window !== 'undefined' ? DOMPurify.sanitize(html) : escapeHtml(html)`.",
+      evidence: match?.[0],
+    },
+  ];
 }
 
 // Format issues for a repair prompt. Same shape used by the corrupted-files

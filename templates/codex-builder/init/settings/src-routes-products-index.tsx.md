@@ -3,9 +3,8 @@ target: src/routes/products/index.tsx
 ---
 import { createFileRoute } from "@tanstack/react-router";
 import { useStore } from "@/app/store-provider";
-import { Link } from "@tanstack/react-router";
-import { formatMoney, resolveProductPrice } from "@/lib/format-money";
 import { useProductsList } from "@/services/store/use-products-list";
+import { ProductCard } from "@/components/store/product-card";
 
 export const Route = createFileRoute("/products/")({
   component: ProductsPage,
@@ -40,27 +39,9 @@ function ProductsPage() {
         </div>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {products.map((product) => {
-            const image = product.image ?? product.images?.[0];
-            return (
-              <Link
-                key={product.id}
-                to="/products/$productId"
-                params={{ productId: product.id }}
-                className="group overflow-hidden rounded-xl border bg-card text-card-foreground"
-              >
-                {image ? (
-                  <img src={image} alt={product.name} className="aspect-square w-full object-cover" />
-                ) : (
-                  <div className="aspect-square w-full bg-muted" />
-                )}
-                <div className="space-y-2 p-4">
-                  <h2 className="font-medium group-hover:text-primary">{product.name}</h2>
-                  <p className="text-sm text-muted-foreground">{formatMoney(resolveProductPrice(product))}</p>
-                </div>
-              </Link>
-            );
-          })}
+          {products.map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
         </div>
       )}
 

@@ -352,6 +352,24 @@ export class ProjectService {
           delayMs: 5000,
           at: new Date().toISOString(),
         });
+        // Vite resolves `import.meta.env.VITE_STORE_SLUG` at dev server start
+        // and does NOT re-read .env on iframe reload. Restart the PM2 preview
+        // process so the new slug is picked up; without this, the generated
+        // hooks keep returning sample data despite the .env update.
+        if (this.runtimeOrchestrator) {
+          const workspaceRoot = await this.workspaceService.ensureWorkspace(projectId);
+          this.runtimeOrchestrator
+            .restartPreview({ projectId, userId, workspaceRoot })
+            .catch((err) => {
+              console.warn(
+                JSON.stringify({
+                  event: "generated_project_preview_restart_failed",
+                  projectId,
+                  error: err instanceof Error ? err.message : String(err),
+                }),
+              );
+            });
+        }
       }
     }
     return project;

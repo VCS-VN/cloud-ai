@@ -147,6 +147,78 @@ describe("validateWrittenFiles", () => {
     expect(issues).toEqual([]);
   });
 
+  it("flags product.descriptions rendered as raw JSX text", async () => {
+    const dir = await fixture({
+      "src/components/store/product-card.tsx": `
+        export function ProductCard({ product }: any) {
+          return <div>{product.descriptions}</div>;
+        }
+      `,
+    });
+    const issues = await validateWrittenFiles({
+      draftWorkspacePath: dir,
+      filePaths: ["src/components/store/product-card.tsx"],
+    });
+    await fs.rm(dir, { recursive: true, force: true });
+    expect(issues.map((i) => i.code)).toEqual(["product_descriptions_unsanitized"]);
+  });
+
+  it("flags product.descriptions injected via dangerouslySetInnerHTML without sanitize", async () => {
+    const dir = await fixture({
+      "src/components/store/product-card.tsx": `
+        export function ProductCard({ product }: any) {
+          return <div dangerouslySetInnerHTML={{ __html: product.descriptions ?? '' }} />;
+        }
+      `,
+    });
+    const issues = await validateWrittenFiles({
+      draftWorkspacePath: dir,
+      filePaths: ["src/components/store/product-card.tsx"],
+    });
+    await fs.rm(dir, { recursive: true, force: true });
+    expect(issues.map((i) => i.code)).toEqual(["product_descriptions_unsanitized"]);
+  });
+
+  it("passes when DOMPurify.sanitize is used with the SSR guard", async () => {
+    const dir = await fixture({
+      "src/components/store/product-card.tsx": `
+        import DOMPurify from 'dompurify';
+        import { useMemo } from 'react';
+        export function ProductCard({ product }: any) {
+          const sanitizedDescriptions = useMemo(() => {
+            const html = product.descriptions ?? '';
+            return typeof window !== "undefined" ? DOMPurify.sanitize(html) : html;
+          }, [product.descriptions]);
+          return <div dangerouslySetInnerHTML={{ __html: sanitizedDescriptions }} />;
+        }
+      `,
+    });
+    const issues = await validateWrittenFiles({
+      draftWorkspacePath: dir,
+      filePaths: ["src/components/store/product-card.tsx"],
+    });
+    await fs.rm(dir, { recursive: true, force: true });
+    expect(issues).toEqual([]);
+  });
+
+  it("flags DOMPurify.sanitize without an SSR guard", async () => {
+    const dir = await fixture({
+      "src/components/store/product-card.tsx": `
+        import DOMPurify from 'dompurify';
+        export function ProductCard({ product }: any) {
+          const html = DOMPurify.sanitize(product.descriptions ?? '');
+          return <div dangerouslySetInnerHTML={{ __html: html }} />;
+        }
+      `,
+    });
+    const issues = await validateWrittenFiles({
+      draftWorkspacePath: dir,
+      filePaths: ["src/components/store/product-card.tsx"],
+    });
+    await fs.rm(dir, { recursive: true, force: true });
+    expect(issues.map((i) => i.code)).toContain("dompurify_ssr_unsafe");
+  });
+
   it("formatIssuesForRepairPrompt groups by code", () => {
     const out = formatIssuesForRepairPrompt([
       {
