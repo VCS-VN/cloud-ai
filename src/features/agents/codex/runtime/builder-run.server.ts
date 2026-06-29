@@ -1129,24 +1129,23 @@ export async function runInitBuilderRun(
       "- style.font / style.motion (0..1): only if the user implied them.",
       "Omit `style` entirely when hasStyleDirection is false.",
     ].join("\n");
+    // Detect + variant turns only need a JSON-shape reply, never apply_patch /
+    // exec. Hit /v1/responses directly to skip the codex CLI's 13KB system
+    // prompt + 8KB tool array + skills registry that get baked into every SDK
+    // call, and to avoid the WS-reconnect / reasoning-replay failure modes that
+    // only surface inside the CLI's HTTP fallback.
+    const { runResponsesTurn } = await import("./responses-http-client.server");
     const detectResult = await detectStyleDirection({
       runTurn: async () => {
-        const detectThread = createBoundedCodexThread({
+        return await runResponsesTurn({
           env: ctx.env,
-          draftWorkspacePath,
-          sandboxMode: "read-only",
-          modelReasoningEffort: "high",
-          maxRetryAttempts: INIT_CODEX_MAX_RETRY_ATTEMPTS,
-        });
-        const summary = await detectThread.runTurnStreamed(
-          { prompt: detectPrompt, signal: ctx.signal },
-          (ev) => {
-            if (ev.kind === "reasoning") {
-              emit({ type: "thinking", runId, text: ev.text, at: Date.now() });
-            }
+          prompt: detectPrompt,
+          reasoningEffort: "high",
+          signal: ctx.signal,
+          onReasoning: (text) => {
+            emit({ type: "thinking", runId, text, at: Date.now() });
           },
-        );
-        return { finalResponse: summary.finalResponse };
+        });
       },
     });
     console.warn(
@@ -1199,32 +1198,17 @@ export async function runInitBuilderRun(
     ].join("\n");
     const result = await generateRetailVariants({
       runTurn: async () => {
-        // Fresh thread per attempt. The retry path must NOT resume the prior
-        // thread: on the HTTP `responses` transport a resumed turn replays the
-        // whole transcript into input[], and the replayed reasoning item has no
-        // content/encrypted_content unless the provider preserves it — relays
-        // that don't reject it with `content is required (input[N].content)`,
-        // which is exactly what burned the variant retry loop. A new thread is
-        // a clean single round-trip with no replay.
-        const variantThread = createBoundedCodexThread({
+        // Direct HTTP — same rationale as detect above. No CLI, no WS, no
+        // transcript replay between attempts (each call is one round-trip).
+        return await runResponsesTurn({
           env: ctx.env,
-          draftWorkspacePath,
-          sandboxMode: "read-only",
-          modelReasoningEffort: "high",
-          maxRetryAttempts: INIT_CODEX_MAX_RETRY_ATTEMPTS,
-        });
-        // Stream so the design reasoning surfaces AS IT FORMS, before the
-        // variant pick lands — the user sees the model thinking instead of a
-        // frozen screen.
-        const summary = await variantThread.runTurnStreamed(
-          { prompt: variantReasoningPrompt, signal: ctx.signal },
-          (ev) => {
-            if (ev.kind === "reasoning") {
-              emit({ type: "thinking", runId, text: ev.text, at: Date.now() });
-            }
+          prompt: variantReasoningPrompt,
+          reasoningEffort: "high",
+          signal: ctx.signal,
+          onReasoning: (text) => {
+            emit({ type: "thinking", runId, text, at: Date.now() });
           },
-        );
-        return { finalResponse: summary.finalResponse };
+        });
       },
     });
     if (result.ok) {
