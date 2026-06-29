@@ -54,7 +54,6 @@ const INIT_PHASES: readonly InitPhase[] = [
   {
     marker: "DESIGN_DOC",
     files: ["DESIGN.md"],
-    // DESIGN.md authoring rules live inline in system.md; no separate spec body.
   },
   {
     marker: "COMPONENTS",
@@ -66,13 +65,13 @@ const INIT_PHASES: readonly InitPhase[] = [
       "src/components/store/cart-item.tsx",
       "src/components/store/order-card.tsx",
       "src/components/store/not-found.tsx",
-      // The homepage is the only route the agent authors. All other commerce
-      // routes are seeded runtime-owned and reverted if touched; home carries
-      // the storefront's visual identity, so it ships in this batch alongside
-      // the components that compose it.
-      "src/routes/index.tsx",
     ],
-    specPaths: ["data/component.md", "pages/home.md"],
+    specPaths: ["data/component.md"],
+  },
+  {
+    marker: "HOME",
+    files: ["src/routes/index.tsx"],
+    specPaths: ["pages/home.md"],
   },
 ];
 

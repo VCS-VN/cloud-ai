@@ -1078,9 +1078,25 @@ export async function runInitBuilderRun(
       detectStyleDirection,
       buildDetectedStyleBuildPrompt,
     } = await import("./design-variants.server");
-    const instructionDigest = allInstructions
-      .map((i) => `### ${i.meta.name}\n${i.content}`)
-      .join("\n\n---\n\n");
+    // Pre-build clarification turns only need a thin brief: project type, taste
+    // dial vocabulary, and output JSON shape (inlined in each prompt below).
+    // The full instructionDigest (foundation + init/system.md + init-mode) is
+    // ~11k tokens of build-time authoring rules (cat-heredoc, DOMPurify SSR
+    // guard, axios .data unwrap, completion checklist) irrelevant to choosing a
+    // visual direction. The full bundle still ships on the build turn via
+    // bundle.prompt below.
+    const designBrief = [
+      "Project: retail e-commerce storefront, public-publishing, SEO-capable.",
+      "Audience: shoppers; pages must serve a storefront shopping experience.",
+      "Taste dials (1=low, 10=high) — pick values that fit the brief, do not",
+      "default to baseline:",
+      "- designVariance: 1=perfect symmetry, 10=artsy chaos",
+      "- motionIntensity: 1=static, 10=cinematic / physics",
+      "- visualDensity: 1=airy gallery, 10=packed cockpit",
+      "Avoid generic defaults (AI-purple/blue gradient, beige+brass luxury,",
+      "Inter-as-default). Read the user request for real cultural / category /",
+      "price-tier cues and tailor the direction to THIS store.",
+    ].join("\n");
 
     // First, check whether the user's prompt ALREADY carries a clear design
     // direction. If it does, the four-variant question is redundant — extract
@@ -1099,9 +1115,9 @@ export async function runInitBuilderRun(
       ctx.userPrompt.trim(),
       "</user_request>",
       "",
-      "<project_instructions>",
-      instructionDigest,
-      "</project_instructions>",
+      "<project_brief>",
+      designBrief,
+      "</project_brief>",
       "",
       "Output JSON only — no prose, no code fence. Shape:",
       '{ "hasStyleDirection": boolean, "style"?: { "label": string, "summary": string, "palette"?: string[], "font"?: string, "motion"?: number } }',
@@ -1162,9 +1178,9 @@ export async function runInitBuilderRun(
       ctx.userPrompt.trim(),
       "</user_request>",
       "",
-      "<project_instructions>",
-      instructionDigest,
-      "</project_instructions>",
+      "<project_brief>",
+      designBrief,
+      "</project_brief>",
       "",
       "Output JSON only — no prose, no code fence. Shape:",
       '{ "question": string, "variants": [v1, v2, v3, v4] }',
