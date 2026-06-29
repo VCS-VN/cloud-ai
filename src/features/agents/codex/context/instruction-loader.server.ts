@@ -34,6 +34,57 @@ function frontmatterStrip(content: string): string {
   return content.slice(end + 4).replace(/^\n+/, "");
 }
 
+// {{include:<rel-path>}} placeholder resolver. Inlines the body of another
+// template (frontmatter stripped) at the placeholder's location so we can keep
+// one canonical copy of rules that used to be duplicated across 3-5 prompt
+// files. Path is resolved relative to `templates/codex-builder/`.
+//
+// Constraints:
+// - One pass only (depth 1). The resolved body is NOT re-scanned for nested
+//   {{include:...}} — a canonical file MUST be a leaf to keep prompts auditable
+//   and prevent accidental cycles. Nested placeholders are left as-is and will
+//   surface in the prompt as a visible bug (the dev sees the unresolved token).
+// - Missing target file → leave placeholder verbatim + warn. A typo must not
+//   silently empty a section of the prompt.
+const INCLUDE_RE = /\{\{include:([a-zA-Z0-9_\-./]+)\}\}/g;
+
+async function resolveIncludes(body: string): Promise<string> {
+  const matches = Array.from(body.matchAll(INCLUDE_RE));
+  if (matches.length === 0) return body;
+  const cache = new Map<string, string>();
+  let out = body;
+  for (const match of matches) {
+    const placeholder = match[0];
+    const rel = match[1];
+    if (!rel) continue;
+    let resolved = cache.get(rel);
+    if (resolved === undefined) {
+      try {
+        const abs = resolveTemplatePath(rel);
+        const raw = await fs.readFile(abs, "utf8");
+        resolved = frontmatterStrip(raw).trim();
+        cache.set(rel, resolved);
+      } catch (error) {
+        console.warn(
+          `[instruction-loader] include "${rel}" failed: ${
+            error instanceof Error ? error.message : "unknown"
+          }`,
+        );
+        continue;
+      }
+    }
+    out = out.split(placeholder).join(resolved);
+  }
+  return out;
+}
+
+// Exposed for other prompt-assembly paths (project-rules loader, batch-spec
+// loader) that read MD outside `loadInstruction` but still want canonical
+// dedupe placeholders to resolve.
+export async function resolveTemplateIncludes(body: string): Promise<string> {
+  return resolveIncludes(body);
+}
+
 export async function loadInstruction(input: {
   name: string;
   relativePath: string;
@@ -43,7 +94,8 @@ export async function loadInstruction(input: {
   const abs = resolveTemplatePath(input.relativePath);
   const raw = await fs.readFile(abs, "utf8");
   const stripped = frontmatterStrip(raw);
-  const hash = createHash("sha256").update(stripped).digest("hex").slice(0, 16);
+  const expanded = await resolveIncludes(stripped);
+  const hash = createHash("sha256").update(expanded).digest("hex").slice(0, 16);
   const meta: SelectedInstruction = {
     name: input.name,
     source: input.source,
@@ -51,7 +103,7 @@ export async function loadInstruction(input: {
     hash,
     loaded: true,
   };
-  return { meta, content: stripped };
+  return { meta, content: expanded };
 }
 
 export function wrapSelectedInstruction(input: {

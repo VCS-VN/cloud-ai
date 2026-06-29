@@ -101,13 +101,16 @@ function stripFrontmatter(content: string): string {
  * file list itself is still valid.
  */
 export async function loadBatchSpecs(specPaths: string[]): Promise<string[]> {
+  const { resolveTemplateIncludes } = await import(
+    "@/features/agents/codex/context/instruction-loader.server"
+  );
   const bodies: string[] = [];
   for (const rel of specPaths) {
     try {
       const abs = path.resolve(process.cwd(), INIT_TEMPLATES_DIR, rel);
       const raw = await fs.readFile(abs, "utf8");
       const body = stripFrontmatter(raw).trim();
-      if (body) bodies.push(body);
+      if (body) bodies.push(await resolveTemplateIncludes(body));
     } catch (error) {
       console.warn(
         JSON.stringify({

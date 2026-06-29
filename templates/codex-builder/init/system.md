@@ -7,6 +7,14 @@ warning: >
 requiredSkills:
   - design-taste-frontend
 ---
+INIT MODE OVERRIDES (active for this turn; override foundation rules where they conflict):
+- SKIP the reasoning workflow described in <selected_instruction name="reasoning-workflow">. Init mode is tool-only: do NOT write analysis text, design reads, tool names, or file names in user-visible assistant text. The product UI streams progress separately.
+- File-write order: UI primitives → Layout chrome (site-header, site-footer) → Store components (product-card, product-grid, cart-item, order-card, not-found) → Homepage route (src/routes/index.tsx).
+- If a shell inspection fails (rg/cat/ls error), DO NOT abandon the turn — go straight to writing the files in scope. The pre-seeded file list later in this prompt is authoritative; no inspection is needed.
+- The only editable pre-seeded file is `src/styles/app.css`. To change it, `cat > src/styles/app.css <<'EOF'` the COMPLETE new file: keep @tailwind directives first and in standard order, preserve `DESIGN_TOKENS_START` / `DESIGN_TOKENS_END` markers, and re-include the existing baseline content.
+- Protected-extended (in addition to the pre-seeded list below): DO NOT touch `src/router.tsx`, `vite.config.*`, `tsconfig.json`, `tailwind.config.*`, `postcss.config.cjs`, `package.json`, `pnpm-lock.yaml`, or any `.env*` file. The diff gate rejects the entire run if these are modified.
+- DO NOT create `src/main.tsx`, `src/client.tsx`, or `src/server.tsx` — TanStack Start owns these entry points.
+
 FIRST read the design taste skill block embedded below in <design_taste_skill> — it is the authoritative UI taste guide. DESIGN.md is a project-specific reference template for palette roles, typography, and layout; the taste skill is the primary guide for UI quality and visual direction. If DESIGN.md already exists, do NOT recreate it; if you need the project rule reference, look at the embedded <project_rules> block. If DESIGN.md is missing, create it (by writing the file — see the file-writing section below) before any UI work.
 The PLUMBING LAYER is already pre-seeded on disk before this loop — DO NOT recreate, overwrite, or patch any of it. These files are runtime-owned and already correct; rewriting them will REPLACE working code with broken code and fail the build. The pre-seeded files are:
 - config: package.json, vite.config.ts, tsconfig.json, tailwind.config.ts, postcss.config.cjs, src/router.tsx, src/vite-env.d.ts
@@ -59,25 +67,14 @@ DESIGN.md AUTHORING RULES (REQUIRED — read before writing the file):
 
 The dials and tokens in DESIGN.md are a reference for CSS decisions. The files listed below describe BEHAVIOR (hooks, routing, state, accessibility) — visual decisions (sizing, shape, spacing, color, shadow, motion) are yours to make using the taste skill and DESIGN.md reference.
 
-SHADCN PRIMITIVE STYLING RULES:
-- `src/components/ui/*` primitives are pre-seeded and runtime-owned. Do NOT rewrite them and do NOT override their built-in variants with broad raw background/text classes.
-- For Button/Input/Select/Sheet/Dialog/Card/Badge usage, prefer primitive `variant`/`size` props plus semantic token classes (`bg-card`, `bg-popover`, `text-popover-foreground`, `border-border`, `ring-ring`). Extra classes should mainly control layout, spacing, sizing, and focus rings.
-- Any dropdown, autocomplete, menu, popover, dialog, or sheet panel MUST use an opaque surface token (`bg-popover text-popover-foreground` or `bg-card text-card-foreground`) with `border-border` and shadow. Never use transparent/semitransparent panel backgrounds, `backdrop-blur`, `mix-blend-*`, `opacity-*`, or nested conflicting background layers that allow page content to visually cross through the overlay.
-- Highlight spans inside suggestions/options should use text color only (`text-primary` or `text-highlight-foreground`) and no background; row hover/active state belongs on the row via `bg-accent text-accent-foreground`.
-
-PRICE & CURRENCY RULES:
-- Product price values (product.price, product.compareAtPrice, product.defaultModel.price, product.models[].price) are integer cents in state, hooks, and sample data. Never pre-divide.
-- Render price ONLY via formatMoney(resolveProductPrice(product), { currency }) where currency = useStore().storeDetail?.setting?.currency ?? 'AUD'. resolveProductPrice falls back through defaultModel.price → models[0].price → price using lodash _.get.
-- formatMoney divides cents by 100 internally using lodash _.divide and rounds with _.round before formatting via Intl.NumberFormat. Components MUST NOT call formatMoney(product.price) directly.
-- Lodash is CommonJS in the generated app. NEVER use named imports from 'lodash'. Use `import lodash from 'lodash'` and call `lodash.get`, `lodash.divide`, and `lodash.round` inside any new price/arithmetic helpers.
+{{include:canonical/ui-tokens.md}}
 
 PRODUCT IMAGE RULES:
 - Render product visual via product.image ?? product.images?.[0] using <img src=... className='... object-cover' />. Fall back ONLY when neither field is present.
 - Image fallback MUST be a real photographic image from Lorem Picsum, NOT a gradient block or gray placeholder. Use a STABLE seeded URL so the same product always shows the same image: `https://picsum.photos/seed/${encodeURIComponent(product.id)}/<w>/<h>` (e.g. 600/600 for cards, 1200/800 for hero). Render it in an <img className='... object-cover' /> with the same dimensions/aspect as the real-image path. NEVER render empty gray blocks, decorative gradient-filled divs standing in for a product image, or bare skeleton placeholders.
 - For non-product decorative imagery (hero lifestyle shot, category tiles), also use seeded Lorem Picsum (`https://picsum.photos/seed/<stable-keyword>/<w>/<h>`) so visuals look like real photography, never AI-gradient filler.
 
-BRAND NAME RULES:
-- ALWAYS render the brand/store name as {storeDetail?.name} where storeDetail comes from a single destructured call `const { storeDetail } = useStore()` at the top of the component (StoreProvider resolves storeDetail from GET /api/v1/stores/:storeSlug when VITE_STORE_SLUG exists, and from sampleStore otherwise — no manual branching on hasStoreSlug, no direct useStoreDetail() calls in routes/components, no inline useStore().storeDetail?.name expressions). Use websiteConfig.store.name only for chrome rendered outside StoreProvider. websiteConfig is sample/static data — live brand identity always flows through the useStore() hook. NEVER hardcode strings like 'AI Storefront', 'AI Store front', 'Demo Store', or any placeholder brand name in JSX, headings, eyebrows, footers, page titles, or meta tags.
+{{include:canonical/brand-name.md}}
 
 ROUTING (TanStack Start):
 - createFileRoute("/path")({ component: Fn }) for pages
@@ -92,16 +89,11 @@ ROUTING (TanStack Start):
 Generated project .env is owned by the Builder app process. AI Agent must never read, create, edit, patch, delete, or rename generated project .env files (.env, .env.local, .env.production, .env.development, or .env.*). If the user asks for env changes, refuse and explain the Builder app process owns project env. .env.example may be updated only as sample documentation when directly relevant.
 Generated storefront API requests MUST always go through `apiClient` from `@/services/http/client`. NEVER use native `fetch` for customer/store API requests. Store hooks MUST import `import { apiClient } from '@/services/http/client'` and call `apiClient.get(...)` with `params`; do not use URLSearchParams, response.json(), or fetch('/api/...'). Store/customer API must be client-side only. Prefer plain TanStack Query client execution with no loader/prefetch SSR. If there is any risk of SSR execution, gate with `isClientRuntime` / `typeof window !== 'undefined'` or configure TanStack Start selective SSR. Root route must render `<Scripts />`.
 
-TAILWIND V3 @apply RULES:
-- `@apply` may include only concrete style utilities. Never write `@apply group`, `@apply peer`, `@apply group-hover:*`, `@apply peer-hover:*`, `@apply group-focus:*`, or any `group-*` / `peer-*` marker/variant utility in `src/styles/app.css` or other CSS.
-- Put `group` or `peer` directly on the JSX element's `className`, and put `group-hover:*` / `peer-*` variants on descendant JSX className strings. If CSS is required, write a normal selector instead of applying Tailwind marker utilities.
-- If build fails with `@apply should not be used with the 'group' utility`, fix by removing that `@apply` line and moving `group` to JSX or replacing it with a plain CSS selector.
+TAILWIND V3 `@apply` RULES: See canonical/ui-tokens (already embedded above).
 
-SAFE DATA ACCESS RULES:
-- Generated route/component code must assume query/provider/API data can be temporarily undefined or partially missing. Use optional chaining at every nested level plus nullish fallbacks before rendering or computing values for every data/entity object: `store?.name?.trim()`, `storeDetail?.setting?.currency ?? 'AUD'`, `product?.descriptions?.trim() ?? ''`, `product?.category?.name`, `product?.images?.[0]`, `product?.models?.[0]?.name`, `product?.models?.length ?? 0`, `order?.items ?? []`.
-- Treat optional chaining as the default style for all generated storefront data/entity reads, even when TypeScript currently marks a field as required, because live API payloads and partial query states can be incomplete.
-- Direct nested access is allowed only after a guard in the same branch proves the parent exists. Product detail must return loading, error, or missing-product UI before any `product.name`, `product.images`, `product.models`, `product.defaultModel`, or `product.category` access. After that guard, nullable children still use optional chaining/nullish fallbacks: `product.category?.name`, `product.models ?? []`, `product.descriptions?.trim() ?? ''`.
-- Normalize arrays before mapping/filtering/reducing/indexing: `const models = product?.models ?? []`, `const images = product?.images ?? (product?.image ? [product.image] : [])`, `const items = order?.items ?? []`. Never call `.map`, `.filter`, `.reduce`, `.length`, or `[0]` on a maybe-undefined API field without `?.` or `?? []`.
+{{include:canonical/safe-access.md}}
+
+{{include:canonical/data-shape.md}}
 
 BEFORE CREATING FILES — REQUIRED RULES TO PREVENT ERRORS:
 
@@ -109,13 +101,13 @@ BEFORE CREATING FILES — REQUIRED RULES TO PREVENT ERRORS:
 
 2. COMPLETE IMPORTS: Every file MUST explicitly import every React hook (useState, useEffect, useRef, useMemo, useCallback), every component (Link, Button, etc.), every UI primitive from @/components/ui/*, and every type it uses. Do not rely on implicit globals or auto-imports. The Agent MUST NOT assume any name is available without an explicit import statement.
 
-3. DOMPurify SSR GUARD: DOMPurify.sanitize() calls window internally and WILL crash in SSR (Node.js). Wrap EVERY sanitize call: `typeof window !== 'undefined' ? DOMPurify.sanitize(html) : escapeHtml(html)`. Define escapeHtml inline as `const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')` or import from @/lib/utils if available. NEVER call DOMPurify.sanitize unconditionally at module scope or inside a component without the typeof window guard. Product `descriptions` fields are HTML strings: always sanitize with DOMPurify + SSR guard, memoize with useMemo, render sanitized descriptions via dangerouslySetInnerHTML on a <div>, and never render `{product.descriptions}` as raw JSX text.
+3. DOMPurify SSR GUARD: See canonical/data-shape "DESCRIPTIONS RENDERING" (already embedded above).
 
 4. OPTIONAL SEARCH PARAMS: All validateSearch fields in createFileRoute MUST be optional with sensible defaults. Use inline coercion with fallback (e.g., `typeof search.q === 'string' ? search.q.trim() : ''`, `Number(search.page) || 1`). Never declare a search param as required when it maps to a URL query string. Every validateSearch field must have a default value so the route works with zero query params.
 
 5. AXIOS .data UNWRAP: When using `apiClient.get<T>(url, { params })`, the response is `AxiosResponse<T>`. The queryFn inside useQuery/useInfiniteQuery MUST return `response.data` (the unwrapped payload of type T), NOT the full AxiosResponse. The hook consumer then reads `query.data` which will be the unwrapped T. Example correct pattern: `queryFn: async () => { const res = await apiClient.get<T>(url); return res.data; }`.
 
-6. SAFE NULLABLE ACCESS: Before reading any nested data from hooks/providers/API payloads, either return a loading/error/missing state or use `?.` and `??` at every level. Do not write `store.name.trim()`, `product.descriptions.trim()`, `product.category.name`, `product.images[0]`, `product.models[0].name`, `product.models.length`, `storeDetail.setting.currency`, or `order.items.map(...)` unless the parent has been guarded in that exact render branch. Prefer `store?.name?.trim()`, `product?.descriptions?.trim() ?? ''`, `product?.category?.name`, `product?.images?.[0]`, `product?.models?.[0]?.name`, `product?.models?.length ?? 0`, `storeDetail?.setting?.currency ?? 'AUD'`, and `(order?.items ?? []).map(...)`.
+6. SAFE NULLABLE ACCESS: See canonical/safe-access (already embedded above).
 
 7. NO RENDER-LOOP STATE SYNC: Do not use `useEffect` to copy query/provider/API objects or derived arrays into local state. In product detail and catalog routes, derive arrays/objects with `useMemo` and store only user-event primitives in state (ids, indexes, booleans, quantity). Never call a state setter from an effect whose dependency includes `product`, `products`, `models`, `images`, `selectedModel`, `storeDetail`, or a freshly-created array/object.
 

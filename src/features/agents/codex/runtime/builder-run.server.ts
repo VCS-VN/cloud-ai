@@ -129,9 +129,9 @@ const FOUNDATION_INSTRUCTIONS: { name: string; relativePath: string }[] = [
 // Project-rule docs (routing, imports, protected files, data contract, UI,
 // loading UX) live outside the codex-builder template root. The manifest
 // references them and both retail-constraints.md (via the {{projectRuleDocs}}
-// placeholder) and system.md / init-mode.md (via the <project_rules> block they
-// tell the agent to read) depend on them being embedded. Order matches the
-// manifest's PROJECT_RULE_* layer order.
+// placeholder) and system.md (via the <project_rules> block it tells the
+// agent to read) depend on them being embedded. Order matches the manifest's
+// PROJECT_RULE_* layer order.
 const PROJECT_RULE_DOCS = [
   "routing.md",
   "imports.md",
@@ -155,13 +155,16 @@ function stripDocFrontmatter(content: string): string {
  * missing doc is skipped (logged) rather than failing the run.
  */
 async function loadProjectRuleDocs(): Promise<string> {
+  const { resolveTemplateIncludes } = await import(
+    "@/features/agents/codex/context/instruction-loader.server"
+  );
   const sections: string[] = [];
   for (const rel of PROJECT_RULE_DOCS) {
     try {
       const abs = path.resolve(process.cwd(), "templates/project-rules", rel);
       const raw = await fs.readFile(abs, "utf8");
       const body = stripDocFrontmatter(raw).trim();
-      if (body) sections.push(body);
+      if (body) sections.push(await resolveTemplateIncludes(body));
     } catch (error) {
       console.warn(
         JSON.stringify({
@@ -199,19 +202,11 @@ async function loadFoundationInstructions(): Promise<LoadedInstruction[]> {
   return out;
 }
 
-async function loadInitInstruction(): Promise<LoadedInstruction> {
-  return loadInstruction({
-    name: "init-mode",
-    relativePath: "init/init-mode.md",
-    source: "template_required",
-  });
-}
-
-// system.md carries the most detailed init authoring rules (DESIGN.md authoring,
-// price/currency cents, Lorem Picsum image contract, DOMPurify SSR guard, axios
-// .data unwrap, completion checklist). Its own frontmatter states it must be
-// sent verbatim to the model on init — but it was never loaded, so the agent
-// never saw these anti-error rules. Load it as part of the init instruction set.
+// system.md is the canonical init instruction. It now embeds the init-mode
+// overrides at its top (init-mode.md was merged into system.md). It carries the
+// detailed init authoring rules: DESIGN.md authoring, price/currency cents,
+// Lorem Picsum image contract, DOMPurify SSR guard, axios .data unwrap,
+// completion checklist. Its frontmatter states it must be sent verbatim on init.
 async function loadInitSystemInstruction(): Promise<LoadedInstruction> {
   return loadInstruction({
     name: "init-system",
@@ -949,11 +944,9 @@ export async function runInitBuilderRun(
   const fileManifest = await listFiles(draftWorkspacePath);
   const foundationInstructions = await loadFoundationInstructions();
   const initSystemInstruction = await loadInitSystemInstruction();
-  const initInstruction = await loadInitInstruction();
   const allInstructions = [
     ...foundationInstructions,
     initSystemInstruction,
-    initInstruction,
   ];
 
   const bundle = buildContextBundle({
@@ -1502,6 +1495,58 @@ export async function runInitBuilderRun(
     const stillCorrupted = await detectCorruptedFiles(draftWorkspacePath, sweepFiles);
     if (stillCorrupted.length > 0) {
       throw new CorruptedFilesError(stillCorrupted);
+    }
+    // Post-write rule validator: deterministic rules that used to bloat the
+    // prompt (hardcoded brand strings, lucide brand-icon imports, @apply group
+    // misuse, direct @/data imports in UI). Validator catches them in the
+    // generated files even when the model "forgets" the rule, then re-prompts
+    // with a structured repair list. One repair attempt — rules are mechanical.
+    {
+      const { validateWrittenFiles, formatIssuesForRepairPrompt } =
+        await import("./post-write-validator.server");
+      let validationIssues = await validateWrittenFiles({
+        draftWorkspacePath,
+        filePaths: sweepFiles,
+      });
+      if (validationIssues.length > 0) {
+        console.warn(
+          JSON.stringify({
+            event: "init_post_write_validation_issues",
+            runId,
+            projectId: ctx.projectId,
+            issueCount: validationIssues.length,
+            codes: Array.from(new Set(validationIssues.map((i) => i.code))),
+          }),
+        );
+        const repairList = formatIssuesForRepairPrompt(validationIssues);
+        await runTurnAndBridge(getIntermediateThread(), runId, emit, {
+          prompt:
+            `Validator found rule violations in files you just wrote. Fix each by ` +
+            `OVERWRITING the file via \`cat > <path> <<'EOF'\` … \`EOF\` with the ` +
+            `corrected complete file content. Use a single \`>\` (overwrite), NEVER ` +
+            `\`>>\`. Findings:\n\n${repairList}`,
+          signal: ctx.signal,
+          emitAnswer: false,
+          locale: toProgressLocale(ctx.locale),
+        });
+        validationIssues = await validateWrittenFiles({
+          draftWorkspacePath,
+          filePaths: sweepFiles,
+        });
+        if (validationIssues.length > 0) {
+          console.warn(
+            JSON.stringify({
+              event: "init_post_write_validation_persisted",
+              runId,
+              projectId: ctx.projectId,
+              issues: validationIssues.slice(0, 20),
+            }),
+          );
+          // Soft warning — don't fail the run yet; typecheck/build gates will
+          // catch hard breakages and these rule violations rarely break preview
+          // boot. Surface for triage and continue.
+        }
+      }
     }
     await enforceTailwindDirectivesAtTop({ draftWorkspacePath });
   } catch (error) {
