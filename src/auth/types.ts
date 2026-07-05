@@ -26,6 +26,8 @@ export type AuthUser = FirebaseUserProfile & {
   bio?: string
   coverImage?: string
   dateOfBirth?: string
+  episCloudTenantId?: string
+  episCloudActivatedAt?: Date
   createdAt: Date
   updatedAt: Date
   lastLoginAt: Date
@@ -40,6 +42,8 @@ export type AuthUserSummary = {
   bio?: string
   coverImage?: string
   dateOfBirth?: string
+  episCloudTenantId?: string
+  episCloudActivatedAt?: Date
   provider: AuthProvider
 }
 
@@ -116,6 +120,7 @@ export type LoginErrorCode =
   | 'oauth-exchange-failed'
   | 'oauth-profile-fetch-failed'
   | 'oauth-login-failed'
+  | 'episcloud-activation-failed'
   | 'unknown'
 
 export type LoginError = {

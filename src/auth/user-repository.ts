@@ -17,6 +17,8 @@ function rowToAuthUser(row: typeof users.$inferSelect): AuthUser {
     bio: row.bio ?? undefined,
     coverImage: row.coverImage ?? undefined,
     dateOfBirth: row.dateOfBirth ?? undefined,
+    episCloudTenantId: row.episCloudTenantId ?? undefined,
+    episCloudActivatedAt: row.episCloudActivatedAt ?? undefined,
     provider: row.provider === 'GITHUB' ? 'GITHUB' : row.provider === 'MONMI_OAUTH' ? 'MONMI_OAUTH' : 'GOOGLE',
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -158,6 +160,16 @@ export class UserRepository {
     if (!row) throw new AuthError('unauthorized')
     return rowToAuthUser(row)
   }
+
+  async activateEpisCloud(id: string, tenantId: string): Promise<AuthUser> {
+    const [row] = await getDb()
+      .update(users)
+      .set({ episCloudTenantId: tenantId, episCloudActivatedAt: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning()
+    if (!row) throw new AuthError('unauthorized')
+    return rowToAuthUser(row)
+  }
 }
 
 export function toAuthUserSummary(user: AuthUser): AuthUserSummary {
@@ -171,6 +183,8 @@ export function toAuthUserSummary(user: AuthUser): AuthUserSummary {
     bio: user.bio,
     coverImage: user.coverImage,
     dateOfBirth: user.dateOfBirth,
+    episCloudTenantId: user.episCloudTenantId,
+    episCloudActivatedAt: user.episCloudActivatedAt,
     provider: user.provider
   }
 }

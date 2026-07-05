@@ -48,6 +48,10 @@ export const updateProfile = createServerFn({ method: 'POST' })
     })
   )
 
+export const activateEpisCloud = createServerFn({ method: 'POST' }).handler(async () =>
+  (await loadAuthService()).activateEpisCloud()
+)
+
 export async function requireServerUser() {
   return (await loadAuthService()).requireActionUser().catch((error) => {
     throw toSafeAuthError(error, 'unauthorized')

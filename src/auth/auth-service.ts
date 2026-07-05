@@ -3,6 +3,7 @@ import { AuthError, toSafeAuthError } from './auth-errors'
 import { mapDecodedTokenToUserProfile, verifyIdToken } from './firebase-admin.server'
 import { encryptUserApiKey, decryptUserApiKey } from './api-key-crypto.server'
 import { MerchantGatewayClient } from './oauth-client.server'
+import { EpisCloudClient } from './episcloud-client.server'
 import type { LoginResult, OAuthLoginInput } from './types'
 import { toAuthUserSummary, UserRepository } from './user-repository'
 import { SessionService } from './session-service.server'
@@ -11,7 +12,8 @@ export class AuthService {
   constructor(
     private readonly users = new UserRepository(),
     private readonly sessions = new SessionService(),
-    private readonly merchantGateway = new MerchantGatewayClient()
+    private readonly merchantGateway = new MerchantGatewayClient(),
+    private readonly episCloud = new EpisCloudClient()
   ) { }
 
   async signInWithFirebaseIdToken(idToken: string): Promise<LoginResult> {
@@ -89,6 +91,17 @@ export class AuthService {
   }) {
     const current = await this.requireActionUser()
     const updated = await this.users.updateProfile(current.id, fields)
+    return toAuthUserSummary(updated)
+  }
+
+  async activateEpisCloud() {
+    const current = await this.requireActionUser()
+    if (current.episCloudTenantId) return current
+    const account = await this.episCloud.createAccount({
+      externalRef: current.id,
+      displayName: current.displayName ?? current.email
+    })
+    const updated = await this.users.activateEpisCloud(current.id, account.tenant_id)
     return toAuthUserSummary(updated)
   }
 

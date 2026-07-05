@@ -20,6 +20,7 @@ const safeMessages: Record<LoginErrorCode, string> = {
   'oauth-exchange-failed': 'Unable to complete sign-in. Please try again.',
   'oauth-profile-fetch-failed': 'Unable to load your account details. Please try again.',
   'oauth-login-failed': 'Unable to sign in to Cloud AI. Please try again.',
+  'episcloud-activation-failed': 'Could not activate EpisCloud. Please try again.',
   unknown: 'Something went wrong. Please try again.'
 }
 

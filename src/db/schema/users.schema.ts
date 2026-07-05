@@ -21,6 +21,8 @@ export const users = pgTable(
     bio: text("bio"),
     coverImage: text("cover_image"),
     dateOfBirth: text("date_of_birth"),
+    episCloudTenantId: text("epis_cloud_tenant_id"),
+    episCloudActivatedAt: timestamp("epis_cloud_activated_at"),
     provider: text("provider").notNull(),
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
