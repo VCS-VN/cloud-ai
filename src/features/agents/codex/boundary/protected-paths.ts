@@ -1,3 +1,24 @@
+/**
+ * Directory names never walked when building the Codex context (file manifest),
+ * routing detection, or the diff-gate snapshot. These hold dependencies, VCS
+ * metadata, and build artifacts (the generated project builds to dist/client)
+ * — feeding them to the SDK just burns tokens. Matched by exact directory name
+ * at any depth.
+ */
+export const IGNORED_WORKSPACE_DIRS: ReadonlySet<string> = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  ".tanstack",
+  ".output",
+  ".nitro",
+  ".vinxi",
+]);
+
+export function isIgnoredWorkspaceDir(name: string): boolean {
+  return IGNORED_WORKSPACE_DIRS.has(name);
+}
+
 export const BLOCKED_PROJECT_PATHS: readonly string[] = [
   "package.json",
   "pnpm-lock.yaml",

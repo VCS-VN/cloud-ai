@@ -197,7 +197,40 @@ async function writeSeedFile(absTarget: string, body: string, target: string): P
   }
 }
 
+// Written into every generated project so the Codex CLI's own file discovery
+// (it honors .gitignore even with skipGitRepoCheck) never walks dependency,
+// VCS, or build-artifact trees. The project builds to dist/client, so without
+// this the CLI reads the entire compiled bundle into context — huge token cost
+// on every follow-up prompt. Keep in sync with IGNORED_WORKSPACE_DIRS.
+const PROJECT_GITIGNORE = [
+  "node_modules",
+  "dist",
+  ".output",
+  ".tanstack",
+  ".nitro",
+  ".vinxi",
+  ".env",
+  "*.log",
+  "",
+].join("\n");
+
+/**
+ * Idempotently ensure the project workspace has a .gitignore excluding build
+ * artifacts / deps. Called on init AND on every update/new-route run so that
+ * projects created before this seed existed still get one on their next prompt.
+ */
+export async function ensureProjectGitignore(input: {
+  draftWorkspacePath: string;
+}): Promise<void> {
+  const gitignorePath = path.join(input.draftWorkspacePath, ".gitignore");
+  if (!(await pathExists(gitignorePath))) {
+    await writeSeedFile(gitignorePath, PROJECT_GITIGNORE, ".gitignore");
+  }
+}
+
 export async function seedInitSettingsFiles(input: { draftWorkspacePath: string }): Promise<void> {
+  await ensureProjectGitignore(input);
+
   for (const seedTarget of SEED_TARGETS) {
     validateTargetPath(seedTarget.target);
 

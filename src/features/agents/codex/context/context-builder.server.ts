@@ -26,6 +26,12 @@ export type ContextBundleInput = {
   selectedInstructions: LoadedInstruction[];
   selectedSkills?: SelectedSkillForInjection[];
   skillRegistry?: LoadedSkill[];
+  /**
+   * Optional pre-computed scope from the thinking pass. When present, the agent
+   * is told to focus on these files and skip broad discovery — avoiding a
+   * redundant full-workspace re-exploration on every prompt.
+   */
+  scopeAnalysis?: { relevantFiles: string[]; approach: string } | null;
 };
 
 export type ContextBundleOutput = {
@@ -53,6 +59,18 @@ export function buildContextBundle(input: ContextBundleInput): ContextBundleOutp
   lines.push("<file_manifest>");
   lines.push(manifestBlock(input.fileManifest));
   lines.push("</file_manifest>");
+  if (input.scopeAnalysis && input.scopeAnalysis.relevantFiles.length > 0) {
+    lines.push("<scope_analysis>");
+    lines.push(
+      "A triage pass already identified the files this request needs. Read and edit " +
+        "ONLY these unless your inspection finds they are insufficient — do NOT re-run " +
+        "broad discovery (ls/rg over the whole tree) before making the change.",
+    );
+    lines.push("relevant_files:");
+    lines.push(input.scopeAnalysis.relevantFiles.map((p) => `- ${p}`).join("\n"));
+    lines.push(`approach: ${input.scopeAnalysis.approach}`);
+    lines.push("</scope_analysis>");
+  }
   lines.push("<protected_paths>");
   lines.push("blocked:");
   lines.push(input.protectedPaths.blocked.map((p) => `- ${p}`).join("\n"));

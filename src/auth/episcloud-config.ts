@@ -13,3 +13,7 @@ export function getEpisCloudBaseUrl() {
 export function getEpisCloudPartnerToken() {
   return requireEnv('EPISCLOUD_PARTNER_TOKEN')
 }
+
+export function getEpisCloudGatewayBaseUrl() {
+  return requireEnv('EPISCLOUD_AIGW_BASE_URL', 'https://paas-ai.episcloud.com/v1')
+}

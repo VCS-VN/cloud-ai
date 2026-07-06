@@ -5,25 +5,22 @@ import os from "node:os";
 import type { CodexEnvAvailable } from "@/server/env/codex";
 
 vi.mock("@openai/codex-sdk", async () => {
-  let callCount = 0;
-  // Shared turn logic: turn 1 is planning (discovers draft root, no edits),
-  // turn 2 is the mutation that writes the new route file. The bridge now
-  // streams turns, so this runs from runStreamed; run() delegates for the
-  // non-streaming callers (repair loop, classifier).
-  async function doTurn(): Promise<void> {
-    callCount++;
-    // New-route now edits the project workspace root in place (no draft clone),
-    // so turn 2 writes the route file directly under the project root.
-    if (callCount === 2) {
-      const fs = await import("node:fs/promises");
-      const path = await import("node:path");
-      const root = (globalThis as any).__codexProjectRoot as string;
-      await fs.mkdir(path.join(root, "src/routes"), { recursive: true });
-      await fs.writeFile(
-        path.join(root, "src/routes/about.tsx"),
-        "export const About = () => null;",
-      );
-    }
+  // The read-only triage turns (classifier, planner, scope-analysis) all call
+  // run(); the mutation turn is the ONLY caller of runStreamed(). Key the file
+  // write off the first runStreamed() call rather than a shared turn counter so
+  // the mock stays correct no matter how many triage turns precede it.
+  let mutated = false;
+  async function writeRoute(): Promise<void> {
+    if (mutated) return;
+    mutated = true;
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const root = (globalThis as any).__codexProjectRoot as string;
+    await fs.mkdir(path.join(root, "src/routes"), { recursive: true });
+    await fs.writeFile(
+      path.join(root, "src/routes/about.tsx"),
+      "export const About = () => null;",
+    );
   }
   return {
     Codex: class {
@@ -31,11 +28,11 @@ vi.mock("@openai/codex-sdk", async () => {
         return {
           id: "t1",
           async run() {
-            await doTurn();
+            // Read-only triage turn: no edits.
             return { items: [], finalResponse: "ok", usage: null };
           },
           async runStreamed() {
-            await doTurn();
+            await writeRoute();
             return {
               events: (async function* () {
                 yield { type: "turn.completed", usage: null };
@@ -101,14 +98,53 @@ beforeEach(async () => {
   );
 });
 
+async function seedRootStylePlumbing(projectRoot: string): Promise<void> {
+  await fs.mkdir(path.join(projectRoot, "src/routes"), { recursive: true });
+  await fs.mkdir(path.join(projectRoot, "src/styles"), { recursive: true });
+  await fs.writeFile(
+    path.join(projectRoot, "src/routes/__root.tsx"),
+    [
+      "import '@vitejs/plugin-react/preamble';",
+      "import '@/styles/app.css';",
+      'import { Outlet, Scripts } from "@tanstack/react-router";',
+      'import { Providers } from "@/app/providers";',
+      "export default function Root() {",
+      "  return (",
+      "    <Providers>",
+      "      <Outlet />",
+      "      <Scripts />",
+      "    </Providers>",
+      "  );",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await fs.writeFile(
+    path.join(projectRoot, "src/styles/app.css"),
+    [
+      "@tailwind base;",
+      "@tailwind components;",
+      "@tailwind utilities;",
+      "/* DESIGN_TOKENS_START */",
+      ":root { --primary: 0 0% 0%; }",
+      "/* DESIGN_TOKENS_END */",
+      "",
+    ].join("\n"),
+  );
+}
+
 describe("new-route builder run", () => {
   it("emits planning milestone, runs build, and forwards new route to preview-health", async () => {
     const { runNewRouteBuilderRun, newRunId } = await import(
       "@/features/agents/codex/runtime/builder-run.server"
     );
     const projectId = "proj-r";
-    await fs.mkdir(path.join(tmpRoot, projectId), { recursive: true });
-    (globalThis as any).__codexProjectRoot = path.join(tmpRoot, projectId);
+    const projectRoot = path.join(tmpRoot, projectId);
+    await fs.mkdir(projectRoot, { recursive: true });
+    // Seed the runtime-owned plumbing the root/style contract requires so the
+    // run reaches the build gate (an existing project always has these).
+    await seedRootStylePlumbing(projectRoot);
+    (globalThis as any).__codexProjectRoot = projectRoot;
 
     const env: CodexEnvAvailable = {
       available: true,

@@ -66,6 +66,16 @@ export type PaymentConfig = {
   paypal: PaypalPaymentConfig
 }
 
+export type EpisCloudModel = {
+  id: string
+  ownedBy?: string
+}
+
+export type EpisCloudModelsResult =
+  | { status: 'ok'; models: EpisCloudModel[] }
+  | { status: 'no-api-key' }
+  | { status: 'error'; message: string }
+
 export type UpdateProfileInput = {
   displayName?: string
   photoUrl?: string
@@ -120,6 +130,8 @@ export type LoginErrorCode =
   | 'handoff-login-failed'
   | 'episcloud-activation-failed'
   | 'episcloud-not-activated'
+  | 'episcloud-api-key-failed'
+  | 'episcloud-models-failed'
   | 'payment-config-failed'
   | 'unknown'
 

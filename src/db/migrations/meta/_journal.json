@@ -43,6 +43,13 @@
       "when": 1783277674825,
       "tag": "0005_flat_reavers",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783322673940,
+      "tag": "0006_opposite_hairball",
+      "breakpoints": true
     }
   ]
 }

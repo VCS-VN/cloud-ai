@@ -93,6 +93,7 @@ type PreviewTokenState = {
 
 const CHAT_WIDTH_KEY = "project-detail-chat-width";
 const CHAT_VISIBLE_KEY = "project-detail-chat-visible";
+const SELECTED_MODEL_KEY = "project-detail-selected-model";
 const DEFAULT_CHAT_WIDTH = 420;
 const MIN_CHAT_WIDTH = 320;
 
@@ -150,6 +151,7 @@ function ProjectDetailPage() {
   const [draft, setDraft] = useState("");
   const [reasoningEffort, setReasoningEffort] =
     useState<ComposerReasoningEffort>("high");
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [planModeEnabled, setPlanModeEnabled] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | undefined>();
@@ -361,6 +363,14 @@ function ProjectDetailPage() {
 
     const savedVisible = window.localStorage.getItem(CHAT_VISIBLE_KEY);
     if (savedVisible === "false") setChatVisible(false);
+
+    const savedModel = window.localStorage.getItem(SELECTED_MODEL_KEY);
+    if (savedModel) setSelectedModel(savedModel);
+  }, []);
+
+  const handleModelChange = useCallback((modelId: string) => {
+    setSelectedModel(modelId);
+    window.localStorage.setItem(SELECTED_MODEL_KEY, modelId);
   }, []);
 
   // Clean up preview polling intervals on unmount so they don't leak across
@@ -1125,6 +1135,7 @@ function ProjectDetailPage() {
                 value={draft}
                 reasoningEffort={reasoningEffort}
                 planMode={planModeEnabled}
+                selectedModel={selectedModel}
                 sending={sending}
                 processing={isProcessing}
                 error={sendError}
@@ -1132,6 +1143,7 @@ function ProjectDetailPage() {
                 onChange={setDraft}
                 onReasoningEffortChange={setReasoningEffort}
                 onPlanModeChange={setPlanModeEnabled}
+                onModelChange={handleModelChange}
                 onSend={handleSendMessage}
                 onStop={handleStopGeneration}
                 onScrollMessagesUp={() => scrollMessagesByPage("up")}

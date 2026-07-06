@@ -21,6 +21,8 @@ const safeMessages: Record<LoginErrorCode, string> = {
   'handoff-login-failed': 'This builder link has expired or is invalid. Open Cloud AI again from the merchant dashboard.',
   'episcloud-activation-failed': 'Could not activate EpisCloud. Please try again.',
   'episcloud-not-activated': 'Activate EpisCloud before adding a payment method.',
+  'episcloud-api-key-failed': 'Could not provision your EpisCloud API key. Please try again.',
+  'episcloud-models-failed': 'Could not load available models from EpisCloud. Please try again.',
   'payment-config-failed': 'Could not load payment options. Please try again.',
   unknown: 'Something went wrong. Please try again.'
 }

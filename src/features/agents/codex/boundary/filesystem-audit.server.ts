@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isIgnoredWorkspaceDir } from "./protected-paths";
 
 export type FilesystemSnapshot = {
   draftWorkspacePath: string;
@@ -34,7 +35,7 @@ async function walk(
     if (entry.isSymbolicLink()) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      if (isIgnoredWorkspaceDir(entry.name)) continue;
       await walk(full, root, out);
       continue;
     }

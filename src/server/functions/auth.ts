@@ -45,6 +45,10 @@ export const getPaymentConfig = createServerFn({ method: 'POST' }).handler(async
   (await loadAuthService()).getPaymentConfig()
 )
 
+export const listEpisCloudModels = createServerFn({ method: 'GET' }).handler(async () =>
+  (await loadAuthService()).listEpisCloudModels()
+)
+
 export async function requireServerUser() {
   return (await loadAuthService()).requireActionUser().catch((error) => {
     throw toSafeAuthError(error, 'unauthorized')

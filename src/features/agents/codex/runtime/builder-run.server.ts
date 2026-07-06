@@ -5,6 +5,7 @@ import {
   classifyProjectPath,
   ALLOWED_AUDIT_PROJECT_PATH_PATTERNS,
   BLOCKED_PROJECT_PATHS,
+  isIgnoredWorkspaceDir,
 } from "@/features/agents/codex/boundary/protected-paths";
 import {
   takeSnapshot,
@@ -58,6 +59,7 @@ import {
   fireTaskTransitions,
 } from "./task-transition.server";
 import { runPlanGenerationPhase } from "./plan-generation.server";
+import { analyzeScope } from "./scope-analysis.server";
 import {
   planInitBatches,
   validatePlan,
@@ -68,6 +70,7 @@ import {
 import {
   InitSettingsSeedError,
   enforceTailwindDirectivesAtTop,
+  ensureProjectGitignore,
   injectDesignPaletteIntoAppCss,
   installInitWorkspaceDependencies,
   reassertRuntimeOwnedFiles,
@@ -117,10 +120,23 @@ export type BuilderRunOutcome = {
 
 export type EmitFn = (event: BuilderRunEvent) => void;
 
-const FOUNDATION_INSTRUCTIONS: { name: string; relativePath: string }[] = [
+type FoundationEntry = { name: string; relativePath: string };
+
+const FOUNDATION_INSTRUCTIONS: FoundationEntry[] = [
   { name: "retail-constraints", relativePath: "foundation/retail-constraints.md" },
   { name: "reasoning-workflow", relativePath: "foundation/reasoning-workflow.md" },
   { name: "edit-system", relativePath: "foundation/edit-system.md" },
+];
+
+// Update / new-route runs edit an existing storefront: edit-system.md already
+// carries the route-ownership map + edit rules, and retail-constraints keeps
+// the commerce guardrails. reasoning-workflow.md is the from-scratch build
+// sequence — dead weight for a targeted edit. The heavy {{projectRuleDocs}}
+// embed (~20KB) is also dropped for updates (see loadFoundationInstructions),
+// so a one-line copy tweak no longer ships the whole project-rule corpus.
+const UPDATE_FOUNDATION_INSTRUCTIONS: FoundationEntry[] = [
+  { name: "edit-system", relativePath: "foundation/edit-system.md" },
+  { name: "retail-constraints", relativePath: "foundation/retail-constraints.md" },
 ];
 
 // Project-rule docs (routing, imports, protected files, data contract, UI,
@@ -175,24 +191,31 @@ async function loadProjectRuleDocs(): Promise<string> {
   return sections.join("\n\n---\n\n");
 }
 
-async function loadFoundationInstructions(): Promise<LoadedInstruction[]> {
-  // retail-constraints.md ships a {{projectRuleDocs}} placeholder; fill it with
-  // the concatenated project-rule docs wrapped in <project_rules> so the block
-  // the init instructions tell the agent to read actually exists. Loaded once
-  // and reused across the foundation set.
-  const projectRuleDocs = await loadProjectRuleDocs();
+async function loadFoundationInstructions(
+  opts: { entries?: FoundationEntry[]; embedProjectRuleDocs?: boolean } = {},
+): Promise<LoadedInstruction[]> {
+  const entries = opts.entries ?? FOUNDATION_INSTRUCTIONS;
+  const embedProjectRuleDocs = opts.embedProjectRuleDocs ?? true;
+  // retail-constraints.md ships a {{projectRuleDocs}} placeholder. On init we
+  // fill it with the full project-rule corpus (the init instructions tell the
+  // agent to read the <project_rules> block). On updates we drop that ~20KB
+  // embed — edit-system.md already carries the route/edit rules a targeted
+  // change needs — and just strip the placeholder to keep the file valid.
+  const projectRuleDocs = embedProjectRuleDocs ? await loadProjectRuleDocs() : "";
   const out: LoadedInstruction[] = [];
-  for (const entry of FOUNDATION_INSTRUCTIONS) {
+  for (const entry of entries) {
     const loaded = await loadInstruction({
       name: entry.name,
       relativePath: entry.relativePath,
       source: "template_required",
     });
     if (loaded.content.includes("{{projectRuleDocs}}")) {
-      loaded.content = loaded.content.replace(
-        "{{projectRuleDocs}}",
-        `<project_rules>\n${projectRuleDocs}\n</project_rules>`,
-      );
+      loaded.content = embedProjectRuleDocs
+        ? loaded.content.replace(
+            "{{projectRuleDocs}}",
+            `<project_rules>\n${projectRuleDocs}\n</project_rules>`,
+          )
+        : loaded.content.replace(/\n?PROJECT RULE DOCS[^\n]*\n\{\{projectRuleDocs\}\}/, "").replace("{{projectRuleDocs}}", "");
     }
     out.push(loaded);
   }
@@ -331,6 +354,50 @@ async function runTurnAndBridge(
     });
   }
   return { finalResponse: summary.finalResponse, fileChanges: summary.fileChanges };
+}
+
+/**
+ * Run the scope-analysis thinking pass for an update/new-route run, streaming
+ * its plan as a thinking event. Returns `{ aborted: true }` if the user
+ * cancelled during the pass so the driver can finalize as "cancelled" (same as
+ * an abort during the execute turn). analyzeScope already swallows non-abort
+ * errors and returns null — those degrade gracefully to unscoped execution.
+ */
+async function runScopeAnalysisPhase(
+  ctx: BuilderRunContext,
+  emit: EmitFn,
+  input: { fileManifest: string[]; draftWorkspacePath: string },
+): Promise<
+  | { aborted: true }
+  | { aborted: false; scopeAnalysis: Awaited<ReturnType<typeof analyzeScope>> }
+> {
+  try {
+    const scopeAnalysis = await analyzeScope({
+      runId: ctx.runId,
+      prompt: ctx.userPrompt,
+      fileManifest: input.fileManifest,
+      language: toProgressLocale(ctx.locale),
+      signal: ctx.signal,
+      env: ctx.env,
+      draftWorkspacePath: input.draftWorkspacePath,
+    });
+    if (scopeAnalysis && scopeAnalysis.approach) {
+      emit({ type: "thinking", runId: ctx.runId, text: scopeAnalysis.approach, at: Date.now() });
+    }
+    return { aborted: false, scopeAnalysis };
+  } catch (error) {
+    if (ctx.signal?.aborted) return { aborted: true };
+    // analyzeScope only rethrows AbortError; anything else here is unexpected.
+    // Degrade to unscoped execution rather than failing the run.
+    console.warn(
+      JSON.stringify({
+        event: "scope_analysis_phase_unexpected_error",
+        runId: ctx.runId,
+        rawMessage: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return { aborted: false, scopeAnalysis: null };
+  }
 }
 
 function emitFinalAnswer(emit: EmitFn, runId: string, finalResponse: string): void {
@@ -495,7 +562,7 @@ async function listFiles(root: string): Promise<string[]> {
       return;
     }
     for (const entry of entries) {
-      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      if (entry.isDirectory() && isIgnoredWorkspaceDir(entry.name)) continue;
       const full = path.join(dir, entry.name);
       const rel = path.relative(base, full);
       if (entry.isDirectory()) {
@@ -1886,8 +1953,12 @@ export async function runNewRouteBuilderRun(
   const draftWorkspacePath = await ensureProjectWorkspace({
     projectId: ctx.projectId,
   });
+  await ensureProjectGitignore({ draftWorkspacePath });
   const fileManifest = await listFiles(draftWorkspacePath);
-  const foundationInstructions = await loadFoundationInstructions();
+  const foundationInstructions = await loadFoundationInstructions({
+    entries: UPDATE_FOUNDATION_INSTRUCTIONS,
+    embedProjectRuleDocs: false,
+  });
 
   // T015: classifier+planner gate. Skipped automatically when ctx.planMode === true.
   await runPlanGenerationPhase(
@@ -1898,6 +1969,26 @@ export async function runNewRouteBuilderRun(
     },
     emit,
   );
+
+  // Thinking pass: scope the request to specific files before the expensive
+  // high-reasoning execute turn, so it edits directly instead of re-deriving
+  // the project structure with broad discovery every time.
+  const scopePhase = await runScopeAnalysisPhase(ctx, emit, {
+    fileManifest,
+    draftWorkspacePath,
+  });
+  if (scopePhase.aborted) {
+    emit({ type: "cancelled", runId, milestone: "cancelled", at: Date.now() });
+    return finalize({
+      runId,
+      status: "cancelled",
+      failureCode: "cancelled",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: [],
+      optionalRouteWarnings: [],
+    });
+  }
 
   const bundle = buildContextBundle({
     projectId: ctx.projectId,
@@ -1915,6 +2006,7 @@ export async function runNewRouteBuilderRun(
     selectedInstructions: foundationInstructions,
     selectedSkills: skillSelection.selected,
     skillRegistry: skillSelection.registry,
+    scopeAnalysis: scopePhase.scopeAnalysis,
   });
 
   const symlinkScan = await scanDraftForSymlinks(draftWorkspacePath);
@@ -2268,8 +2360,14 @@ export async function runSmallUpdateBuilderRun(
   const draftWorkspacePath = await ensureProjectWorkspace({
     projectId: ctx.projectId,
   });
+  // Backfill .gitignore for projects created before it was seeded, so the
+  // Codex CLI never walks dist/ etc. into context on this follow-up prompt.
+  await ensureProjectGitignore({ draftWorkspacePath });
   const fileManifest = await listFiles(draftWorkspacePath);
-  const foundationInstructions = await loadFoundationInstructions();
+  const foundationInstructions = await loadFoundationInstructions({
+    entries: UPDATE_FOUNDATION_INSTRUCTIONS,
+    embedProjectRuleDocs: false,
+  });
 
   // T014: classifier+planner gate. Skipped automatically when ctx.planMode === true.
   await runPlanGenerationPhase(
@@ -2280,6 +2378,26 @@ export async function runSmallUpdateBuilderRun(
     },
     emit,
   );
+
+  // Thinking pass: scope the request to specific files before the expensive
+  // high-reasoning execute turn, so it edits directly instead of re-deriving
+  // the project structure with broad discovery every time.
+  const scopePhase = await runScopeAnalysisPhase(ctx, emit, {
+    fileManifest,
+    draftWorkspacePath,
+  });
+  if (scopePhase.aborted) {
+    emit({ type: "cancelled", runId, milestone: "cancelled", at: Date.now() });
+    return finalize({
+      runId,
+      status: "cancelled",
+      failureCode: "cancelled",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: [],
+      optionalRouteWarnings: [],
+    });
+  }
 
   const bundle = buildContextBundle({
     projectId: ctx.projectId,
@@ -2297,6 +2415,7 @@ export async function runSmallUpdateBuilderRun(
     selectedInstructions: foundationInstructions,
     selectedSkills: skillSelection.selected,
     skillRegistry: skillSelection.registry,
+    scopeAnalysis: scopePhase.scopeAnalysis,
   });
 
   const symlinkScan = await scanDraftForSymlinks(draftWorkspacePath);

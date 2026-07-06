@@ -78,6 +78,39 @@ vi.mock("@/features/agents/codex/validation/preview-health.server", () => ({
 
 let tmpRoot: string;
 
+// The update driver runs the root/style contract before typecheck. Seed the
+// runtime-owned plumbing an existing project always has so the run reaches the
+// typecheck repair loop this test exercises.
+async function seedRootStylePlumbing(projectRoot: string): Promise<void> {
+  await fs.mkdir(path.join(projectRoot, "src/routes"), { recursive: true });
+  await fs.mkdir(path.join(projectRoot, "src/styles"), { recursive: true });
+  await fs.writeFile(
+    path.join(projectRoot, "src/routes/__root.tsx"),
+    [
+      "import '@vitejs/plugin-react/preamble';",
+      "import '@/styles/app.css';",
+      'import { Outlet, Scripts } from "@tanstack/react-router";',
+      'import { Providers } from "@/app/providers";',
+      "export default function Root() {",
+      "  return (<Providers><Outlet /><Scripts /></Providers>);",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await fs.writeFile(
+    path.join(projectRoot, "src/styles/app.css"),
+    [
+      "@tailwind base;",
+      "@tailwind components;",
+      "@tailwind utilities;",
+      "/* DESIGN_TOKENS_START */",
+      ":root { --primary: 0 0% 0%; }",
+      "/* DESIGN_TOKENS_END */",
+      "",
+    ].join("\n"),
+  );
+}
+
 beforeEach(async () => {
   typecheckSpy.mockReset();
   (globalThis as any).__codexProjectRoot = undefined;
@@ -97,6 +130,7 @@ describe("repair cycle", () => {
     );
     const projectId = "proj-r1";
     await fs.mkdir(path.join(tmpRoot, projectId, "published"), { recursive: true });
+    await seedRootStylePlumbing(path.join(tmpRoot, projectId));
     (globalThis as any).__codexProjectRoot = path.join(tmpRoot, projectId);
 
     let n = 0;

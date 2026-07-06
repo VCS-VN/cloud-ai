@@ -25,11 +25,13 @@ import type {
   TokenContext,
 } from "@/shared/project-types";
 import { TokenBar } from "./TokenBar";
+import { ModelPicker } from "./ModelPicker";
 
 type MessageComposerProps = {
   value: string;
   reasoningEffort: ComposerReasoningEffort;
   planMode: boolean;
+  selectedModel: string | null;
   sending?: boolean;
   processing?: boolean;
   error?: string;
@@ -38,6 +40,7 @@ type MessageComposerProps = {
   onChange: (value: string) => void;
   onReasoningEffortChange: (value: ComposerReasoningEffort) => void;
   onPlanModeChange: (value: boolean) => void;
+  onModelChange: (value: string) => void;
   onSend: (value: string) => Promise<void> | void;
   onStop?: () => Promise<void> | void;
   onScrollMessagesUp?: () => void;
@@ -102,6 +105,7 @@ export function MessageComposer({
   value,
   reasoningEffort,
   planMode,
+  selectedModel,
   sending = false,
   processing = false,
   error,
@@ -110,6 +114,7 @@ export function MessageComposer({
   onChange,
   onReasoningEffortChange,
   onPlanModeChange,
+  onModelChange,
   onSend,
   onStop,
 }: MessageComposerProps) {
@@ -182,7 +187,13 @@ export function MessageComposer({
           </Button>
         </div>
 
-        <Popover open={effortOpen} onOpenChange={setEffortOpen}>
+        <div className="flex items-center gap-1">
+          <ModelPicker
+            selectedModel={selectedModel}
+            disabled={sending || disabled}
+            onModelChange={onModelChange}
+          />
+          <Popover open={effortOpen} onOpenChange={setEffortOpen}>
           <PopoverTrigger asChild>
             <Button
               variant="unstyled"
@@ -247,6 +258,7 @@ export function MessageComposer({
             })}
           </PopoverContent>
         </Popover>
+        </div>
       </div>
 
       {/* Textarea */}

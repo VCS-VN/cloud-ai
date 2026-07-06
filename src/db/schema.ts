@@ -1,4 +1,5 @@
 export * from "./schema/users.schema";
+export * from "./schema/user-settings.schema";
 export * from "./schema/projects.schema";
 export * from "./schema/project-revisions.schema";
 export * from "./schema/generation-records.schema";

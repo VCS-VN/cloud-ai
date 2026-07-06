@@ -170,6 +170,7 @@ export class UserRepository {
     if (!row) throw new AuthError('unauthorized')
     return rowToAuthUser(row)
   }
+
 }
 
 export function toAuthUserSummary(user: AuthUser): AuthUserSummary {

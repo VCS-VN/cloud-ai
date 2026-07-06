@@ -1,11 +1,12 @@
 import { redirect } from '@tanstack/react-router'
-import { AuthError, toSafeAuthError } from './auth-errors'
+import { AuthError, getSafeAuthMessage, toSafeAuthError } from './auth-errors'
 import { mapDecodedTokenToUserProfile, verifyIdToken } from './firebase-admin.server'
 import { encryptUserApiKey, decryptUserApiKey } from './api-key-crypto.server'
 import { MerchantGatewayClient } from './oauth-client.server'
 import { EpisCloudClient } from './episcloud-client.server'
-import type { LoginResult } from './types'
+import type { EpisCloudModelsResult, LoginResult } from './types'
 import { toAuthUserSummary, UserRepository } from './user-repository'
+import { UserSettingsRepository } from './user-settings-repository'
 import { SessionService } from './session-service.server'
 
 export class AuthService {
@@ -13,7 +14,8 @@ export class AuthService {
     private readonly users = new UserRepository(),
     private readonly sessions = new SessionService(),
     private readonly merchantGateway = new MerchantGatewayClient(),
-    private readonly episCloud = new EpisCloudClient()
+    private readonly episCloud = new EpisCloudClient(),
+    private readonly userSettings = new UserSettingsRepository()
   ) { }
 
   async signInWithFirebaseIdToken(idToken: string): Promise<LoginResult> {
@@ -91,19 +93,56 @@ export class AuthService {
 
   async activateEpisCloud() {
     const current = await this.requireActionUser()
-    if (current.episCloudTenantId) return current
-    const account = await this.episCloud.createAccount({
-      externalRef: current.id,
-      displayName: current.displayName ?? current.email
-    })
-    const updated = await this.users.activateEpisCloud(current.id, account.tenant_id)
-    return toAuthUserSummary(updated)
+    const user = await this.users.findById(current.id)
+    if (!user) throw new AuthError('unauthorized')
+
+    let result = user
+    let tenantId = user.episCloudTenantId
+
+    if (!tenantId) {
+      const account = await this.episCloud.createAccount({
+        externalRef: user.id,
+        displayName: user.displayName ?? user.email
+      })
+      tenantId = account.tenant_id
+      result = await this.users.activateEpisCloud(user.id, tenantId)
+    }
+
+    const settings = await this.userSettings.findByUserId(user.id)
+    if (!settings?.episCloudApiKey) {
+      const apiKey = await this.episCloud.createApiKey({
+        tenantId,
+        name: 'retail-default'
+      })
+      await this.userSettings.saveEpisCloudApiKey(user.id, {
+        encryptedSecret: encryptUserApiKey(apiKey.raw_secret),
+        keyId: apiKey.id,
+        prefix: apiKey.prefix
+      })
+    }
+
+    return toAuthUserSummary(result)
   }
 
   async getPaymentConfig() {
     const current = await this.requireActionUser()
     if (!current.episCloudTenantId) throw new AuthError('episcloud-not-activated')
     return this.episCloud.getPaymentConfig(current.episCloudTenantId)
+  }
+
+  async listEpisCloudModels(): Promise<EpisCloudModelsResult> {
+    const current = await this.requireActionUser()
+    const settings = await this.userSettings.findByUserId(current.id)
+    if (!settings?.episCloudApiKey) return { status: 'no-api-key' }
+
+    try {
+      const apiKey = decryptUserApiKey(settings.episCloudApiKey)
+      const models = await this.episCloud.listModels(apiKey)
+      return { status: 'ok', models }
+    } catch (error) {
+      const code = error instanceof AuthError ? error.code : 'episcloud-models-failed'
+      return { status: 'error', message: getSafeAuthMessage(code) }
+    }
   }
 
   async requireMerchantApiKey() {
@@ -114,6 +153,16 @@ export class AuthService {
     if (!user?.apiKey) throw new AuthError('unauthorized')
 
     return decryptUserApiKey(user.apiKey)
+  }
+
+  async requireEpisCloudApiKey() {
+    const session = await this.sessions.readSession()
+    if (!session) throw new AuthError('unauthorized')
+
+    const settings = await this.userSettings.findByUserId(session.userId)
+    if (!settings?.episCloudApiKey) throw new AuthError('episcloud-api-key-failed')
+
+    return decryptUserApiKey(settings.episCloudApiKey)
   }
 
   async logout() {

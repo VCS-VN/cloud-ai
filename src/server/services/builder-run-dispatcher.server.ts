@@ -1,6 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { getProjectWorkspaceRoot } from "@/server/config/paths.server";
+import { isIgnoredWorkspaceDir } from "@/features/agents/codex/boundary/protected-paths";
 import {
   ActiveRunExistsError,
   createBuilderRunHandle,
@@ -92,8 +93,7 @@ async function listWorkspaceFiles(projectId: string): Promise<string[]> {
     }
     for (const entry of entries) {
       if (
-        entry.name === "node_modules" ||
-        entry.name === ".git" ||
+        isIgnoredWorkspaceDir(entry.name) ||
         (dir === base && (entry.name === "drafts" || entry.name === "published"))
       ) {
         continue;

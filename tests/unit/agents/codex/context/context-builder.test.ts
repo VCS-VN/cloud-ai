@@ -80,4 +80,31 @@ describe("buildContextBundle", () => {
     const out = buildContextBundle(baseInput({ projectSummary: null }));
     expect(out.prompt).toContain("(no project summary yet)");
   });
+
+  it("renders a scope_analysis block with the relevant files and approach", () => {
+    const out = buildContextBundle(
+      baseInput({
+        scopeAnalysis: {
+          relevantFiles: ["src/routes/index.tsx"],
+          approach: "Edit the hero heading.",
+        },
+      }),
+    );
+    expect(out.prompt).toContain("<scope_analysis>");
+    expect(out.prompt).toContain("- src/routes/index.tsx");
+    expect(out.prompt).toContain("approach: Edit the hero heading.");
+    expect(out.prompt).toContain("</scope_analysis>");
+  });
+
+  it("omits the scope_analysis block when scopeAnalysis is null", () => {
+    const out = buildContextBundle(baseInput({ scopeAnalysis: null }));
+    expect(out.prompt).not.toContain("<scope_analysis>");
+  });
+
+  it("omits the scope_analysis block when relevantFiles is empty", () => {
+    const out = buildContextBundle(
+      baseInput({ scopeAnalysis: { relevantFiles: [], approach: "unsure" } }),
+    );
+    expect(out.prompt).not.toContain("<scope_analysis>");
+  });
 });
