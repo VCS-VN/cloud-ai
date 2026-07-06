@@ -53,10 +53,8 @@ import {
 } from "./codex-thread.server";
 import {
   fireRemainingTasksComplete,
-  fireTaskCompleted,
   fireTaskPauseAll,
   fireTaskResumeAll,
-  fireTaskStarted,
   fireTaskTransitions,
 } from "./task-transition.server";
 import { runPlanGenerationPhase } from "./plan-generation.server";
@@ -82,7 +80,6 @@ import type {
   BuilderRunEvent,
   BuilderRunFailureCode,
   BuilderRunMilestone,
-  BuilderRunPlannedTask,
 } from "@/features/agents/ui/builder-events";
 import type { BuilderRunKind, BuilderRunStatus } from "@/features/agents/ui/builder-run-status";
 import type { CodexEnvAvailable } from "@/server/env/codex";
@@ -222,10 +219,7 @@ function emitMilestoneInternal(
 ): void {
   emit({ type: "milestone", runId, milestone, at: Date.now() });
   const handle = getBuilderRunHandle(runId);
-  // Init drives the checklist itself (manualTaskTransitions), advancing one task
-  // at a time at the exact moment each batch begins/ends. Other flows still use
-  // the milestone→bucket auto-advance.
-  if (handle && !handle.manualTaskTransitions) {
+  if (handle) {
     fireTaskTransitions(handle, emit, milestone);
   }
 }
@@ -617,67 +611,6 @@ class CorruptedFilesError extends Error {
   }
 }
 
-// Init task IDs. The driver fires started/completed for these explicitly so the
-// checklist advances one task at a time (see runInitBuilderRun).
-const INIT_TASK_PREPARE = "prepare";
-const INIT_TASK_DEFINE_STYLE = "define-style";
-const INIT_TASK_BUILD_COMPONENTS = "build-components";
-const INIT_TASK_VERIFY = "verify";
-
-// Locale-aware init task titles. The init driver fires started/completed
-// for these explicitly so the checklist advances one task at a time. Titles
-// must match ctx.locale so the task list is never stuck in a single language
-// regardless of the user's prompt language.
-const INIT_TASK_TITLES: Record<ProgressLocale, Record<string, string>> = {
-  en: {
-    [INIT_TASK_PREPARE]: "Prepare workspace",
-    [INIT_TASK_DEFINE_STYLE]: "Define design",
-    [INIT_TASK_BUILD_COMPONENTS]: "Build components",
-    [INIT_TASK_VERIFY]: "Verify & finalize",
-  },
-  vi: {
-    [INIT_TASK_PREPARE]: "Chuẩn bị workspace",
-    [INIT_TASK_DEFINE_STYLE]: "Định hình thiết kế",
-    [INIT_TASK_BUILD_COMPONENTS]: "Dựng giao diện",
-    [INIT_TASK_VERIFY]: "Kiểm tra & hoàn tất",
-  },
-};
-
-function deterministicInitTasks(locale: ProgressLocale): BuilderRunPlannedTask[] {
-  const titles = INIT_TASK_TITLES[locale] ?? INIT_TASK_TITLES.en;
-  return [
-    { id: INIT_TASK_PREPARE, title: titles[INIT_TASK_PREPARE], phase: "prep" },
-    { id: INIT_TASK_DEFINE_STYLE, title: titles[INIT_TASK_DEFINE_STYLE], phase: "build" },
-    { id: INIT_TASK_BUILD_COMPONENTS, title: titles[INIT_TASK_BUILD_COMPONENTS], phase: "build" },
-    { id: INIT_TASK_VERIFY, title: titles[INIT_TASK_VERIFY], phase: "verify" },
-  ];
-}
-
-// Seed the init checklist at the very start of the run. All tasks begin pending;
-// the driver fires started/completed explicitly. manualTaskTransitions stops the
-// milestone→bucket auto-advance from racing the driver's per-task transitions.
-function seedInitTaskPlan(runId: string, emit: EmitFn, locale: ProgressLocale): void {
-  const handle = getBuilderRunHandle(runId);
-  if (!handle || (handle.taskList && handle.taskList.length > 0)) return;
-  const tasks = deterministicInitTasks(locale);
-  handle.taskList = tasks;
-  handle.taskStatuses = Object.fromEntries(tasks.map((task) => [task.id, "pending" as const]));
-  handle.manualTaskTransitions = true;
-  emit({ type: "plan.created", runId, tasks, at: Date.now() });
-}
-
-// Thin wrappers that resolve the handle by runId so the init driver can advance
-// the checklist with just (runId, emit, taskId).
-function fireInitTaskStarted(runId: string, emit: EmitFn, taskId: string): void {
-  const handle = getBuilderRunHandle(runId);
-  if (handle) fireTaskStarted(handle, emit, taskId);
-}
-
-function fireInitTaskCompleted(runId: string, emit: EmitFn, taskId: string): void {
-  const handle = getBuilderRunHandle(runId);
-  if (handle) fireTaskCompleted(handle, emit, taskId);
-}
-
 // Codex owns file writes inside the CLI binary; the app cannot intercept a
 // patch to force "apply in place". When the model re-creates a file across
 // turns (or runs `*** Add File:` on a file that already exists), the contents
@@ -881,12 +814,6 @@ export async function runInitBuilderRun(
   const { runId } = ctx;
   emitMilestoneInternal(emit, runId, "loading_context");
 
-  // Seed the 4-task checklist immediately so the user sees structured progress
-  // from the first moment — not a blank panel during seed+install. `prepare`
-  // goes active right away; the driver advances each task explicitly below.
-  seedInitTaskPlan(runId, emit, toProgressLocale(ctx.locale));
-  fireInitTaskStarted(runId, emit, INIT_TASK_PREPARE);
-
   const skillSelection = await runSkillSelection(
     ctx,
     ["init_project"],
@@ -908,6 +835,19 @@ export async function runInitBuilderRun(
   const draftWorkspacePath = await ensureProjectWorkspace({
     projectId: ctx.projectId,
   });
+
+  // Same LLM-based planner used by update/new_route: replaces a fixed
+  // 4-task checklist with request-specific tasks, milestone-bucket
+  // auto-advanced (see task-transition.server.ts). This also fixes the
+  // design-variant pause below being invisible in the checklist — under
+  // manual task-driving no task was "active" during that pause, so
+  // fireTaskPauseAll was a no-op; bucket auto-advance keeps the prep-bucket
+  // task active through it.
+  await runPlanGenerationPhase(
+    ctx,
+    { draftWorkspacePath, currentMilestone: "loading_context" },
+    emit,
+  );
 
   try {
     await seedInitSettingsFiles({ draftWorkspacePath });
@@ -937,9 +877,6 @@ export async function runInitBuilderRun(
       optionalRouteWarnings: [],
     });
   }
-
-  // Workspace seeded + dependencies installed — the prepare task is done.
-  fireInitTaskCompleted(runId, emit, INIT_TASK_PREPARE);
 
   const fileManifest = await listFiles(draftWorkspacePath);
   const foundationInstructions = await loadFoundationInstructions();
@@ -1279,8 +1216,6 @@ export async function runInitBuilderRun(
   }
 
   // Variant chosen (or skipped) — begin authoring the visual identity.
-  fireInitTaskStarted(runId, emit, INIT_TASK_DEFINE_STYLE);
-
   emitMilestoneInternal(emit, runId, "building_pages");
   let finalResponse = "";
   try {
@@ -1394,16 +1329,6 @@ export async function runInitBuilderRun(
         }
       }
 
-      // Advance the checklist as each batch finishes. DESIGN_DOC completes the
-      // define-style task and starts build-components; COMPONENTS completes
-      // build-components and starts verify (the gates run next).
-      if (batch.marker === "DESIGN_DOC") {
-        fireInitTaskCompleted(runId, emit, INIT_TASK_DEFINE_STYLE);
-        fireInitTaskStarted(runId, emit, INIT_TASK_BUILD_COMPONENTS);
-      } else if (batch.marker === "COMPONENTS") {
-        fireInitTaskCompleted(runId, emit, INIT_TASK_BUILD_COMPONENTS);
-        fireInitTaskStarted(runId, emit, INIT_TASK_VERIFY);
-      }
     }
 
     // Re-assert runtime-owned plumbing. system.md tells the model NOT to touch

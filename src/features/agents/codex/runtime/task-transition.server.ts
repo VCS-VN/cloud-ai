@@ -27,9 +27,8 @@ const BUCKET_ORDER: Record<BuilderRunTaskPhase, number> = {
 // wrapper, so publish-first is naturally satisfied — the translator+bridge
 // receive the published event and persist the matching timeline directive.
 
-// Milestone→bucket auto-advance used by the update / new_route flows, whose
-// checklists track coarse phases. The init flow opts out (manualTaskTransitions)
-// and drives tasks one at a time via fireTaskStarted/fireTaskCompleted instead.
+// Milestone→bucket auto-advance used by all run kinds (update / new_route /
+// init), whose checklists track coarse phases (prep/build/verify).
 export function fireTaskTransitions(
   handle: BuilderRunHandle,
   emit: EmitFn,
@@ -55,33 +54,6 @@ export function fireTaskTransitions(
       }
     }
   }
-}
-
-// Mark exactly ONE task active and emit plan.task.started. The init driver
-// calls this at the precise moment it begins each batch, so the checklist shows
-// the single task actually running — not every task in a phase bucket at once.
-export function fireTaskStarted(
-  handle: BuilderRunHandle,
-  emit: EmitFn,
-  taskId: string,
-): void {
-  if (!handle.taskList || handle.taskList.length === 0) return;
-  if (handle.taskStatuses[taskId] === "active") return;
-  handle.taskStatuses[taskId] = "active";
-  emit({ type: "plan.task.started", runId: handle.runId, taskId, at: Date.now() });
-}
-
-// Mark exactly ONE task done and emit plan.task.completed. Paired with
-// fireTaskStarted by the driver to advance the checklist one task at a time.
-export function fireTaskCompleted(
-  handle: BuilderRunHandle,
-  emit: EmitFn,
-  taskId: string,
-): void {
-  if (!handle.taskList || handle.taskList.length === 0) return;
-  if (handle.taskStatuses[taskId] === "done") return;
-  handle.taskStatuses[taskId] = "done";
-  emit({ type: "plan.task.completed", runId: handle.runId, taskId, at: Date.now() });
 }
 
 export function fireTaskPauseAll(handle: BuilderRunHandle, emit: EmitFn): void {
