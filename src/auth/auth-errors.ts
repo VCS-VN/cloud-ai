@@ -21,6 +21,8 @@ const safeMessages: Record<LoginErrorCode, string> = {
   'oauth-profile-fetch-failed': 'Unable to load your account details. Please try again.',
   'oauth-login-failed': 'Unable to sign in to Cloud AI. Please try again.',
   'episcloud-activation-failed': 'Could not activate EpisCloud. Please try again.',
+  'episcloud-not-activated': 'Activate EpisCloud before adding a payment method.',
+  'payment-config-failed': 'Could not load payment options. Please try again.',
   unknown: 'Something went wrong. Please try again.'
 }
 

@@ -1,7 +1,13 @@
 ---
 target: src/app/store-provider.tsx
 ---
-import { createContext, useContext, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   useStoreDetail,
   hasStoreSlug,
@@ -61,7 +67,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const { data, isLoading, isError, error, refetch, isUsingSampleData } =
     useStoreDetail();
 
-  if (hasStoreSlug && isLoading) return <StorefrontLoadingScreen />;
+  // Entry loading covers the initial client-mount/hydration window so the
+  // branded loading screen is visible on first load even when store data
+  // resolves synchronously (sample-data mode, no VITE_STORE_SLUG). `mounted`
+  // is a real readiness signal (flips true after hydration), not a fake timer.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || (hasStoreSlug && isLoading)) return <StorefrontLoadingScreen />;
   if (hasStoreSlug && isError) return <StorefrontErrorScreen onRetry={refetch} />;
 
   return (

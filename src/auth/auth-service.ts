@@ -105,6 +105,12 @@ export class AuthService {
     return toAuthUserSummary(updated)
   }
 
+  async getPaymentConfig() {
+    const current = await this.requireActionUser()
+    if (!current.episCloudTenantId) throw new AuthError('episcloud-not-activated')
+    return this.episCloud.getPaymentConfig(current.episCloudTenantId)
+  }
+
   async requireMerchantApiKey() {
     const session = await this.sessions.readSession()
     if (!session) throw new AuthError('unauthorized')

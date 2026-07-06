@@ -18,6 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import { UserAvatar, UserMenu } from "@/components/auth/UserMenu";
+import { AddPaymentMethodDialog } from "@/components/profile/AddPaymentMethodDialog";
 import { EpisCloudActivateDialog } from "@/components/profile/EpisCloudActivateDialog";
 import { Button } from "@/components/ui/button";
 import { activateEpisCloud, getCurrentUser } from "@/server/functions/auth";
@@ -181,7 +182,7 @@ function SettingsPage() {
           />
           <PlanSection />
           <UsageSection />
-          <PaymentSection />
+          <PaymentSection user={user} />
           <InvoicesSection />
           <TeamSection displayName={displayName} email={user.email} />
           <PreferencesSection theme={theme} setTheme={setTheme} />
@@ -582,7 +583,9 @@ function UsageSection() {
   );
 }
 
-function PaymentSection() {
+function PaymentSection({ user }: { user: AuthUserSummary }) {
+  const [addOpen, setAddOpen] = useState(false);
+  const activated = Boolean(user.episCloudTenantId);
   return (
     <section
       id="payment"
@@ -612,10 +615,21 @@ function PaymentSection() {
           action="Make default"
           dangerAction="Remove"
         />
-        <button className="mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-hairline text-ui-sm font-medium text-muted hover:border-ink/30 hover:text-ink">
+        <button
+          type="button"
+          disabled={!activated}
+          onClick={() => setAddOpen(true)}
+          className="mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-hairline text-ui-sm font-medium text-muted hover:border-ink/30 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-hairline disabled:hover:text-muted"
+        >
           <Plus aria-hidden="true" size={16} />
           Add payment method
         </button>
+        {!activated ? (
+          <p className="m-0 text-center text-[11px] text-subtle">
+            Activate EpisCloud in your profile to add a payment method.
+          </p>
+        ) : null}
+        <AddPaymentMethodDialog open={addOpen} onClose={() => setAddOpen(false)} />
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <SettingsInput label="Tax ID / VAT" value="TAX 0314887621" mono />
           <SettingsInput

@@ -47,6 +47,25 @@ export type AuthUserSummary = {
   provider: AuthProvider
 }
 
+export type StripePaymentConfig = {
+  enabled: boolean
+  publishable_key: string
+  setup_intent_client_secret: string
+  setup_intent_id: string
+}
+
+export type PaypalPaymentConfig = {
+  enabled: boolean
+  client_id: string
+  vault_token: string
+  env: 'live' | 'sandbox'
+}
+
+export type PaymentConfig = {
+  stripe: StripePaymentConfig
+  paypal: PaypalPaymentConfig
+}
+
 export type UpdateProfileInput = {
   displayName?: string
   photoUrl?: string
@@ -121,6 +140,8 @@ export type LoginErrorCode =
   | 'oauth-profile-fetch-failed'
   | 'oauth-login-failed'
   | 'episcloud-activation-failed'
+  | 'episcloud-not-activated'
+  | 'payment-config-failed'
   | 'unknown'
 
 export type LoginError = {

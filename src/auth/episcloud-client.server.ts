@@ -5,6 +5,7 @@ import {
   getEpisCloudBaseUrl,
   getEpisCloudPartnerToken,
 } from "./episcloud-config";
+import type { PaymentConfig } from "./types";
 
 type EpisCloudAccount = {
   tenant_id: string;
@@ -72,6 +73,26 @@ export class EpisCloudClient {
       if (error instanceof AuthError) throw error;
       logEpisCloudError("episcloud_create_account_failed", error);
       throw new AuthError("episcloud-activation-failed");
+    }
+  }
+
+  async getPaymentConfig(intentId: string): Promise<PaymentConfig> {
+    try {
+      const response = await axios.get<PaymentConfig>(
+        `${getEpisCloudBaseUrl()}/v1/partner/accounts/${encodeURIComponent(intentId)}/payment-config`,
+        {
+          headers: {
+            Authorization: `Bearer ${getEpisCloudPartnerToken()}`,
+          },
+        },
+      );
+      if (!response.data?.stripe && !response.data?.paypal)
+        throw new AuthError("payment-config-failed");
+      return response.data;
+    } catch (error) {
+      if (error instanceof AuthError) throw error;
+      logEpisCloudError("episcloud_payment_config_failed", error);
+      throw new AuthError("payment-config-failed");
     }
   }
 }
