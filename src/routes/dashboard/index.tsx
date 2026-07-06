@@ -13,7 +13,6 @@ import {
   ChevronDown,
   FileText,
   Grid2X2,
-  LayoutTemplate,
   Loader2,
   MoreHorizontal,
   Paperclip,
