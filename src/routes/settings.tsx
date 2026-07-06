@@ -491,7 +491,7 @@ function PlanSection() {
           </article>
         ))}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-hairline bg-stone-50/50 px-6 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-hairline bg-chalk/50 px-6 py-4">
         <div className="text-xs text-muted">
           Cycle: <span className="font-medium text-ink">Monthly</span> · Switch
           to yearly and save{" "}
@@ -565,7 +565,7 @@ function UsageSection() {
             ].map((height, index) => (
               <div
                 key={index}
-                className="flex-1 rounded-t-sm bg-stone-400 last:bg-ink"
+                className="flex-1 rounded-t-sm bg-muted/40 last:bg-ink"
                 style={{ height: `${height}%` }}
               />
             ))}
@@ -674,7 +674,7 @@ function InvoicesSection() {
             {invoices.map(([number, date, description, amount, status]) => (
               <tr
                 key={number}
-                className="border-b border-hairline hover:bg-stone-50/50 last:border-b-0"
+                className="border-b border-hairline hover:bg-chalk/50 last:border-b-0"
               >
                 <td className="px-6 py-3.5 font-mono">{number}</td>
                 <td className="px-3 py-3.5 font-mono text-muted">{date}</td>
@@ -918,7 +918,7 @@ function UsageCard({
         </span>
         <span className="text-ui-sm text-muted">{max}</span>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-stone-200">
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-hairline">
         <div className="h-full bg-ink" style={{ width: percent }} />
       </div>
       <div className="mt-2 text-[11px] text-muted">{note}</div>
