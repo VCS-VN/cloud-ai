@@ -14,6 +14,7 @@ import {
   FileText,
   Grid2X2,
   Loader2,
+  LogOut,
   Monitor,
   Moon,
   MoreHorizontal,
@@ -35,7 +36,7 @@ import {
 } from "@/components/ui/popover";
 import { ModelPicker } from "@/components/projects/ModelPicker";
 import { useTheme, type AppTheme } from "@/theme";
-import { getCurrentUser } from "@/server/functions/auth";
+import { getCurrentUser, logout } from "@/server/functions/auth";
 import {
   createProjectFromPrompt,
   deleteProject,
@@ -647,6 +648,9 @@ gap-3  */}
               </div>
             </div>
             <SidebarThemeSwitcher />
+            <div className="mt-3 border-t border-hairline pt-3">
+              <SidebarSignOutButton />
+            </div>
           </PopoverContent>
         </Popover>
       </div>
@@ -695,6 +699,35 @@ function SidebarThemeSwitcher() {
         })}
       </div>
     </div>
+  );
+}
+
+function SidebarSignOutButton() {
+  const navigate = useNavigate();
+  const logoutFn = useServerFn(logout);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSignOut() {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const result = await logoutFn();
+      await navigate({ to: result.redirectTo as never });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleSignOut()}
+      disabled={loading}
+      className="flex w-full items-center gap-2.5 rounded-md border border-danger-bg bg-danger-bg px-3 py-2 text-ui-sm font-medium text-danger-fg transition-colors duration-base hover:bg-danger-fg hover:text-paper disabled:cursor-not-allowed disabled:opacity-60 focus-ring"
+    >
+      <LogOut aria-hidden="true" size={16} />
+      {loading ? "Signing out..." : "Sign out"}
+    </button>
   );
 }
 
