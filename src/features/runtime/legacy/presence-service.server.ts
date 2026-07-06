@@ -1,5 +1,4 @@
-import type { ProcessManager } from "./process-manager.server";
-import type { DevRuntime } from "@/features/projects/legacy/project-state.schema";
+import type { RuntimeOrchestrator } from "./runtime-orchestrator.server";
 
 export type PresenceLeaveReason = "leave" | "blur" | "hidden" | "unload" | "expired";
 
@@ -10,11 +9,6 @@ export type PresenceEntry = {
   focused: boolean;
   lastHeartbeatMs: number;
   lastSignalMs: number;
-};
-
-export type RuntimeStateStoreForPresence = {
-  readDevRuntime: (projectId: string) => Promise<DevRuntime>;
-  saveDevRuntime: (projectId: string, devRuntime: DevRuntime) => Promise<unknown>;
 };
 
 export type ProjectPresence = {
@@ -28,15 +22,10 @@ const HEARTBEAT_TTL_MS = 75_000;
 
 class PresenceService {
   private projectPresence = new Map<string, ProjectPresence>();
-  private processManager: ProcessManager | null = null;
-  private runtimeStore: RuntimeStateStoreForPresence | null = null;
+  private runtimeOrchestrator: Pick<RuntimeOrchestrator, "stopPreview"> | null = null;
 
-  setProcessManager(pm: ProcessManager): void {
-    this.processManager = pm;
-  }
-
-  setRuntimeStore(store: RuntimeStateStoreForPresence): void {
-    this.runtimeStore = store;
+  setRuntimeOrchestrator(orchestrator: Pick<RuntimeOrchestrator, "stopPreview">): void {
+    this.runtimeOrchestrator = orchestrator;
   }
 
   registerPresence(projectId: string, userId: string, presenceId: string): void {
@@ -149,16 +138,8 @@ class PresenceService {
   }
 
   private async terminateProjectProcess(projectId: string): Promise<void> {
-    if (this.processManager?.isRunning(projectId)) {
-      await this.processManager.stop(projectId);
-    }
-    if (this.runtimeStore) {
-      const runtime = await this.runtimeStore.readDevRuntime(projectId);
-      await this.runtimeStore.saveDevRuntime(projectId, {
-        ...runtime,
-        status: "stopped",
-        pid: null,
-      });
+    if (this.runtimeOrchestrator) {
+      await this.runtimeOrchestrator.stopPreview(projectId);
     }
     this.projectPresence.delete(projectId);
   }

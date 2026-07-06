@@ -148,7 +148,6 @@ export async function getProjectServices() {
   void portAllocator;
   const snapshotService = new SnapshotService(projectSnapshotRepo);
   void snapshotService;
-  presenceService.setProcessManager(processManager);
   ensureRuntimeBootstrap();
   void ensureAgentRunReconcileOnce(agentRunRepo);
   void ensureSkillRegistryLoadedOnce();
@@ -182,7 +181,7 @@ export async function getProjectServices() {
   if (isProductionPreviewEnabled(previewRuntimeConfig)) {
     startPreviewRouterOnce({ runtimeOrchestrator, tokenService: previewTokenService, publicHost: previewRuntimeConfig.publicHost! });
   }
-  presenceService.setRuntimeStore(projectStateStore);
+  presenceService.setRuntimeOrchestrator(runtimeOrchestrator);
   const projectService = new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore, runtimeService, envWriter, runtimeOrchestrator, runStore, agentRunRepo);
 
   return {
