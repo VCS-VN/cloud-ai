@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { LogOut, Monitor, Moon, Settings, Sun, UserRound } from "lucide-react";
 import type { AuthUserSummary } from "@/auth/types";
 import { Button } from "@/components/ui/button";
-import { logout } from "@/server/functions/auth";
+import { useSignOut } from "@/components/auth/use-sign-out";
 import { useTheme, type AppTheme } from "@/theme";
 
 type UserMenuProps = {
@@ -33,11 +32,10 @@ export function UserMenu({
   align = "right",
 }: UserMenuProps) {
   const navigate = useNavigate();
-  const logoutFn = useServerFn(logout);
   const { theme, setTheme } = useTheme();
-  const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const { signOut, loading } = useSignOut({ beforeNavigate: () => setOpen(false) });
 
   useEffect(() => {
     if (!open) return undefined;
@@ -59,18 +57,6 @@ export function UserMenu({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
-
-  async function handleLogout() {
-    if (loading) return;
-    setLoading(true);
-    try {
-      const result = await logoutFn();
-      setOpen(false);
-      await navigate({ to: result.redirectTo });
-    } finally {
-      setLoading(false);
-    }
-  }
 
   function closeAndNavigate(to: string) {
     setOpen(false);
@@ -204,7 +190,7 @@ export function UserMenu({
               variant="unstyled"
               type="button"
               role="menuitem"
-              onClick={() => void handleLogout()}
+              onClick={() => void signOut()}
               disabled={loading}
               className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[13px] text-ink transition hover:bg-ink/[0.04] disabled:opacity-60"
               // className="group focus-ring flex w-full items-center justify-center gap-2 rounded-lg border border-danger-fg/25 bg-danger-bg px-3 py-2 text-ui-sm font-semibold text-danger-fg transition-[background-color,border-color,color,transform] duration-base ease-standard hover:border-danger-fg hover:bg-danger-fg hover:text-paper active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"

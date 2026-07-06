@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/popover";
 import { listEpisCloudModels } from "@/server/functions/auth";
 import type { EpisCloudModel, EpisCloudModelsResult } from "@/auth/types";
+import { startCase } from "lodash";
 
 type LoadState =
   | { status: "idle" }
@@ -157,13 +158,13 @@ export function ModelPicker({
                   >
                     <span className="flex-1 min-w-0">
                       <span className="block truncate text-ui-sm font-medium text-ink">
-                        {labelForModel(model)}
+                        {startCase(model?.id)}
                       </span>
-                      {model.ownedBy ? (
+                      {/* {model.ownedBy ? (
                         <span className="block truncate text-eyebrow text-muted">
                           {model.ownedBy}
                         </span>
-                      ) : null}
+                      ) : null} */}
                     </span>
                     {active ? (
                       <Check

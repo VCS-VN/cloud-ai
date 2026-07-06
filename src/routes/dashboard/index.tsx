@@ -36,7 +36,8 @@ import {
 } from "@/components/ui/popover";
 import { ModelPicker } from "@/components/projects/ModelPicker";
 import { useTheme, type AppTheme } from "@/theme";
-import { getCurrentUser, logout } from "@/server/functions/auth";
+import { useSignOut } from "@/components/auth/use-sign-out";
+import { getCurrentUser } from "@/server/functions/auth";
 import {
   createProjectFromPrompt,
   deleteProject,
@@ -711,25 +712,12 @@ function SidebarThemeSwitcher() {
 }
 
 function SidebarSignOutButton() {
-  const navigate = useNavigate();
-  const logoutFn = useServerFn(logout);
-  const [loading, setLoading] = useState(false);
-
-  async function handleSignOut() {
-    if (loading) return;
-    setLoading(true);
-    try {
-      const result = await logoutFn();
-      await navigate({ to: result.redirectTo as never });
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { signOut, loading } = useSignOut();
 
   return (
     <button
       type="button"
-      onClick={() => void handleSignOut()}
+      onClick={() => void signOut()}
       disabled={loading}
       aria-label="Sign out"
       className="group focus-ring flex w-full items-center justify-center gap-2 rounded-lg border border-danger-fg/25 bg-danger-bg px-3 py-2 text-ui-sm font-semibold text-danger-fg transition-[background-color,border-color,color,transform] duration-base ease-standard hover:border-danger-fg hover:bg-danger-fg hover:text-paper active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
