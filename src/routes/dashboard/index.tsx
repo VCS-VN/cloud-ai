@@ -620,9 +620,12 @@ gap-3  */}
                 {initials}
               </span>
               <span
-                className={classnames("dashboard-side-label min-w-0 text-left", {
-                  hidden: !expanded,
-                })}
+                className={classnames(
+                  "dashboard-side-label min-w-0 text-left",
+                  {
+                    hidden: !expanded,
+                  },
+                )}
               >
                 <span className="block truncate text-ui-sm font-medium text-ink">
                   {userLabel}
@@ -633,8 +636,13 @@ gap-3  */}
               </span>
             </button>
           </PopoverTrigger>
-          <PopoverContent side="right" align="end" sideOffset={12} className="w-64 p-3">
-            <div className="flex min-w-0 items-center gap-3 border-b border-hairline pb-3">
+          <PopoverContent
+            side="right"
+            align="end"
+            sideOffset={12}
+            className="w-64 p-3"
+          >
+            <div className="flex min-w-0 items-center gap-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-xs font-semibold text-paper">
                 {initials}
               </span>
@@ -648,7 +656,7 @@ gap-3  */}
               </div>
             </div>
             <SidebarThemeSwitcher />
-            <div className="mt-3 border-t border-hairline pt-3">
+            <div className="pt-3">
               <SidebarSignOutButton />
             </div>
           </PopoverContent>
@@ -723,9 +731,18 @@ function SidebarSignOutButton() {
       type="button"
       onClick={() => void handleSignOut()}
       disabled={loading}
-      className="flex w-full items-center gap-2.5 rounded-md border border-danger-bg bg-danger-bg px-3 py-2 text-ui-sm font-medium text-danger-fg transition-colors duration-base hover:bg-danger-fg hover:text-paper disabled:cursor-not-allowed disabled:opacity-60 focus-ring"
+      aria-label="Sign out"
+      className="group focus-ring flex w-full items-center justify-center gap-2 rounded-lg border border-danger-fg/25 bg-danger-bg px-3 py-2 text-ui-sm font-semibold text-danger-fg transition-[background-color,border-color,color,transform] duration-base ease-standard hover:border-danger-fg hover:bg-danger-fg hover:text-paper active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
     >
-      <LogOut aria-hidden="true" size={16} />
+      {loading ? (
+        <Loader2 aria-hidden="true" size={16} className="animate-spin" />
+      ) : (
+        <LogOut
+          aria-hidden="true"
+          size={16}
+          className="transition-transform duration-base group-hover:-translate-x-0.5"
+        />
+      )}
       {loading ? "Signing out..." : "Sign out"}
     </button>
   );
