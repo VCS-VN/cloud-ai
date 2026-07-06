@@ -26,6 +26,7 @@ import {
 import classnames from "classnames";
 
 import { Button } from "@/components/ui/button";
+import { ModelPicker } from "@/components/projects/ModelPicker";
 import { getCurrentUser } from "@/server/functions/auth";
 import {
   createProjectFromPrompt,
@@ -51,6 +52,8 @@ const SUGGESTIONS = [
   "Event page",
 ] as const;
 
+const SELECTED_MODEL_KEY = "project-detail-selected-model";
+
 function DashboardPage() {
   const navigate = useNavigate();
   const router = useRouter();
@@ -63,11 +66,19 @@ function DashboardPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("lumen.dashboard.sidebar");
     setIsSidebarExpanded(stored === "expanded");
+    const savedModel = window.localStorage.getItem(SELECTED_MODEL_KEY);
+    if (savedModel) setSelectedModel(savedModel);
   }, []);
+
+  const handleModelChange = (modelId: string) => {
+    setSelectedModel(modelId);
+    window.localStorage.setItem(SELECTED_MODEL_KEY, modelId);
+  };
 
   useEffect(() => {
     document.body.classList.toggle("sidebar-expanded", isSidebarExpanded);
@@ -170,20 +181,11 @@ function DashboardPage() {
                   <Paperclip aria-hidden="true" size={14} />
                   <span className="hidden sm:inline">Attach</span>
                 </Button>
-                <Button
-                  type="button"
-                  variant="unstyled"
-                  className="dashboard-prompt-tool"
-                  title="Start from a template"
-                  disabled
-                >
-                  <LayoutTemplate aria-hidden="true" size={14} />
-                  <span className="hidden sm:inline">Template</span>
-                </Button>
-                <span className="hidden h-8 items-center gap-1.5 rounded-md px-2.5 text-xs text-subtle md:inline-flex">
-                  <span className="h-1.5 w-1.5 rounded-full bg-ink/40" /> Claude
-                  Sonnet 4.6
-                </span>
+                <ModelPicker
+                  selectedModel={selectedModel}
+                  disabled={creating}
+                  onModelChange={handleModelChange}
+                />
               </div>
               <div className="flex items-center gap-2">
                 <span className="hidden items-center gap-1 font-mono text-[11px] text-subtle sm:inline-flex">

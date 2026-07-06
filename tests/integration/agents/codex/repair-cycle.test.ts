@@ -175,6 +175,7 @@ describe("repair cycle", () => {
     );
     const projectId = "proj-r2";
     await fs.mkdir(path.join(tmpRoot, projectId, "published"), { recursive: true });
+    await seedRootStylePlumbing(path.join(tmpRoot, projectId));
     (globalThis as any).__codexProjectRoot = path.join(tmpRoot, projectId);
 
     typecheckSpy.mockResolvedValue({

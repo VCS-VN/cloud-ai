@@ -127,6 +127,7 @@ export class EpisCloudClient {
         )
         .map((row) => ({ id: row.id, ownedBy: row.owned_by }));
     } catch (error) {
+      console.log("ajsdofjaosdfjoajsdofjoasdfojasdf", error);
       if (error instanceof AuthError) throw error;
       logEpisCloudError("episcloud_list_models_failed", error);
       throw new AuthError("episcloud-models-failed");

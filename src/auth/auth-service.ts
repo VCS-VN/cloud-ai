@@ -1,13 +1,16 @@
-import { redirect } from '@tanstack/react-router'
-import { AuthError, getSafeAuthMessage, toSafeAuthError } from './auth-errors'
-import { mapDecodedTokenToUserProfile, verifyIdToken } from './firebase-admin.server'
-import { encryptUserApiKey, decryptUserApiKey } from './api-key-crypto.server'
-import { MerchantGatewayClient } from './oauth-client.server'
-import { EpisCloudClient } from './episcloud-client.server'
-import type { EpisCloudModelsResult, LoginResult } from './types'
-import { toAuthUserSummary, UserRepository } from './user-repository'
-import { UserSettingsRepository } from './user-settings-repository'
-import { SessionService } from './session-service.server'
+import { redirect } from "@tanstack/react-router";
+import { AuthError, getSafeAuthMessage, toSafeAuthError } from "./auth-errors";
+import {
+  mapDecodedTokenToUserProfile,
+  verifyIdToken,
+} from "./firebase-admin.server";
+import { encryptUserApiKey, decryptUserApiKey } from "./api-key-crypto.server";
+import { MerchantGatewayClient } from "./oauth-client.server";
+import { EpisCloudClient } from "./episcloud-client.server";
+import type { EpisCloudModelsResult, LoginResult } from "./types";
+import { toAuthUserSummary, UserRepository } from "./user-repository";
+import { UserSettingsRepository } from "./user-settings-repository";
+import { SessionService } from "./session-service.server";
 
 export class AuthService {
   constructor(
@@ -15,164 +18,186 @@ export class AuthService {
     private readonly sessions = new SessionService(),
     private readonly merchantGateway = new MerchantGatewayClient(),
     private readonly episCloud = new EpisCloudClient(),
-    private readonly userSettings = new UserSettingsRepository()
-  ) { }
+    private readonly userSettings = new UserSettingsRepository(),
+  ) {}
 
   async signInWithFirebaseIdToken(idToken: string): Promise<LoginResult> {
-    if (!idToken || typeof idToken !== 'string') return toSafeAuthError(new AuthError('missing-token'))
+    if (!idToken || typeof idToken !== "string")
+      return toSafeAuthError(new AuthError("missing-token"));
 
     try {
-      const decoded = await verifyIdToken(idToken)
-      const profile = mapDecodedTokenToUserProfile(decoded)
-      const user = await this.users.upsertFromFirebase(profile)
-      await this.sessions.createSessionCookie(user)
-      return { ok: true, user: toAuthUserSummary(user), redirectTo: '/dashboard' }
+      const decoded = await verifyIdToken(idToken);
+      const profile = mapDecodedTokenToUserProfile(decoded);
+      const user = await this.users.upsertFromFirebase(profile);
+      await this.sessions.createSessionCookie(user);
+      return {
+        ok: true,
+        user: toAuthUserSummary(user),
+        redirectTo: "/dashboard",
+      };
     } catch (error) {
-      return toSafeAuthError(error)
+      return toSafeAuthError(error);
     }
   }
 
   async signInWithHandoffCode(code: string): Promise<LoginResult> {
-    if (!code || typeof code !== 'string') {
-      return toSafeAuthError(new AuthError('handoff-code-missing'))
+    if (!code || typeof code !== "string") {
+      return toSafeAuthError(new AuthError("handoff-code-missing"));
     }
 
     try {
-      const tokenSet = await this.merchantGateway.exchangeHandoffCode({ code })
-      const profile = await this.merchantGateway.getProfile({ apiKey: tokenSet.apiKey })
+      const tokenSet = await this.merchantGateway.exchangeHandoffCode({ code });
+      const profile = await this.merchantGateway.getProfile({
+        apiKey: tokenSet.apiKey,
+      });
       const user = await this.users.upsertFromOAuth({
         providerUid: profile.id,
         email: profile.email,
         displayName: profile.name,
-        provider: 'MONMI_OAUTH',
-        apiKey: encryptUserApiKey(tokenSet.apiKey)
-      })
+        provider: "MONMI_OAUTH",
+        apiKey: encryptUserApiKey(tokenSet.apiKey),
+      });
 
-      await this.sessions.createSessionCookie(user)
+      await this.sessions.createSessionCookie(user);
 
-      return { ok: true, user: toAuthUserSummary(user), redirectTo: '/dashboard' }
+      return {
+        ok: true,
+        user: toAuthUserSummary(user),
+        redirectTo: "/dashboard",
+      };
     } catch (error) {
-      console.error(JSON.stringify({
-        event: 'cloud_ai_handoff_login_failed',
-        reason: error instanceof AuthError ? error.code : error instanceof Error ? error.message : 'unknown'
-      }))
-      return toSafeAuthError(error, 'handoff-login-failed')
+      console.error(
+        JSON.stringify({
+          event: "cloud_ai_handoff_login_failed",
+          reason:
+            error instanceof AuthError
+              ? error.code
+              : error instanceof Error
+                ? error.message
+                : "unknown",
+        }),
+      );
+      return toSafeAuthError(error, "handoff-login-failed");
     }
   }
 
   async getCurrentUser() {
-    const session = await this.sessions.readSession()
-    if (!session) return null
-    const user = await this.users.findById(session.userId)
-    return user ? toAuthUserSummary(user) : null
+    const session = await this.sessions.readSession();
+    if (!session) return null;
+    const user = await this.users.findById(session.userId);
+    return user ? toAuthUserSummary(user) : null;
   }
 
   async requireUser() {
-    const user = await this.getCurrentUser()
-    if (!user) throw redirect({ to: '/' })
-    return user
+    const user = await this.getCurrentUser();
+    if (!user) throw redirect({ to: "/" });
+    return user;
   }
 
   async requireActionUser() {
-    const user = await this.getCurrentUser()
-    if (!user) throw new AuthError('unauthorized')
-    return user
+    const user = await this.getCurrentUser();
+    if (!user) throw new AuthError("unauthorized");
+    return user;
   }
 
   async updateProfile(fields: {
-    displayName: string | null
-    bio: string | null
-    photoUrl: string | null
-    coverImage: string | null
-    dateOfBirth: string | null
+    displayName: string | null;
+    bio: string | null;
+    photoUrl: string | null;
+    coverImage: string | null;
+    dateOfBirth: string | null;
   }) {
-    const current = await this.requireActionUser()
-    const updated = await this.users.updateProfile(current.id, fields)
-    return toAuthUserSummary(updated)
+    const current = await this.requireActionUser();
+    const updated = await this.users.updateProfile(current.id, fields);
+    return toAuthUserSummary(updated);
   }
 
   async activateEpisCloud() {
-    const current = await this.requireActionUser()
-    const user = await this.users.findById(current.id)
-    if (!user) throw new AuthError('unauthorized')
+    const current = await this.requireActionUser();
+    const user = await this.users.findById(current.id);
+    if (!user) throw new AuthError("unauthorized");
 
-    let result = user
-    let tenantId = user.episCloudTenantId
+    let result = user;
+    let tenantId = user.episCloudTenantId;
 
     if (!tenantId) {
       const account = await this.episCloud.createAccount({
         externalRef: user.id,
-        displayName: user.displayName ?? user.email
-      })
-      tenantId = account.tenant_id
-      result = await this.users.activateEpisCloud(user.id, tenantId)
+        displayName: user.displayName ?? user.email,
+      });
+      tenantId = account.tenant_id;
+      result = await this.users.activateEpisCloud(user.id, tenantId);
     }
 
-    const settings = await this.userSettings.findByUserId(user.id)
+    const settings = await this.userSettings.findByUserId(user.id);
     if (!settings?.episCloudApiKey) {
       const apiKey = await this.episCloud.createApiKey({
         tenantId,
-        name: 'retail-default'
-      })
+        name: "retail-default",
+      });
       await this.userSettings.saveEpisCloudApiKey(user.id, {
         encryptedSecret: encryptUserApiKey(apiKey.raw_secret),
         keyId: apiKey.id,
-        prefix: apiKey.prefix
-      })
+        prefix: apiKey.prefix,
+      });
     }
 
-    return toAuthUserSummary(result)
+    return toAuthUserSummary(result);
   }
 
   async getPaymentConfig() {
-    const current = await this.requireActionUser()
-    if (!current.episCloudTenantId) throw new AuthError('episcloud-not-activated')
-    return this.episCloud.getPaymentConfig(current.episCloudTenantId)
+    const current = await this.requireActionUser();
+    if (!current.episCloudTenantId)
+      throw new AuthError("episcloud-not-activated");
+    return this.episCloud.getPaymentConfig(current.episCloudTenantId);
   }
 
   async listEpisCloudModels(): Promise<EpisCloudModelsResult> {
-    const current = await this.requireActionUser()
-    const settings = await this.userSettings.findByUserId(current.id)
-    if (!settings?.episCloudApiKey) return { status: 'no-api-key' }
+    const current = await this.requireActionUser();
+    const settings = await this.userSettings.findByUserId(current.id);
+    if (!settings?.episCloudApiKey) return { status: "no-api-key" };
 
     try {
-      const apiKey = decryptUserApiKey(settings.episCloudApiKey)
-      const models = await this.episCloud.listModels(apiKey)
-      return { status: 'ok', models }
+      const apiKey = decryptUserApiKey(settings.episCloudApiKey);
+      const models = await this.episCloud.listModels(apiKey);
+      return { status: "ok", models };
     } catch (error) {
-      const code = error instanceof AuthError ? error.code : 'episcloud-models-failed'
-      return { status: 'error', message: getSafeAuthMessage(code) }
+      console.log("ajsodfjoasdjfoaj9fj19f91jfoisdf", error);
+      const code =
+        error instanceof AuthError ? error.code : "episcloud-models-failed";
+      return { status: "error", message: getSafeAuthMessage(code) };
     }
   }
 
   async requireMerchantApiKey() {
-    const session = await this.sessions.readSession()
-    if (!session) throw new AuthError('unauthorized')
+    const session = await this.sessions.readSession();
+    if (!session) throw new AuthError("unauthorized");
 
-    const user = await this.users.findById(session.userId)
-    if (!user?.apiKey) throw new AuthError('unauthorized')
+    const user = await this.users.findById(session.userId);
+    if (!user?.apiKey) throw new AuthError("unauthorized");
 
-    return decryptUserApiKey(user.apiKey)
+    return decryptUserApiKey(user.apiKey);
   }
 
   async requireEpisCloudApiKey() {
-    const session = await this.sessions.readSession()
-    if (!session) throw new AuthError('unauthorized')
+    const session = await this.sessions.readSession();
+    if (!session) throw new AuthError("unauthorized");
 
-    const settings = await this.userSettings.findByUserId(session.userId)
-    if (!settings?.episCloudApiKey) throw new AuthError('episcloud-api-key-failed')
+    const settings = await this.userSettings.findByUserId(session.userId);
+    if (!settings?.episCloudApiKey)
+      throw new AuthError("episcloud-api-key-failed");
 
-    return decryptUserApiKey(settings.episCloudApiKey)
+    return decryptUserApiKey(settings.episCloudApiKey);
   }
 
   async logout() {
-    const session = await this.sessions.readSession()
-    if (session) await this.users.clearApiKey(session.userId)
-    await this.sessions.clearSessionCookie()
-    return { ok: true as const, redirectTo: '/' as const }
+    const session = await this.sessions.readSession();
+    if (session) await this.users.clearApiKey(session.userId);
+    await this.sessions.clearSessionCookie();
+    return { ok: true as const, redirectTo: "/" as const };
   }
 }
 
 export function getAuthService() {
-  return new AuthService()
+  return new AuthService();
 }
