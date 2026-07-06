@@ -221,6 +221,34 @@ function StripeCardForm({
   )
 }
 
+const PAYPAL_SDK_ID = 'paypal-sdk'
+
+function loadPaypalSdk(clientId: string): Promise<any> {
+  const win = window as unknown as { paypal?: any }
+  if (win.paypal) return Promise.resolve(win.paypal)
+
+  const existing = document.getElementById(PAYPAL_SDK_ID) as HTMLScriptElement | null
+  if (existing) {
+    return new Promise((resolve, reject) => {
+      existing.addEventListener('load', () => resolve(win.paypal))
+      existing.addEventListener('error', () => reject(new Error('PayPal SDK failed to load.')))
+    })
+  }
+
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script')
+    script.id = PAYPAL_SDK_ID
+    const params = new URLSearchParams({
+      'client-id': clientId,
+      components: 'buttons'
+    })
+    script.src = `https://www.paypal.com/sdk/js?${params.toString()}`
+    script.onload = () => resolve(win.paypal)
+    script.onerror = () => reject(new Error('PayPal SDK failed to load.'))
+    document.head.appendChild(script)
+  })
+}
+
 function PaypalVaultForm({
   paypal,
   onSuccess
@@ -228,61 +256,57 @@ function PaypalVaultForm({
   paypal: PaymentConfig['paypal']
   onSuccess: () => void
 }) {
-  const [submitting, setSubmitting] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  async function handleClick() {
-    if (submitting) return
-    setSubmitting(true)
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
     setError(null)
-    try {
-      const braintree = await import('braintree-web')
-      const client = await braintree.client.create({ authorization: paypal.vault_token })
-      const paypalCheckout = await braintree.paypalCheckout.create({ client })
-      await paypalCheckout.loadPayPalSDK({ vault: true })
-      await new Promise<void>((resolve, reject) => {
-        const win = window as unknown as { paypal?: any }
-        if (!win.paypal) {
-          reject(new Error('PayPal SDK failed to load.'))
-          return
-        }
-        win.paypal
+    loadPaypalSdk(paypal.client_id)
+      .then((sdk) => {
+        if (cancelled || !sdk || !containerRef.current) return
+        containerRef.current.innerHTML = ''
+        sdk
           .Buttons({
-            createBillingAgreement: () => paypalCheckout.createPayment({ flow: 'vault' as any }),
-            onApprove: async (data: unknown) => {
-              await paypalCheckout.tokenizePayment(data as any)
-              resolve()
+            createVaultSetupToken: () => paypal.vault_token,
+            onApprove: () => {
+              onSuccess()
             },
-            onCancel: () => resolve(),
-            onError: (err: unknown) => reject(err instanceof Error ? err : new Error('PayPal error'))
+            onError: () => {
+              if (!cancelled) setError('Could not connect PayPal. Please try again.')
+            }
           })
-          .render('#paypal-vault-button')
+          .render(containerRef.current)
+          .catch(() => {
+            if (!cancelled) setError('Could not render the PayPal button. Please try again.')
+          })
       })
-      onSuccess()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not connect PayPal. Please try again.')
-    } finally {
-      setSubmitting(false)
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not connect PayPal.')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
-  }
+  }, [paypal.client_id, paypal.vault_token, onSuccess])
 
   return (
     <div>
       <p className="m-0 text-ui-sm text-muted">
-        Connect a PayPal account to vault it for future charges.
+        Connect a PayPal account to save it for future charges.
       </p>
-      <div id="paypal-vault-button" className="mt-4 min-h-[44px]" />
+      {loading ? (
+        <div className="mt-4 flex items-center gap-2 text-ui-sm text-muted">
+          <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+          Loading PayPal…
+        </div>
+      ) : null}
+      <div ref={containerRef} className="mt-4 min-h-[44px]" />
       {error ? <p className="m-0 mt-2 text-ui-sm text-danger-fg">{error}</p> : null}
-      <Button type="button" className="mt-4 w-full !h-10" disabled={submitting} onClick={handleClick}>
-        {submitting ? (
-          <>
-            <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
-            Connecting…
-          </>
-        ) : (
-          'Connect PayPal'
-        )}
-      </Button>
     </div>
   )
 }

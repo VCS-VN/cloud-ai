@@ -601,20 +601,6 @@ function PaymentSection({ user }: { user: AuthUserSummary }) {
         </p>
       </header>
       <div className="space-y-3 p-6">
-        <PaymentCard
-          brand="VISA"
-          title="Visa ending in 4242"
-          subtitle="Expires 03/2028 · Thai Mai"
-          badge="Default"
-          action="Edit"
-        />
-        <PaymentCard
-          brand="MC"
-          title="Mastercard ending in 8821"
-          subtitle="Expires 11/2027 · Maple Studio"
-          action="Make default"
-          dangerAction="Remove"
-        />
         <button
           type="button"
           disabled={!activated}
@@ -629,7 +615,10 @@ function PaymentSection({ user }: { user: AuthUserSummary }) {
             Activate EpisCloud in your profile to add a payment method.
           </p>
         ) : null}
-        <AddPaymentMethodDialog open={addOpen} onClose={() => setAddOpen(false)} />
+        <AddPaymentMethodDialog
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+        />
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <SettingsInput label="Tax ID / VAT" value="TAX 0314887621" mono />
           <SettingsInput
