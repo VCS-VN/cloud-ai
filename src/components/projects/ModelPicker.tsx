@@ -73,11 +73,16 @@ export function ModelPicker({
           aria-haspopup="listbox"
           aria-expanded={open}
           disabled={disabled}
-          className="composer-effort-trigger"
+          title={triggerLabel}
+          className="composer-effort-trigger min-w-0 max-w-[180px]"
         >
-          <Cpu aria-hidden="true" size={12} />
-          Model: <span className="text-ink">{triggerLabel}</span>
-          <ChevronDown aria-hidden="true" size={10} className="text-subtle" />
+          <Cpu aria-hidden="true" size={12} className="shrink-0" />
+          <span className="truncate text-ink">{triggerLabel}</span>
+          <ChevronDown
+            aria-hidden="true"
+            size={10}
+            className="shrink-0 text-subtle"
+          />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={6} className="w-64 p-1">

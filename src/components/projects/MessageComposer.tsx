@@ -8,6 +8,7 @@ import {
   Link2,
   Loader2,
   Paperclip,
+  Plus,
   Shield,
   Square,
   Wand2,
@@ -91,14 +92,36 @@ const EFFORT_OPTIONS: ComposerReasoningEffort[] = [
   "xhigh",
 ];
 
-const ATTACH_BUTTONS: Array<{
+const ATTACH_ACTIONS: Array<{
   key: string;
   label: string;
+  description: string;
   Icon: typeof ImageIcon;
 }> = [
-  { key: "attach", label: "Attach", Icon: Paperclip },
-  { key: "image", label: "Image", Icon: ImageIcon },
-  { key: "url", label: "Reference file/url", Icon: Link2 },
+  {
+    key: "attach",
+    label: "Attach file",
+    description: "Add a document for context",
+    Icon: Paperclip,
+  },
+  {
+    key: "image",
+    label: "Image",
+    description: "Upload a reference image",
+    Icon: ImageIcon,
+  },
+  {
+    key: "url",
+    label: "Reference file/URL",
+    description: "Link to a file or page",
+    Icon: Link2,
+  },
+  {
+    key: "hint",
+    label: "Hint",
+    description: "Guide the build with a hint",
+    Icon: FileText,
+  },
 ];
 
 export function MessageComposer({
@@ -120,6 +143,7 @@ export function MessageComposer({
 }: MessageComposerProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [effortOpen, setEffortOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const inputValidationError = useMemo(
     () => validateProjectMessageInput(value),
     [value],
@@ -160,7 +184,11 @@ export function MessageComposer({
     <form className="composer" onSubmit={handleSubmit}>
       {/* Top row: mode toggle + reasoning effort */}
       <div className="flex items-center justify-between gap-2 border-b border-hairline/70 px-2.5 pb-1 pt-2">
-        <div role="tablist" aria-label="Mode" className="composer-mode-group">
+        <div
+          role="tablist"
+          aria-label="Mode"
+          className="composer-mode-group shrink-0"
+        >
           <Button
             variant="unstyled"
             type="button"
@@ -187,7 +215,7 @@ export function MessageComposer({
           </Button>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex min-w-0 items-center gap-1">
           <ModelPicker
             selectedModel={selectedModel}
             disabled={sending || disabled}
@@ -201,17 +229,17 @@ export function MessageComposer({
               aria-haspopup="listbox"
               aria-expanded={effortOpen}
               disabled={sending || disabled}
-              className="composer-effort-trigger"
+              className="composer-effort-trigger shrink-0"
             >
-              <Clock aria-hidden="true" size={12} />
-              Reasoning:{" "}
+              <Clock aria-hidden="true" size={12} className="shrink-0" />
+              <span className="hidden sm:inline">Reasoning:</span>{" "}
               <span className="text-ink">
                 {EFFORT_META[reasoningEffort].label}
               </span>
               <ChevronDown
                 aria-hidden="true"
                 size={10}
-                className="text-subtle"
+                className="shrink-0 text-subtle"
               />
             </Button>
           </PopoverTrigger>
@@ -300,33 +328,50 @@ export function MessageComposer({
 
       {/* Bottom row: attachments + send */}
       <div className="flex items-center justify-between gap-2 px-2 pb-2">
-        <div className="flex items-center gap-0.5">
-          {ATTACH_BUTTONS.map(({ key, label, Icon }) => (
+        <Popover open={actionsOpen} onOpenChange={setActionsOpen}>
+          <PopoverTrigger asChild>
             <Button
-              key={key}
               variant="unstyled"
               type="button"
+              aria-haspopup="menu"
+              aria-expanded={actionsOpen}
+              aria-label="Add attachment or hint"
+              disabled={sending || disabled}
               className="composer-icon-btn"
-              aria-label={label}
-              title={`${label} — coming soon`}
-              disabled
             >
-              <Icon aria-hidden="true" size={14} />
+              <Plus aria-hidden="true" size={16} />
             </Button>
-          ))}
-          <Button
-            variant="unstyled"
-            type="button"
-            className="composer-icon-btn px-2 w-auto h-7 text-eyebrow font-medium"
-            title="Hint — coming soon"
-            disabled
-          >
-            <FileText aria-hidden="true" size={12} />
-            <span>Hint</span>
-          </Button>
-        </div>
+          </PopoverTrigger>
+          <PopoverContent align="start" sideOffset={6} className="w-60 p-1" role="menu">
+            {ATTACH_ACTIONS.map(({ key, label, description, Icon }) => (
+              <Button
+                key={key}
+                variant="unstyled"
+                type="button"
+                role="menuitem"
+                title={`${label} — coming soon`}
+                disabled
+                className="composer-effort-option opacity-60"
+              >
+                <Icon
+                  aria-hidden="true"
+                  size={16}
+                  className="mt-0.5 shrink-0 text-subtle"
+                />
+                <span className="flex-1 min-w-0">
+                  <span className="block text-ui-sm font-medium text-ink">
+                    {label}
+                  </span>
+                  <span className="block text-eyebrow text-muted">
+                    {description}
+                  </span>
+                </span>
+              </Button>
+            ))}
+          </PopoverContent>
+        </Popover>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <TokenBar tokenContext={tokenContext ?? null} />
           {canStop ? (
             <Button
