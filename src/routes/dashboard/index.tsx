@@ -37,7 +37,7 @@ import type { Project } from "@/shared/project-types";
 export const Route = createFileRoute("/dashboard/")({
   beforeLoad: async () => {
     const { user } = await getCurrentUser();
-    if (!user) throw redirect({ to: "/auth/login" as never });
+    if (!user) throw redirect({ to: "/" as never });
     return { user };
   },
   loader: () => getProjectWorkspace({ data: {} }),

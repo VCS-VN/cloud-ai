@@ -53,12 +53,9 @@ function HomeAuthGate() {
           </span>
           <span className="font-semibold tracking-tight">Cloud AI</span>
         </Link>
-        <Link
-          to="/auth/login"
-          className="text-ui-sm text-muted transition-colors duration-base hover:text-ink"
-        >
-          Sign in
-        </Link>
+        <span className="text-ui-sm text-muted">
+          Open from Merchant Dashboard
+        </span>
       </header>
 
       <main className="relative z-10 flex min-h-[calc(100vh-56px)] items-center justify-center px-5 py-10">

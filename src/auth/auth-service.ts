@@ -4,7 +4,7 @@ import { mapDecodedTokenToUserProfile, verifyIdToken } from './firebase-admin.se
 import { encryptUserApiKey, decryptUserApiKey } from './api-key-crypto.server'
 import { MerchantGatewayClient } from './oauth-client.server'
 import { EpisCloudClient } from './episcloud-client.server'
-import type { LoginResult, OAuthLoginInput } from './types'
+import type { LoginResult } from './types'
 import { toAuthUserSummary, UserRepository } from './user-repository'
 import { SessionService } from './session-service.server'
 
@@ -30,18 +30,13 @@ export class AuthService {
     }
   }
 
-  async signInWithOAuthCode(input: OAuthLoginInput): Promise<LoginResult> {
-    if (!input.code || !input.state || !input.codeVerifier || !input.redirectUri) {
-      return toSafeAuthError(new AuthError('oauth-login-failed'))
+  async signInWithHandoffCode(code: string): Promise<LoginResult> {
+    if (!code || typeof code !== 'string') {
+      return toSafeAuthError(new AuthError('handoff-code-missing'))
     }
 
     try {
-      const tokenSet = await this.merchantGateway.exchangeOAuthCode({
-        clientId: 'cloud-ai',
-        code: input.code,
-        codeVerifier: input.codeVerifier,
-        redirectUri: input.redirectUri
-      })
+      const tokenSet = await this.merchantGateway.exchangeHandoffCode({ code })
       const profile = await this.merchantGateway.getProfile({ apiKey: tokenSet.apiKey })
       const user = await this.users.upsertFromOAuth({
         providerUid: profile.id,
@@ -56,10 +51,10 @@ export class AuthService {
       return { ok: true, user: toAuthUserSummary(user), redirectTo: '/dashboard' }
     } catch (error) {
       console.error(JSON.stringify({
-        event: 'cloud_ai_oauth_login_failed',
+        event: 'cloud_ai_handoff_login_failed',
         reason: error instanceof AuthError ? error.code : error instanceof Error ? error.message : 'unknown'
       }))
-      return toSafeAuthError(error, 'oauth-login-failed')
+      return toSafeAuthError(error, 'handoff-login-failed')
     }
   }
 

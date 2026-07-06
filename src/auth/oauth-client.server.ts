@@ -2,20 +2,8 @@ import '@tanstack/react-start/server-only'
 import axios, { AxiosError } from 'axios'
 import type { StoreListResult, StoreOption } from '@/shared/project-types'
 import { AuthError } from './auth-errors'
-import { getMerchantApiBaseUrl, getOauthClientId, getOauthRedirectUri, getOauthScope, getOauthUiOrigin } from './oauth-config'
-import { buildOAuthAuthorizeUrlWithConfig } from './oauth-utils'
+import { getMerchantApiBaseUrl, getOauthClientId } from './oauth-config'
 import type { OAuthMerchantProfile, OAuthTokenSet } from './types'
-
-export function buildOAuthAuthorizeUrl(input: { state: string; codeChallenge: string; redirectUri?: string }) {
-  return buildOAuthAuthorizeUrlWithConfig({
-    oauthUiOrigin: getOauthUiOrigin(),
-    clientId: getOauthClientId(),
-    redirectUri: input.redirectUri ?? getOauthRedirectUri(),
-    scope: getOauthScope(),
-    state: input.state,
-    codeChallenge: input.codeChallenge
-  })
-}
 
 function toAuthError(error: unknown, code: 'oauth-exchange-failed' | 'oauth-profile-fetch-failed') {
   if (error instanceof AuthError) return error
@@ -88,16 +76,11 @@ function normalizeStoreList(value: unknown, page: number, limit: number): StoreL
 }
 
 export class MerchantGatewayClient {
-  async exchangeOAuthCode(input: {
-    clientId: 'cloud-ai'
-    code: string
-    codeVerifier: string
-    redirectUri: string
-  }): Promise<OAuthTokenSet> {
+  async exchangeHandoffCode(input: { code: string }): Promise<OAuthTokenSet> {
     try {
       const response = await axios.post<OAuthTokenSet>(
-        `${getMerchantApiBaseUrl()}/api/v2/auth/oauth/exchange`,
-        input,
+        `${getMerchantApiBaseUrl()}/api/v2/auth/builder-handoff/exchange`,
+        { clientId: getOauthClientId(), code: input.code },
         { headers: { 'content-type': 'application/json' } }
       )
       assertTokenSet(response.data)

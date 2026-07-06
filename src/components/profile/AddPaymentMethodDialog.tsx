@@ -8,6 +8,12 @@ import type { PaymentConfig } from '@/auth/types'
 
 type Tab = 'card' | 'paypal'
 
+// PayPal vault_without_purchase needs a server-issued setup token + buyer
+// user-id-token, which the EpisCloud payment-config endpoint does not provide
+// yet (v1 attaches pre-vaulted pmt- tokens only). Keep the flow disabled until
+// the backend exposes those, otherwise the button crashes at PayPal prebuild.
+const PAYPAL_ENABLED = false
+
 export function AddPaymentMethodDialog({
   open,
   onClose,
@@ -35,7 +41,7 @@ export function AddPaymentMethodDialog({
       .then((result) => {
         if (cancelled) return
         setConfig(result)
-        setTab(result.stripe?.enabled ? 'card' : 'paypal')
+        setTab(result.stripe?.enabled || !PAYPAL_ENABLED ? 'card' : 'paypal')
       })
       .catch((error) => {
         if (cancelled) return
@@ -101,7 +107,7 @@ export function AddPaymentMethodDialog({
                   <CreditCard aria-hidden="true" size={14} /> Card
                 </TabButton>
               ) : null}
-              {config.paypal?.enabled ? (
+              {PAYPAL_ENABLED && config.paypal?.enabled ? (
                 <TabButton active={tab === 'paypal'} onClick={() => setTab('paypal')}>
                   PayPal
                 </TabButton>
@@ -112,7 +118,7 @@ export function AddPaymentMethodDialog({
               {tab === 'card' && config.stripe?.enabled ? (
                 <StripeCardForm stripe={config.stripe} onSuccess={handleSuccess} />
               ) : null}
-              {tab === 'paypal' && config.paypal?.enabled ? (
+              {PAYPAL_ENABLED && tab === 'paypal' && config.paypal?.enabled ? (
                 <PaypalVaultForm paypal={config.paypal} onSuccess={handleSuccess} />
               ) : null}
             </div>

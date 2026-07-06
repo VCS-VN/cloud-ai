@@ -84,19 +84,6 @@ export type LoginSuccess = {
   redirectTo: '/dashboard'
 }
 
-export type OAuthCallbackQuery = {
-  code?: string
-  state?: string
-  error?: string
-  errorDescription?: string
-}
-
-export type OAuthTempSessionData = {
-  state: string
-  codeVerifier: string
-  createdAt: string
-}
-
 export type OAuthTokenSet = {
   refreshToken?: string
   expiresIn: number
@@ -110,13 +97,6 @@ export type OAuthMerchantProfile = {
   name?: string
   identityLogin?: string
   scopes?: string[]
-}
-
-export type OAuthLoginInput = {
-  code: string
-  state: string
-  codeVerifier: string
-  redirectUri: string
 }
 
 export type LoginErrorCode =
@@ -134,11 +114,10 @@ export type LoginErrorCode =
   | 'operation-not-allowed'
   | 'invalid-client-config'
   | 'missing-oauth-config'
-  | 'oauth-state-mismatch'
-  | 'oauth-temp-session-missing'
   | 'oauth-exchange-failed'
   | 'oauth-profile-fetch-failed'
-  | 'oauth-login-failed'
+  | 'handoff-code-missing'
+  | 'handoff-login-failed'
   | 'episcloud-activation-failed'
   | 'episcloud-not-activated'
   | 'payment-config-failed'
