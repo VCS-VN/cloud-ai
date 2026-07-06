@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import {
-  LogOut,
-  Monitor,
-  Moon,
-  Settings,
-  Sun,
-  UserRound,
-} from "lucide-react";
+import { LogOut, Monitor, Moon, Settings, Sun, UserRound } from "lucide-react";
 import type { AuthUserSummary } from "@/auth/types";
 import { Button } from "@/components/ui/button";
 import { logout } from "@/server/functions/auth";
@@ -165,7 +158,7 @@ export function UserMenu({
             </div>
           </div>
 
-          <nav className="py-1.5">
+          {/* <nav className="py-1.5">
             <MenuItem
               icon={UserRound}
               label="Profile"
@@ -176,9 +169,9 @@ export function UserMenu({
               label="Settings"
               onClick={() => closeAndNavigate("/settings")}
             />
-          </nav>
+          </nav> */}
 
-          <div className="border-t border-hairline px-3 py-2.5">
+          <div className="px-3 py-2.5">
             <div className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-subtle">
               Appearance
             </div>
@@ -213,7 +206,7 @@ export function UserMenu({
               role="menuitem"
               onClick={() => void handleLogout()}
               disabled={loading}
-              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[13px] text-ink transition hover:bg-ink/[0.04] disabled:opacity-60"
+              className="group focus-ring flex w-full items-center justify-center gap-2 rounded-lg border border-danger-fg/25 bg-danger-bg px-3 py-2 text-ui-sm font-semibold text-danger-fg transition-[background-color,border-color,color,transform] duration-base ease-standard hover:border-danger-fg hover:bg-danger-fg hover:text-paper active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
             >
               <LogOut aria-hidden="true" className="h-4 w-4 text-muted" />
               {loading ? "Signing out..." : "Sign out"}
