@@ -759,10 +759,10 @@ function ProjectThumbnail({
           <div className="rounded-lg bg-stone-500" />
         </div>
         <div className="absolute bottom-4 left-4 right-4">
-          <div className="font-mono text-[8px] uppercase tracking-widest text-white/50">
+          <div className="font-mono text-[8px] uppercase tracking-widest text-paper/50">
             Project · 2026
           </div>
-          <div className="mt-1 truncate font-semibold text-white">
+          <div className="mt-1 truncate font-semibold text-paper">
             {project.name}
           </div>
         </div>

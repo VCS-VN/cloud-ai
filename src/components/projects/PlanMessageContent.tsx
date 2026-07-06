@@ -24,7 +24,7 @@ export function PlanMessageContent({ content }: PlanMessageContentProps) {
   const summary = extractPlanSummary(content);
   return (
     <div
-      className="min-w-0 max-w-full break-words text-[12px] leading-4 text-current [overflow-wrap:anywhere] [&_code]:rounded-sm [&_code]:bg-black/10 [&_code]:px-xxs [&_code]:py-[1px] [&_code]:text-[11px] [&_p]:my-xxs"
+      className="min-w-0 max-w-full break-words text-[12px] leading-4 text-current [overflow-wrap:anywhere] [&_code]:rounded-sm [&_code]:bg-ink/10 [&_code]:px-xxs [&_code]:py-[1px] [&_code]:text-[11px] [&_p]:my-xxs"
       dangerouslySetInnerHTML={{ __html: dumprify(summary) }}
     />
   );
