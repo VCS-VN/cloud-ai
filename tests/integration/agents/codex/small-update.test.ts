@@ -75,15 +75,13 @@ vi.mock("@/features/agents/codex/validation/preview-health.server", () => ({
 let tmpRoot: string;
 
 async function seedDraft(
-  draftDirParent: string,
+  workspaceRoot: string,
   fileCount: number,
 ): Promise<void> {
-  const dirs = await fs.readdir(draftDirParent);
-  const target = path.join(draftDirParent, dirs[0]);
-  await fs.mkdir(path.join(target, "src/components"), { recursive: true });
+  await fs.mkdir(path.join(workspaceRoot, "src/components"), { recursive: true });
   for (let i = 0; i < fileCount; i++) {
     await fs.writeFile(
-      path.join(target, `src/components/Item${i}.tsx`),
+      path.join(workspaceRoot, `src/components/Item${i}.tsx`),
       `export const Item${i} = ${i};`,
     );
   }
@@ -108,7 +106,7 @@ describe("small update integration", () => {
       "@/features/agents/codex/runtime/builder-run.server"
     );
     const projectId = "proj-1";
-    await fs.mkdir(path.join(tmpRoot, projectId, "published"), { recursive: true });
+    await fs.mkdir(path.join(tmpRoot, projectId), { recursive: true });
 
     const env: CodexEnvAvailable = {
       available: true,
@@ -135,7 +133,7 @@ describe("small update integration", () => {
 
     const events: any[] = [];
     const seedTimer = setTimeout(() => {
-      seedDraft(path.join(tmpRoot, projectId, "drafts"), 3).catch(() => {});
+      seedDraft(path.join(tmpRoot, projectId), 3).catch(() => {});
     }, 5);
     const outcome = await runSmallUpdateBuilderRun(ctx, (e) => events.push(e));
     clearTimeout(seedTimer);
@@ -153,7 +151,7 @@ describe("small update integration", () => {
       "@/features/agents/codex/runtime/builder-run.server"
     );
     const projectId = "proj-2";
-    await fs.mkdir(path.join(tmpRoot, projectId, "published"), { recursive: true });
+    await fs.mkdir(path.join(tmpRoot, projectId), { recursive: true });
 
     const env: CodexEnvAvailable = {
       available: true,
@@ -180,7 +178,7 @@ describe("small update integration", () => {
 
     const events: any[] = [];
     const seedTimer = setTimeout(() => {
-      seedDraft(path.join(tmpRoot, projectId, "drafts"), 25).catch(() => {});
+      seedDraft(path.join(tmpRoot, projectId), 25).catch(() => {});
     }, 5);
     const outcome = await runSmallUpdateBuilderRun(ctx, (e) => events.push(e));
     clearTimeout(seedTimer);

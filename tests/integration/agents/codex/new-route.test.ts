@@ -12,25 +12,17 @@ vi.mock("@openai/codex-sdk", async () => {
   // non-streaming callers (repair loop, classifier).
   async function doTurn(): Promise<void> {
     callCount++;
-    const draftRoot = (globalThis as any).__codexDraftRoot as string | undefined;
-    if (callCount === 2 && draftRoot) {
-      const fs = await import("node:fs/promises");
-      const path = await import("node:path");
-      await fs.mkdir(path.join(draftRoot, "src/routes"), { recursive: true });
-      await fs.writeFile(
-        path.join(draftRoot, "src/routes/about.tsx"),
-        "export const About = () => null;",
-      );
-    }
-    if (!draftRoot) {
+    // New-route now edits the project workspace root in place (no draft clone),
+    // so turn 2 writes the route file directly under the project root.
+    if (callCount === 2) {
       const fs = await import("node:fs/promises");
       const path = await import("node:path");
       const root = (globalThis as any).__codexProjectRoot as string;
-      const draftDir = path.join(root, "drafts");
-      const dirs = await fs.readdir(draftDir);
-      if (dirs.length > 0) {
-        (globalThis as any).__codexDraftRoot = path.join(draftDir, dirs[0]);
-      }
+      await fs.mkdir(path.join(root, "src/routes"), { recursive: true });
+      await fs.writeFile(
+        path.join(root, "src/routes/about.tsx"),
+        "export const About = () => null;",
+      );
     }
   }
   return {
@@ -115,8 +107,7 @@ describe("new-route builder run", () => {
       "@/features/agents/codex/runtime/builder-run.server"
     );
     const projectId = "proj-r";
-    await fs.mkdir(path.join(tmpRoot, projectId, "published"), { recursive: true });
-    (globalThis as any).__codexDraftRoot = undefined;
+    await fs.mkdir(path.join(tmpRoot, projectId), { recursive: true });
     (globalThis as any).__codexProjectRoot = path.join(tmpRoot, projectId);
 
     const env: CodexEnvAvailable = {

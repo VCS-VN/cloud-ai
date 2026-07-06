@@ -4,7 +4,3 @@ import { getRequestUrl } from '@tanstack/react-start/server'
 export function getCurrentRequestOrigin() {
   return getRequestUrl({ xForwardedHost: true, xForwardedProto: true }).origin
 }
-
-export function getCurrentRequestCallbackUri() {
-  return `${getCurrentRequestOrigin()}/api/auth/callback`
-}

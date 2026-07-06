@@ -688,22 +688,6 @@ async function detectCorruptedFiles(
   return corrupted;
 }
 
-async function ensureDraftWorkspace(input: {
-  projectId: string;
-  runId: string;
-}): Promise<string> {
-  const projectsRoot = getProjectWorkspaceRoot(input.projectId);
-  const draftRoot = path.join(projectsRoot, "drafts", input.runId);
-  await fs.mkdir(draftRoot, { recursive: true });
-  const publishedRoot = path.join(projectsRoot, "published");
-  try {
-    await fs.cp(publishedRoot, draftRoot, { recursive: true });
-  } catch {
-    // empty published — start from blank draft
-  }
-  return draftRoot;
-}
-
 /**
  * Init driver writes straight into the project workspace root
  * (`projects/<id>/`) — the same directory the preview pm2 process picks up
@@ -735,9 +719,11 @@ export async function runWithPlanModeIfRequested(
   }
 
   const { runPlanTurn, buildExecuteTurnPrompt } = await import("./plan-mode.server");
-  const draftWorkspacePath = await ensureDraftWorkspace({
+  // Plan turn is read-only but must snapshot the SAME workspace the execute
+  // driver will edit — the project root (update/new_route/init all operate
+  // in-place there), not a draft clone.
+  const draftWorkspacePath = await ensureProjectWorkspace({
     projectId: ctx.projectId,
-    runId: ctx.runId,
   });
 
   emitMilestoneInternal(emit, ctx.runId, "planning");
@@ -796,15 +782,6 @@ export async function runWithPlanModeIfRequested(
       resolve(outcome);
     };
   });
-}
-
-async function syncDraftToPublished(
-  draftPath: string,
-  publishedPath: string,
-): Promise<void> {
-  await fs.rm(publishedPath, { recursive: true, force: true });
-  await fs.mkdir(path.dirname(publishedPath), { recursive: true });
-  await fs.cp(draftPath, publishedPath, { recursive: true });
 }
 
 export async function runInitBuilderRun(
@@ -1683,8 +1660,7 @@ export async function runInitBuilderRun(
     });
   }
 
-  // Init wrote straight into published/, so there is nothing to sync or
-  // clean up here. Update / new_route drivers still publish from drafts.
+  // Init wrote straight into the project root — nothing to sync or clean up.
   {
     const handle = getBuilderRunHandle(runId);
     if (handle) fireRemainingTasksComplete(handle, emit);
@@ -1904,9 +1880,11 @@ export async function runNewRouteBuilderRun(
     return pausedOutcome(ctx, skillSelection);
   }
 
-  const draftWorkspacePath = await ensureDraftWorkspace({
+  // New-route runs in-place against the project workspace root (same as init
+  // and update) — the cwd the preview pm2 process binds to. No draft clone /
+  // publish round-trip: the new route file lands directly in the live project.
+  const draftWorkspacePath = await ensureProjectWorkspace({
     projectId: ctx.projectId,
-    runId,
   });
   const fileManifest = await listFiles(draftWorkspacePath);
   const foundationInstructions = await loadFoundationInstructions();
@@ -2244,9 +2222,7 @@ export async function runNewRouteBuilderRun(
     });
   }
 
-  const publishedPath = path.join(getProjectWorkspaceRoot(ctx.projectId), "published");
-  await syncDraftToPublished(draftWorkspacePath, publishedPath);
-  await fs.rm(draftWorkspacePath, { recursive: true, force: true });
+  // Edits landed in the project root in place — nothing to sync or clean up.
   {
     const handle = getBuilderRunHandle(runId);
     if (handle) fireRemainingTasksComplete(handle, emit);
@@ -2285,9 +2261,12 @@ export async function runSmallUpdateBuilderRun(
     return pausedOutcome(ctx, skillSelection);
   }
 
-  const draftWorkspacePath = await ensureDraftWorkspace({
+  // Update runs in-place against the project workspace root — the same cwd the
+  // preview pm2 process binds to and the same directory init wrote into. This
+  // keeps a single source of truth so edits target the actual project files
+  // (not an empty draft cloned from a never-populated published/ mirror).
+  const draftWorkspacePath = await ensureProjectWorkspace({
     projectId: ctx.projectId,
-    runId,
   });
   const fileManifest = await listFiles(draftWorkspacePath);
   const foundationInstructions = await loadFoundationInstructions();
@@ -2539,9 +2518,7 @@ export async function runSmallUpdateBuilderRun(
     });
   }
 
-  const publishedPath = path.join(getProjectWorkspaceRoot(ctx.projectId), "published");
-  await syncDraftToPublished(draftWorkspacePath, publishedPath);
-  await fs.rm(draftWorkspacePath, { recursive: true, force: true });
+  // Edits landed in the project root in place — nothing to sync or clean up.
   {
     const handle = getBuilderRunHandle(runId);
     if (handle) fireRemainingTasksComplete(handle, emit);

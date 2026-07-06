@@ -8,16 +8,12 @@ vi.mock("@openai/codex-sdk", async () => {
   async function seedFoo(): Promise<void> {
     const root = (globalThis as any).__codexProjectRoot as string | undefined;
     if (!root) return;
-    const draftDir = path.join(root, "drafts");
-    const dirs = await fs.readdir(draftDir);
-    if (dirs.length > 0) {
-      const target = path.join(draftDir, dirs[0]);
-      await fs.mkdir(path.join(target, "src/components"), { recursive: true });
-      await fs.writeFile(
-        path.join(target, "src/components/Foo.tsx"),
-        "export const Foo = 1;",
-      );
-    }
+    // Update runs in-place against the project root (no draft clone).
+    await fs.mkdir(path.join(root, "src/components"), { recursive: true });
+    await fs.writeFile(
+      path.join(root, "src/components/Foo.tsx"),
+      "export const Foo = 1;",
+    );
   }
   return {
     Codex: class {

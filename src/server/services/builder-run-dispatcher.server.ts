@@ -77,7 +77,11 @@ export type BuilderRunStartOutcome =
     };
 
 async function listWorkspaceFiles(projectId: string): Promise<string[]> {
-  const root = path.join(getProjectWorkspaceRoot(projectId), "published");
+  // Source of truth is the project workspace root (projects/<id>/) — the same
+  // cwd the preview pm2 process binds to and the directory all drivers write
+  // into. `drafts/` (in-flight run scratch) and the legacy `published/` mirror
+  // are excluded so a populated existing project is never misread as empty.
+  const root = getProjectWorkspaceRoot(projectId);
   const out: string[] = [];
   async function walk(dir: string, base: string): Promise<void> {
     let entries: import("node:fs").Dirent[];
@@ -87,7 +91,13 @@ async function listWorkspaceFiles(projectId: string): Promise<string[]> {
       return;
     }
     for (const entry of entries) {
-      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      if (
+        entry.name === "node_modules" ||
+        entry.name === ".git" ||
+        (dir === base && (entry.name === "drafts" || entry.name === "published"))
+      ) {
+        continue;
+      }
       const full = path.join(dir, entry.name);
       const rel = path.relative(base, full);
       if (entry.isDirectory()) {
