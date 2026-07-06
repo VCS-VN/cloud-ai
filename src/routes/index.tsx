@@ -101,41 +101,16 @@ function HomeAuthGate() {
                 Sign-in required
               </p>
               <h1 className="mb-3 text-[28px] font-semibold leading-[1.08] tracking-tight md:text-[32px]">
-                Sign in to create a project.
+                Open Cloud AI from the Merchant Dashboard.
               </h1>
               <p className="mx-auto mb-8 max-w-sm text-ui-sm leading-relaxed text-muted md:text-[15px]">
-                New projects require a Monmi account so prompt history, previews, and build status can be saved.
+                Cloud AI is an internal builder for your Monmi store. Launch it from the Merchant Dashboard so your session carries over automatically.
               </p>
-
-              <div className="grid gap-3">
-                <Link
-                  to="/auth/login"
-                  className="flex h-11 items-center justify-center gap-2 rounded-xl bg-ink text-ui-sm font-medium text-paper transition-colors duration-base hover:bg-ink/90"
-                >
-                  Sign in with Monmi
-                  <svg
-                    aria-hidden="true"
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path d="M5 12h14M13 5l7 7-7 7" />
-                  </svg>
-                </Link>
-                <Link
-                  to="/dashboard"
-                  className="flex h-11 items-center justify-center rounded-xl border border-hairline bg-surface text-ui-sm font-medium transition-colors duration-base hover:border-ink/30"
-                >
-                  Back to Dashboard
-                </Link>
-              </div>
             </div>
           )}
 
           <p className="mt-6 text-center text-xs leading-relaxed text-subtle">
-            This page checks access before you create a new project.
+            Access is granted through the Merchant Dashboard.
           </p>
         </section>
       </main>
