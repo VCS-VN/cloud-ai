@@ -767,8 +767,8 @@
   .notfound-grid-bg {
     background-size: 32px 32px;
     background-image:
-      linear-gradient(to right, rgb(15 15 16 / 0.025) 1px, transparent 1px),
-      linear-gradient(to bottom, rgb(15 15 16 / 0.025) 1px, transparent 1px);
+      linear-gradient(to right, rgb(var(--color-ink) / 0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--color-ink) / 0.025) 1px, transparent 1px);
   }
 
   .notfound-card-shadow {
@@ -791,8 +791,8 @@
   .callback-grid-bg {
     background-size: 32px 32px;
     background-image:
-      linear-gradient(to right, rgb(15 15 16 / 0.025) 1px, transparent 1px),
-      linear-gradient(to bottom, rgb(15 15 16 / 0.025) 1px, transparent 1px);
+      linear-gradient(to right, rgb(var(--color-ink) / 0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--color-ink) / 0.025) 1px, transparent 1px);
   }
 
   .callback-spinner {
@@ -852,13 +852,13 @@
   .thumb-pattern {
     background-size: 14px 14px;
     background-image:
-      linear-gradient(to right, rgb(15 15 16 / 0.04) 1px, transparent 1px),
-      linear-gradient(to bottom, rgb(15 15 16 / 0.04) 1px, transparent 1px);
+      linear-gradient(to right, rgb(var(--color-ink) / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--color-ink) / 0.04) 1px, transparent 1px);
   }
 
   .dot-pattern {
     background-size: 18px 18px;
-    background-image: radial-gradient(circle, rgb(15 15 16 / 0.07) 1px, transparent 1px);
+    background-image: radial-gradient(circle, rgb(var(--color-ink) / 0.07) 1px, transparent 1px);
   }
 
   /* ─── Hero paper wash (radial neutral wash behind hero) ────── */
@@ -873,7 +873,7 @@
     height: 720px;
     border-radius: 50%;
     filter: blur(80px);
-    background: radial-gradient(circle, rgb(15 15 16 / 0.04) 0%, transparent 70%);
+    background: radial-gradient(circle, rgb(var(--color-ink) / 0.04) 0%, transparent 70%);
     top: -180px;
     left: 50%;
     transform: translateX(-50%);

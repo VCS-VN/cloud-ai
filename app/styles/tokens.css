@@ -43,8 +43,45 @@
                     'Segoe UI', system-ui, sans-serif;
     --font-mono:    ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo,
                     monospace;
+
+    color-scheme: light;
   }
 
-  /* Khi brand thật về dark mode (chưa active) — chỉ cần override ở đây */
-  /* :root[data-theme='dark'] { ... } */
+  /* ─── Dark theme ─────────────────────────────────────────────────
+   * Warm off-black mirror of the Lumen light palette. Same semantic
+   * roles, inverted lightness: `ink` becomes a warm off-white (still
+   * primary text AND CTA fill, so btn-primary is a light button with
+   * dark `paper` text), surfaces step UP in lightness for elevation.
+   * No pure #000 / #fff — depth needs a little warmth on both ends.
+   * Activated by ThemeProvider via document.documentElement[data-theme].
+   */
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+
+    /* ─── Surfaces (page → card, ascending lightness) ──────────── */
+    --color-paper:          20 19 17;    /* #141311 — global page bg */
+    --color-chalk:          30 28 25;    /* #1E1C19 — soft raised fill */
+    --color-surface:        27 26 23;    /* #1B1A17 — cards */
+    --color-hairline:       44 42 38;    /* #2C2A26 — borders */
+    --color-hairline-soft:  58 56 51;    /* #3A3833 — strong divider */
+
+    /* ─── Foreground (ink = text + CTA fill; deep = brighter hover) */
+    --color-ink:    237 232 224;  /* #EDE8E0 — primary text + CTA */
+    --color-deep:   250 246 240;  /* #FAF6F0 — CTA hover (brighter) */
+    --color-muted:  165 160 153;  /* #A5A099 — secondary text */
+    --color-subtle: 139 133 125;  /* #8B857D — placeholder, disabled */
+
+    /* ─── Status — dark-tinted bg + bright readable fg + dot ───── */
+    --color-success-bg:  14 46 32;     /* #0E2E20 */
+    --color-success-fg:  74 222 128;   /* #4ADE80 */
+    --color-success-dot: 52 211 153;   /* #34D399 */
+
+    --color-warning-bg:  46 36 16;     /* #2E2410 */
+    --color-warning-fg:  251 191 36;   /* #FBBF24 */
+    --color-warning-dot: 245 158 11;   /* #F59E0B */
+
+    --color-danger-bg:  46 20 24;      /* #2E1418 */
+    --color-danger-fg:  251 113 133;   /* #FB7185 */
+    --color-danger-dot: 244 63 94;     /* #F43F5E */
+  }
 }

@@ -27,7 +27,7 @@ export function ChatPanelTabs({
         <MessageSquare aria-hidden="true" size={12} />
         Chat
       </Button>
-      <Button
+      {/* <Button
         variant="unstyled"
         type="button"
         role="tab"
@@ -54,7 +54,7 @@ export function ChatPanelTabs({
         {typeof versionCount === "number" ? (
           <span className="project-tab-count">{versionCount}</span>
         ) : null}
-      </Button>
+      </Button> */}
     </div>
   );
 }

@@ -138,10 +138,15 @@ function NotFoundPage() {
   )
 }
 
+// Runs before first paint so a dark user never sees a light flash. Mirrors the
+// resolution logic in @/theme (storage key, system = prefers-color-scheme).
+const themeInitScript = `(function(){try{var t=localStorage.getItem('cloud-ai-theme');if(t!=='light'&&t!=='dark'&&t!=='system')t='system';var e=t==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):t;document.documentElement.dataset.theme=e;}catch(_){document.documentElement.dataset.theme='dark';}})();`
+
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <HeadContent />
       </head>
       <body>
