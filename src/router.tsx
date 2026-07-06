@@ -1,10 +1,12 @@
 import { createRouter } from '@tanstack/react-router'
 import { routeTree } from './routeTree.gen'
+import { AppErrorFallback } from '@/components/AppErrorFallback'
 
 export function getRouter() {
   return createRouter({
     routeTree,
-    scrollRestoration: true
+    scrollRestoration: true,
+    defaultErrorComponent: AppErrorFallback
   })
 }
 
