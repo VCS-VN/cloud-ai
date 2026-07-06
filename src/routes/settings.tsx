@@ -50,11 +50,11 @@ const settingsNav: Array<{
   badge?: string;
 }> = [
   { id: "profile", label: "Profile", icon: User },
-  { id: "plan", label: "Plan", icon: Star },
-  { id: "usage", label: "Usage", icon: BarChart3 },
+  // { id: "plan", label: "Plan", icon: Star },
+  // { id: "usage", label: "Usage", icon: BarChart3 },
   { id: "payment", label: "Payment", icon: CreditCard },
-  { id: "invoices", label: "Invoices", icon: FileText },
-  { id: "team", label: "Team", icon: Users, badge: "3" },
+  // { id: "invoices", label: "Invoices", icon: FileText },
+  // { id: "team", label: "Team", icon: Users, badge: "3" },
   { id: "preferences", label: "Preferences", icon: Settings },
 ];
 
@@ -180,11 +180,11 @@ function SettingsPage() {
             displayName={displayName}
             onUserChange={setUser}
           />
-          <PlanSection />
-          <UsageSection />
+          {/* <PlanSection /> */}
+          {/* <UsageSection /> */}
           <PaymentSection user={user} />
-          <InvoicesSection />
-          <TeamSection displayName={displayName} email={user.email} />
+          {/* <InvoicesSection /> */}
+          {/* <TeamSection displayName={displayName} email={user.email} /> */}
           <PreferencesSection theme={theme} setTheme={setTheme} />
           {/* <DangerSection /> */}
         </main>
