@@ -164,13 +164,13 @@ function SettingsPage() {
               </a>
             ))}
             <div className="mx-2 h-5 w-px shrink-0 bg-hairline md:mx-0 md:my-2 md:h-px md:w-auto" />
-            <a
+            {/* <a
               href="#danger"
               className="flex h-9 shrink-0 items-center gap-2.5 rounded-md px-3 text-rose-700 hover:bg-rose-50"
             >
               <ShieldAlert aria-hidden="true" size={16} />
               Danger zone
-            </a>
+            </a> */}
           </nav>
         </aside>
 
@@ -186,7 +186,7 @@ function SettingsPage() {
           <InvoicesSection />
           <TeamSection displayName={displayName} email={user.email} />
           <PreferencesSection theme={theme} setTheme={setTheme} />
-          <DangerSection />
+          {/* <DangerSection /> */}
         </main>
       </div>
 
