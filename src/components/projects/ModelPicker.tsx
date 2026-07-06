@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, Cpu, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,19 +10,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { listEpisCloudModels } from "@/server/functions/auth";
-import type { EpisCloudModel, EpisCloudModelsResult } from "@/auth/types";
+import type { EpisCloudModelsResult } from "@/auth/types";
 import { startCase } from "lodash";
-
-type LoadState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "ok"; models: EpisCloudModel[] }
-  | { status: "no-api-key" }
-  | { status: "error"; message: string };
-
-function labelForModel(model: EpisCloudModel) {
-  return model.id;
-}
 
 export function ModelPicker({
   selectedModel,
@@ -34,34 +24,16 @@ export function ModelPicker({
 }) {
   const listModels = useServerFn(listEpisCloudModels);
   const [open, setOpen] = useState(false);
-  const [state, setState] = useState<LoadState>({ status: "idle" });
 
-  const load = useCallback(async () => {
-    setState({ status: "loading" });
-    try {
-      const result = (await listModels()) as EpisCloudModelsResult;
-      if (result.status === "ok") {
-        setState({ status: "ok", models: result.models });
-      } else if (result.status === "no-api-key") {
-        setState({ status: "no-api-key" });
-      } else {
-        setState({ status: "error", message: result.message });
-      }
-    } catch (error) {
-      setState({
-        status: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Could not load models. Please try again.",
-      });
-    }
-  }, [listModels]);
-
-  // Load the model list the first time the popover opens.
-  useEffect(() => {
-    if (open && state.status === "idle") void load();
-  }, [open, state.status, load]);
+  // useQuery fully owns the models data plus its loading/error state. The
+  // server fn returns a discriminated result (ok / no-api-key / error), so
+  // those are query data; a thrown request failure surfaces via query.error.
+  const query = useQuery({
+    queryKey: ["episcloud-models"],
+    queryFn: () => listModels() as Promise<EpisCloudModelsResult>,
+    enabled: open,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const triggerLabel = selectedModel ?? "Model";
 
@@ -87,14 +59,28 @@ export function ModelPicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={6} className="w-64 p-1">
-        {state.status === "loading" || state.status === "idle" ? (
+        {query.isPending || query.isFetching ? (
           <div className="flex items-center gap-2 px-3 py-4 text-ui-sm text-muted">
             <Loader2 aria-hidden="true" size={14} className="animate-spin" />
             Loading models…
           </div>
-        ) : null}
-
-        {state.status === "no-api-key" ? (
+        ) : query.isError ? (
+          <div className="space-y-3 p-3">
+            <p className="m-0 text-ui-sm leading-relaxed text-danger-fg">
+              {query.error instanceof Error
+                ? query.error.message
+                : "Could not load models. Please try again."}
+            </p>
+            <Button
+              variant="outline"
+              type="button"
+              className="!h-9 w-full"
+              onClick={() => void query.refetch()}
+            >
+              Try again
+            </Button>
+          </div>
+        ) : query.data?.status === "no-api-key" ? (
           <div className="space-y-3 p-3">
             <div className="flex items-start gap-2">
               <Sparkles
@@ -116,32 +102,28 @@ export function ModelPicker({
               Activate EpisCloud
             </Link>
           </div>
-        ) : null}
-
-        {state.status === "error" ? (
+        ) : query.data?.status === "error" ? (
           <div className="space-y-3 p-3">
             <p className="m-0 text-ui-sm leading-relaxed text-danger-fg">
-              {state.message}
+              {query.data.message}
             </p>
             <Button
               variant="outline"
               type="button"
               className="!h-9 w-full"
-              onClick={() => void load()}
+              onClick={() => void query.refetch()}
             >
               Try again
             </Button>
           </div>
-        ) : null}
-
-        {state.status === "ok" ? (
-          state.models.length === 0 ? (
+        ) : query.data?.status === "ok" ? (
+          query.data.models.length === 0 ? (
             <p className="m-0 px-3 py-4 text-ui-sm text-muted">
               No models available on your account yet.
             </p>
           ) : (
             <div role="listbox" className="max-h-64 overflow-y-auto">
-              {state.models.map((model) => {
+              {query.data.models.map((model) => {
                 const active = model.id === selectedModel;
                 return (
                   <Button

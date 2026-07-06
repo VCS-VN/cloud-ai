@@ -357,7 +357,7 @@ function DashboardPage() {
           </div>
         </section>
 
-        <section className="mt-12 flex flex-wrap items-center justify-between gap-6 rounded-xl border border-hairline bg-surface p-5">
+        {/* <section className="mt-12 flex flex-wrap items-center justify-between gap-6 rounded-xl border border-hairline bg-surface p-5">
           <div className="flex items-center gap-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chalk">
               <svg
@@ -405,7 +405,7 @@ function DashboardPage() {
               Upgrade
             </a>
           </div>
-        </section>
+        </section> */}
       </main>
 
       <footer className="mx-auto mt-8 flex max-w-[1440px] flex-wrap items-center justify-between gap-3 border-t border-hairline px-6 py-8 text-xs text-subtle lg:px-8">
