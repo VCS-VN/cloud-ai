@@ -14,18 +14,27 @@ import {
   FileText,
   Grid2X2,
   Loader2,
+  Monitor,
+  Moon,
   MoreHorizontal,
   Paperclip,
   Plus,
   Search,
   Settings,
+  Sun,
   Trash2,
   X,
 } from "lucide-react";
 import classnames from "classnames";
 
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { ModelPicker } from "@/components/projects/ModelPicker";
+import { useTheme, type AppTheme } from "@/theme";
 import { getCurrentUser } from "@/server/functions/auth";
 import {
   createProjectFromPrompt,
@@ -596,32 +605,96 @@ gap-3  */}
           <Settings aria-hidden="true" size={24} />
           <span className="dashboard-side-label">Settings</span>
         </Link>
-        <button
-          type="button"
-          className={classnames("dashboard-side-profile", {
-            "gap-3": expanded,
-          })}
-          title={userLabel}
-          aria-label={userLabel}
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-xs font-semibold text-paper shadow-sm ring-4 ring-paper">
-            {initials}
-          </span>
-          <span
-            className={classnames("dashboard-side-label min-w-0 text-left", {
-              hidden: !expanded,
-            })}
-          >
-            <span className="block truncate text-ui-sm font-medium text-ink">
-              {userLabel}
-            </span>
-            <span className="block truncate text-[11px] text-muted">
-              {userEmail}
-            </span>
-          </span>
-        </button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={classnames("dashboard-side-profile", {
+                "gap-3": expanded,
+              })}
+              title={userLabel}
+              aria-label={`${userLabel} — account menu`}
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-xs font-semibold text-paper shadow-sm ring-4 ring-paper">
+                {initials}
+              </span>
+              <span
+                className={classnames("dashboard-side-label min-w-0 text-left", {
+                  hidden: !expanded,
+                })}
+              >
+                <span className="block truncate text-ui-sm font-medium text-ink">
+                  {userLabel}
+                </span>
+                <span className="block truncate text-[11px] text-muted">
+                  {userEmail}
+                </span>
+              </span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent side="right" align="end" sideOffset={12} className="w-64 p-3">
+            <div className="flex min-w-0 items-center gap-3 border-b border-hairline pb-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-xs font-semibold text-paper">
+                {initials}
+              </span>
+              <div className="min-w-0">
+                <p className="m-0 truncate text-ui-sm font-semibold text-ink">
+                  {userLabel}
+                </p>
+                <p className="m-0 truncate text-[11px] text-muted">
+                  {userEmail}
+                </p>
+              </div>
+            </div>
+            <SidebarThemeSwitcher />
+          </PopoverContent>
+        </Popover>
       </div>
     </aside>
+  );
+}
+
+const SIDEBAR_THEME_OPTIONS: Array<{
+  value: AppTheme;
+  label: string;
+  icon: typeof Moon;
+}> = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
+];
+
+function SidebarThemeSwitcher() {
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <div className="pt-3">
+      <p className="m-0 mb-2 text-eyebrow font-mono uppercase tracking-wide text-subtle">
+        Theme
+      </p>
+      <div className="grid grid-cols-3 gap-1 rounded-lg border border-hairline bg-chalk p-0.5">
+        {SIDEBAR_THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
+          const active = theme === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setTheme(value)}
+              aria-pressed={active}
+              className={classnames(
+                "flex flex-col items-center gap-1 rounded-md py-2 text-[11px] font-medium transition-colors duration-base focus-ring",
+                active
+                  ? "bg-surface text-ink shadow-sm"
+                  : "text-muted hover:text-ink",
+              )}
+            >
+              <Icon aria-hidden="true" size={16} />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

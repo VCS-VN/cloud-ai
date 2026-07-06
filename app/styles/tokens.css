@@ -58,12 +58,16 @@
   :root[data-theme='dark'] {
     color-scheme: dark;
 
-    /* ─── Surfaces (page → card, ascending lightness) ──────────── */
+    /* ─── Surfaces (ascending lightness = ascending elevation) ────
+     * paper (page, darkest) < chalk (recessed fill / segmented-control
+     * track) < surface (raised card / active tab, lightest). Mirrors
+     * the light ramp's roles so a `bg-surface` selection always reads
+     * as raised above its `bg-chalk` track. */
     --color-paper:          20 19 17;    /* #141311 — global page bg */
-    --color-chalk:          30 28 25;    /* #1E1C19 — soft raised fill */
-    --color-surface:        27 26 23;    /* #1B1A17 — cards */
-    --color-hairline:       44 42 38;    /* #2C2A26 — borders */
-    --color-hairline-soft:  58 56 51;    /* #3A3833 — strong divider */
+    --color-chalk:          28 26 23;    /* #1C1A17 — recessed fill / track */
+    --color-surface:        34 32 28;    /* #22201C — raised cards */
+    --color-hairline:       48 45 41;    /* #302D29 — borders */
+    --color-hairline-soft:  64 60 55;    /* #403C37 — strong divider */
 
     /* ─── Foreground (ink = text + CTA fill; deep = brighter hover) */
     --color-ink:    237 232 224;  /* #EDE8E0 — primary text + CTA */
