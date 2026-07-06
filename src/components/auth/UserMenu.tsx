@@ -206,7 +206,8 @@ export function UserMenu({
               role="menuitem"
               onClick={() => void handleLogout()}
               disabled={loading}
-              className="group focus-ring flex w-full items-center justify-center gap-2 rounded-lg border border-danger-fg/25 bg-danger-bg px-3 py-2 text-ui-sm font-semibold text-danger-fg transition-[background-color,border-color,color,transform] duration-base ease-standard hover:border-danger-fg hover:bg-danger-fg hover:text-paper active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[13px] text-ink transition hover:bg-ink/[0.04] disabled:opacity-60"
+              // className="group focus-ring flex w-full items-center justify-center gap-2 rounded-lg border border-danger-fg/25 bg-danger-bg px-3 py-2 text-ui-sm font-semibold text-danger-fg transition-[background-color,border-color,color,transform] duration-base ease-standard hover:border-danger-fg hover:bg-danger-fg hover:text-paper active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
             >
               <LogOut aria-hidden="true" className="h-4 w-4 text-muted" />
               {loading ? "Signing out..." : "Sign out"}
