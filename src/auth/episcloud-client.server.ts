@@ -1,5 +1,5 @@
 import '@tanstack/react-start/server-only'
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 import { AuthError } from './auth-errors'
 import { getEpisCloudBaseUrl, getEpisCloudPartnerToken } from './episcloud-config'
 
@@ -9,6 +9,28 @@ type EpisCloudAccount = {
   display_name: string
   status: string
   created_at: number
+}
+
+type EpisCloudErrorEnvelope = {
+  error?: { code?: string; message?: string }
+}
+
+function logEpisCloudError(event: string, error: unknown) {
+  if (error instanceof AxiosError) {
+    const data = error.response?.data as EpisCloudErrorEnvelope | undefined
+    console.error(JSON.stringify({
+      event,
+      status: error.response?.status,
+      code: data?.error?.code,
+      message: data?.error?.message,
+      reason: error.message
+    }))
+    return
+  }
+  console.error(JSON.stringify({
+    event,
+    reason: error instanceof Error ? error.message : 'unknown'
+  }))
 }
 
 export class EpisCloudClient {
@@ -23,6 +45,7 @@ export class EpisCloudClient {
       return response.data
     } catch (error) {
       if (error instanceof AuthError) throw error
+      logEpisCloudError('episcloud_create_account_failed', error)
       throw new AuthError('episcloud-activation-failed')
     }
   }
