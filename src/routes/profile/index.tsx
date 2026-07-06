@@ -1,16 +1,15 @@
 import { useState } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { CalendarDays, Camera, Check, Copy, ImageIcon, Loader2, UserRound } from 'lucide-react'
+import { CalendarDays, Camera, ImageIcon, Loader2, UserRound } from 'lucide-react'
 import type { AuthUserSummary } from '@/auth/types'
 import { UserMenu } from '@/components/auth/UserMenu'
-import { EpisCloudActivateDialog } from '@/components/profile/EpisCloudActivateDialog'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
-import { activateEpisCloud, getCurrentUser, updateProfile } from '@/server/functions/auth'
+import { getCurrentUser, updateProfile } from '@/server/functions/auth'
 
 export const Route = createFileRoute('/profile/')({
   beforeLoad: async () => {
@@ -66,32 +65,17 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
   year: 'numeric'
 })
 
-const activatedAtFormatter = new Intl.DateTimeFormat(undefined, {
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit'
-})
-
 function ProfileSettingsPage() {
-  const { user: initialUser } = Route.useRouteContext()
+  const { user } = Route.useRouteContext()
   const updateProfileFn = useServerFn(updateProfile)
-  const activateEpisCloudFn = useServerFn(activateEpisCloud)
 
-  const [user, setUser] = useState<AuthUserSummary>(initialUser)
-  const [initial, setInitial] = useState<FormState>(() => toForm(initialUser))
-  const [form, setForm] = useState<FormState>(() => toForm(initialUser))
+  const [initial, setInitial] = useState<FormState>(() => toForm(user))
+  const [form, setForm] = useState<FormState>(() => toForm(user))
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<'idle' | 'saved' | 'error'>('idle')
   const [avatarFailed, setAvatarFailed] = useState(false)
   const [coverFailed, setCoverFailed] = useState(false)
   const [dateOpen, setDateOpen] = useState(false)
-
-  const [confirmActivateOpen, setConfirmActivateOpen] = useState(false)
-  const [activating, setActivating] = useState(false)
-  const [activateError, setActivateError] = useState<string | null>(null)
-  const [tenantIdCopied, setTenantIdCopied] = useState(false)
 
   const dirty = (Object.keys(form) as Array<keyof FormState>).some((key) => form[key] !== initial[key])
   const hasName = form.displayName.trim().length > 0
@@ -129,32 +113,6 @@ function ProfileSettingsPage() {
     setStatus('idle')
     setAvatarFailed(false)
     setCoverFailed(false)
-  }
-
-  async function handleActivateEpisCloud() {
-    if (activating) return
-    setActivating(true)
-    setActivateError(null)
-    try {
-      const updated = await activateEpisCloudFn()
-      setUser(updated)
-      setConfirmActivateOpen(false)
-    } catch (error) {
-      setActivateError(error instanceof Error ? error.message : 'Could not activate EpisCloud. Please try again.')
-    } finally {
-      setActivating(false)
-    }
-  }
-
-  async function handleCopyTenantId() {
-    if (!user.episCloudTenantId) return
-    try {
-      await navigator.clipboard.writeText(user.episCloudTenantId)
-      setTenantIdCopied(true)
-      setTimeout(() => setTenantIdCopied(false), 1500)
-    } catch {
-      // Clipboard access can be denied by the browser; nothing to recover from here.
-    }
   }
 
   const showCover = form.coverImage.trim() && !coverFailed
@@ -222,63 +180,6 @@ function ProfileSettingsPage() {
               </p>
             ) : null}
           </div>
-        </section>
-
-        {/* EpisCloud activation card */}
-        <section className="overflow-hidden rounded-card border border-hairline bg-surface p-6 shadow-card">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="m-0 text-section-title font-semibold tracking-tight text-ink">EpisCloud</h2>
-              <p className="m-0 mt-1 max-w-prose text-body leading-relaxed text-muted">
-                EpisCloud powers the AI features on your storefront. Activate it to create your account with EpisCloud.
-              </p>
-            </div>
-            {user.episCloudTenantId ? (
-              <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full border border-success-bg bg-success-bg px-2 text-ui-sm text-success-fg">
-                <span className="h-1.5 w-1.5 rounded-full bg-success-dot" />
-                Activated
-              </span>
-            ) : null}
-          </div>
-
-          {user.episCloudTenantId ? (
-            <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-hairline pt-4">
-              <div>
-                <p className="m-0 text-caption uppercase tracking-wide text-subtle">Activated on</p>
-                <p className="m-0 mt-0.5 text-ui-sm text-ink">
-                  {user.episCloudActivatedAt ? activatedAtFormatter.format(new Date(user.episCloudActivatedAt)) : '—'}
-                </p>
-              </div>
-              <div>
-                <p className="m-0 text-caption uppercase tracking-wide text-subtle">Account ID</p>
-                <div className="mt-0.5 flex items-center gap-1.5">
-                  <code className="text-ui-sm text-ink">{user.episCloudTenantId.slice(0, 12)}…</code>
-                  <Button
-                    variant="icon"
-                    className="h-6 w-6"
-                    type="button"
-                    aria-label="Copy EpisCloud account ID"
-                    onClick={handleCopyTenantId}
-                  >
-                    {tenantIdCopied ? (
-                      <Check aria-hidden="true" className="h-3.5 w-3.5 text-success-fg" />
-                    ) : (
-                      <Copy aria-hidden="true" className="h-3.5 w-3.5 text-muted" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-4 flex items-center justify-between gap-3 border-t border-hairline pt-4">
-              <span aria-live="polite" className="text-ui-sm">
-                {activateError ? <span className="text-danger-fg">{activateError}</span> : null}
-              </span>
-              <Button type="button" onClick={() => setConfirmActivateOpen(true)}>
-                Activate EpisCloud
-              </Button>
-            </div>
-          )}
         </section>
 
         {/* Edit form card */}
@@ -395,17 +296,6 @@ function ProfileSettingsPage() {
           </div>
         </form>
       </div>
-
-      <EpisCloudActivateDialog
-        open={confirmActivateOpen}
-        activating={activating}
-        error={activateError}
-        onCancel={() => {
-          setConfirmActivateOpen(false)
-          setActivateError(null)
-        }}
-        onConfirm={handleActivateEpisCloud}
-      />
     </main>
   )
 }
