@@ -102,4 +102,63 @@ describe("classifyPromptComplexity", () => {
     });
     expect(out).toEqual({ complexity: "simple", language: "vi" });
   });
+
+  it("retries once on malformed output, then returns the second attempt's decision", async () => {
+    let calls = 0;
+    const fakeThread = {
+      runTurn: async () => {
+        calls++;
+        if (calls === 1) {
+          return {
+            finalResponse: "Sure, here you go: simple",
+            usage: null,
+            fileChanges: [],
+            skillToolCalls: [],
+            reasoning: [],
+          };
+        }
+        return {
+          finalResponse: '{"complexity":"simple","language":"en"}',
+          usage: null,
+          fileChanges: [],
+          skillToolCalls: [],
+          reasoning: [],
+        };
+      },
+    };
+    const out = await classifyPromptComplexity({
+      runId: "r4",
+      prompt: "change the button color to blue",
+      env: FAKE_ENV,
+      draftWorkspacePath: "/tmp",
+      thread: fakeThread,
+    });
+    expect(calls).toBe(2);
+    expect(out).toEqual({ complexity: "simple", language: "en" });
+  });
+
+  it("falls back to CLASSIFIER_FALLBACK when every retry attempt is malformed", async () => {
+    let calls = 0;
+    const fakeThread = {
+      runTurn: async () => {
+        calls++;
+        return {
+          finalResponse: "not json at all",
+          usage: null,
+          fileChanges: [],
+          skillToolCalls: [],
+          reasoning: [],
+        };
+      },
+    };
+    const out = await classifyPromptComplexity({
+      runId: "r5",
+      prompt: "hi",
+      env: FAKE_ENV,
+      draftWorkspacePath: "/tmp",
+      thread: fakeThread,
+    });
+    expect(calls).toBe(2);
+    expect(out).toEqual(CLASSIFIER_FALLBACK);
+  });
 });

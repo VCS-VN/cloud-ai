@@ -30,13 +30,26 @@ export const CLASSIFIER_FALLBACK: ClassifierOutput = {
   language: "en",
 };
 
+// Fail fast: this is a quick triage call, not a heavy build turn. Inheriting
+// the default 10-attempt/60s-backoff policy meant for multi-step builds made
+// a single triage call spend up to a minute retrying transport errors before
+// falling back to "complex".
+const CLASSIFIER_THREAD_RETRY_ATTEMPTS = 2;
+// One extra turn if the model's output didn't parse as valid JSON, mirroring
+// the planner's retry-on-invalid-output behavior instead of permanently
+// defaulting to "complex" on the first format hiccup.
+const CLASSIFIER_PARSE_RETRY_ATTEMPTS = 1;
+
 const CLASSIFIER_PROMPT = `You are a fast triage classifier. Output ONLY a JSON object — no prose, no fence.
 
 Return:
 { "complexity": "simple" | "complex", "language": "<ISO-639-1 lowercase>" }
 
-- "simple" = a single trivial change, one section, no multi-step reasoning needed.
-- "complex" = anything that touches multiple sections, requires planning, or involves more than one step.
+- "simple" = a single visual/content tweak to ONE existing element or component, with no structural change: recoloring, resizing, restyling, retexting, or toggling visibility.
+  Examples: "change the button color to blue", "make the title bigger", "hide the promo banner", "update the hero heading text".
+- "complex" = adding/removing a page or section, changing layout/structure, wiring up new behavior (forms, cart, navigation), or touching more than one component.
+  Examples: "add a contact form", "add a new FAQ page", "restructure the header", "add a newsletter signup flow".
+- If genuinely torn between the two, prefer "simple" — treating a small request as complex costs the user an unnecessary planning step.
 - "language" = the dominant natural language of the user's prompt as a 2-letter lowercase code (e.g. "en", "vi", "ja").
 
 User prompt follows.`;
@@ -74,15 +87,19 @@ function stripFenceForJson(raw: string): string {
   return trimmed;
 }
 
-export function parseClassifierOutput(raw: string): ClassifierOutput {
+function tryParseClassifierOutput(raw: string): ClassifierOutput | null {
   try {
     const json = JSON.parse(stripFenceForJson(raw));
     const parsed = ClassifierOutputSchema.safeParse(json);
     if (parsed.success) return parsed.data;
   } catch {
-    // fall through to fallback
+    // fall through — caller decides whether to retry or fall back
   }
-  return CLASSIFIER_FALLBACK;
+  return null;
+}
+
+export function parseClassifierOutput(raw: string): ClassifierOutput {
+  return tryParseClassifierOutput(raw) ?? CLASSIFIER_FALLBACK;
 }
 
 export async function classifyPromptComplexity(
@@ -96,13 +113,43 @@ export async function classifyPromptComplexity(
       draftWorkspacePath: input.draftWorkspacePath,
       sandboxMode: "read-only",
       modelReasoningEffort: "minimal",
+      maxRetryAttempts: CLASSIFIER_THREAD_RETRY_ATTEMPTS,
     });
   try {
-    const turn = await thread.runTurn({
-      prompt: `${CLASSIFIER_PROMPT}\n\n${prompt}`,
-      signal,
-    });
-    const decision = parseClassifierOutput(turn.finalResponse);
+    let decision: ClassifierOutput | null = null;
+    // Retry once on a malformed (non-JSON) response before defaulting to
+    // "complex" — a single format hiccup at minimal reasoning effort
+    // shouldn't permanently cost the user a planning step.
+    for (let attempt = 0; attempt <= CLASSIFIER_PARSE_RETRY_ATTEMPTS; attempt++) {
+      const turn = await thread.runTurn({
+        prompt: `${CLASSIFIER_PROMPT}\n\n${prompt}`,
+        signal,
+      });
+      decision = tryParseClassifierOutput(turn.finalResponse);
+      if (decision) break;
+      console.warn(
+        JSON.stringify({
+          event: "plan_classifier_parse_failed",
+          runId,
+          attempt: attempt + 1,
+          willRetry: attempt < CLASSIFIER_PARSE_RETRY_ATTEMPTS,
+        }),
+      );
+    }
+    if (!decision) {
+      // Distinguish from plan_classifier_failed_fallback below: this is a
+      // parse failure (model responded, output didn't fit the schema), not a
+      // transport/thread error. Logged separately so "genuine complex" vs
+      // "guessed complex because we couldn't parse" is no longer ambiguous.
+      console.warn(
+        JSON.stringify({
+          event: "plan_classifier_parse_failed_fallback",
+          runId,
+          prompt_length: prompt.length,
+        }),
+      );
+      decision = CLASSIFIER_FALLBACK;
+    }
     console.log(
       JSON.stringify({
         event: "plan_classifier_decision",

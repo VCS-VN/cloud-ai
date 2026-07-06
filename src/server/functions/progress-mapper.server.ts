@@ -194,6 +194,27 @@ export const THINKING_LABEL: Record<ProgressLocale, string> = {
   en: "Thinking",
 };
 
+const REASONING_DETAIL_MAX = 140;
+
+/**
+ * Best-effort privacy-safe snippet of a reasoning turn, for display under the
+ * "Thinking…" label. Reasoning text is usually multi-line; most lines
+ * mention file paths/identifiers and fail isPrivacySafe, so this scans line
+ * by line for the first safe one instead of checking only the first line.
+ * Returns null when no line is safe to show (falls back to the bare label).
+ */
+export function sanitizeReasoningSnippet(text: string): string | null {
+  if (!text) return null;
+  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    if (!isPrivacySafe(line)) continue;
+    return line.length > REASONING_DETAIL_MAX
+      ? `${line.slice(0, REASONING_DETAIL_MAX)}…`
+      : line;
+  }
+  return null;
+}
+
 const SUMMARY_MAX_LENGTH = 400;
 
 /**
