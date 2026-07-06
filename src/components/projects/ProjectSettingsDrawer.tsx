@@ -72,7 +72,7 @@ export function ProjectSettingsDrawer({
 
   return (
     <div
-      className={`fixed inset-0 z-[80] flex justify-end bg-ink/20 backdrop-blur-sm transition-opacity duration-200 ease-standard ${visible ? "opacity-100" : "opacity-0"}`}
+      className={`fixed inset-0 z-[80] flex justify-end bg-black/40 backdrop-blur-sm transition-opacity duration-200 ease-standard ${visible ? "opacity-100" : "opacity-0"}`}
       role="dialog"
       aria-modal="true"
       aria-label="Project settings"
@@ -112,7 +112,7 @@ export function ProjectSettingsDrawer({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-stone-50 p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-paper p-5">
           {activeTab === "general" ? (
             <ProjectSettingsGeneralTab
               project={project}
