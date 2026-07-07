@@ -1,34 +1,38 @@
-import { useState } from 'react'
-import { Link, useRouter, type ErrorComponentProps } from '@tanstack/react-router'
-import { AlertTriangle, ChevronDown, Home, RotateCw } from 'lucide-react'
+import { useState } from "react";
+import {
+  Link,
+  useRouter,
+  type ErrorComponentProps,
+} from "@tanstack/react-router";
+import { AlertTriangle, ChevronDown, Home, RotateCw } from "lucide-react";
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (typeof error === 'string') return error
-  return 'An unexpected error occurred.'
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "An unexpected error occurred.";
 }
 
 function getErrorStack(error: unknown): string | null {
-  if (error instanceof Error && error.stack) return error.stack
-  return null
+  if (error instanceof Error && error.stack) return error.stack;
+  return null;
 }
 
 export function AppErrorFallback({ error, reset }: ErrorComponentProps) {
-  const router = useRouter()
-  const [retrying, setRetrying] = useState(false)
-  const [detailsOpen, setDetailsOpen] = useState(false)
+  const router = useRouter();
+  const [retrying, setRetrying] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
-  const message = getErrorMessage(error)
-  const stack = getErrorStack(error)
+  const message = getErrorMessage(error);
+  const stack = getErrorStack(error);
 
   async function handleRetry() {
-    if (retrying) return
-    setRetrying(true)
+    if (retrying) return;
+    setRetrying(true);
     try {
-      reset()
-      await router.invalidate()
+      reset();
+      await router.invalidate();
     } finally {
-      setRetrying(false)
+      setRetrying(false);
     }
   }
 
@@ -51,7 +55,10 @@ export function AppErrorFallback({ error, reset }: ErrorComponentProps) {
             </span>
             <span className="font-semibold tracking-tight">Cloud AI</span>
           </Link>
-          <Link to="/" className="text-ui-sm text-muted transition-colors duration-base hover:text-ink">
+          <Link
+            to="/"
+            className="text-ui-sm text-muted transition-colors duration-base hover:text-ink"
+          >
             Sign in
           </Link>
         </div>
@@ -60,21 +67,30 @@ export function AppErrorFallback({ error, reset }: ErrorComponentProps) {
       <main className="flex flex-1 items-center justify-center px-6 py-14">
         <section className="w-full max-w-[640px] animate-[notfound-fade-in_0.45s_ease-out] text-center">
           <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-danger-fg/25 bg-danger-bg px-3 py-1 text-eyebrow font-medium uppercase tracking-wide text-danger-fg">
-            <span className="h-1.5 w-1.5 rounded-full bg-danger-dot" aria-hidden="true" />
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-danger-dot"
+              aria-hidden="true"
+            />
             Something broke
           </div>
 
           <div className="notfound-card-shadow rounded-[28px] border border-hairline bg-surface px-8 py-10 md:px-12 md:py-12">
             <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-2xl border border-danger-fg/25 bg-danger-bg">
-              <AlertTriangle aria-hidden="true" size={30} className="text-danger-fg" strokeWidth={2} />
+              <AlertTriangle
+                aria-hidden="true"
+                size={30}
+                className="text-danger-fg"
+                strokeWidth={2}
+              />
             </div>
 
-            <h1 className="mb-4 font-display text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-[48px]">
+            <h1 className="mb-4 font-display text-[30px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-[48px]">
               This screen ran into a problem.
             </h1>
             <p className="mx-auto mb-8 max-w-[480px] text-[15px] leading-relaxed text-muted md:text-[16px]">
-              The page failed to load. Retrying often clears it. If the problem keeps happening, head back to
-              your dashboard and try again from there.
+              The page failed to load. Retrying often clears it. If the problem
+              keeps happening, head back to your dashboard and try again from
+              there.
             </p>
 
             <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -87,9 +103,9 @@ export function AppErrorFallback({ error, reset }: ErrorComponentProps) {
                 <RotateCw
                   aria-hidden="true"
                   size={16}
-                  className={retrying ? 'animate-spin' : undefined}
+                  className={retrying ? "animate-spin" : undefined}
                 />
-                {retrying ? 'Retrying...' : 'Try again'}
+                {retrying ? "Retrying..." : "Try again"}
               </button>
               <Link
                 to="/dashboard"
@@ -112,7 +128,7 @@ export function AppErrorFallback({ error, reset }: ErrorComponentProps) {
                   <ChevronDown
                     aria-hidden="true"
                     size={16}
-                    className={`shrink-0 transition-transform duration-base ${detailsOpen ? 'rotate-180' : ''}`}
+                    className={`shrink-0 transition-transform duration-base ${detailsOpen ? "rotate-180" : ""}`}
                   />
                 </button>
                 {detailsOpen ? (
@@ -136,5 +152,5 @@ export function AppErrorFallback({ error, reset }: ErrorComponentProps) {
         </div>
       </footer>
     </div>
-  )
+  );
 }
