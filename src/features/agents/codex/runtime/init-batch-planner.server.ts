@@ -73,6 +73,11 @@ const INIT_PHASES: readonly InitPhase[] = [
     files: ["src/routes/index.tsx"],
     specPaths: ["pages/home.md"],
   },
+  {
+    marker: "PRODUCT_DETAIL",
+    files: ["src/routes/products/$productId.tsx"],
+    specPaths: ["pages/product-detail.md"],
+  },
 ];
 
 export type ManifestSource = { layers?: ManifestEntry[] };
@@ -126,7 +131,6 @@ export async function loadBatchSpecs(specPaths: string[]): Promise<string[]> {
 
 export type PlanBuildInput = {
   manifest?: ManifestSource;
-  pagesOnly?: boolean;
 };
 
 export async function planInitBatches(
@@ -146,15 +150,13 @@ export async function planInitBatches(
   // agent only authors DESIGN.md + the storefront components; the polish batch
   // was dropped — it targeted a never-written placeholder and added a turn
   // without producing files.
-  if (!input.pagesOnly) {
-    for (const phase of INIT_PHASES) {
-      batches.push({
-        kind: "foundation_data",
-        marker: phase.marker,
-        files: [...phase.files],
-        specPaths: phase.specPaths ? [...phase.specPaths] : [],
-      });
-    }
+  for (const phase of INIT_PHASES) {
+    batches.push({
+      kind: "foundation_data",
+      marker: phase.marker,
+      files: [...phase.files],
+      specPaths: phase.specPaths ? [...phase.specPaths] : [],
+    });
   }
 
   let totalFiles = 0;

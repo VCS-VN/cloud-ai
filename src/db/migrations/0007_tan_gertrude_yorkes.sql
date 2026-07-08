@@ -1,0 +1,1 @@
+ALTER TABLE "project_states" ADD COLUMN "generated_pages" json DEFAULT '[]'::json NOT NULL;

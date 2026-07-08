@@ -127,6 +127,7 @@ export type ProjectState = {
     changedFiles: string[];
     validationStatus: "passed" | "failed" | "skipped";
   }>;
+  generatedPages: Array<{ slug: string; generatedAt: string }>;
   designState?: {
     templateId: string;
     designSourcePath: string;
@@ -648,5 +649,6 @@ export function createEmptyProjectState(projectId: string): ProjectState {
     fileManifest: [],
     decisionLog: [],
     recentChanges: [],
+    generatedPages: [],
   };
 }

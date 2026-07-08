@@ -83,6 +83,7 @@ import type {
   ProjectFileNode,
   ProjectWorkspace,
 } from "@/shared/project-types";
+import { parseGeneratePageCommand } from "@/features/agents/codex/runtime/generate-page";
 
 type DetailMode = "preview" | "code";
 type PreviewTokenState = {
@@ -515,20 +516,41 @@ function ProjectDetailPage() {
   // run lifecycle, so when activeRun clears we flip the project back to idle and
   // refresh derived data (files/preview/runs) that the run may have changed.
   const prevActiveRunRef = useRef<string | null>(null);
+  // Slug of a known page the in-flight /generate-page run is authoring, so the
+  // composer menu can mark it "designed" the moment the run completes without a
+  // full route reload. The server persists the same slug; the two converge.
+  const pendingGeneratedSlugRef = useRef<string | null>(null);
   useEffect(() => {
     const current = chatState.activeRun?.runId ?? null;
     const previous = prevActiveRunRef.current;
     prevActiveRunRef.current = current;
     if (previous && !current) {
-      setProject((currentProject) =>
-        currentProject && currentProject.processingStatus === "processing"
-          ? {
-              ...currentProject,
-              processingStatus: "idle",
-              activeRunId: undefined,
-            }
-          : currentProject,
-      );
+      const completedSlug =
+        chatState.lastRunOutcome === "completed"
+          ? pendingGeneratedSlugRef.current
+          : null;
+      pendingGeneratedSlugRef.current = null;
+      setProject((currentProject) => {
+        if (!currentProject || currentProject.processingStatus !== "processing") {
+          return currentProject;
+        }
+        const generatedPages =
+          completedSlug &&
+          !(currentProject.generatedPages ?? []).some(
+            (page) => page.slug === completedSlug,
+          )
+            ? [
+                ...(currentProject.generatedPages ?? []),
+                { slug: completedSlug, generatedAt: new Date().toISOString() },
+              ]
+            : currentProject.generatedPages;
+        return {
+          ...currentProject,
+          processingStatus: "idle",
+          activeRunId: undefined,
+          generatedPages,
+        };
+      });
       // Auto-start the preview when the run completed successfully (init or an
       // edit). On failure/stop we leave the preview alone so the user never sees
       // a broken storefront — they read the error and retry/refine instead.
@@ -761,6 +783,12 @@ function ProjectDetailPage() {
     setSending(true);
     setSendError(undefined);
     setDraft("");
+
+    // Remember a known-page /generate-page target so the composer menu can mark
+    // it designed once the run completes (server persists it too).
+    const parsed = parseGeneratePageCommand(content);
+    pendingGeneratedSlugRef.current =
+      parsed?.target.isKnownPage ? parsed.target.slug : null;
 
     const result = await agentStream.sendPrompt({
       prompt: content,
@@ -1140,6 +1168,9 @@ function ProjectDetailPage() {
                 processing={isProcessing}
                 error={sendError}
                 disabled={false}
+                generatedPageSlugs={
+                  project.generatedPages?.map((page) => page.slug) ?? []
+                }
                 onChange={setDraft}
                 onReasoningEffortChange={setReasoningEffort}
                 onPlanModeChange={setPlanModeEnabled}

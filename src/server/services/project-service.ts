@@ -291,14 +291,18 @@ export class ProjectService {
     const project = await this.projectRepository.getProject(projectId, userId);
     if (!project) return undefined;
 
-    const [messages, fileTree, devRuntime] = await Promise.all([
+    const [messages, fileTree, devRuntime, projectState] = await Promise.all([
       this.messageRepository.listMessages(projectId, userId, { limit: 50 }),
       this.fileNodeRepository.listFileNodes(projectId, userId),
       this.projectStateStore?.readDevRuntime(projectId) ?? null,
+      this.projectStateStore?.loadOrCreate(projectId, userId) ?? null,
     ]);
 
     return {
-      project,
+      project: {
+        ...project,
+        generatedPages: projectState?.generatedPages ?? [],
+      },
       messages: messages.messages,
       fileTree: buildTree(fileTree),
       devRuntime: devRuntime ?? undefined,

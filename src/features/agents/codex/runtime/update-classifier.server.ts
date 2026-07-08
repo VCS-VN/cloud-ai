@@ -76,7 +76,12 @@ export function classifyUpdatePrompt(
 
 export const SMALL_UPDATE_FILE_CAP = 20;
 
-export type ResolvedBuilderRunKind = "init" | "update" | "new_route" | "unsupported";
+export type ResolvedBuilderRunKind =
+  | "init"
+  | "update"
+  | "new_route"
+  | "generate_page"
+  | "unsupported";
 
 export type ResolveBuilderRunKindInput = {
   project: Pick<Project, "status">;

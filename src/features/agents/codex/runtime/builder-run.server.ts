@@ -79,6 +79,7 @@ import {
 import { runRepairLoop } from "./repair-loop.server";
 import { recordBoundaryViolation, type ViolationLayer } from "./violation-counter.server";
 import { SMALL_UPDATE_FILE_CAP } from "./update-classifier.server";
+import { findKnownPage, type GeneratePageTarget } from "./generate-page";
 import type {
   BuilderRunEvent,
   BuilderRunFailureCode,
@@ -106,6 +107,8 @@ export type BuilderRunContext = {
   signal?: AbortSignal;
   reasoningEffort?: "low" | "medium" | "high" | "xhigh" | null;
   planMode?: boolean;
+  // Set only for generate_page runs (parsed from the /generate-page command).
+  generatePageTarget?: GeneratePageTarget;
 };
 
 export type BuilderRunOutcome = {
@@ -2315,6 +2318,317 @@ export async function runNewRouteBuilderRun(
   }
 
   // Edits landed in the project root in place — nothing to sync or clean up.
+  {
+    const handle = getBuilderRunHandle(runId);
+    if (handle) fireRemainingTasksComplete(handle, emit);
+  }
+  emitFinalAnswer(emit, runId, finalResponse);
+  emit({ type: "done", runId, milestone: "done", at: Date.now() });
+  return finalize({
+    runId,
+    status: "done",
+    changedFiles: diffGate.changedFiles,
+    draftWorkspacePath,
+    selectedInstructionMeta: bundle.selectedInstructionMeta,
+    optionalRouteWarnings: [],
+  });
+}
+
+// Author (or redesign) a single storefront page on demand via the
+// /generate-page command. Runs in-place on the project workspace like
+// small_update/new_route (no reassert — reassert is init-only). For a known
+// page it embeds the init page-spec verbatim so the result matches init-grade
+// quality; for a custom slug it authors a brand-new route from the user's
+// description. The target file is known up front, so the scope-analysis
+// thinking pass is skipped. On success the dispatcher records the slug in
+// project state (generatedPages).
+export async function runGeneratePageBuilderRun(
+  ctx: BuilderRunContext,
+  emit: EmitFn,
+): Promise<BuilderRunOutcome> {
+  const { runId } = ctx;
+  const target = ctx.generatePageTarget;
+  emitMilestoneInternal(emit, runId, "loading_context");
+
+  const skillSelection = await runSkillSelection(
+    ctx,
+    ["ui_mutation"],
+    emit,
+    async (rerunPrompt) => {
+      await runGeneratePageBuilderRun({ ...ctx, userPrompt: rerunPrompt }, emit);
+    },
+  );
+  if (skillSelection.kind === "required_unavailable") {
+    return requiredUnavailableOutcome(ctx, emit, skillSelection.missing);
+  }
+  if (skillSelection.kind === "paused") {
+    return pausedOutcome(ctx, skillSelection);
+  }
+
+  const draftWorkspacePath = await ensureProjectWorkspace({
+    projectId: ctx.projectId,
+  });
+  await ensureProjectGitignore({ draftWorkspacePath });
+  const fileManifest = await listFiles(draftWorkspacePath);
+  const foundationInstructions = await loadFoundationInstructions({
+    entries: FOUNDATION_INSTRUCTIONS,
+    embedProjectRuleDocs: true,
+  });
+
+  // Load the page spec for a known page and embed it verbatim (the spec
+  // frontmatter warns "send verbatim to the model"). Missing spec is
+  // non-fatal — the user's description still drives the run.
+  const specBodies = target?.isKnownPage && target.spec
+    ? await loadBatchSpecs([target.spec])
+    : [];
+
+  const routeHint = target?.route
+    ? `The target route file is \`${target.route}\`.`
+    : "This is a brand-new page not in the standard storefront set — create the route file and register it if the router requires it.";
+  const specBlock = specBodies.length > 0
+    ? `\n\n<page_spec>\nAuthor the page to satisfy this contract verbatim. ${routeHint}\n\n${specBodies.join("\n\n")}\n</page_spec>`
+    : `\n\n<page_target>\n${routeHint}\n</page_target>`;
+  const modeNote = target?.isKnownPage
+    ? "If the route file already exists as a designed page, treat this as a redesign: preserve its data hooks and cart/commerce contract, and apply the user's requested changes. If it is still the seeded skeleton, author it fully from the spec."
+    : "Author the new page from the user's description.";
+  const generatePrompt = `<generate_page_request>\nSlug: ${target?.slug ?? "(unknown)"}\n${modeNote}${specBlock}\n</generate_page_request>`;
+
+  const bundle = buildContextBundle({
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    draftWorkspacePath,
+    userPrompt: `${ctx.userPrompt}\n\n${generatePrompt}`.trim(),
+    locale: ctx.locale,
+    projectSummary: ctx.projectSummary,
+    fileManifest,
+    protectedPaths: {
+      blocked: BLOCKED_PROJECT_PATHS,
+      allowedAudit: ALLOWED_AUDIT_PROJECT_PATH_PATTERNS.map((p) => p.source),
+    },
+    validationRules: { typecheck: true, build: true, previewHealth: true },
+    selectedInstructions: foundationInstructions,
+    selectedSkills: skillSelection.selected,
+    skillRegistry: skillSelection.registry,
+    scopeAnalysis: target?.route
+      ? { relevantFiles: [target.route], approach: `Author the ${target.slug} page.` }
+      : null,
+  });
+
+  const symlinkScan = await scanDraftForSymlinks(draftWorkspacePath);
+  if (!symlinkScan.ok) {
+    emitBoundaryViolation(emit, ctx, "symlink", "request blocked by safety check");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "boundary_violation",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "planning");
+  let thread: BoundedCodexThread;
+  try {
+    thread = createBoundedCodexThread({
+      env: ctx.env,
+      draftWorkspacePath,
+      skillToolCallbacks: buildSkillToolCallbacks(runId),
+      modelReasoningEffort: ctx.reasoningEffort ?? "high",
+    });
+  } catch {
+    emitFailure(emit, runId, "codex_runtime_failed", "failed to start codex thread");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "codex_runtime_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "creating_draft");
+  const beforeSnapshot = await takeSnapshot(draftWorkspacePath);
+
+  emitMilestoneInternal(emit, runId, "building_pages");
+  let finalResponse = "";
+  try {
+    const mutationSummary = await runTurnAndBridge(thread, runId, emit, {
+      prompt: bundle.prompt,
+      signal: ctx.signal,
+      emitAnswer: false,
+      locale: toProgressLocale(ctx.locale),
+    });
+    if (mutationSummary.finalResponse) finalResponse = mutationSummary.finalResponse;
+  } catch (error) {
+    if (ctx.signal?.aborted) {
+      emit({ type: "cancelled", runId, milestone: "cancelled", at: Date.now() });
+      return finalize({
+        runId,
+        status: "cancelled",
+        failureCode: "cancelled",
+        changedFiles: [],
+        draftWorkspacePath,
+        selectedInstructionMeta: bundle.selectedInstructionMeta,
+        optionalRouteWarnings: [],
+      });
+    }
+    emitFailure(emit, runId, "codex_runtime_failed", "generate-page turn ended unexpectedly");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "codex_runtime_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  const afterSnapshot = await takeSnapshot(draftWorkspacePath);
+  const diff = diffSnapshots(beforeSnapshot, afterSnapshot);
+  const diffGate = runDiffGate({ draftWorkspacePath, diff });
+  if (!diffGate.ok) {
+    const code: BuilderRunFailureCode = diffGate.violations.some(
+      (v) => v.reason === "outside_draft_workspace",
+    )
+      ? "boundary_violation"
+      : "blocked_request";
+    if (code === "boundary_violation") {
+      emitBoundaryViolation(emit, ctx, "diff_gate", "request blocked by safety check");
+    } else {
+      emitFailure(emit, runId, code, "request touched a protected file");
+    }
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "checking_preview");
+  const styleRepair = await runRepairLoop({
+    thread,
+    validate: () => runRootStyleContract(draftWorkspacePath),
+    signal: ctx.signal,
+    onCycleStart: () => emitMilestoneInternal(emit, runId, "repairing"),
+    onProgress: (ev) => emitCodexProgressEvent(ev, runId, emit, toProgressLocale(ctx.locale)),
+    createRepairThread: () => createCompactRepairThread(ctx, draftWorkspacePath),
+    stage: "root_style_contract",
+    runId,
+    projectId: ctx.projectId,
+    changedFilesCount: diffGate.changedFiles.length,
+    context: buildCompactRepairContext({
+      ctx,
+      draftWorkspacePath,
+      changedFiles: diffGate.changedFiles,
+      stage: "root_style_contract",
+    }),
+  });
+  if (!styleRepair.finalOutcome.ok) {
+    const code: BuilderRunFailureCode =
+      styleRepair.cyclesUsed >= 2 ? "repair_exhausted" : "validation_failed";
+    emitFailure(emit, runId, code, `root/style contract failed: ${truncate(styleRepair.finalOutcome.summary, 1500)}`);
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+  const typecheckRepair = await runRepairLoop({
+    thread,
+    validate: () => runTypecheck(draftWorkspacePath, { signal: ctx.signal }),
+    signal: ctx.signal,
+    onCycleStart: () => emitMilestoneInternal(emit, runId, "repairing"),
+    onProgress: (ev) => emitCodexProgressEvent(ev, runId, emit, toProgressLocale(ctx.locale)),
+    createRepairThread: () => createCompactRepairThread(ctx, draftWorkspacePath),
+    stage: "typecheck",
+    runId,
+    projectId: ctx.projectId,
+    changedFilesCount: diffGate.changedFiles.length,
+    context: buildCompactRepairContext({
+      ctx,
+      draftWorkspacePath,
+      changedFiles: diffGate.changedFiles,
+      stage: "typecheck",
+    }),
+  });
+  if (!typecheckRepair.finalOutcome.ok) {
+    const code: BuilderRunFailureCode =
+      typecheckRepair.cyclesUsed >= 2 ? "repair_exhausted" : "validation_failed";
+    emitFailure(emit, runId, code, `typecheck failed: ${truncate(typecheckRepair.finalOutcome.summary, 1500)}`);
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+  const buildRepair = await runRepairLoop({
+    thread,
+    validate: () => runBuild(draftWorkspacePath, { signal: ctx.signal }),
+    signal: ctx.signal,
+    onCycleStart: () => emitMilestoneInternal(emit, runId, "repairing"),
+    onProgress: (ev) => emitCodexProgressEvent(ev, runId, emit, toProgressLocale(ctx.locale)),
+    createRepairThread: () => createCompactRepairThread(ctx, draftWorkspacePath),
+    stage: "build",
+    runId,
+    projectId: ctx.projectId,
+    changedFilesCount: diffGate.changedFiles.length,
+    context: buildCompactRepairContext({
+      ctx,
+      draftWorkspacePath,
+      changedFiles: diffGate.changedFiles,
+      stage: "build",
+    }),
+  });
+  if (!buildRepair.finalOutcome.ok) {
+    const code: BuilderRunFailureCode =
+      buildRepair.cyclesUsed >= 2 ? "repair_exhausted" : "validation_failed";
+    emitFailure(emit, runId, code, `build failed: ${truncate(buildRepair.finalOutcome.summary, 1500)}`);
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "publishing");
+  const promotion = runPromotionGate({
+    expected: { projectId: ctx.projectId, userId: ctx.userId, draftWorkspacePath },
+    current: { projectId: ctx.projectId, userId: ctx.userId, draftWorkspacePath },
+  });
+  if (!promotion.ok) {
+    emitBoundaryViolation(emit, ctx, "promotion_gate", "request blocked by safety check");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "boundary_violation",
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
   {
     const handle = getBuilderRunHandle(runId);
     if (handle) fireRemainingTasksComplete(handle, emit);

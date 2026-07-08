@@ -108,17 +108,20 @@ const SEED_TARGETS: readonly SeedTarget[] = [
   // is regenerated per brief. editable_baseline so the agent's home write
   // survives the reassert pass.
   { template: "src-routes-index.tsx.md", target: "src/routes/index.tsx", policy: "editable_baseline" },
-  // The remaining commerce routes are seeded as working skeletons and kept
-  // runtime_owned: init builds the home page + components only, so any route
-  // the model touches here (it is still told these paths exist) is reverted to
-  // the canonical seed by reassertRuntimeOwnedFiles after the batch loop. They
-  // become editable later only via explicit user update/new_route runs.
-  { template: "src-routes-products-index.tsx.md", target: "src/routes/products/index.tsx", policy: "runtime_owned" },
-  { template: "src-routes-products-productId.tsx.md", target: "src/routes/products/$productId.tsx", policy: "runtime_owned" },
-  { template: "src-routes-cart.tsx.md", target: "src/routes/cart.tsx", policy: "runtime_owned" },
-  { template: "src-routes-checkout.tsx.md", target: "src/routes/checkout.tsx", policy: "runtime_owned" },
-  { template: "src-routes-orders.tsx.md", target: "src/routes/orders.tsx", policy: "runtime_owned" },
-  { template: "src-routes-orders-orderId.tsx.md", target: "src/routes/orders/$orderId.tsx", policy: "runtime_owned" },
+  // The remaining commerce routes are seeded as working skeletons but kept
+  // editable_baseline: product-detail is now AI-authored at init (see
+  // init-batch-planner INIT_PHASES), and the other four (products, cart,
+  // checkout, orders, order-detail) can be authored on demand via the
+  // /generate-page run. All must survive reassertRuntimeOwnedFiles (which only
+  // runs at init) and any init retry without being reverted to the canonical
+  // seed, so none may be runtime_owned. init only tasks the model with home +
+  // product-detail, so the untouched skeletons remain valid until generated.
+  { template: "src-routes-products-index.tsx.md", target: "src/routes/products/index.tsx", policy: "editable_baseline" },
+  { template: "src-routes-products-productId.tsx.md", target: "src/routes/products/$productId.tsx", policy: "editable_baseline" },
+  { template: "src-routes-cart.tsx.md", target: "src/routes/cart.tsx", policy: "editable_baseline" },
+  { template: "src-routes-checkout.tsx.md", target: "src/routes/checkout.tsx", policy: "editable_baseline" },
+  { template: "src-routes-orders.tsx.md", target: "src/routes/orders.tsx", policy: "editable_baseline" },
+  { template: "src-routes-orders-orderId.tsx.md", target: "src/routes/orders/$orderId.tsx", policy: "editable_baseline" },
 ];
 
 function parseSeedTemplate(raw: string, expectedTarget: string): { target: string; body: string } {

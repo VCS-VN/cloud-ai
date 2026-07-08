@@ -9,7 +9,7 @@ export type ProjectProcessingStatus = 'idle' | 'processing'
 export type MessageProcessingStatus = 'pending' | 'streaming' | 'completed' | 'failed' | 'stopped'
 export type AgentMessageKind = 'plan' | 'answer' | 'clarification' | 'error' | 'review_required' | 'agent_question' | 'thinking'
 export type AgentRunStatus = 'streaming' | 'awaiting_input' | 'completed' | 'failed' | 'stopped' | 'interrupted'
-export type BuilderRunKind = 'init' | 'update' | 'new_route'
+export type BuilderRunKind = 'init' | 'update' | 'new_route' | 'generate_page'
 export type SkeletonPhase =
   | 'starting'
   | 'understanding'
@@ -186,6 +186,12 @@ export type Project = {
    * is available. Absent on records that were never previewed.
    */
   previewStatus?: PreviewRunningStatus
+  /**
+   * Slugs of pages the AI has authored (home + product-detail seeded at init,
+   * others appended by /generate-page runs). Drives the /generate-page menu
+   * status badges. Absent on records loaded without project-state join.
+   */
+  generatedPages?: Array<{ slug: string; generatedAt: string }>
 }
 
 export type Message = {

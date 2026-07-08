@@ -2,7 +2,10 @@ import {
   ArrowRight,
   Check,
   ChevronDown,
+  Circle,
+  CircleCheck,
   Clock,
+  FilePlus2,
   FileText,
   Image as ImageIcon,
   Link2,
@@ -13,14 +16,24 @@ import {
   Square,
   Wand2,
 } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { KNOWN_PAGES, GENERATE_PAGE_COMMAND } from "@/features/agents/codex/runtime/generate-page";
 import type {
   ComposerReasoningEffort,
   TokenContext,
@@ -38,6 +51,8 @@ type MessageComposerProps = {
   error?: string;
   disabled?: boolean;
   tokenContext?: TokenContext | null;
+  /** Slugs of pages already authored by the AI — drives /generate-page badges. */
+  generatedPageSlugs?: string[];
   onChange: (value: string) => void;
   onReasoningEffortChange: (value: ComposerReasoningEffort) => void;
   onPlanModeChange: (value: boolean) => void;
@@ -134,6 +149,7 @@ export function MessageComposer({
   error,
   disabled = false,
   tokenContext,
+  generatedPageSlugs = [],
   onChange,
   onReasoningEffortChange,
   onPlanModeChange,
@@ -144,6 +160,12 @@ export function MessageComposer({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [effortOpen, setEffortOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [pageMenuOpen, setPageMenuOpen] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const generatedSet = useMemo(
+    () => new Set(generatedPageSlugs),
+    [generatedPageSlugs],
+  );
   const inputValidationError = useMemo(
     () => validateProjectMessageInput(value),
     [value],
@@ -166,7 +188,36 @@ export function MessageComposer({
     await onSend(value.trim());
   }
 
+  // Open the /generate-page menu the moment the composer contains just a lone
+  // "/" — the simplest, unambiguous trigger. Anything else closes it.
+  function handleValueChange(next: string) {
+    setValidationError(null);
+    onChange(next);
+    setPageMenuOpen(next === "/");
+  }
+
+  function insertGenerateCommand(slug: string | null) {
+    const prefix = slug
+      ? `${GENERATE_PAGE_COMMAND} ${slug} `
+      : `${GENERATE_PAGE_COMMAND} `;
+    setPageMenuOpen(false);
+    onChange(prefix);
+    // Restore focus + caret to the end so the user types their description next.
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(prefix.length, prefix.length);
+    });
+  }
+
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // While the page menu is open, let its own key handling (arrows/enter/esc)
+    // take over — don't submit the form on Enter.
+    if (pageMenuOpen) {
+      if (event.key === "Escape") setPageMenuOpen(false);
+      return;
+    }
     if (
       event.key === "Enter" &&
       !event.shiftKey &&
@@ -294,24 +345,30 @@ export function MessageComposer({
         Enter message
       </label>
       <div className="px-3 pt-3">
-        <Textarea
-          id="project-message"
-          className="w-full bg-transparent border-0 outline-none p-0
-                     text-body leading-relaxed text-ink
-                     placeholder:text-subtle
-                     resize-none min-h-[96px] max-h-[260px] overflow-y-auto
-                     focus-visible:shadow-none"
-          value={value}
-          placeholder={placeholder}
-          disabled={sending || disabled}
-          maxLength={MAX_PROJECT_MESSAGE_LENGTH}
-          aria-invalid={!!displayedError}
-          onChange={(event) => {
-            setValidationError(null);
-            onChange(event.target.value);
-          }}
-          onKeyDown={handleKeyDown}
-        />
+        <Popover open={pageMenuOpen} onOpenChange={setPageMenuOpen}>
+          <PopoverAnchor asChild>
+            <Textarea
+              id="project-message"
+              ref={textareaRef}
+              className="w-full bg-transparent border-0 outline-none p-0
+                         text-body leading-relaxed text-ink
+                         placeholder:text-subtle
+                         resize-none min-h-[96px] max-h-[260px] overflow-y-auto
+                         focus-visible:shadow-none"
+              value={value}
+              placeholder={placeholder}
+              disabled={sending || disabled}
+              maxLength={MAX_PROJECT_MESSAGE_LENGTH}
+              aria-invalid={!!displayedError}
+              onChange={(event) => handleValueChange(event.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+          </PopoverAnchor>
+          <PageCommandMenu
+            generatedSet={generatedSet}
+            onSelectPage={insertGenerateCommand}
+          />
+        </Popover>
       </div>
 
       {displayedError ? (
@@ -412,5 +469,87 @@ export function MessageComposer({
             : ""}
       </p>
     </form>
+  );
+}
+
+const PAGE_DESCRIPTIONS: Record<string, string> = {
+  home: "Landing page — hero, catalog, calls to action",
+  products: "Catalog grid with categories and filters",
+  "product-detail": "Single product — gallery, price, add to cart",
+  cart: "Cart line items and subtotal",
+  checkout: "Shipping form and mock order placement",
+  orders: "Order history list",
+  "order-detail": "Single order summary and line items",
+};
+
+function PageCommandMenu({
+  generatedSet,
+  onSelectPage,
+}: {
+  generatedSet: Set<string>;
+  onSelectPage: (slug: string | null) => void;
+}) {
+  return (
+    <PopoverContent
+      align="start"
+      side="top"
+      sideOffset={8}
+      className="w-[min(22rem,calc(100vw-2rem))] p-0"
+      onOpenAutoFocus={(event) => event.preventDefault()}
+    >
+      <Command className="bg-surface">
+        <CommandInput placeholder="Generate a page…" className="text-ui-sm" />
+        <CommandList>
+          <CommandEmpty>No matching page.</CommandEmpty>
+          <CommandGroup heading="Storefront pages">
+            {KNOWN_PAGES.map((page) => {
+              const designed = generatedSet.has(page.slug);
+              return (
+                <CommandItem
+                  key={page.slug}
+                  value={`${page.slug} ${page.label}`}
+                  onSelect={() => onSelectPage(page.slug)}
+                  className="gap-3 py-2"
+                >
+                  {designed ? (
+                    <CircleCheck aria-hidden="true" size={16} className="shrink-0 text-ink" />
+                  ) : (
+                    <Circle aria-hidden="true" size={16} className="shrink-0 text-subtle" />
+                  )}
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-ui-sm font-medium text-ink">
+                      {page.label}
+                    </span>
+                    <span className="truncate text-eyebrow text-muted">
+                      {PAGE_DESCRIPTIONS[page.slug] ?? page.route}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-eyebrow text-subtle">
+                    {designed ? "Designed" : "Skeleton"}
+                  </span>
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+          <CommandGroup heading="Something else">
+            <CommandItem
+              value="custom new page"
+              onSelect={() => onSelectPage(null)}
+              className="gap-3 py-2"
+            >
+              <FilePlus2 aria-hidden="true" size={16} className="shrink-0 text-muted" />
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-ui-sm font-medium text-ink">
+                  Custom page
+                </span>
+                <span className="truncate text-eyebrow text-muted">
+                  Describe a page that isn't in the list
+                </span>
+              </span>
+            </CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </Command>
+    </PopoverContent>
   );
 }

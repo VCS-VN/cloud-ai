@@ -64,6 +64,16 @@ export class ProjectStateStore {
     }, userId);
   }
 
+  async appendGeneratedPage(projectId: string, slug: string, userId?: string): Promise<ProjectState> {
+    const current = await this.loadOrCreate(projectId, userId);
+    const generatedAt = new Date().toISOString();
+    const withoutSlug = current.generatedPages.filter((entry) => entry.slug !== slug);
+    return this.save({
+      ...current,
+      generatedPages: [...withoutSlug, { slug, generatedAt }],
+    }, userId);
+  }
+
   async updateFileManifest(projectId: string, entries: FileManifestEntry[], userId?: string): Promise<ProjectState> {
     const current = await this.loadOrCreate(projectId, userId);
     const manifest = new Map(current.fileManifest.map((entry) => [entry.path, entry]));
@@ -138,6 +148,7 @@ function mergeProjectStatePatch(current: ProjectState, patch: Partial<ProjectSta
     fileManifest: patch.fileManifest ?? current.fileManifest,
     decisionLog: patch.decisionLog ?? current.decisionLog,
     recentChanges: patch.recentChanges ?? current.recentChanges,
+    generatedPages: patch.generatedPages ?? current.generatedPages,
   };
 }
 

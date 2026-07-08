@@ -11,12 +11,18 @@ import {
 import {
   newRunId,
   resolveBuilderRunKind,
+  runGeneratePageBuilderRun,
   runInitBuilderRun,
   runNewRouteBuilderRun,
   runSmallUpdateBuilderRun,
   runWithPlanModeIfRequested,
   type BuilderRunContext,
+  type ResolvedBuilderRunKind,
 } from "@/features/agents/codex/runtime";
+import {
+  parseGeneratePageCommand,
+  type GeneratePageTarget,
+} from "@/features/agents/codex/runtime/generate-page";
 import { getCodexEnv, isCodexFeatureAvailable } from "@/features/agents/codex/runtime/feature-flag.server";
 import type { BuilderRunEvent } from "@/features/agents/ui/builder-events";
 import {
@@ -52,7 +58,9 @@ export type BuilderRunStartInput = {
   /** Existing agent_runs row id to attach the codex driver run to. */
   runId?: string;
   /** Optional callback fired after R5 resolves the kind, before the driver starts. */
-  onKindResolved?: (kind: "init" | "update" | "new_route") => Promise<void> | void;
+  onKindResolved?: (
+    kind: "init" | "update" | "new_route" | "generate_page",
+  ) => Promise<void> | void;
   /** Persistence wiring for the bridge (translator → message repo + run store + agent run repo). */
   persistence?: BuilderRunPersistence;
   /**
@@ -207,16 +215,33 @@ export async function startBuilderRunForChat(
   }
 
   const workspaceFiles = await listWorkspaceFiles(input.projectId);
-  const kind = resolveBuilderRunKind({
-    project: input.project,
-    workspaceFiles,
-    prompt: input.prompt,
-  });
+  // A /generate-page command routes straight to the generate_page driver — the
+  // intent is explicit, so skip the classifier's heuristics. If the workspace
+  // is still empty/draft, fall through to normal resolution (init must run
+  // first before any single page can be generated).
+  const generatePage = parseGeneratePageCommand(input.prompt);
+  const isEmptyOrDraft =
+    workspaceFiles.length === 0 || input.project.status === "draft";
+  let generatePageTarget: GeneratePageTarget | undefined;
+  let runPrompt = input.prompt;
+  let kind: ResolvedBuilderRunKind;
+  if (generatePage && !isEmptyOrDraft) {
+    kind = "generate_page";
+    generatePageTarget = generatePage.target;
+    runPrompt = generatePage.restPrompt;
+  } else {
+    kind = resolveBuilderRunKind({
+      project: input.project,
+      workspaceFiles,
+      prompt: input.prompt,
+    });
+  }
   console.log(
     JSON.stringify({
       event: "builder_run_dispatch_kind_resolved",
       projectId: input.projectId,
       kind,
+      generatePageSlug: generatePageTarget?.slug,
       workspaceFileCount: workspaceFiles.length,
       projectStatus: input.project.status,
     }),
@@ -261,21 +286,24 @@ export async function startBuilderRunForChat(
     userId: input.userId,
     runId,
     kind,
-    userPrompt: input.prompt,
+    userPrompt: runPrompt,
     locale: input.locale,
     env,
     projectSummary: null,
     signal: handle.abortController.signal,
     reasoningEffort: input.reasoningEffort ?? null,
     planMode: input.planMode ?? false,
+    generatePageTarget,
   };
 
   const driver =
     kind === "init"
       ? runInitBuilderRun
-      : kind === "new_route"
-        ? runNewRouteBuilderRun
-        : runSmallUpdateBuilderRun;
+      : kind === "generate_page"
+        ? runGeneratePageBuilderRun
+        : kind === "new_route"
+          ? runNewRouteBuilderRun
+          : runSmallUpdateBuilderRun;
 
   const events = subscribeAsAsyncIterable(handle);
 
@@ -360,7 +388,14 @@ export async function startBuilderRunForChat(
       projectId: input.projectId,
       runId,
       kind,
-      driverName: kind === "init" ? "runInitBuilderRun" : kind === "new_route" ? "runNewRouteBuilderRun" : "runSmallUpdateBuilderRun",
+      driverName:
+        kind === "init"
+          ? "runInitBuilderRun"
+          : kind === "generate_page"
+            ? "runGeneratePageBuilderRun"
+            : kind === "new_route"
+              ? "runNewRouteBuilderRun"
+              : "runSmallUpdateBuilderRun",
     }),
   );
 
@@ -384,7 +419,7 @@ export async function startBuilderRunForChat(
     },
     driver,
   )
-    .then(() => {
+    .then(async () => {
       if (shouldForceTerminalOnDriverResolve(handle.status)) {
         publishBuilderRunEvent(handle, {
           type: "failed",
@@ -394,6 +429,43 @@ export async function startBuilderRunForChat(
           message: "Builder driver ended before emitting a terminal event.",
           at: Date.now(),
         });
+      }
+      // Record the authored page slug once a generate_page run completes so the
+      // /generate-page menu can mark it "designed". Best-effort — a failure to
+      // persist must not surface as a run error.
+      // init authors home + product-detail; generate_page authors one slug.
+      // Record whichever applies so the /generate-page menu status is accurate.
+      const authoredSlugs =
+        handle.status !== "done"
+          ? []
+          : kind === "init"
+            ? ["home", "product-detail"]
+            : kind === "generate_page" && generatePageTarget
+              ? [generatePageTarget.slug]
+              : [];
+      if (authoredSlugs.length > 0) {
+        try {
+          const { projectStateStore } = await (
+            await import("@/server/services/project-services")
+          ).getProjectServices();
+          for (const slug of authoredSlugs) {
+            await projectStateStore.appendGeneratedPage(
+              input.projectId,
+              slug,
+              input.userId,
+            );
+          }
+        } catch (error) {
+          console.warn(
+            JSON.stringify({
+              event: "generated_pages_persist_failed",
+              projectId: input.projectId,
+              runId,
+              slugs: authoredSlugs,
+              error: error instanceof Error ? error.message : "unknown",
+            }),
+          );
+        }
       }
       console.log(
         JSON.stringify({

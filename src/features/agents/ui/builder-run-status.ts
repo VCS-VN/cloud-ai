@@ -1,4 +1,9 @@
-export type BuilderRunKind = "init" | "update" | "new_route" | "repair";
+export type BuilderRunKind =
+  | "init"
+  | "update"
+  | "new_route"
+  | "generate_page"
+  | "repair";
 
 export type BuilderRunStatus =
   | "queued"

@@ -187,6 +187,7 @@ export async function getProjectServices() {
   return {
     projectService,
     projectRepository: projectRepo,
+    projectStateStore,
     previewTokenService,
     projectRunService: new ProjectRunService(projectRepo, runStore),
     chatHistoryService: new ChatHistoryService(projectRepo, messageRepo, runStore),

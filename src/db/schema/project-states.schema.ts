@@ -24,6 +24,7 @@ export const projectStates = pgTable(
     fileManifest: json("file_manifest").notNull(),
     decisionLog: json("decision_log").notNull(),
     recentChanges: json("recent_changes").notNull(),
+    generatedPages: json("generated_pages").notNull().default([]),
     devRuntime: json("dev_runtime").notNull().default({
       status: "stopped",
       enabled: false,

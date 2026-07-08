@@ -54,6 +54,7 @@ export function createTestProjectState(overrides: Partial<ProjectState> = {}): P
     fileManifest: [],
     decisionLog: [],
     recentChanges: [],
+    generatedPages: [],
     ...overrides,
   };
 }
