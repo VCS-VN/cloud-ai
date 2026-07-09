@@ -40,6 +40,37 @@ export function findKnownPage(slug: string) {
   return KNOWN_PAGES.find((page) => page.slug === slug);
 }
 
+// A normal chat prompt (small_update / new_route) never carries an explicit
+// /modify-page slug, so it does not load a page spec — the agent only sees the
+// generic route-ownership map, not the per-page authoring contract (search
+// param, infinite scroll, required sections, hooks). This matcher recovers the
+// intended page(s) from the files the run will touch + the prompt text, so
+// those drivers can embed the SAME `pages/*.md` spec that /modify-page uses.
+//
+// Signals (union, deduped):
+// - a known page's route file appears in the run's scoped/relevant files, or
+// - the prompt names the route path or the slug as a whole word.
+// Order follows KNOWN_PAGES. Note product-detail's route is a strict superset
+// of the products route prefix, so we match on the FULL route string to avoid
+// mislabeling `$productId.tsx` as the `products` list page.
+export function matchKnownPagesForEdit(input: {
+  relevantFiles: readonly string[];
+  prompt: string;
+}): (typeof KNOWN_PAGES)[number][] {
+  const files = new Set(input.relevantFiles.map((f) => f.trim()));
+  const prompt = input.prompt.toLowerCase();
+  const matched: (typeof KNOWN_PAGES)[number][] = [];
+  for (const page of KNOWN_PAGES) {
+    const byFile = files.has(page.route);
+    const byRouteMention = prompt.includes(page.route.toLowerCase());
+    const bySlug = new RegExp(`\\b${page.slug.replace(/-/g, "[\\s-]?")}\\b`, "i").test(
+      input.prompt,
+    );
+    if (byFile || byRouteMention || bySlug) matched.push(page);
+  }
+  return matched;
+}
+
 // Parse a chat prompt. Returns null when the prompt is not a /generate-page
 // command, so the caller falls through to the normal classifier.
 export function parseGeneratePageCommand(prompt: string): ParsedGeneratePageCommand | null {

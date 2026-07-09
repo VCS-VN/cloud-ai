@@ -73,7 +73,11 @@ import {
 import { runRepairLoop } from "./repair-loop.server";
 import { recordBoundaryViolation, type ViolationLayer } from "./violation-counter.server";
 import { SMALL_UPDATE_FILE_CAP } from "./update-classifier.server";
-import { findKnownPage, type GeneratePageTarget } from "./generate-page";
+import {
+  findKnownPage,
+  matchKnownPagesForEdit,
+  type GeneratePageTarget,
+} from "./generate-page";
 import type {
   BuilderRunEvent,
   BuilderRunFailureCode,
@@ -230,6 +234,40 @@ async function loadInitSystemInstruction(): Promise<LoadedInstruction> {
     relativePath: "init/system.md",
     source: "template_required",
   });
+}
+
+// Build a <page_spec> block for a normal update / new_route run by matching the
+// request against the known storefront pages and embedding the SAME init
+// page-spec that /modify-page uses. Without this, only the explicit
+// /modify-page command carried the per-page authoring contract (search param,
+// infinite scroll, required sections, hooks) — a plain-chat "create/redesign
+// the products page" saw only the generic route map and drifted from the spec.
+// Empty string when the request maps to no known page (a genuinely custom
+// route), so a bespoke page is unaffected.
+async function buildEditPageSpecBlock(input: {
+  relevantFiles: readonly string[];
+  prompt: string;
+}): Promise<string> {
+  const pages = matchKnownPagesForEdit({
+    relevantFiles: input.relevantFiles,
+    prompt: input.prompt,
+  });
+  if (pages.length === 0) return "";
+  const specPaths = pages.map((p) => p.spec);
+  const bodies = await loadBatchSpecs(specPaths);
+  if (bodies.length === 0) return "";
+  const routeHints = pages
+    .map((p) => `- ${p.label}: \`${p.route}\``)
+    .join("\n");
+  return (
+    `\n\n<page_spec>\n` +
+    `This request targets a known storefront page. Author or update it to satisfy ` +
+    `the contract below verbatim. If the target route already exists as a designed ` +
+    `page, treat this as a redesign: preserve its data hooks and cart/commerce ` +
+    `contract and apply the requested changes; if it is still the seeded skeleton, ` +
+    `author it fully from the spec.\nTarget route file(s):\n${routeHints}\n\n` +
+    `${bodies.join("\n\n---\n\n")}\n</page_spec>`
+  );
 }
 
 function emitMilestoneInternal(
@@ -2006,6 +2044,14 @@ export async function runNewRouteBuilderRun(
     scopeAnalysis: scopePhase.scopeAnalysis,
   });
 
+  // A new_route request that targets a known storefront page (e.g. building the
+  // products catalog from chat rather than via /modify-page) gets the same
+  // init page-spec embedded so it follows the per-page authoring contract.
+  const pageSpecBlock = await buildEditPageSpecBlock({
+    relevantFiles: scopePhase.scopeAnalysis?.relevantFiles ?? [],
+    prompt: ctx.userPrompt,
+  });
+
   const symlinkScan = await scanDraftForSymlinks(draftWorkspacePath);
   if (!symlinkScan.ok) {
     emitBoundaryViolation(emit, ctx, "symlink", "request blocked by safety check");
@@ -2044,7 +2090,7 @@ export async function runNewRouteBuilderRun(
   let finalResponse = "";
   try {
     const planningSummary = await runTurnAndBridge(thread, runId, emit, {
-      prompt: bundle.prompt + "\n\n<plan_request>Plan the new route changes before mutating any files.</plan_request>",
+      prompt: bundle.prompt + pageSpecBlock + "\n\n<plan_request>Plan the new route changes before mutating any files.</plan_request>",
       signal: ctx.signal,
       emitAnswer: false,
       locale: toProgressLocale(ctx.locale),
@@ -2708,6 +2754,14 @@ export async function runSmallUpdateBuilderRun(
     scopeAnalysis: scopePhase.scopeAnalysis,
   });
 
+  // An update request that edits a known storefront page (e.g. "improve the
+  // products search") gets the same init page-spec embedded so the edit follows
+  // the per-page authoring contract instead of only the generic route map.
+  const pageSpecBlock = await buildEditPageSpecBlock({
+    relevantFiles: scopePhase.scopeAnalysis?.relevantFiles ?? [],
+    prompt: ctx.userPrompt,
+  });
+
   const symlinkScan = await scanDraftForSymlinks(draftWorkspacePath);
   if (!symlinkScan.ok) {
     emitBoundaryViolation(emit, ctx, "symlink", "request blocked by safety check");
@@ -2750,7 +2804,7 @@ export async function runSmallUpdateBuilderRun(
   let finalResponse = "";
   try {
     const summary = await runTurnAndBridge(thread, runId, emit, {
-      prompt: bundle.prompt,
+      prompt: bundle.prompt + pageSpecBlock,
       signal: ctx.signal,
       emitAnswer: false,
       locale: toProgressLocale(ctx.locale),
