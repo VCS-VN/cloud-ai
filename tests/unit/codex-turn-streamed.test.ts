@@ -264,6 +264,32 @@ describe("BoundedCodexThread.runTurnStreamed", () => {
     expect(thread.runStreamed).toHaveBeenCalledTimes(1);
   });
 
+  it("fires onProgress for EVERY completed agent_message, not just the last", async () => {
+    // A turn can emit multiple agent_message items (narrative before/after
+    // edits). All of them must surface to the UI live; finalResponse remains
+    // the last one (unchanged retry-gate contract).
+    const thread = makeStreamingThread([
+      [
+        agentMessage("First: I'll start with the hero."),
+        fileChangeItem(["src/routes/index.tsx"]),
+        agentMessage("Done: hero updated and banner added."),
+        TURN_COMPLETED,
+      ],
+    ]);
+    const bounded = new BoundedCodexThread(thread as never);
+    const progress: CodexProgressEvent[] = [];
+    const summary = await bounded.runTurnStreamed({ prompt: "p" }, (ev) =>
+      progress.push(ev),
+    );
+    const agentMessages = progress.filter((p) => p.kind === "agent_message");
+    expect(agentMessages.map((p) => (p as { text: string }).text)).toEqual([
+      "First: I'll start with the hero.",
+      "Done: hero updated and banner added.",
+    ]);
+    // finalResponse is still the last agent_message text.
+    expect(summary.finalResponse).toBe("Done: hero updated and banner added.");
+  });
+
   it("accepts an empty stream (integration-mock parity, no reconnects)", async () => {
     // Integration tests script empty event generators. Without reconnects,
     // an empty turn must NOT trigger the gate; otherwise every mock-backed

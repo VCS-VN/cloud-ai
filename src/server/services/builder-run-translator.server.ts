@@ -1,5 +1,4 @@
 import {
-  extractSummary,
   fileChangeToSection,
   isPrivacySafe,
   phaseLabel,
@@ -63,6 +62,18 @@ export type PersistDirective =
       kind: "plan";
       messageId: string;
       content: string;
+    }
+  | {
+      kind: "reasoning";
+      messageId: string;
+      content: string;
+      processingStatus: "completed";
+    }
+  | {
+      kind: "agent_message";
+      messageId: string;
+      content: string;
+      processingStatus: "completed";
     };
 
 export type ProgressTimelineDirective =
@@ -229,36 +240,79 @@ export function translateBuilderEventToRunStreamEvent(
       };
     }
     case "thinking": {
-      // Reasoning text from the model almost always contains file paths,
-      // framework tokens, or code identifiers, which would fail
-      // isPrivacySafe and get silently dropped — leaving the user with no
-      // visible "thinking" indicator at all. sanitizeReasoningSnippet scans
-      // line by line for a privacy-safe line to show as detail; the label
-      // stays the static locale "Thinking…" either way, so raw reasoning
-      // never reaches the client, only an already-filtered snippet (or none).
+      // Live "Thinking…" skeleton (privacy-safe snippet only) AND a persisted
+      // reasoning bubble carrying the full raw text. The skeleton stays a
+      // transient indicator; the message is the durable record.
       const detail = sanitizeReasoningSnippet(event.text) ?? undefined;
+      const messageId = `msg-${runId}-reasoning-${event.at}`;
+      const content = event.text;
+      const events: RunStreamEvent[] = [
+        {
+          type: "skeleton.update",
+          runId,
+          phase: "understanding",
+          label: THINKING_LABEL[locale] ?? THINKING_LABEL.en,
+          detail,
+        },
+        {
+          type: "message.created",
+          runId,
+          messageId,
+          kind: "reasoning",
+          content,
+          processingStatus: "completed",
+          createdAt: new Date(event.at).toISOString(),
+          metadata: null,
+        },
+        {
+          type: "message.completed",
+          runId,
+          messageId,
+          content,
+        },
+      ];
       return {
-        events: [
-          {
-            type: "skeleton.update",
-            runId,
-            phase: "understanding",
-            label: THINKING_LABEL[locale] ?? THINKING_LABEL.en,
-            detail,
-          },
-        ],
-        persist: null,
+        events,
+        persist: { kind: "reasoning", messageId, content, processingStatus: "completed" },
+        timeline: null,
+        terminal: null,
+      };
+    }
+    case "agent_message": {
+      const messageId = `msg-${runId}-agent-${event.at}`;
+      const content = event.text;
+      const events: RunStreamEvent[] = [
+        {
+          type: "message.created",
+          runId,
+          messageId,
+          kind: "agent_message",
+          content,
+          processingStatus: "completed",
+          createdAt: new Date(event.at).toISOString(),
+          metadata: null,
+        },
+        {
+          type: "message.completed",
+          runId,
+          messageId,
+          content,
+        },
+      ];
+      return {
+        events,
+        persist: { kind: "agent_message", messageId, content, processingStatus: "completed" },
         timeline: null,
         terminal: null,
       };
     }
     case "turn_completed": {
-      const summary = extractSummary(event.finalResponse, locale);
-      const safe = isPrivacySafe(summary)
-        ? summary
-        : locale === "vi"
+      const raw = event.finalResponse.trim();
+      const safe =
+        raw ||
+        (locale === "vi"
           ? "Đã hoàn tất yêu cầu của bạn."
-          : "Done with your request.";
+          : "Done with your request.");
       const messageId = `msg-${runId}-answer`;
       const events: RunStreamEvent[] = [
         {

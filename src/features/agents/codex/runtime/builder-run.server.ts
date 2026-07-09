@@ -265,6 +265,9 @@ function emitCodexProgressEvent(
     case "reasoning":
       emit({ type: "thinking", runId, text: ev.text, at: Date.now() });
       return;
+    case "agent_message":
+      emit({ type: "agent_message", runId, text: ev.text, at: Date.now() });
+      return;
     case "file_change_started":
       emit({
         type: "step",

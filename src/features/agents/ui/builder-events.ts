@@ -81,6 +81,7 @@ export type BuilderRunEvent =
   | { type: "cancelled"; runId: string; milestone: "cancelled"; at: number }
   | { type: "file_change"; runId: string; path: string; at: number }
   | { type: "thinking"; runId: string; text: string; at: number }
+  | { type: "agent_message"; runId: string; text: string; at: number }
   | { type: "turn_completed"; runId: string; finalResponse: string; at: number }
   | {
       type: "plan.created";

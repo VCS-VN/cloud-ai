@@ -19,7 +19,7 @@ import type {
 export type BridgePersistAdapter = {
   saveAgentMessage(input: {
     runId: string;
-    kind: Extract<AgentMessageKind, "answer" | "error" | "agent_question" | "plan">;
+    kind: Extract<AgentMessageKind, "answer" | "error" | "agent_question" | "plan" | "reasoning" | "agent_message">;
     content: string;
     metadata?: AgentQuestionMetadata | null;
   }): Promise<void>;
@@ -87,6 +87,18 @@ export async function runBuilderBridge(input: BridgeRunInput): Promise<{
         await persist.saveAgentMessage({
           runId: ctx.runId,
           kind: "plan",
+          content: directive.content,
+        });
+      } else if (directive.kind === "reasoning") {
+        await persist.saveAgentMessage({
+          runId: ctx.runId,
+          kind: "reasoning",
+          content: directive.content,
+        });
+      } else if (directive.kind === "agent_message") {
+        await persist.saveAgentMessage({
+          runId: ctx.runId,
+          kind: "agent_message",
           content: directive.content,
         });
       } else if (directive.kind === "agent_question") {

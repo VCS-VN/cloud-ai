@@ -8,7 +8,7 @@ async function* asAsync<T>(items: T[]): AsyncIterable<T> {
 }
 
 type SavedMessage = {
-  kind: "answer" | "error" | "agent_question" | "plan";
+  kind: "answer" | "error" | "agent_question" | "plan" | "reasoning" | "agent_message";
   content: string;
 };
 

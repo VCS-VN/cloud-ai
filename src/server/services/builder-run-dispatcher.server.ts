@@ -517,7 +517,11 @@ async function persistAgentMessage(
         ? "error"
         : directive.kind === "plan"
           ? "plan"
-          : "agent_question";
+          : directive.kind === "reasoning"
+            ? "reasoning"
+            : directive.kind === "agent_message"
+              ? "agent_message"
+              : "agent_question";
   const content =
     "content" in directive ? directive.content : (directive as { question: string }).question;
   const metadata =

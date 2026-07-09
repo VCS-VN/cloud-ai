@@ -92,26 +92,24 @@ describe("US2 privacy — every user-visible payload is privacy-safe across many
       });
 
       for (const event of emitted) {
+        // NOTE: as of the "unblock-message" change, agent answer/reasoning/
+        // agent_message CONTENT is intentionally passed through verbatim (the
+        // FR-007/SC-002 content filter was removed for message bodies). The
+        // privacy guarantee now applies only to the transient progress surface:
+        // skeleton.update labels/details and the section-framed timeline.
         if (event.type === "skeleton.update") {
           if (!isPrivacySafe(event.label)) failures.push(`skeleton.label="${event.label}"`);
           if (event.detail && !isPrivacySafe(event.detail)) failures.push(`skeleton.detail="${event.detail}"`);
-        }
-        if (event.type === "message.created") {
-          if (!isPrivacySafe(event.content)) failures.push(`message.created.content="${event.content}"`);
-        }
-        if (event.type === "message.completed") {
-          if (!isPrivacySafe(event.content)) failures.push(`message.completed.content="${event.content}"`);
         }
         if (event.type === "run.failed") {
           if (!isPrivacySafe(event.error.message)) failures.push(`run.failed.error.message="${event.error.message}"`);
         }
       }
-      for (const m of adapter.messages) {
-        if (!isPrivacySafe(m.content)) failures.push(`persisted.${m.kind}="${m.content}"`);
-      }
       for (const t of adapter.timeline) {
         const payload = t.payload as Record<string, unknown>;
-        const text = (payload.text as string | undefined) ?? (payload.section as string | undefined);
+        // `summary` timeline text now mirrors the raw answer content and is no
+        // longer privacy-filtered; only the `section` framing is checked.
+        const text = payload.section as string | undefined;
         if (text && !isPrivacySafe(text)) failures.push(`timeline.${t.kind}="${text}"`);
       }
     }

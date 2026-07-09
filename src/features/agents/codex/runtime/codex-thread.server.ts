@@ -40,6 +40,7 @@ export type CodexTurnSummary = {
  */
 export type CodexProgressEvent =
   | { kind: "reasoning"; text: string }
+  | { kind: "agent_message"; text: string }
   | { kind: "file_change_started"; paths: string[] }
   | { kind: "file_change_completed"; paths: string[]; failed: boolean }
   | { kind: "command_started"; command: string }
@@ -596,6 +597,9 @@ export class BoundedCodexThread {
       itemTypeCounts[item.type] = (itemTypeCounts[item.type] ?? 0) + 1;
       if (item.type === "agent_message") {
         finalResponse = item.text;
+        if (typeof item.text === "string" && item.text.trim().length > 0) {
+          onProgress({ kind: "agent_message", text: item.text });
+        }
       } else if (
         item.type === "reasoning" &&
         typeof item.text === "string" &&

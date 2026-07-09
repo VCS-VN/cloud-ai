@@ -87,7 +87,7 @@ function AgentBody({
     freeText: string,
   ) => Promise<boolean | void>;
 }) {
-  if (message.kind === "thinking") {
+  if (message.kind === "thinking" || message.kind === "reasoning") {
     return <ThinkingBubble content={message.content} />;
   }
   if (message.kind === "plan") {

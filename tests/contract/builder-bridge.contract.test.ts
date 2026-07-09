@@ -87,18 +87,66 @@ describe("BuilderRunEvent → RunStreamEvent translator (Phase 1 contract)", () 
     });
   });
 
-  it("turn_completed with leaky finalResponse falls back to the safe vi default", () => {
+  it("turn_completed keeps the raw finalResponse verbatim (no privacy filter)", () => {
+    const raw = "Updated src/components/storefront/Hero.tsx successfully";
     const out = translateBuilderEventToRunStreamEvent(
       {
         type: "turn_completed",
         runId: "run-1",
-        finalResponse: "Updated src/components/storefront/Hero.tsx successfully",
+        finalResponse: raw,
         at: 1234,
       },
       ctx,
     );
+    expect(out.events[0]).toMatchObject({ content: raw });
+    expect(out.persist).toMatchObject({ content: raw });
+  });
+
+  it("turn_completed falls back to the safe default only when finalResponse is empty", () => {
+    const out = translateBuilderEventToRunStreamEvent(
+      { type: "turn_completed", runId: "run-1", finalResponse: "   ", at: 1234 },
+      ctx,
+    );
     expect(out.events[0]).toMatchObject({ content: "Đã hoàn tất yêu cầu của bạn." });
-    expect(out.persist).toMatchObject({ content: "Đã hoàn tất yêu cầu của bạn." });
+  });
+
+  it("thinking emits a skeleton.update AND a persisted reasoning message (raw text)", () => {
+    const raw = "Reading src/routes/index.tsx to plan the hero edit";
+    const out = translateBuilderEventToRunStreamEvent(
+      { type: "thinking", runId: "run-1", text: raw, at: 55 },
+      ctx,
+    );
+    expect(out.events.map((e) => e.type)).toEqual([
+      "skeleton.update",
+      "message.created",
+      "message.completed",
+    ]);
+    expect(out.events[1]).toMatchObject({ kind: "reasoning", content: raw });
+    expect(out.persist).toEqual({
+      kind: "reasoning",
+      messageId: "msg-run-1-reasoning-55",
+      content: raw,
+      processingStatus: "completed",
+    });
+  });
+
+  it("agent_message emits a persisted agent_message message (raw text)", () => {
+    const raw = "I edited `Hero.tsx` and added the promo banner.";
+    const out = translateBuilderEventToRunStreamEvent(
+      { type: "agent_message", runId: "run-1", text: raw, at: 77 },
+      ctx,
+    );
+    expect(out.events.map((e) => e.type)).toEqual([
+      "message.created",
+      "message.completed",
+    ]);
+    expect(out.events[0]).toMatchObject({ kind: "agent_message", content: raw });
+    expect(out.persist).toEqual({
+      kind: "agent_message",
+      messageId: "msg-run-1-agent-77",
+      content: raw,
+      processingStatus: "completed",
+    });
   });
 
   it("done → run.completed terminal", () => {

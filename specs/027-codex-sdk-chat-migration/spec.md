@@ -130,6 +130,7 @@ The user sends a chat prompt and the run is mid-flight when the backend process 
 #### Progress feedback (page/section privacy)
 - **FR-006**: The system MUST emit progress messages framed at the page or section level (e.g., home page, hero section, product card), localized to the user's language.
 - **FR-007**: User-visible progress and final summary text MUST NOT contain file paths, file extensions, code identifiers, framework names, or code snippets.
+  - **SUPERSEDED (unblock-message change)**: This restriction now applies ONLY to the transient progress surface (skeleton labels/details, section-framed timeline). Codex agent message CONTENT — `agent_message`, `reasoning`, and the final `answer` — is intentionally passed through verbatim and persisted so the UI can render every message the codex SDK produces, by type. The content filter (`extractSummary`/`isPrivacySafe`) was removed from the message-body path.
 - **FR-008**: The system MUST emit a final one-line summary at the end of every successful turn that confirms what changed at section level.
 - **FR-009**: When the agent works on phases without a file artifact (e.g., reading context, validating preview), the system MUST emit human-readable phase messages.
 
@@ -177,6 +178,7 @@ The user sends a chat prompt and the run is mid-flight when the backend process 
 
 - **SC-001**: Zero project-detail chat runs produce a preview parser error in two consecutive weeks of usage after Phase 1 ships (regression-killer for the original bug).
 - **SC-002**: 100% of user-visible progress and final-summary messages, sampled across at least 200 real runs, contain no file paths, file extensions, code identifiers, framework names, or code snippets.
+  - **SUPERSEDED (unblock-message change)**: Scope narrowed to the transient progress surface only (skeleton labels/details, timeline section framing). Agent message content is now shown verbatim by design — see FR-007 note.
 - **SC-003**: At least 95% of update prompts that succeed today on the legacy path also succeed end-to-end on the new path during a parallel-comparison week.
 - **SC-004**: Median time-to-first-progress-message after submit stays below the legacy path's measured median, and 95th percentile stays within 1.25x of the legacy 95th percentile.
 - **SC-005**: After Phase 5, the codebase contains exactly one chat agent path; an automated check confirms the legacy directories are absent and no runtime route serves the legacy chat endpoints.
