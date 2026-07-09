@@ -2,6 +2,8 @@ import {
   ArrowRight,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Circle,
   CircleCheck,
   Clock,
@@ -11,6 +13,7 @@ import {
   Link2,
   Loader2,
   Paperclip,
+  PencilRuler,
   Plus,
   Shield,
   Square,
@@ -161,6 +164,7 @@ export function MessageComposer({
   const [effortOpen, setEffortOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [pageMenuOpen, setPageMenuOpen] = useState(false);
+  const [menuLevel, setMenuLevel] = useState<"root" | "modify-page">("root");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const generatedSet = useMemo(
     () => new Set(generatedPageSlugs),
@@ -188,12 +192,15 @@ export function MessageComposer({
     await onSend(value.trim());
   }
 
-  // Open the /generate-page menu the moment the composer contains just a lone
-  // "/" — the simplest, unambiguous trigger. Anything else closes it.
+  // Open the slash-command menu the moment the composer contains just a lone
+  // "/" — the simplest, unambiguous trigger. Anything else closes it. Always
+  // start at the root level so a fresh "/" shows the top-level command list.
   function handleValueChange(next: string) {
     setValidationError(null);
     onChange(next);
-    setPageMenuOpen(next === "/");
+    const open = next === "/";
+    setPageMenuOpen(open);
+    if (open) setMenuLevel("root");
   }
 
   function insertGenerateCommand(slug: string | null) {
@@ -215,7 +222,16 @@ export function MessageComposer({
     // While the page menu is open, let its own key handling (arrows/enter/esc)
     // take over — don't submit the form on Enter.
     if (pageMenuOpen) {
-      if (event.key === "Escape") setPageMenuOpen(false);
+      if (event.key === "Escape") {
+        // From a sub-level, Escape steps back to the root; from the root it
+        // closes the menu entirely.
+        if (menuLevel !== "root") {
+          event.preventDefault();
+          setMenuLevel("root");
+        } else {
+          setPageMenuOpen(false);
+        }
+      }
       return;
     }
     if (
@@ -345,7 +361,13 @@ export function MessageComposer({
         Enter message
       </label>
       <div className="px-3 pt-3">
-        <Popover open={pageMenuOpen} onOpenChange={setPageMenuOpen}>
+        <Popover
+          open={pageMenuOpen}
+          onOpenChange={(open) => {
+            setPageMenuOpen(open);
+            if (!open) setMenuLevel("root");
+          }}
+        >
           <PopoverAnchor asChild>
             <Textarea
               id="project-message"
@@ -364,8 +386,11 @@ export function MessageComposer({
               onKeyDown={handleKeyDown}
             />
           </PopoverAnchor>
-          <PageCommandMenu
+          <SlashCommandMenu
+            level={menuLevel}
             generatedSet={generatedSet}
+            onEnterModifyPage={() => setMenuLevel("modify-page")}
+            onBack={() => setMenuLevel("root")}
             onSelectPage={insertGenerateCommand}
           />
         </Popover>
@@ -482,11 +507,17 @@ const PAGE_DESCRIPTIONS: Record<string, string> = {
   "order-detail": "Single order summary and line items",
 };
 
-function PageCommandMenu({
+function SlashCommandMenu({
+  level,
   generatedSet,
+  onEnterModifyPage,
+  onBack,
   onSelectPage,
 }: {
+  level: "root" | "modify-page";
   generatedSet: Set<string>;
+  onEnterModifyPage: () => void;
+  onBack: () => void;
   onSelectPage: (slug: string | null) => void;
 }) {
   return (
@@ -497,59 +528,98 @@ function PageCommandMenu({
       className="w-[min(22rem,calc(100vw-2rem))] p-0"
       onOpenAutoFocus={(event) => event.preventDefault()}
     >
-      <Command className="bg-surface">
-        <CommandInput placeholder="Generate a page…" className="text-ui-sm" />
-        <CommandList>
-          <CommandEmpty>No matching page.</CommandEmpty>
-          <CommandGroup heading="Storefront pages">
-            {KNOWN_PAGES.map((page) => {
-              const designed = generatedSet.has(page.slug);
-              return (
-                <CommandItem
-                  key={page.slug}
-                  value={`${page.slug} ${page.label}`}
-                  onSelect={() => onSelectPage(page.slug)}
-                  className="gap-3 py-2"
-                >
-                  {designed ? (
-                    <CircleCheck aria-hidden="true" size={16} className="shrink-0 text-ink" />
-                  ) : (
-                    <Circle aria-hidden="true" size={16} className="shrink-0 text-subtle" />
-                  )}
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-ui-sm font-medium text-ink">
-                      {page.label}
-                    </span>
-                    <span className="truncate text-eyebrow text-muted">
-                      {PAGE_DESCRIPTIONS[page.slug] ?? page.route}
-                    </span>
+      {level === "root" ? (
+        <Command className="bg-surface">
+          <CommandInput placeholder="Search commands…" className="text-ui-sm" />
+          <CommandList>
+            <CommandEmpty>No matching command.</CommandEmpty>
+            <CommandGroup heading="Commands">
+              <CommandItem
+                value="modify page"
+                onSelect={onEnterModifyPage}
+                className="gap-3 py-2"
+              >
+                <PencilRuler aria-hidden="true" size={16} className="shrink-0 text-ink" />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-ui-sm font-medium text-ink">
+                    Modify page
                   </span>
-                  <span className="shrink-0 text-eyebrow text-subtle">
-                    {designed ? "Designed" : "Skeleton"}
+                  <span className="truncate text-eyebrow text-muted">
+                    Regenerate or refine a storefront page
                   </span>
-                </CommandItem>
-              );
-            })}
-          </CommandGroup>
-          <CommandGroup heading="Something else">
-            <CommandItem
-              value="custom new page"
-              onSelect={() => onSelectPage(null)}
-              className="gap-3 py-2"
+                </span>
+                <ChevronRight aria-hidden="true" size={14} className="shrink-0 text-subtle" />
+              </CommandItem>
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      ) : (
+        <Command className="bg-surface">
+          <div className="flex items-center gap-1 border-b border-hairline/70 px-1.5 py-1">
+            <Button
+              variant="unstyled"
+              type="button"
+              onClick={onBack}
+              aria-label="Back to commands"
+              className="composer-icon-btn h-7 w-7"
             >
-              <FilePlus2 aria-hidden="true" size={16} className="shrink-0 text-muted" />
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-ui-sm font-medium text-ink">
-                  Custom page
+              <ChevronLeft aria-hidden="true" size={16} />
+            </Button>
+            <span className="text-ui-sm font-medium text-ink">Modify page</span>
+          </div>
+          <CommandInput placeholder="Pick a page…" className="text-ui-sm" />
+          <CommandList>
+            <CommandEmpty>No matching page.</CommandEmpty>
+            <CommandGroup heading="Storefront pages">
+              {KNOWN_PAGES.map((page) => {
+                const designed = generatedSet.has(page.slug);
+                return (
+                  <CommandItem
+                    key={page.slug}
+                    value={`${page.slug} ${page.label}`}
+                    onSelect={() => onSelectPage(page.slug)}
+                    className="gap-3 py-2"
+                  >
+                    {designed ? (
+                      <CircleCheck aria-hidden="true" size={16} className="shrink-0 text-ink" />
+                    ) : (
+                      <Circle aria-hidden="true" size={16} className="shrink-0 text-subtle" />
+                    )}
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-ui-sm font-medium text-ink">
+                        {page.label}
+                      </span>
+                      <span className="truncate text-eyebrow text-muted">
+                        {PAGE_DESCRIPTIONS[page.slug] ?? page.route}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-eyebrow text-subtle">
+                      {designed ? "Designed" : "Skeleton"}
+                    </span>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+            <CommandGroup heading="Something else">
+              <CommandItem
+                value="custom new page"
+                onSelect={() => onSelectPage(null)}
+                className="gap-3 py-2"
+              >
+                <FilePlus2 aria-hidden="true" size={16} className="shrink-0 text-muted" />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-ui-sm font-medium text-ink">
+                    Custom page
+                  </span>
+                  <span className="truncate text-eyebrow text-muted">
+                    Describe a page that isn't in the list
+                  </span>
                 </span>
-                <span className="truncate text-eyebrow text-muted">
-                  Describe a page that isn't in the list
-                </span>
-              </span>
-            </CommandItem>
-          </CommandGroup>
-        </CommandList>
-      </Command>
+              </CommandItem>
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      )}
     </PopoverContent>
   );
 }

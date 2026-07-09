@@ -18,7 +18,7 @@ export const KNOWN_PAGES = [
 
 export type KnownPageSlug = (typeof KNOWN_PAGES)[number]["slug"];
 
-export const GENERATE_PAGE_COMMAND = "/generate-page";
+export const GENERATE_PAGE_COMMAND = "/modify-page";
 
 export type GeneratePageTarget = {
   slug: string;
@@ -34,7 +34,7 @@ export type ParsedGeneratePageCommand = {
   restPrompt: string;
 };
 
-const GENERATE_PAGE_RE = /^\/generate-page\s+(\S+)\s*([\s\S]*)$/;
+const GENERATE_PAGE_RE = /^\/modify-page\s+(\S+)\s*([\s\S]*)$/;
 
 export function findKnownPage(slug: string) {
   return KNOWN_PAGES.find((page) => page.slug === slug);
