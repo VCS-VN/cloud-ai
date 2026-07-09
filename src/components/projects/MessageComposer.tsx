@@ -2,7 +2,6 @@ import {
   ArrowRight,
   Check,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Circle,
   CircleCheck,
@@ -19,16 +18,8 @@ import {
   Square,
   Wand2,
 } from "lucide-react";
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import {
   Popover,
   PopoverAnchor,
@@ -163,13 +154,43 @@ export function MessageComposer({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [effortOpen, setEffortOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
-  const [pageMenuOpen, setPageMenuOpen] = useState(false);
-  const [menuLevel, setMenuLevel] = useState<"root" | "modify-page">("root");
+  // The slash menu closes on Escape even while the input still holds a partial
+  // command, so its open state is tracked separately from the derived context.
+  const [menuDismissed, setMenuDismissed] = useState(false);
+  // Index of the highlighted suggestion — drives ↑/↓ navigation and which entry
+  // Tab/Enter completes. Reset to 0 whenever the suggestion list changes.
+  const [activeIndex, setActiveIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const generatedSet = useMemo(
     () => new Set(generatedPageSlugs),
     [generatedPageSlugs],
   );
+
+  // Everything about the slash UI is derived from the current input value, so
+  // typing and clicking stay perfectly consistent (no separate menu-level
+  // state to drift out of sync).
+  const slashContext = useMemo(() => parseSlashContext(value), [value]);
+  const suggestions = useMemo(
+    () => buildSuggestions(slashContext, generatedSet),
+    [slashContext, generatedSet],
+  );
+  const menuOpen = !menuDismissed && suggestions.length > 0;
+  const activeSuggestion = suggestions[activeIndex] ?? suggestions[0] ?? null;
+  // Ghost-text suffix: the part of the active suggestion's insert value that
+  // extends past what the user has already typed. Only shown when it's a real
+  // forward-completion of the current input.
+  const ghostSuffix = useMemo(() => {
+    if (!menuOpen || !activeSuggestion) return "";
+    const insert = activeSuggestion.insert;
+    if (insert.length <= value.length) return "";
+    if (!insert.toLowerCase().startsWith(value.toLowerCase())) return "";
+    return insert.slice(value.length);
+  }, [menuOpen, activeSuggestion, value]);
+
+  // A fresh suggestion list means the old highlight index may be stale.
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [slashContext?.mode, slashContext?.query]);
   const inputValidationError = useMemo(
     () => validateProjectMessageInput(value),
     [value],
@@ -192,47 +213,63 @@ export function MessageComposer({
     await onSend(value.trim());
   }
 
-  // Open the slash-command menu the moment the composer contains just a lone
-  // "/" — the simplest, unambiguous trigger. Anything else closes it. Always
-  // start at the root level so a fresh "/" shows the top-level command list.
   function handleValueChange(next: string) {
     setValidationError(null);
     onChange(next);
-    const open = next === "/";
-    setPageMenuOpen(open);
-    if (open) setMenuLevel("root");
+    // Any edit re-arms the menu: a dismissal only suppresses the current keystroke.
+    setMenuDismissed(false);
   }
 
-  function insertGenerateCommand(slug: string | null) {
-    const prefix = slug
-      ? `${GENERATE_PAGE_COMMAND} ${slug} `
-      : `${GENERATE_PAGE_COMMAND} `;
-    setPageMenuOpen(false);
-    onChange(prefix);
-    // Restore focus + caret to the end so the user types their description next.
+  // Apply a suggestion's insert text to the composer and drop the caret at the
+  // end so the user keeps typing their description. Shared by click, Tab, and
+  // Enter so all three behave identically.
+  function applySuggestion(suggestion: Suggestion) {
+    const next = suggestion.insert;
+    onChange(next);
+    setMenuDismissed(false);
     requestAnimationFrame(() => {
       const el = textareaRef.current;
       if (!el) return;
       el.focus();
-      el.setSelectionRange(prefix.length, prefix.length);
+      el.setSelectionRange(next.length, next.length);
     });
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // While the page menu is open, let its own key handling (arrows/enter/esc)
-    // take over — don't submit the form on Enter.
-    if (pageMenuOpen) {
-      if (event.key === "Escape") {
-        // From a sub-level, Escape steps back to the root; from the root it
-        // closes the menu entirely.
-        if (menuLevel !== "root") {
+    // While the slash menu is open, its keys (↑/↓/Tab/Enter/Esc) take over.
+    if (menuOpen) {
+      switch (event.key) {
+        case "ArrowDown":
           event.preventDefault();
-          setMenuLevel("root");
-        } else {
-          setPageMenuOpen(false);
-        }
+          setActiveIndex((i) => (i + 1) % suggestions.length);
+          return;
+        case "ArrowUp":
+          event.preventDefault();
+          setActiveIndex((i) => (i - 1 + suggestions.length) % suggestions.length);
+          return;
+        case "Tab":
+          // Tab always autocompletes to the highlighted suggestion rather than
+          // moving focus — the whole point of the inline hint.
+          event.preventDefault();
+          if (activeSuggestion) applySuggestion(activeSuggestion);
+          return;
+        case "Enter":
+          // Plain Enter accepts the suggestion; Shift+Enter falls through to a
+          // newline. Only intercept when there's a real completion pending so a
+          // fully-typed command can still be sent with Enter.
+          if (!event.shiftKey && activeSuggestion && ghostSuffix) {
+            event.preventDefault();
+            applySuggestion(activeSuggestion);
+            return;
+          }
+          break;
+        case "Escape":
+          event.preventDefault();
+          setMenuDismissed(true);
+          return;
+        default:
+          break;
       }
-      return;
     }
     if (
       event.key === "Enter" &&
@@ -361,37 +398,45 @@ export function MessageComposer({
         Enter message
       </label>
       <div className="px-3 pt-3">
-        <Popover
-          open={pageMenuOpen}
-          onOpenChange={(open) => {
-            setPageMenuOpen(open);
-            if (!open) setMenuLevel("root");
-          }}
-        >
+        <Popover open={menuOpen} onOpenChange={(open) => setMenuDismissed(!open)}>
           <PopoverAnchor asChild>
-            <Textarea
-              id="project-message"
-              ref={textareaRef}
-              className="w-full bg-transparent border-0 outline-none p-0
-                         text-body leading-relaxed text-ink
-                         placeholder:text-subtle
-                         resize-none min-h-[96px] max-h-[260px] overflow-y-auto
-                         focus-visible:shadow-none"
-              value={value}
-              placeholder={placeholder}
-              disabled={sending || disabled}
-              maxLength={MAX_PROJECT_MESSAGE_LENGTH}
-              aria-invalid={!!displayedError}
-              onChange={(event) => handleValueChange(event.target.value)}
-              onKeyDown={handleKeyDown}
-            />
+            {/* Relative wrapper positions the ghost-text overlay exactly behind
+                the textarea so the completion suffix aligns with the caret. */}
+            <div className="relative">
+              {ghostSuffix ? (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 whitespace-pre-wrap break-words
+                             text-body leading-relaxed"
+                >
+                  <span className="invisible">{value}</span>
+                  <span className="text-subtle">{ghostSuffix}</span>
+                </div>
+              ) : null}
+              <Textarea
+                id="project-message"
+                ref={textareaRef}
+                className="relative w-full bg-transparent border-0 outline-none p-0
+                           text-body leading-relaxed text-ink
+                           placeholder:text-subtle
+                           resize-none min-h-[96px] max-h-[260px] overflow-y-auto
+                           focus-visible:shadow-none"
+                value={value}
+                placeholder={placeholder}
+                disabled={sending || disabled}
+                maxLength={MAX_PROJECT_MESSAGE_LENGTH}
+                aria-invalid={!!displayedError}
+                onChange={(event) => handleValueChange(event.target.value)}
+                onKeyDown={handleKeyDown}
+              />
+            </div>
           </PopoverAnchor>
           <SlashCommandMenu
-            level={menuLevel}
-            generatedSet={generatedSet}
-            onEnterModifyPage={() => setMenuLevel("modify-page")}
-            onBack={() => setMenuLevel("root")}
-            onSelectPage={insertGenerateCommand}
+            context={slashContext}
+            suggestions={suggestions}
+            activeIndex={activeIndex}
+            onHover={setActiveIndex}
+            onSelect={applySuggestion}
           />
         </Popover>
       </div>
@@ -507,119 +552,220 @@ const PAGE_DESCRIPTIONS: Record<string, string> = {
   "order-detail": "Single order summary and line items",
 };
 
+// The top-level slash commands. Kept as data so the root menu, filtering, and
+// autocomplete all read from one source — adding a command is a one-line edit.
+type SlashCommand = {
+  name: string;
+  command: string;
+  description: string;
+};
+
+const SLASH_COMMANDS: SlashCommand[] = [
+  {
+    name: "Modify page",
+    command: GENERATE_PAGE_COMMAND,
+    description: "Regenerate or refine a storefront page",
+  },
+];
+
+// A single completion offered to the user. `insert` is the full composer value
+// applied on accept; `key` is stable for React; the rest drives rendering.
+type Suggestion = {
+  key: string;
+  insert: string;
+  label: string;
+  description: string;
+  kind: "command" | "page" | "custom";
+  designed?: boolean;
+};
+
+// What the current input means for the slash UI. `null` means the input is not
+// a slash command at all (menu stays closed).
+type SlashContext =
+  | { mode: "command"; query: string }
+  | { mode: "modify-page"; query: string }
+  | null;
+
+// Matches "/modify-page", optionally followed by a partial slug, but ONLY while
+// the user hasn't started the free-text description yet (no trailing space past
+// the slug). Once a description begins we stop suggesting pages.
+const MODIFY_PAGE_CONTEXT_RE = new RegExp(
+  `^${GENERATE_PAGE_COMMAND.replace(/[/]/g, "\\/")}(?:\\s+(\\S*))?$`,
+);
+
+// Derive the slash context from the raw composer value. Pure + synchronous so
+// it can drive both the menu and the inline ghost text off one useMemo.
+function parseSlashContext(value: string): SlashContext {
+  if (!value.startsWith("/")) return null;
+
+  // Still typing the command name itself: "/", "/mod", "/modify-page" (no space).
+  if (!value.includes(" ")) {
+    return { mode: "command", query: value.slice(1).toLowerCase() };
+  }
+
+  // Past the command name — only the modify-page slug stage offers suggestions.
+  const match = value.match(MODIFY_PAGE_CONTEXT_RE);
+  if (match) {
+    return { mode: "modify-page", query: (match[1] ?? "").toLowerCase() };
+  }
+  return null;
+}
+
+// Turn a context into the ordered suggestion list. Matching is a simple
+// case-insensitive substring on slug + label so "prod" surfaces Products and
+// Product detail. Designed (already-generated) pages sort ahead of skeletons.
+function buildSuggestions(
+  context: SlashContext,
+  generatedSet: Set<string>,
+): Suggestion[] {
+  if (!context) return [];
+
+  if (context.mode === "command") {
+    return SLASH_COMMANDS.filter(
+      (cmd) =>
+        cmd.command.slice(1).toLowerCase().includes(context.query) ||
+        cmd.name.toLowerCase().includes(context.query),
+    ).map((cmd) => ({
+      key: cmd.command,
+      insert: `${cmd.command} `,
+      label: cmd.name,
+      description: cmd.description,
+      kind: "command" as const,
+    }));
+  }
+
+  const pages = KNOWN_PAGES.filter(
+    (page) =>
+      page.slug.toLowerCase().includes(context.query) ||
+      page.label.toLowerCase().includes(context.query),
+  )
+    .map((page) => ({
+      key: page.slug,
+      insert: `${GENERATE_PAGE_COMMAND} ${page.slug} `,
+      label: page.label,
+      description: PAGE_DESCRIPTIONS[page.slug] ?? page.route,
+      kind: "page" as const,
+      designed: generatedSet.has(page.slug),
+    }))
+    // Designed pages first, then alphabetical by original KNOWN_PAGES order.
+    .sort((a, b) => Number(b.designed) - Number(a.designed));
+
+  const custom: Suggestion = {
+    key: "__custom__",
+    insert: `${GENERATE_PAGE_COMMAND} `,
+    label: "Custom page",
+    description: "Describe a page that isn't in the list",
+    kind: "custom",
+  };
+
+  return [...pages, custom];
+}
+
 function SlashCommandMenu({
-  level,
-  generatedSet,
-  onEnterModifyPage,
-  onBack,
-  onSelectPage,
+  context,
+  suggestions,
+  activeIndex,
+  onHover,
+  onSelect,
 }: {
-  level: "root" | "modify-page";
-  generatedSet: Set<string>;
-  onEnterModifyPage: () => void;
-  onBack: () => void;
-  onSelectPage: (slug: string | null) => void;
+  context: SlashContext;
+  suggestions: Suggestion[];
+  activeIndex: number;
+  onHover: (index: number) => void;
+  onSelect: (suggestion: Suggestion) => void;
 }) {
+  if (!context || suggestions.length === 0) return null;
+
+  const heading =
+    context.mode === "command" ? "Commands" : "Modify page — pick a page";
+
   return (
     <PopoverContent
       align="start"
       side="top"
       sideOffset={8}
       className="w-[min(22rem,calc(100vw-2rem))] p-0"
+      // Keep focus in the textarea so typing keeps filtering — the menu is
+      // keyboard-driven from the input, not focus-trapped.
       onOpenAutoFocus={(event) => event.preventDefault()}
+      onCloseAutoFocus={(event) => event.preventDefault()}
     >
-      {level === "root" ? (
-        <Command className="bg-surface">
-          <CommandInput placeholder="Search commands…" className="text-ui-sm" />
-          <CommandList>
-            <CommandEmpty>No matching command.</CommandEmpty>
-            <CommandGroup heading="Commands">
-              <CommandItem
-                value="modify page"
-                onSelect={onEnterModifyPage}
-                className="gap-3 py-2"
+      <div className="rounded-card bg-surface" role="listbox" aria-label={heading}>
+        <div className="p-2">
+          <p className="px-3 py-2 text-caption font-medium text-muted">{heading}</p>
+          {suggestions.map((suggestion, index) => {
+            const active = index === activeIndex;
+            return (
+              <button
+                key={suggestion.key}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onMouseMove={() => onHover(index)}
+                // Use onMouseDown (not onClick) so the selection commits before
+                // the textarea's blur would otherwise close the popover.
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  onSelect(suggestion);
+                }}
+                className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left outline-none
+                            ${active ? "bg-chalk text-ink" : "text-ink hover:bg-ink/[0.04]"}`}
               >
-                <PencilRuler aria-hidden="true" size={16} className="shrink-0 text-ink" />
+                <SuggestionIcon suggestion={suggestion} />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-ui-sm font-medium text-ink">
-                    Modify page
+                    {suggestion.label}
                   </span>
                   <span className="truncate text-eyebrow text-muted">
-                    Regenerate or refine a storefront page
+                    {suggestion.description}
                   </span>
                 </span>
-                <ChevronRight aria-hidden="true" size={14} className="shrink-0 text-subtle" />
-              </CommandItem>
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      ) : (
-        <Command className="bg-surface">
-          <div className="flex items-center gap-1 border-b border-hairline/70 px-1.5 py-1">
-            <Button
-              variant="unstyled"
-              type="button"
-              onClick={onBack}
-              aria-label="Back to commands"
-              className="composer-icon-btn h-7 w-7"
-            >
-              <ChevronLeft aria-hidden="true" size={16} />
-            </Button>
-            <span className="text-ui-sm font-medium text-ink">Modify page</span>
-          </div>
-          <CommandInput placeholder="Pick a page…" className="text-ui-sm" />
-          <CommandList>
-            <CommandEmpty>No matching page.</CommandEmpty>
-            <CommandGroup heading="Storefront pages">
-              {KNOWN_PAGES.map((page) => {
-                const designed = generatedSet.has(page.slug);
-                return (
-                  <CommandItem
-                    key={page.slug}
-                    value={`${page.slug} ${page.label}`}
-                    onSelect={() => onSelectPage(page.slug)}
-                    className="gap-3 py-2"
-                  >
-                    {designed ? (
-                      <CircleCheck aria-hidden="true" size={16} className="shrink-0 text-ink" />
-                    ) : (
-                      <Circle aria-hidden="true" size={16} className="shrink-0 text-subtle" />
-                    )}
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-ui-sm font-medium text-ink">
-                        {page.label}
-                      </span>
-                      <span className="truncate text-eyebrow text-muted">
-                        {PAGE_DESCRIPTIONS[page.slug] ?? page.route}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-eyebrow text-subtle">
-                      {designed ? "Designed" : "Skeleton"}
-                    </span>
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
-            <CommandGroup heading="Something else">
-              <CommandItem
-                value="custom new page"
-                onSelect={() => onSelectPage(null)}
-                className="gap-3 py-2"
-              >
-                <FilePlus2 aria-hidden="true" size={16} className="shrink-0 text-muted" />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-ui-sm font-medium text-ink">
-                    Custom page
-                  </span>
-                  <span className="truncate text-eyebrow text-muted">
-                    Describe a page that isn't in the list
-                  </span>
-                </span>
-              </CommandItem>
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      )}
+                <SuggestionTrailing suggestion={suggestion} />
+              </button>
+            );
+          })}
+        </div>
+        {/* Persistent hint footer explaining the keyboard affordances. */}
+        <div className="flex items-center gap-3 border-t border-hairline/70 px-2.5 py-1.5 text-eyebrow text-subtle">
+          <span className="inline-flex items-center gap-1">
+            <kbd className="composer-kbd">Tab</kbd> complete
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <kbd className="composer-kbd">↑↓</kbd> navigate
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <kbd className="composer-kbd">Esc</kbd> dismiss
+          </span>
+        </div>
+      </div>
     </PopoverContent>
   );
+}
+
+function SuggestionIcon({ suggestion }: { suggestion: Suggestion }) {
+  if (suggestion.kind === "command") {
+    return <PencilRuler aria-hidden="true" size={16} className="shrink-0 text-ink" />;
+  }
+  if (suggestion.kind === "custom") {
+    return <FilePlus2 aria-hidden="true" size={16} className="shrink-0 text-muted" />;
+  }
+  return suggestion.designed ? (
+    <CircleCheck aria-hidden="true" size={16} className="shrink-0 text-ink" />
+  ) : (
+    <Circle aria-hidden="true" size={16} className="shrink-0 text-subtle" />
+  );
+}
+
+function SuggestionTrailing({ suggestion }: { suggestion: Suggestion }) {
+  if (suggestion.kind === "command") {
+    return <ChevronRight aria-hidden="true" size={14} className="shrink-0 text-subtle" />;
+  }
+  if (suggestion.kind === "page") {
+    return (
+      <span className="shrink-0 text-eyebrow text-subtle">
+        {suggestion.designed ? "Designed" : "Skeleton"}
+      </span>
+    );
+  }
+  return null;
 }

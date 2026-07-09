@@ -222,6 +222,10 @@
     @apply focus-ring;
   }
 
+  .composer-kbd {
+    @apply inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded border border-hairline bg-ink/[0.03] font-mono text-[10px] leading-none text-muted;
+  }
+
   .composer-footer {
     @apply mt-2 flex items-center justify-between text-eyebrow text-subtle;
   }
