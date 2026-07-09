@@ -218,33 +218,14 @@ export type AgentRunFailureCode =
 
 export type AgentRunKind = "init" | "update" | "new_route";
 
-export type AgentRunTaskPhase = "prep" | "build" | "verify";
-
-export type AgentRunTaskTransition = "started" | "completed" | "paused" | "resumed";
-
-export type AgentRunPlannedTask = {
-  id: string;
-  title: string;
-  phase: AgentRunTaskPhase;
-};
-
-export type AgentRunTaskEstimate = {
-  totalSeconds: number;
-  perTaskSeconds: Record<string, number>;
-};
+export type AgentRunTodoItem = { id: string; text: string; completed: boolean };
 
 export type AgentRunProgressTimelineEvent =
   | { at: number; kind: "milestone"; milestone: string }
   | { at: number; kind: "section"; section: string; locale: "vi" | "en" }
   | { at: number; kind: "summary"; text: string }
   | { at: number; kind: "error"; failureCode: AgentRunFailureCode }
-  | { at: number; kind: "task_plan"; tasks: AgentRunPlannedTask[]; estimate?: AgentRunTaskEstimate }
-  | {
-      at: number;
-      kind: "task_transition";
-      id: string;
-      transition: AgentRunTaskTransition;
-    };
+  | { at: number; kind: "todo_snapshot"; items: AgentRunTodoItem[] };
 
 export type AgentRunPlanPhase =
   | { stage: "plan_pending" }

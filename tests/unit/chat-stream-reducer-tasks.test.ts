@@ -4,7 +4,7 @@ import {
   createInitialChatState,
   type ChatUIState,
 } from "@/features/agents/ui/agent-event-reducer";
-import type { RunStreamEvent } from "@/shared/project-types";
+import type { RunStreamEvent, TodoItem } from "@/shared/project-types";
 
 function withActiveRun(messages: ChatUIState["messages"] = []): ChatUIState {
   const base = createInitialChatState(messages);
@@ -15,99 +15,71 @@ function withActiveRun(messages: ChatUIState["messages"] = []): ChatUIState {
   });
 }
 
-const TASKS = [
-  { id: "a", title: "Analyze brand", phase: "prep" as const },
-  { id: "b", title: "Build the home page", phase: "build" as const },
-  { id: "c", title: "Validate the preview", phase: "verify" as const },
+const ITEMS: TodoItem[] = [
+  { id: "a", text: "Analyze brand", completed: false },
+  { id: "b", text: "Build the home page", completed: false },
+  { id: "c", text: "Validate the preview", completed: false },
 ];
-const ESTIMATE = {
-  totalSeconds: 450,
-  perTaskSeconds: { a: 90, b: 240, c: 120 },
-};
 
-function planCreatedEvent() {
-  return {
-    type: "plan.created" as const,
-    runId: "r1",
-    tasks: TASKS,
-    estimate: ESTIMATE,
-    at: 1,
-  };
+function todoUpdatedEvent(items: TodoItem[], at = 1) {
+  return { type: "plan.todo_updated" as const, runId: "r1", items, at };
 }
 
-describe("chatStateReducer — task events", () => {
-  it("plan.created seeds tasks and all-pending statuses", () => {
+describe("chatStateReducer — todo events", () => {
+  it("plan.todo_updated sets activeRun.todoItems to the emitted items", () => {
     const state = withActiveRun();
-    const next = chatStateReducer(state, planCreatedEvent());
-    expect(next.activeRun?.tasks).toEqual(TASKS);
-    expect(next.activeRun?.taskEstimate).toEqual(ESTIMATE);
-    expect(next.activeRun?.taskStatuses).toEqual({
-      a: "pending",
-      b: "pending",
-      c: "pending",
-    });
+    const next = chatStateReducer(state, todoUpdatedEvent(ITEMS));
+    expect(next.activeRun?.todoItems).toEqual(ITEMS);
   });
 
-  it("plan.task.started flips a task to active", () => {
-    let state = chatStateReducer(withActiveRun(), planCreatedEvent());
-    state = chatStateReducer(state, {
-      type: "plan.task.started",
-      runId: "r1",
-      taskId: "a",
-      at: 2,
-    });
-    expect(state.activeRun?.taskStatuses.a).toBe("active");
-    expect(state.activeRun?.taskStatuses.b).toBe("pending");
+  it("a later plan.todo_updated fully overwrites the earlier todoItems", () => {
+    let state = chatStateReducer(withActiveRun(), todoUpdatedEvent(ITEMS, 1));
+    const updated: TodoItem[] = [
+      { id: "a", text: "Analyze brand", completed: true },
+      { id: "b", text: "Build the home page", completed: true },
+      { id: "c", text: "Validate the preview", completed: false },
+    ];
+    state = chatStateReducer(state, todoUpdatedEvent(updated, 2));
+    expect(state.activeRun?.todoItems).toEqual(updated);
   });
 
-  it("plan.task.completed flips a task to done", () => {
-    let state = chatStateReducer(withActiveRun(), planCreatedEvent());
-    state = chatStateReducer(state, {
-      type: "plan.task.completed",
-      runId: "r1",
-      taskId: "a",
-      at: 2,
-    });
-    expect(state.activeRun?.taskStatuses.a).toBe("done");
+  it("plan.todo_updated without an active run is ignored", () => {
+    const state = createInitialChatState();
+    const next = chatStateReducer(state, todoUpdatedEvent(ITEMS));
+    expect(next.activeRun).toBeNull();
   });
 
-  it("plan.task.paused → plan.task.resumed cycle", () => {
-    let state = chatStateReducer(withActiveRun(), planCreatedEvent());
+  it("run.started resets todoItems to null", () => {
+    let state = chatStateReducer(withActiveRun(), todoUpdatedEvent(ITEMS));
+    expect(state.activeRun?.todoItems).toEqual(ITEMS);
     state = chatStateReducer(state, {
-      type: "plan.task.started",
-      runId: "r1",
-      taskId: "b",
-      at: 2,
+      type: "run.started",
+      runId: "r2",
+      projectId: "p1",
     });
-    state = chatStateReducer(state, {
-      type: "plan.task.paused",
-      runId: "r1",
-      taskId: "b",
-      at: 3,
-    });
-    expect(state.activeRun?.taskStatuses.b).toBe("paused");
-    state = chatStateReducer(state, {
-      type: "plan.task.resumed",
-      runId: "r1",
-      taskId: "b",
-      at: 4,
-    });
-    expect(state.activeRun?.taskStatuses.b).toBe("active");
+    expect(state.activeRun?.todoItems).toBeNull();
   });
 
-  it("run.completed clears activeRun (drops tasks with the run)", () => {
-    let state = chatStateReducer(withActiveRun(), planCreatedEvent());
+  it("option.selected preserves todoItems from the prior run state", () => {
+    // option.selected re-seeds activeRun; it carries the existing todoItems
+    // forward (rather than dropping them) so the checklist survives a picker.
+    let state = chatStateReducer(withActiveRun(), todoUpdatedEvent(ITEMS));
+    state = chatStateReducer(state, {
+      type: "option.selected",
+      runId: "r1",
+      messageId: "m1",
+      optionId: "opt-1",
+    } satisfies RunStreamEvent);
+    expect(state.activeRun?.todoItems).toEqual(ITEMS);
+  });
+
+  it("run.completed clears activeRun (drops todoItems with the run)", () => {
+    let state = chatStateReducer(withActiveRun(), todoUpdatedEvent(ITEMS));
     state = chatStateReducer(state, {
       type: "run.completed",
       runId: "r1",
       projectProcessingStatus: "idle",
     } satisfies RunStreamEvent);
     expect(state.activeRun).toBeNull();
-  });
-
-  it("plan events without an active run are ignored", () => {
-    const state = createInitialChatState();
-    const next = chatStateReducer(state, planCreatedEvent());
-    expect(next.activeRun).toBeNull();
   });
 });

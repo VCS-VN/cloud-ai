@@ -1,87 +1,50 @@
 import { describe, expect, it } from "vitest";
-import { estimatePlanTasks, translateBuilderEventToRunStreamEvent } from "@/server/services/builder-run-translator.server";
+import { translateBuilderEventToRunStreamEvent } from "@/server/services/builder-run-translator.server";
 
 const CTX = { runId: "r1", projectId: "p1", locale: "en" as const };
 
-describe("translator: plan event pass-through", () => {
-  it("plan.created emits the SSE event and persists task_plan timeline", () => {
-    const tasks = [
-      { id: "a", title: "Analyze brand", phase: "prep" as const },
-      { id: "b", title: "Build the home page", phase: "build" as const },
+describe("translator: todo event pass-through", () => {
+  it("plan.todo_updated emits the SSE event and persists a todo_snapshot timeline", () => {
+    const items = [
+      { id: "a", text: "Analyze brand", completed: true },
+      { id: "b", text: "Build the home page", completed: false },
+      { id: "c", text: "Validate the preview", completed: false },
     ];
     const out = translateBuilderEventToRunStreamEvent(
-      { type: "plan.created", runId: "r1", tasks, at: 1000 },
+      { type: "plan.todo_updated", runId: "r1", items, at: 1000 },
       CTX,
     );
-    const estimate = estimatePlanTasks(tasks);
     expect(out.events).toHaveLength(1);
-    expect(out.events[0]).toMatchObject({
-      type: "plan.created",
+    expect(out.events[0]).toEqual({
+      type: "plan.todo_updated",
       runId: "r1",
-      tasks,
-      estimate,
+      items,
       at: 1000,
     });
-    expect(out.timeline).toEqual({ kind: "task_plan", tasks, estimate });
+    expect(out.timeline).toEqual({ kind: "todo_snapshot", items });
     expect(out.terminal).toBeNull();
     expect(out.persist).toBeNull();
   });
 
-  it("plan.task.started emits SSE event with re-shape and timeline transition", () => {
+  it("a later plan.todo_updated carries the new item set through unchanged", () => {
+    const items = [
+      { id: "a", text: "Analyze brand", completed: true },
+      { id: "b", text: "Build the home page", completed: true },
+    ];
     const out = translateBuilderEventToRunStreamEvent(
-      { type: "plan.task.started", runId: "r1", taskId: "x", at: 2000 },
+      { type: "plan.todo_updated", runId: "r1", items, at: 5000 },
       CTX,
     );
-    expect(out.events[0]).toEqual({
-      type: "plan.task.started",
+    expect(out.events[0]).toMatchObject({
+      type: "plan.todo_updated",
       runId: "r1",
-      taskId: "x",
-      at: 2000,
+      items,
+      at: 5000,
     });
-    expect(out.timeline).toEqual({
-      kind: "task_transition",
-      id: "x",
-      transition: "started",
-    });
+    expect(out.timeline).toEqual({ kind: "todo_snapshot", items });
   });
 
-  it("plan.task.completed maps to completed transition", () => {
-    const out = translateBuilderEventToRunStreamEvent(
-      { type: "plan.task.completed", runId: "r1", taskId: "x", at: 3000 },
-      CTX,
-    );
-    expect(out.timeline).toEqual({
-      kind: "task_transition",
-      id: "x",
-      transition: "completed",
-    });
-  });
-
-  it("plan.task.paused maps to paused transition", () => {
-    const out = translateBuilderEventToRunStreamEvent(
-      { type: "plan.task.paused", runId: "r1", taskId: "y", at: 4000 },
-      CTX,
-    );
-    expect(out.timeline).toEqual({
-      kind: "task_transition",
-      id: "y",
-      transition: "paused",
-    });
-  });
-
-  it("plan.task.resumed maps to resumed transition", () => {
-    const out = translateBuilderEventToRunStreamEvent(
-      { type: "plan.task.resumed", runId: "r1", taskId: "y", at: 5000 },
-      CTX,
-    );
-    expect(out.timeline).toEqual({
-      kind: "task_transition",
-      id: "y",
-      transition: "resumed",
-    });
-  });
-
-  it("repairing milestone emits no task transition", () => {
+  it("repairing milestone emits no todo timeline", () => {
     const out = translateBuilderEventToRunStreamEvent(
       { type: "milestone", runId: "r1", milestone: "repairing", at: 6000 },
       CTX,

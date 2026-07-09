@@ -7,7 +7,6 @@ import {
 } from "@/server/services/chat-event-channel.server";
 import { getProjectServices } from "@/server/services/project-services";
 import type { RunStreamEvent } from "@/shared/project-types";
-import { estimatePlanTasks } from "@/server/services/builder-run-translator.server";
 
 // Keep the SSE connection warm. The client arms a 30s idle timeout that resets
 // only on real events (use-chat-stream.ts); a quiet codex phase (large batch
@@ -223,15 +222,8 @@ export type RunForReplay = {
     | { at: number; kind: "error"; failureCode: string }
     | {
         at: number;
-        kind: "task_plan";
-        tasks: Array<{ id: string; title: string; phase: "prep" | "build" | "verify" }>;
-        estimate?: { totalSeconds: number; perTaskSeconds: Record<string, number> };
-      }
-    | {
-        at: number;
-        kind: "task_transition";
-        id: string;
-        transition: "started" | "completed" | "paused" | "resumed";
+        kind: "todo_snapshot";
+        items: Array<{ id: string; text: string; completed: boolean }>;
       }
   >;
 };
@@ -252,27 +244,11 @@ export function buildArchivedReplay(runId: string, run: RunForReplay): ReadableS
       const timeline = run.progressTimeline ?? [];
       const lastSummary = timeline.findLast((item) => item.kind === "summary");
       for (const item of timeline) {
-        if (item.kind === "task_plan") {
+        if (item.kind === "todo_snapshot") {
           enqueue({
-            type: "plan.created",
+            type: "plan.todo_updated",
             runId,
-            tasks: item.tasks,
-            estimate: item.estimate ?? estimatePlanTasks(item.tasks),
-            at: item.at,
-          });
-        } else if (item.kind === "task_transition") {
-          const eventType =
-            item.transition === "started"
-              ? "plan.task.started"
-              : item.transition === "completed"
-                ? "plan.task.completed"
-                : item.transition === "paused"
-                  ? "plan.task.paused"
-                  : "plan.task.resumed";
-          enqueue({
-            type: eventType,
-            runId,
-            taskId: item.id,
+            items: item.items,
             at: item.at,
           });
         }

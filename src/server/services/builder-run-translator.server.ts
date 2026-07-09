@@ -17,10 +17,9 @@ import type {
 import type {
   AgentQuestionMetadata,
   DesignVariant,
-  PlanTask,
   RunStreamEvent,
   SkeletonPhase,
-  TaskEstimate,
+  TodoItem,
 } from "@/shared/project-types";
 
 export type BuilderTranslatorContext = {
@@ -81,16 +80,7 @@ export type ProgressTimelineDirective =
   | { kind: "section"; section: string; locale: ProgressLocale }
   | { kind: "summary"; text: string }
   | { kind: "error"; failureCode: BuilderRunFailureCode }
-  | {
-      kind: "task_plan";
-      tasks: Array<{ id: string; title: string; phase: "prep" | "build" | "verify" }>;
-      estimate: TaskEstimate;
-    }
-  | {
-      kind: "task_transition";
-      id: string;
-      transition: "started" | "completed" | "paused" | "resumed";
-    };
+  | { kind: "todo_snapshot"; items: TodoItem[] };
 
 export function friendlyFailureMessage(
   code: BuilderRunFailureCode,
@@ -115,22 +105,6 @@ const MILESTONE_TO_SKELETON: Record<
   failed: "responding",
   cancelled: "responding",
 };
-
-const TASK_PHASE_SECONDS: Record<PlanTask["phase"], number> = {
-  prep: 90,
-  build: 240,
-  verify: 120,
-};
-
-export function estimatePlanTasks(tasks: PlanTask[]): TaskEstimate {
-  const perTaskSeconds = Object.fromEntries(
-    tasks.map((task) => [task.id, TASK_PHASE_SECONDS[task.phase]]),
-  );
-  return {
-    totalSeconds: Object.values(perTaskSeconds).reduce((sum, seconds) => sum + seconds, 0),
-    perTaskSeconds,
-  };
-}
 
 function buildAgentQuestionMetadata(
   raw: BuilderRunClarificationMetadata | undefined,
@@ -486,46 +460,18 @@ export function translateBuilderEventToRunStreamEvent(
         terminal: "stopped",
       };
     }
-    case "plan.created": {
-      const estimate = estimatePlanTasks(event.tasks);
+    case "plan.todo_updated": {
       return {
         events: [
           {
-            type: "plan.created",
-            runId,
-            tasks: event.tasks,
-            estimate,
+            type: "plan.todo_updated",
+            runId: event.runId,
+            items: event.items,
             at: event.at,
           },
         ],
         persist: null,
-        timeline: { kind: "task_plan", tasks: event.tasks, estimate },
-        terminal: null,
-      };
-    }
-    case "plan.task.started":
-    case "plan.task.completed":
-    case "plan.task.paused":
-    case "plan.task.resumed": {
-      const transition =
-        event.type === "plan.task.started"
-          ? "started"
-          : event.type === "plan.task.completed"
-            ? "completed"
-            : event.type === "plan.task.paused"
-              ? "paused"
-              : "resumed";
-      return {
-        events: [
-          {
-            type: event.type,
-            runId,
-            taskId: event.taskId,
-            at: event.at,
-          },
-        ],
-        persist: null,
-        timeline: { kind: "task_transition", id: event.taskId, transition },
+        timeline: { kind: "todo_snapshot", items: event.items },
         terminal: null,
       };
     }

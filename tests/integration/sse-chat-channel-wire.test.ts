@@ -130,6 +130,31 @@ describe("Phase 5 (option 2A) — chat-event-channel end-to-end SSE wire", () =>
     expect(types.filter((t) => t === "skeleton.update").length).toBeGreaterThanOrEqual(2);
     expect(types[types.length - 1]).toBe("run.completed");
   });
+
+  it("a plan.todo_updated BuilderRunEvent surfaces on the wire and persists a todo_snapshot", () => {
+    const items = [
+      { id: "t1", text: "Build hero", completed: false },
+      { id: "t2", text: "Validate preview", completed: false },
+    ];
+    // Translator side: the event carries through to the SSE channel and yields
+    // a todo_snapshot timeline directive for persistence.
+    const outcome = translateBuilderEventToRunStreamEvent(
+      { type: "plan.todo_updated", runId: RUN_ID, items, at: 42 },
+      { runId: RUN_ID, projectId: PROJECT_ID, locale: "vi" },
+    );
+    expect(outcome.timeline).toEqual({ kind: "todo_snapshot", items });
+
+    const captured: RunStreamEvent[] = [];
+    subscribeChatEvents(RUN_ID, (e) => captured.push(e));
+    bridgePublish({ type: "plan.todo_updated", runId: RUN_ID, items, at: 42 });
+
+    const todo = captured.find((e) => e.type === "plan.todo_updated") as
+      | (RunStreamEvent & { items: unknown; at: number })
+      | undefined;
+    expect(todo).toBeDefined();
+    expect(todo!.items).toEqual(items);
+    expect(todo!.at).toBe(42);
+  });
 });
 
 async function readSseEvents(stream: ReadableStream<Uint8Array>): Promise<RunStreamEvent[]> {
@@ -173,26 +198,34 @@ describe("buildArchivedReplay — deterministic single-summary replay", () => {
     expect(events[events.length - 1].type).toBe("run.completed");
   });
 
-  it("preserves task_plan and task_transition events alongside the single summary", async () => {
+  it("re-emits todo_snapshot timeline entries as plan.todo_updated alongside the single summary", async () => {
+    const early = [
+      { id: "t1", text: "Build hero", completed: false },
+      { id: "t2", text: "Validate preview", completed: false },
+    ];
+    const late = [
+      { id: "t1", text: "Build hero", completed: true },
+      { id: "t2", text: "Validate preview", completed: false },
+    ];
     const stream = buildArchivedReplay(RUN_ID, {
       status: "completed",
       progressTimeline: [
-        {
-          at: 0,
-          kind: "task_plan",
-          tasks: [{ id: "t1", title: "Build hero", phase: "build" }],
-        },
-        { at: 1, kind: "task_transition", id: "t1", transition: "started" },
+        { at: 0, kind: "todo_snapshot", items: early },
         { at: 2, kind: "summary", text: "intermediate" },
-        { at: 3, kind: "task_transition", id: "t1", transition: "completed" },
+        { at: 3, kind: "todo_snapshot", items: late },
         { at: 4, kind: "summary", text: "final" },
       ],
     });
     const events = await readSseEvents(stream);
     const types = events.map((e) => e.type);
-    expect(types).toContain("plan.created");
-    expect(types.filter((t) => t === "plan.task.started")).toHaveLength(1);
-    expect(types.filter((t) => t === "plan.task.completed")).toHaveLength(1);
+    const todoEvents = events.filter(
+      (e) => e.type === "plan.todo_updated",
+    ) as Array<RunStreamEvent & { items: unknown; at: number }>;
+    expect(todoEvents).toHaveLength(2);
+    expect(todoEvents[0].items).toEqual(early);
+    expect(todoEvents[0].at).toBe(0);
+    expect(todoEvents[1].items).toEqual(late);
+    expect(todoEvents[1].at).toBe(3);
     expect(types.filter((t) => t === "message.created")).toHaveLength(1);
   });
 

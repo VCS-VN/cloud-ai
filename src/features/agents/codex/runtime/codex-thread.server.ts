@@ -57,7 +57,8 @@ export type CodexProgressEvent =
       tool: string;
       failed: boolean;
     }
-  | { kind: "reconnect_notice"; count: number };
+  | { kind: "reconnect_notice"; count: number }
+  | { kind: "todo_list_updated"; sectionId: string; items: { text: string; completed: boolean }[] };
 
 const MAX_RETRY_ATTEMPTS = 10;
 const BASE_RETRY_DELAY_MS = 1000;
@@ -586,7 +587,16 @@ export class BoundedCodexThread {
             server: item.server,
             tool: item.tool,
           });
+        } else if (item.type === "todo_list") {
+          onProgress({ kind: "todo_list_updated", sectionId: item.id, items: item.items });
         }
+        continue;
+      }
+      // item.updated is normally dropped (item.started already fired above), but
+      // todo_list is the exception: it updates in place as steps change and we
+      // want each revision to reach the progress stream.
+      if (event.type === "item.updated" && event.item.type === "todo_list") {
+        onProgress({ kind: "todo_list_updated", sectionId: event.item.id, items: event.item.items });
         continue;
       }
       if (event.type !== "item.completed") {
@@ -642,6 +652,8 @@ export class BoundedCodexThread {
           tool: item.tool,
           failed: item.status === "failed",
         });
+      } else if (item.type === "todo_list") {
+        onProgress({ kind: "todo_list_updated", sectionId: item.id, items: item.items });
       }
     }
 

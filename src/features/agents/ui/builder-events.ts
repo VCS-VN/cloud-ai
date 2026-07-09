@@ -50,13 +50,7 @@ export type BuilderRunClarificationMetadata =
       planMarkdown: string;
     };
 
-export type BuilderRunTaskPhase = "prep" | "build" | "verify";
-
-export type BuilderRunPlannedTask = {
-  id: string;
-  title: string;
-  phase: BuilderRunTaskPhase;
-};
+export type TodoItem = { id: string; text: string; completed: boolean };
 
 export type BuilderRunEvent =
   | { type: "milestone"; runId: string; milestone: BuilderRunMilestone; at: number }
@@ -83,16 +77,7 @@ export type BuilderRunEvent =
   | { type: "thinking"; runId: string; text: string; at: number }
   | { type: "agent_message"; runId: string; text: string; at: number }
   | { type: "turn_completed"; runId: string; finalResponse: string; at: number }
-  | {
-      type: "plan.created";
-      runId: string;
-      tasks: BuilderRunPlannedTask[];
-      at: number;
-    }
-  | { type: "plan.task.started"; runId: string; taskId: string; at: number }
-  | { type: "plan.task.completed"; runId: string; taskId: string; at: number }
-  | { type: "plan.task.paused"; runId: string; taskId: string; at: number }
-  | { type: "plan.task.resumed"; runId: string; taskId: string; at: number }
+  | { type: "plan.todo_updated"; runId: string; items: TodoItem[]; at: number }
   | {
       // Ephemeral live-progress signal fired during a streamed codex turn so
       // the UI can show which step is running (vs. a frozen skeleton). The

@@ -6,9 +6,10 @@ import {
 
 // A scripted streamed turn: an array of ThreadEvent-shaped objects the fake
 // thread yields in order. Mirrors the SDK's runStreamed().events generator.
-function makeStreamingThread(
-  scripts: unknown[][],
-): { runStreamed: ReturnType<typeof vi.fn>; id: string } {
+function makeStreamingThread(scripts: unknown[][]): {
+  runStreamed: ReturnType<typeof vi.fn>;
+  id: string;
+} {
   let callIndex = 0;
   return {
     id: "thread-test",
@@ -25,7 +26,10 @@ function makeStreamingThread(
 }
 
 function reasoningItem(text: string) {
-  return { type: "item.completed", item: { id: "r1", type: "reasoning", text } };
+  return {
+    type: "item.completed",
+    item: { id: "r1", type: "reasoning", text },
+  };
 }
 function fileChangeItem(paths: string[]) {
   return {
@@ -39,7 +43,10 @@ function fileChangeItem(paths: string[]) {
   };
 }
 function agentMessage(text: string) {
-  return { type: "item.completed", item: { id: "a1", type: "agent_message", text } };
+  return {
+    type: "item.completed",
+    item: { id: "a1", type: "agent_message", text },
+  };
 }
 const TURN_COMPLETED = {
   type: "turn.completed",
@@ -65,7 +72,9 @@ describe("BoundedCodexThread.runTurnStreamed", () => {
     process.env.CODEX_LOG_REQUEST_BODY = "true";
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const controller = new AbortController();
-    const thread = makeStreamingThread([[agentMessage("All done"), TURN_COMPLETED]]);
+    const thread = makeStreamingThread([
+      [agentMessage("All done"), TURN_COMPLETED],
+    ]);
     const bounded = new BoundedCodexThread(
       thread as never,
       undefined,
@@ -105,7 +114,10 @@ describe("BoundedCodexThread.runTurnStreamed", () => {
       [
         { type: "thread.started", thread_id: "t1" },
         { type: "turn.started" },
-        { type: "item.started", item: { id: "r1", type: "reasoning", text: "" } },
+        {
+          type: "item.started",
+          item: { id: "r1", type: "reasoning", text: "" },
+        },
         reasoningItem("Thinking about layout"),
         {
           type: "item.started",
@@ -186,7 +198,10 @@ describe("BoundedCodexThread.runTurnStreamed", () => {
 
   it("retries on a soft-gateway-error final response, then succeeds", async () => {
     const thread = makeStreamingThread([
-      [agentMessage("[gateway error: please retry in a moment]"), TURN_COMPLETED],
+      [
+        agentMessage("[gateway error: please retry in a moment]"),
+        TURN_COMPLETED,
+      ],
       [agentMessage("real answer"), TURN_COMPLETED],
     ]);
     const bounded = new BoundedCodexThread(thread as never);
@@ -198,12 +213,17 @@ describe("BoundedCodexThread.runTurnStreamed", () => {
   });
 
   it("rejects promptly when the signal is already aborted (no retry)", async () => {
-    const thread = makeStreamingThread([[agentMessage("never"), TURN_COMPLETED]]);
+    const thread = makeStreamingThread([
+      [agentMessage("never"), TURN_COMPLETED],
+    ]);
     const bounded = new BoundedCodexThread(thread as never);
     const controller = new AbortController();
     controller.abort();
     await expect(
-      bounded.runTurnStreamed({ prompt: "p", signal: controller.signal }, () => {}),
+      bounded.runTurnStreamed(
+        { prompt: "p", signal: controller.signal },
+        () => {},
+      ),
     ).rejects.toMatchObject({ name: "AbortError" });
     expect(thread.runStreamed).not.toHaveBeenCalled();
   });
@@ -215,11 +235,29 @@ describe("BoundedCodexThread.runTurnStreamed", () => {
     // throw so a fresh CLI process gets a clean retry.
     const thread = makeStreamingThread([
       [
-        { type: "error", message: "Reconnecting... 2/5 (stream disconnected before completion: WebSocket protocol error: Handshake not finished)" },
-        { type: "error", message: "Reconnecting... 3/5 (stream disconnected before completion: WebSocket protocol error: Handshake not finished)" },
-        { type: "error", message: "Reconnecting... 4/5 (stream disconnected before completion: WebSocket protocol error: Handshake not finished)" },
-        { type: "error", message: "Reconnecting... 5/5 (stream disconnected before completion: WebSocket protocol error: Handshake not finished)" },
-        agentMessage("Will build a grocery storefront with Premium Market styling..."),
+        {
+          type: "error",
+          message:
+            "Reconnecting... 2/5 (stream disconnected before completion: WebSocket protocol error: Handshake not finished)",
+        },
+        {
+          type: "error",
+          message:
+            "Reconnecting... 3/5 (stream disconnected before completion: WebSocket protocol error: Handshake not finished)",
+        },
+        {
+          type: "error",
+          message:
+            "Reconnecting... 4/5 (stream disconnected before completion: WebSocket protocol error: Handshake not finished)",
+        },
+        {
+          type: "error",
+          message:
+            "Reconnecting... 5/5 (stream disconnected before completion: WebSocket protocol error: Handshake not finished)",
+        },
+        agentMessage(
+          "Will build a grocery storefront with Premium Market styling...",
+        ),
         TURN_COMPLETED,
       ],
       [
@@ -241,7 +279,9 @@ describe("BoundedCodexThread.runTurnStreamed", () => {
     expect(summary.finalResponse).toBe("Built homepage");
     // UI saw the reconnect notices live so the user wasn't watching a frozen
     // screen.
-    const reconnectNotices = progress.filter((p) => p.kind === "reconnect_notice");
+    const reconnectNotices = progress.filter(
+      (p) => p.kind === "reconnect_notice",
+    );
     expect(reconnectNotices.length).toBe(4);
     expect((reconnectNotices.at(-1) as { count: number }).count).toBe(4);
   });
@@ -260,34 +300,59 @@ describe("BoundedCodexThread.runTurnStreamed", () => {
     const bounded = new BoundedCodexThread(thread as never);
     const summary = await bounded.runTurnStreamed({ prompt: "p" }, () => {});
     expect(summary.fileChanges).toEqual([]);
-    expect(summary.finalResponse).toBe("Plan: edit X, add Y, then run validation.");
+    expect(summary.finalResponse).toBe(
+      "Plan: edit X, add Y, then run validation.",
+    );
     expect(thread.runStreamed).toHaveBeenCalledTimes(1);
   });
 
-  it("fires onProgress for EVERY completed agent_message, not just the last", async () => {
-    // A turn can emit multiple agent_message items (narrative before/after
-    // edits). All of them must surface to the UI live; finalResponse remains
-    // the last one (unchanged retry-gate contract).
+  it("routes todo_list item.started/updated/completed to onProgress as todo_list_updated", async () => {
+    // A todo_list arrives, then updates in place (a step flips completed), then
+    // finalizes. Each revision must reach onProgress with the flat item set so
+    // the UI checklist tracks live progress.
+    const started = [
+      { text: "Analyze brand", completed: false },
+      { text: "Build the home page", completed: false },
+    ];
+    const updated = [
+      { text: "Analyze brand", completed: true },
+      { text: "Build the home page", completed: false },
+    ];
+    const completed = [
+      { text: "Analyze brand", completed: true },
+      { text: "Build the home page", completed: true },
+    ];
     const thread = makeStreamingThread([
       [
-        agentMessage("First: I'll start with the hero."),
-        fileChangeItem(["src/routes/index.tsx"]),
-        agentMessage("Done: hero updated and banner added."),
+        {
+          type: "item.started",
+          item: { id: "todo-1", type: "todo_list", items: started },
+        },
+        {
+          type: "item.updated",
+          item: { id: "todo-1", type: "todo_list", items: updated },
+        },
+        {
+          type: "item.completed",
+          item: { id: "todo-1", type: "todo_list", items: completed },
+        },
+        agentMessage("Done"),
         TURN_COMPLETED,
       ],
     ]);
     const bounded = new BoundedCodexThread(thread as never);
     const progress: CodexProgressEvent[] = [];
-    const summary = await bounded.runTurnStreamed({ prompt: "p" }, (ev) =>
-      progress.push(ev),
+    await bounded.runTurnStreamed({ prompt: "p" }, (ev) => progress.push(ev));
+
+    const todoEvents = progress.filter(
+      (p): p is Extract<CodexProgressEvent, { kind: "todo_list_updated" }> =>
+        p.kind === "todo_list_updated",
     );
-    const agentMessages = progress.filter((p) => p.kind === "agent_message");
-    expect(agentMessages.map((p) => (p as { text: string }).text)).toEqual([
-      "First: I'll start with the hero.",
-      "Done: hero updated and banner added.",
-    ]);
-    // finalResponse is still the last agent_message text.
-    expect(summary.finalResponse).toBe("Done: hero updated and banner added.");
+    expect(todoEvents).toHaveLength(3);
+    for (const ev of todoEvents) expect(ev.sectionId).toBe("todo-1");
+    expect(todoEvents[0].items).toEqual(started);
+    expect(todoEvents[1].items).toEqual(updated);
+    expect(todoEvents[2].items).toEqual(completed);
   });
 
   it("accepts an empty stream (integration-mock parity, no reconnects)", async () => {

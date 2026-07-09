@@ -249,28 +249,13 @@ export type SkeletonState = {
   detail?: string
 }
 
-export type PlanTaskPhase = 'prep' | 'build' | 'verify'
-
-export type PlanTaskStatus = 'pending' | 'active' | 'paused' | 'done'
-
-export type PlanTask = {
-  id: string
-  title: string
-  phase: PlanTaskPhase
-}
-
-export type TaskEstimate = {
-  totalSeconds: number
-  perTaskSeconds: Record<string, number>
-}
+export type TodoItem = { id: string; text: string; completed: boolean }
 
 export type RunUIState = {
   runId: string
   status: AgentRunStatus
   skeleton: SkeletonState | null
-  tasks: PlanTask[] | null
-  taskStatuses: Record<string, PlanTaskStatus>
-  taskEstimate: TaskEstimate | null
+  todoItems: TodoItem[] | null
   error?: StreamError
 }
 
@@ -344,18 +329,10 @@ export type OptionSelectedEvent = {
   userMessage?: Message
 }
 
-export type PlanCreatedEvent = {
-  type: 'plan.created'
+export type PlanTodoUpdatedEvent = {
+  type: 'plan.todo_updated'
   runId: string
-  tasks: PlanTask[]
-  estimate: TaskEstimate
-  at: number
-}
-
-export type PlanTaskTransitionEvent = {
-  type: 'plan.task.started' | 'plan.task.completed' | 'plan.task.paused' | 'plan.task.resumed'
-  runId: string
-  taskId: string
+  items: TodoItem[]
   at: number
 }
 
@@ -370,8 +347,7 @@ export type RunStreamEvent =
   | RunHeartbeatEvent
   | RunAwaitingInputEvent
   | OptionSelectedEvent
-  | PlanCreatedEvent
-  | PlanTaskTransitionEvent
+  | PlanTodoUpdatedEvent
 
 export type RuntimeStreamEvent =
   | DevRuntimeEvent

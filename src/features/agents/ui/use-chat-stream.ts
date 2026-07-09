@@ -64,9 +64,7 @@ function streamActionReducer(state: ChatUIState, action: StreamAction): ChatUISt
           runId: action.userMessage.id,
           status: "streaming",
           skeleton: { phase: "starting", label: CLIENT_SKELETON_LABELS.starting },
-          tasks: null,
-          taskStatuses: {},
-          taskEstimate: null,
+          todoItems: null,
         },
       };
     case "rollback":
@@ -236,11 +234,7 @@ export function useChatStream({
           "failed",
           "cancelled",
           "heartbeat",
-          "plan.created",
-          "plan.task.started",
-          "plan.task.completed",
-          "plan.task.paused",
-          "plan.task.resumed",
+          "plan.todo_updated",
         ]) {
           source.addEventListener(type, onAny as EventListener);
         }

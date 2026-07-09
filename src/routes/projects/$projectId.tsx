@@ -1152,8 +1152,7 @@ function ProjectDetailPage() {
 
             <div className="shrink-0 px-3 pb-2">
               <PlanChecklist
-                tasks={chatState.activeRun?.tasks ?? null}
-                statuses={chatState.activeRun?.taskStatuses ?? {}}
+                todoItems={chatState.activeRun?.todoItems ?? null}
                 runClosed={chatState.activeRun === null}
               />
             </div>

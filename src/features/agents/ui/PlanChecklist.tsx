@@ -1,19 +1,19 @@
-import { Check, ChevronDown, Loader2, Pause, SquareCheckBig } from "lucide-react";
+import { Check, ChevronDown, Loader2, SquareCheckBig } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { PlanTask, PlanTaskStatus } from "@/shared/project-types";
+import type { TodoItem } from "@/shared/project-types";
 
 export type PlanChecklistProps = {
-  tasks: PlanTask[] | null;
-  statuses: Record<string, PlanTaskStatus>;
+  todoItems: TodoItem[] | null;
   /** True when state.activeRun is null (run terminated). Spinners stop. */
   runClosed: boolean;
 };
 
-const STATUS_LABEL: Record<PlanTaskStatus, string> = {
-  pending: "Pending",
+type DisplayStatus = "upcoming" | "active" | "done";
+
+const STATUS_LABEL: Record<DisplayStatus, string> = {
+  upcoming: "Upcoming",
   active: "In progress",
-  paused: "Paused",
   done: "Completed",
 };
 
@@ -22,12 +22,12 @@ function StatusIcon({
   animate,
   index,
 }: {
-  status: PlanTaskStatus;
+  status: DisplayStatus;
   animate: boolean;
   index?: number;
 }) {
   switch (status) {
-    case "pending":
+    case "upcoming":
       return (
         <span aria-hidden className="plan-status-icon plan-status-pending">
           {typeof index === "number" ? index + 1 : ""}
@@ -39,12 +39,6 @@ function StatusIcon({
           <Loader2 size={12} className={animate ? "animate-spin" : undefined} />
         </span>
       );
-    case "paused":
-      return (
-        <span aria-hidden className="plan-status-icon plan-status-paused">
-          <Pause size={10} />
-        </span>
-      );
     case "done":
       return (
         <span aria-hidden className="plan-status-icon plan-status-done">
@@ -54,37 +48,24 @@ function StatusIcon({
   }
 }
 
-export function PlanChecklist({ tasks, statuses, runClosed }: PlanChecklistProps) {
+export function PlanChecklist({ todoItems, runClosed }: PlanChecklistProps) {
   const [expanded, setExpanded] = useState(true);
 
   const summary = useMemo(() => {
-    if (!tasks || tasks.length === 0) {
-      return { activeId: null, activeTitle: null, doneCount: 0, total: 0 };
+    if (!todoItems || todoItems.length === 0) {
+      return { activeIndex: -1, activeTitle: null, doneCount: 0, total: 0 };
     }
-    const total = tasks.length;
-    const doneCount = tasks.filter((t) => statuses[t.id] === "done").length;
-    const active =
-      tasks.find((t) => statuses[t.id] === "active") ??
-      tasks.find((t) => statuses[t.id] === "paused") ??
-      tasks.find((t) => statuses[t.id] === "pending");
-    return {
-      activeId: active?.id ?? null,
-      activeTitle: active?.title ?? null,
-      doneCount,
-      total,
-    };
-  }, [tasks, statuses]);
+    const total = todoItems.length;
+    const doneCount = todoItems.filter((t) => t.completed).length;
+    // First not-completed item is "in progress"; earlier are done, later upcoming.
+    const activeIndex = todoItems.findIndex((t) => !t.completed);
+    const activeTitle = activeIndex >= 0 ? todoItems[activeIndex].text : null;
+    return { activeIndex, activeTitle, doneCount, total };
+  }, [todoItems]);
 
-  if (!tasks || tasks.length === 0) return null;
+  if (!todoItems || todoItems.length === 0) return null;
 
   const allDone = summary.doneCount === summary.total;
-  const headerStatus: PlanTaskStatus = runClosed
-    ? allDone
-      ? "done"
-      : "paused"
-    : summary.activeId
-      ? statuses[summary.activeId] ?? "active"
-      : "active";
 
   const headerSummaryText = runClosed
     ? `${allDone ? "Completed" : "Stopped"} ${summary.doneCount} of ${summary.total} tasks`
@@ -134,15 +115,19 @@ export function PlanChecklist({ tasks, statuses, runClosed }: PlanChecklistProps
       >
         <div className="plan-checklist-collapse-inner">
           <ul id={listId} role="list" className="plan-checklist-body">
-            {tasks.map((task, index) => {
-              const status = statuses[task.id] ?? "pending";
+            {todoItems.map((item, index) => {
+              const status: DisplayStatus = item.completed
+                ? "done"
+                : index === summary.activeIndex
+                  ? "active"
+                  : "upcoming";
               const isActive = status === "active";
               return (
                 <li
-                  key={task.id}
+                  key={item.id}
                   role="listitem"
                   aria-busy={isActive && !runClosed}
-                  className={`plan-task-row ${isActive ? "plan-task-row-active" : ""} ${status === "pending" ? "plan-task-row-pending" : ""}`}
+                  className={`plan-task-row ${isActive ? "plan-task-row-active" : ""} ${status === "upcoming" ? "plan-task-row-pending" : ""}`}
                 >
                   <StatusIcon
                     status={status}
@@ -154,7 +139,7 @@ export function PlanChecklist({ tasks, statuses, runClosed }: PlanChecklistProps
                     <span
                       className={`block plan-task-title ${isActive ? "plan-task-title-active" : ""} ${status === "done" ? "plan-task-title-done" : ""}`}
                     >
-                      {task.title}
+                      {item.text}
                     </span>
                     <span
                       className={`block plan-task-meta ${isActive ? "plan-task-meta-active" : ""}`}

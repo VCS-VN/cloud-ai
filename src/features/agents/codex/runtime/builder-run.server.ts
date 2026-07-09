@@ -52,13 +52,6 @@ import {
   type BoundedCodexThread,
   type CodexProgressEvent,
 } from "./codex-thread.server";
-import {
-  fireRemainingTasksComplete,
-  fireTaskPauseAll,
-  fireTaskResumeAll,
-  fireTaskTransitions,
-} from "./task-transition.server";
-import { runPlanGenerationPhase } from "./plan-generation.server";
 import { analyzeScope } from "./scope-analysis.server";
 import {
   planInitBatches,
@@ -244,10 +237,6 @@ function emitMilestoneInternal(
   milestone: BuilderRunMilestone,
 ): void {
   emit({ type: "milestone", runId, milestone, at: Date.now() });
-  const handle = getBuilderRunHandle(runId);
-  if (handle) {
-    fireTaskTransitions(handle, emit, milestone);
-  }
 }
 
 /** Coerce a BCP-47 locale (e.g. "vi-VN") to the ProgressLocale the labels use. */
@@ -323,6 +312,19 @@ function emitCodexProgressEvent(
       // Completion is implied by the next started event replacing the skeleton
       // bar. Emitting a completed label would just flicker.
       return;
+    case "todo_list_updated": {
+      const handle = getBuilderRunHandle(runId);
+      if (!handle) return;
+      const mapped = ev.items.map((it, i) => ({
+        id: `${ev.sectionId}:${i}`,
+        text: it.text,
+        completed: it.completed,
+      }));
+      handle.todoSections.set(ev.sectionId, mapped);
+      const flat = Array.from(handle.todoSections.values()).flat();
+      emit({ type: "plan.todo_updated", runId, items: flat, at: Date.now() });
+      return;
+    }
   }
 }
 
@@ -886,19 +888,6 @@ export async function runInitBuilderRun(
     projectId: ctx.projectId,
   });
 
-  // Same LLM-based planner used by update/new_route: replaces a fixed
-  // 4-task checklist with request-specific tasks, milestone-bucket
-  // auto-advanced (see task-transition.server.ts). This also fixes the
-  // design-variant pause below being invisible in the checklist — under
-  // manual task-driving no task was "active" during that pause, so
-  // fireTaskPauseAll was a no-op; bucket auto-advance keeps the prep-bucket
-  // task active through it.
-  await runPlanGenerationPhase(
-    ctx,
-    { draftWorkspacePath, currentMilestone: "loading_context" },
-    emit,
-  );
-
   try {
     await seedInitSettingsFiles({ draftWorkspacePath });
     await installInitWorkspaceDependencies({
@@ -1211,10 +1200,8 @@ export async function runInitBuilderRun(
             handle.resumeFn = async (answer) => {
               handle.resumeFn = null;
               handle.clarificationPrompt = null;
-              if (handle) fireTaskResumeAll(handle, emit);
               resolveChoice(answer);
             };
-            if (handle) fireTaskPauseAll(handle, emit);
             publishBuilderRunEvent(handle, {
               type: "awaiting_clarification",
               runId,
@@ -1733,11 +1720,6 @@ export async function runInitBuilderRun(
     });
   }
 
-  // Init wrote straight into the project root — nothing to sync or clean up.
-  {
-    const handle = getBuilderRunHandle(runId);
-    if (handle) fireRemainingTasksComplete(handle, emit);
-  }
   // Explicit "storefront is ready" notification so the user knows init finished
   // (the composer unblocks and the client auto-starts the preview). Prefer the
   // model's own closing summary; fall back to a fixed locale-aware message.
@@ -1839,11 +1821,9 @@ async function runSkillSelection(
           handle.pendingSkills = [];
           handle.clarificationPrompt = null;
           handle.resumeFn = null;
-          fireTaskResumeAll(handle, emit);
           await resumeFnFactory(augmentedPrompt);
         };
       }
-      fireTaskPauseAll(handle, emit);
     }
     publishBuilderRunEvent(handle ?? ({} as never), {
       type: "awaiting_clarification",
@@ -1965,16 +1945,6 @@ export async function runNewRouteBuilderRun(
     entries: UPDATE_FOUNDATION_INSTRUCTIONS,
     embedProjectRuleDocs: false,
   });
-
-  // T015: classifier+planner gate. Skipped automatically when ctx.planMode === true.
-  await runPlanGenerationPhase(
-    ctx,
-    {
-      draftWorkspacePath,
-      currentMilestone: "loading_context",
-    },
-    emit,
-  );
 
   // Thinking pass: scope the request to specific files before the expensive
   // high-reasoning execute turn, so it edits directly instead of re-deriving
@@ -2321,10 +2291,6 @@ export async function runNewRouteBuilderRun(
   }
 
   // Edits landed in the project root in place — nothing to sync or clean up.
-  {
-    const handle = getBuilderRunHandle(runId);
-    if (handle) fireRemainingTasksComplete(handle, emit);
-  }
   emitFinalAnswer(emit, runId, finalResponse);
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({
@@ -2632,10 +2598,6 @@ export async function runGeneratePageBuilderRun(
     });
   }
 
-  {
-    const handle = getBuilderRunHandle(runId);
-    if (handle) fireRemainingTasksComplete(handle, emit);
-  }
   emitFinalAnswer(emit, runId, finalResponse);
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({
@@ -2685,16 +2647,6 @@ export async function runSmallUpdateBuilderRun(
     entries: UPDATE_FOUNDATION_INSTRUCTIONS,
     embedProjectRuleDocs: false,
   });
-
-  // T014: classifier+planner gate. Skipped automatically when ctx.planMode === true.
-  await runPlanGenerationPhase(
-    ctx,
-    {
-      draftWorkspacePath,
-      currentMilestone: "loading_context",
-    },
-    emit,
-  );
 
   // Thinking pass: scope the request to specific files before the expensive
   // high-reasoning execute turn, so it edits directly instead of re-deriving
@@ -2955,10 +2907,6 @@ export async function runSmallUpdateBuilderRun(
   }
 
   // Edits landed in the project root in place — nothing to sync or clean up.
-  {
-    const handle = getBuilderRunHandle(runId);
-    if (handle) fireRemainingTasksComplete(handle, emit);
-  }
   emitFinalAnswer(emit, runId, finalResponse);
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({

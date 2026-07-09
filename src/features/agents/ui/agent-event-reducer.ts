@@ -121,9 +121,7 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
           // run.started and the first skeleton.update (seconds during init),
           // leaving the user unsure the agent is working.
           skeleton: { phase: "starting", label: CLIENT_SKELETON_LABELS.starting },
-          tasks: null,
-          taskStatuses: {},
-          taskEstimate: null,
+          todoItems: null,
         },
       };
 
@@ -219,9 +217,7 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
           runId: event.runId,
           status: "streaming",
           skeleton: { phase: "starting", label: CLIENT_SKELETON_LABELS.starting },
-          tasks: state.activeRun?.tasks ?? null,
-          taskStatuses: state.activeRun?.taskStatuses ?? {},
-          taskEstimate: state.activeRun?.taskEstimate ?? null,
+          todoItems: state.activeRun?.todoItems ?? null,
         },
         messages: messages.map((m) =>
           m.id === messageId
@@ -231,44 +227,12 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
       };
     }
 
-    case "plan.created":
+    case "plan.todo_updated":
       if (!state.activeRun) return state;
       return {
         ...state,
-        activeRun: {
-          ...state.activeRun,
-          tasks: event.tasks,
-          taskEstimate: event.estimate,
-          taskStatuses: Object.fromEntries(
-            event.tasks.map((t) => [t.id, "pending" as const]),
-          ),
-        },
+        activeRun: { ...state.activeRun, todoItems: event.items },
       };
-
-    case "plan.task.started":
-    case "plan.task.completed":
-    case "plan.task.paused":
-    case "plan.task.resumed": {
-      if (!state.activeRun) return state;
-      const nextStatus =
-        event.type === "plan.task.started"
-          ? "active"
-          : event.type === "plan.task.completed"
-            ? "done"
-            : event.type === "plan.task.paused"
-              ? "paused"
-              : "active";
-      return {
-        ...state,
-        activeRun: {
-          ...state.activeRun,
-          taskStatuses: {
-            ...state.activeRun.taskStatuses,
-            [event.taskId]: nextStatus,
-          },
-        },
-      };
-    }
 
     case "run.completed":
       return { ...state, activeRun: null, lastRunOutcome: "completed" };
