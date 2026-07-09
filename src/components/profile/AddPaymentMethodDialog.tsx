@@ -5,6 +5,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { Button } from '@/components/ui/button'
 import { getPaymentConfig } from '@/server/functions/auth'
 import type { PaymentConfig } from '@/auth/types'
+import { useTheme } from '@/theme'
 
 type Tab = 'card' | 'paypal'
 
@@ -149,6 +150,32 @@ function TabButton({
   )
 }
 
+// Stripe renders its card fields inside a cross-origin iframe, so app CSS and
+// Tailwind classes can't reach the input text. The only way to theme it is the
+// Elements `style` API. Read the resolved token RGBs off <html> at runtime so
+// these stay in lockstep with tokens.css instead of hardcoding a second copy.
+function readCardStyle() {
+  const styles = getComputedStyle(document.documentElement)
+  const rgb = (token: string, fallback: string) => {
+    const value = styles.getPropertyValue(token).trim()
+    return value ? `rgb(${value.replace(/\s+/g, ' ')})` : fallback
+  }
+  return {
+    base: {
+      color: rgb('--color-ink', '#0F0F10'),
+      fontFamily:
+        styles.getPropertyValue('--font-sans').trim() || 'system-ui, sans-serif',
+      fontSize: '14px',
+      '::placeholder': { color: rgb('--color-subtle', '#9B9892') },
+      iconColor: rgb('--color-muted', '#75736E')
+    },
+    invalid: {
+      color: rgb('--color-danger-fg', '#BE123C'),
+      iconColor: rgb('--color-danger-fg', '#BE123C')
+    }
+  }
+}
+
 function StripeCardForm({
   stripe: stripeConfig,
   onSuccess
@@ -156,6 +183,7 @@ function StripeCardForm({
   stripe: PaymentConfig['stripe']
   onSuccess: () => void
 }) {
+  const { effectiveTheme } = useTheme()
   const mountRef = useRef<HTMLDivElement>(null)
   const stripeRef = useRef<Stripe | null>(null)
   const cardRef = useRef<StripeCardElement | null>(null)
@@ -166,12 +194,16 @@ function StripeCardForm({
   useEffect(() => {
     let cancelled = false
     let card: StripeCardElement | null = null
+    setReady(false)
     loadStripe(stripeConfig.publishable_key)
       .then((stripe) => {
         if (cancelled || !stripe || !mountRef.current) return
         stripeRef.current = stripe
         const elements = stripe.elements()
-        card = elements.create('card', { hidePostalCode: true })
+        card = elements.create('card', {
+          hidePostalCode: true,
+          style: readCardStyle()
+        })
         cardRef.current = card
         card.mount(mountRef.current)
         card.on('ready', () => {
@@ -186,7 +218,7 @@ function StripeCardForm({
       card?.destroy()
       cardRef.current = null
     }
-  }, [stripeConfig.publishable_key])
+  }, [stripeConfig.publishable_key, effectiveTheme])
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
