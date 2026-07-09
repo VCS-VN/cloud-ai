@@ -189,6 +189,10 @@ function ProjectDetailPage() {
   const [detailMode, setDetailMode] = useState<DetailMode>("preview");
   const [previewDraftPath, setPreviewDraftPath] = useState("/");
   const [previewCommittedPath, setPreviewCommittedPath] = useState("/");
+  // Live location reported by the preview itself (in-preview link clicks,
+  // back/forward). Drives the path bar display + "open in new tab" without
+  // re-committing the iframe src, so syncing never triggers a reload.
+  const [previewLivePath, setPreviewLivePath] = useState("/");
   const [previewPathError, setPreviewPathError] = useState<string | null>(null);
   const [previewReloadKey, setPreviewReloadKey] = useState(0);
   const [chatWidth, setChatWidth] = useState(DEFAULT_CHAT_WIDTH);
@@ -412,6 +416,7 @@ function ProjectDetailPage() {
     setDetailMode("preview");
     setPreviewDraftPath("/");
     setPreviewCommittedPath("/");
+    setPreviewLivePath("/");
     setPreviewPathError(null);
     setPreviewReloadKey(0);
     setCodeQuery("");
@@ -475,6 +480,42 @@ function ProjectDetailPage() {
     runtimeState.status,
   ]);
 
+  // Keep the path bar in sync with navigation happening *inside* the preview
+  // (link clicks, back/forward). The preview iframe is cross-origin, so its
+  // seeded root posts its location here via postMessage. We only update the
+  // displayed path — never previewCommittedPath, which drives the iframe src;
+  // re-committing would remount the iframe and fight the navigation the
+  // preview just performed.
+  useEffect(() => {
+    const previewUrl = runtimeState.previewUrl;
+    if (!previewUrl) return;
+    let previewOrigin: string;
+    try {
+      previewOrigin = new URL(previewUrl).origin;
+    } catch {
+      return;
+    }
+    function handleNavMessage(event: MessageEvent) {
+      if (event.origin !== previewOrigin) return;
+      const data = event.data;
+      if (
+        !data ||
+        typeof data !== "object" ||
+        data.type !== "lumen:preview-nav" ||
+        typeof data.path !== "string"
+      ) {
+        return;
+      }
+      const normalized = normalizePreviewPath(data.path);
+      if (!normalized.ok) return;
+      setPreviewLivePath(normalized.path);
+      setPreviewDraftPath(normalized.path);
+      setPreviewPathError(null);
+    }
+    window.addEventListener("message", handleNavMessage);
+    return () => window.removeEventListener("message", handleNavMessage);
+  }, [runtimeState.previewUrl]);
+
   const selectedNode = useMemo(
     () => findNode(workspace?.fileTree ?? [], selectedNodeId),
     [workspace?.fileTree, selectedNodeId],
@@ -486,6 +527,12 @@ function ProjectDetailPage() {
   const activePreviewUrl =
     previewReady && runtimeState.previewUrl
       ? buildPreviewUrl(runtimeState.previewUrl, previewCommittedPath)
+      : null;
+  // URL for "open in new tab": tracks the preview's live location so it opens
+  // whatever page the user is actually viewing, not the last committed path.
+  const livePreviewUrl =
+    previewReady && runtimeState.previewUrl
+      ? buildPreviewUrl(runtimeState.previewUrl, previewLivePath)
       : null;
   const previewControlsLoading =
     previewStarting ||
@@ -874,6 +921,7 @@ function ProjectDetailPage() {
     setPreviewStartError(null);
     setPreviewDraftPath("/");
     setPreviewCommittedPath("/");
+    setPreviewLivePath("/");
     setPreviewPathError(null);
     setPreviewReloadKey(0);
     // Optimistic: show starting immediately. The server confirms via the
@@ -1204,7 +1252,7 @@ function ProjectDetailPage() {
               previewPathError={previewPathError}
               previewReady={previewReady}
               previewControlsLoading={previewControlsLoading}
-              activePreviewUrl={activePreviewUrl}
+              activePreviewUrl={livePreviewUrl ?? activePreviewUrl}
               runtimeState={runtimeState}
               previewStopping={previewStopping}
               projectStatus={project.status}

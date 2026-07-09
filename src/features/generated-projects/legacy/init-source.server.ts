@@ -1684,8 +1684,8 @@ export function useCart() {
 export function rootRouteSource() {
   return `import '@vitejs/plugin-react/preamble'
 import '@/styles/app.css'
-import { Suspense } from 'react'
-import { Outlet, createRootRoute, HeadContent, Scripts } from '@tanstack/react-router'
+import { Suspense, useEffect } from 'react'
+import { Outlet, createRootRoute, HeadContent, Scripts, useRouterState } from '@tanstack/react-router'
 import { Providers } from '@/app/providers'
 import { StoreProvider } from '@/app/store-provider'
 import { AuthProvider } from '@/app/auth-provider'
@@ -1700,6 +1700,23 @@ export const Route = createRootRoute({ component: Root, notFoundComponent: NotFo
 
 const THEME_INIT_SCRIPT = \`(function(){try{var t=localStorage.getItem('storefront-theme')||'light';if(t==='dark'){document.documentElement.classList.add('dark');}else{document.documentElement.classList.remove('dark');}}catch(e){document.documentElement.classList.remove('dark');}})();\`
 
+// Reports the live preview location to the Lumen builder shell so its path bar
+// can stay in sync with in-preview navigation (link clicks, back/forward).
+// Harmless outside the builder: postMessage to a non-existent parent is a no-op.
+function PreviewNavBridge() {
+  const path = useRouterState({ select: (state) => state.location.href })
+
+  useEffect(() => {
+    if (window.parent === window) return
+    window.parent.postMessage(
+      { type: 'lumen:preview-nav', path },
+      '*',
+    )
+  }, [path])
+
+  return null
+}
+
 function Root() {
   return (
     <html lang='en'>
@@ -1712,6 +1729,7 @@ function Root() {
           <StoreProvider>
             <AuthProvider>
               <CartProvider>
+                <PreviewNavBridge />
                 <RouteLoadingBar />
                 <SiteHeader />
                 <Suspense fallback={<RouteSuspenseFallback />}>
