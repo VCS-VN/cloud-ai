@@ -339,11 +339,11 @@ function CommittedAnswerInline({
           ) : null}
         </div>
       ) : null}
-      <div className="flex items-center gap-2 border-t border-hairline bg-emerald-50/30 px-3.5 py-2.5">
+      <div className="flex items-center gap-2 border-t border-hairline bg-success-bg/30 px-3.5 py-2.5">
         <Check
           aria-hidden="true"
           size={14}
-          className="shrink-0 text-emerald-700"
+          className="shrink-0 text-success-fg"
           strokeWidth={2.5}
         />
         <span className="text-[12px] text-ink">

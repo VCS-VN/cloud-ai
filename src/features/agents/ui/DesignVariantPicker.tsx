@@ -108,7 +108,7 @@ export function DesignVariantPicker({
                     {variant.label}
                   </span>
                   {index === 0 || variant.id.toLowerCase().includes("recommended") ? (
-                    <span className="inline-flex h-5 items-center rounded border border-emerald-200 bg-emerald-50 px-1.5 font-mono text-[10px] font-medium uppercase tracking-wide text-emerald-700">
+                    <span className="inline-flex h-5 items-center rounded border border-success-fg/30 bg-success-bg px-1.5 font-mono text-[10px] font-medium uppercase tracking-wide text-success-fg">
                       Đề xuất
                     </span>
                   ) : null}
@@ -173,7 +173,7 @@ export function DesignVariantPicker({
         </div>
       ) : null}
 
-      <div className="flex items-center justify-end border-t border-hairline bg-stone-50/60 px-3.5 py-2.5">
+      <div className="flex items-center justify-end border-t border-hairline bg-chalk px-3.5 py-2.5">
         <Button
           variant="unstyled"
           type="button"
@@ -223,8 +223,8 @@ function cardClass(picked: boolean, isBusy = false): string {
   const base =
     "flex w-full items-start gap-3 rounded-md border p-3 text-left transition-all duration-base focus-visible:outline-none focus-visible:shadow-focus";
   const stateClass = picked
-    ? "border-ink bg-[#FAF7F2] shadow-[inset_0_0_0_1px_rgb(15_15_16)]"
-    : "border-hairline bg-surface hover:bg-[#FAF7F2] hover:border-hairline-soft";
+    ? "border-ink bg-chalk shadow-[inset_0_0_0_1px_rgb(var(--color-ink))]"
+    : "border-hairline bg-surface hover:bg-chalk hover:border-hairline-soft";
   const disabledClass = isBusy
     ? "opacity-60 cursor-not-allowed"
     : "cursor-pointer";
