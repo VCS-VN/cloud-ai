@@ -152,6 +152,13 @@ export class AuthService {
     return this.episCloud.getPaymentConfig(current.episCloudTenantId);
   }
 
+  async listPaymentMethods() {
+    const current = await this.requireActionUser();
+    if (!current.episCloudTenantId)
+      throw new AuthError("episcloud-not-activated");
+    return this.episCloud.listPaymentMethods(current.episCloudTenantId);
+  }
+
   async listEpisCloudModels(): Promise<EpisCloudModelsResult> {
     const current = await this.requireActionUser();
     const settings = await this.userSettings.findByUserId(current.id);

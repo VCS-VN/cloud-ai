@@ -45,6 +45,10 @@ export const getPaymentConfig = createServerFn({ method: 'POST' }).handler(async
   (await loadAuthService()).getPaymentConfig()
 )
 
+export const listPaymentMethods = createServerFn({ method: 'GET' }).handler(async () =>
+  (await loadAuthService()).listPaymentMethods()
+)
+
 export const listEpisCloudModels = createServerFn({ method: 'GET' }).handler(async () =>
   (await loadAuthService()).listEpisCloudModels()
 )

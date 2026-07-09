@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import {
   BarChart3,
   Check,
   Copy,
   CreditCard,
   FileText,
+  Loader2,
   Monitor,
   Moon,
   Plus,
@@ -21,8 +23,12 @@ import { UserAvatar, UserMenu } from "@/components/auth/UserMenu";
 import { AddPaymentMethodDialog } from "@/components/profile/AddPaymentMethodDialog";
 import { EpisCloudActivateDialog } from "@/components/profile/EpisCloudActivateDialog";
 import { Button } from "@/components/ui/button";
-import { activateEpisCloud, getCurrentUser } from "@/server/functions/auth";
-import type { AuthUserSummary } from "@/auth/types";
+import {
+  activateEpisCloud,
+  getCurrentUser,
+  listPaymentMethods,
+} from "@/server/functions/auth";
+import type { AuthUserSummary, PaymentMethodsResult } from "@/auth/types";
 import { useTheme, type AppTheme } from "@/theme";
 
 const activatedAtFormatter = new Intl.DateTimeFormat(undefined, {
@@ -586,6 +592,16 @@ function UsageSection() {
 function PaymentSection({ user }: { user: AuthUserSummary }) {
   const [addOpen, setAddOpen] = useState(false);
   const activated = Boolean(user.episCloudTenantId);
+  const fetchPaymentMethods = useServerFn(listPaymentMethods);
+
+  const methodsQuery = useQuery({
+    queryKey: ["episcloud-payment-methods"],
+    queryFn: () => fetchPaymentMethods() as Promise<PaymentMethodsResult>,
+    enabled: activated,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const paymentMethods = methodsQuery.data?.payment_methods ?? [];
   return (
     <section
       id="payment"
@@ -601,6 +617,38 @@ function PaymentSection({ user }: { user: AuthUserSummary }) {
         </p>
       </header>
       <div className="space-y-3 p-6">
+        {activated && methodsQuery.isPending ? (
+          <div className="flex items-center gap-2 rounded-xl border border-hairline bg-paper p-4 text-ui-sm text-muted">
+            <Loader2 aria-hidden="true" size={14} className="animate-spin" />
+            Loading payment methods…
+          </div>
+        ) : activated && methodsQuery.isError ? (
+          <div className="space-y-3 rounded-xl border border-hairline bg-paper p-4">
+            <p className="m-0 text-ui-sm leading-relaxed text-danger-fg">
+              {methodsQuery.error instanceof Error
+                ? methodsQuery.error.message
+                : "Could not load your payment methods. Please try again."}
+            </p>
+            <button
+              type="button"
+              onClick={() => void methodsQuery.refetch()}
+              className="h-8 px-2.5 text-xs text-muted hover:text-ink"
+            >
+              Try again
+            </button>
+          </div>
+        ) : paymentMethods.length > 0 ? (
+          paymentMethods.map((method) => (
+            <PaymentCard
+              key={method.id}
+              brand={method.brand}
+              title={`${method.brand} •••• ${method.last4}`}
+              subtitle={`Expires ${method.expiry_month}/${method.expiry_year}`}
+              badge={method.default ? "Default" : undefined}
+              action="Edit"
+            />
+          ))
+        ) : null}
         <button
           type="button"
           disabled={!activated}

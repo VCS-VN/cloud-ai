@@ -6,7 +6,11 @@ import {
   getEpisCloudGatewayBaseUrl,
   getEpisCloudPartnerToken,
 } from "./episcloud-config";
-import type { EpisCloudModel, PaymentConfig } from "./types";
+import type {
+  EpisCloudModel,
+  PaymentConfig,
+  PaymentMethodsResult,
+} from "./types";
 
 type EpisCloudAccount = {
   tenant_id: string;
@@ -151,6 +155,26 @@ export class EpisCloudClient {
       if (error instanceof AuthError) throw error;
       logEpisCloudError("episcloud_payment_config_failed", error);
       throw new AuthError("payment-config-failed");
+    }
+  }
+
+  async listPaymentMethods(intentId: string): Promise<PaymentMethodsResult> {
+    try {
+      const response = await axios.get<PaymentMethodsResult>(
+        `${getEpisCloudBaseUrl()}/v1/partner/accounts/${encodeURIComponent(intentId)}/payment-methods`,
+        {
+          headers: {
+            Authorization: `Bearer ${getEpisCloudPartnerToken()}`,
+          },
+        },
+      );
+      if (!Array.isArray(response.data?.payment_methods))
+        throw new AuthError("payment-methods-failed");
+      return response.data;
+    } catch (error) {
+      if (error instanceof AuthError) throw error;
+      logEpisCloudError("episcloud_payment_methods_failed", error);
+      throw new AuthError("payment-methods-failed");
     }
   }
 }

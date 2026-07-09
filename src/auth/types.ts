@@ -66,6 +66,20 @@ export type PaymentConfig = {
   paypal: PaypalPaymentConfig
 }
 
+export type PaymentMethod = {
+  id: string
+  provider: string
+  brand: string
+  last4: string
+  expiry_month: string
+  expiry_year: string
+  default: boolean
+}
+
+export type PaymentMethodsResult = {
+  payment_methods: PaymentMethod[]
+}
+
 export type EpisCloudModel = {
   id: string
   ownedBy?: string
@@ -133,6 +147,7 @@ export type LoginErrorCode =
   | 'episcloud-api-key-failed'
   | 'episcloud-models-failed'
   | 'payment-config-failed'
+  | 'payment-methods-failed'
   | 'unknown'
 
 export type LoginError = {
