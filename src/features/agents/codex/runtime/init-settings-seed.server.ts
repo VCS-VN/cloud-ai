@@ -124,6 +124,24 @@ const SEED_TARGETS: readonly SeedTarget[] = [
   { template: "src-routes-orders-orderId.tsx.md", target: "src/routes/orders/$orderId.tsx", policy: "editable_baseline" },
 ];
 
+// The commerce routes that init does NOT task the agent with. INIT_PHASES
+// (init-batch-planner) only authors home (src/routes/index.tsx) + product-detail
+// (src/routes/products/$productId.tsx); these five ship as "coming soon"
+// skeletons and must stay that way until the user runs /generate-page for them.
+// They are kept editable_baseline (so /generate-page can author them later and
+// so seed/reassert of runtime-owned plumbing never reverts them), which means
+// reassertRuntimeOwnedFiles does NOT restore them — so the model is free to
+// write full pages into them mid-init and nothing reverts it. This list backs
+// an init-only reassert (reassertComingSoonRoutes) that pins them to the seed
+// after the batch loop, without touching the /generate-page flow.
+const INIT_COMING_SOON_ROUTES: readonly string[] = [
+  "src/routes/products/index.tsx",
+  "src/routes/cart.tsx",
+  "src/routes/checkout.tsx",
+  "src/routes/orders.tsx",
+  "src/routes/orders/$orderId.tsx",
+];
+
 function parseSeedTemplate(raw: string, expectedTarget: string): { target: string; body: string } {
   if (!raw.startsWith("---\n")) {
     throw new InitSettingsSeedError(
@@ -294,6 +312,45 @@ export async function reassertRuntimeOwnedFiles(input: {
     restored.push(seedTarget.target);
   }
   return restored;
+}
+
+// Init tasks the model with home + product-detail only (see INIT_PHASES); the
+// other five commerce routes ship as "coming soon" skeletons. They are
+// editable_baseline (not runtime_owned) so /generate-page can author them on
+// demand and so runtime-owned reasserts never revert them — but that also means
+// reassertRuntimeOwnedFiles leaves them alone, and the model (which ignores the
+// "do NOT touch other routes" prompt rule and writes straight to disk via the
+// CLI) can fill them with full pages mid-init. This restores each to its
+// canonical "coming soon" seed AFTER the init batch loop, so init only ever
+// ships home + product-detail as real pages. It is init-only: /generate-page
+// never calls it, so a later generate for these slugs still works. Returns the
+// list of relative paths that were reverted (for logging). Mirrors
+// reassertRuntimeOwnedFiles but scoped to INIT_COMING_SOON_ROUTES.
+export async function reassertComingSoonRoutes(input: {
+  draftWorkspacePath: string;
+}): Promise<string[]> {
+  const reverted: string[] = [];
+  for (const route of INIT_COMING_SOON_ROUTES) {
+    const seedTarget = SEED_TARGETS.find((t) => t.target === route);
+    if (!seedTarget) continue;
+    validateTargetPath(seedTarget.target);
+
+    const raw = await fs.readFile(
+      path.join(SETTINGS_TEMPLATE_ROOT, seedTarget.template),
+      "utf8",
+    );
+    const { body } = parseSeedTemplate(raw, seedTarget.target);
+    const absTarget = path.join(input.draftWorkspacePath, seedTarget.target);
+
+    const current = (await pathExists(absTarget))
+      ? await fs.readFile(absTarget, "utf8")
+      : null;
+    if (current === body) continue;
+
+    await writeSeedFile(absTarget, body, seedTarget.target);
+    reverted.push(seedTarget.target);
+  }
+  return reverted;
 }
 
 const APP_CSS_REL = "src/styles/app.css";

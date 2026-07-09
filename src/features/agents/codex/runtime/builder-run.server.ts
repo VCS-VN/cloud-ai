@@ -66,6 +66,7 @@ import {
   ensureProjectGitignore,
   injectDesignPaletteIntoAppCss,
   installInitWorkspaceDependencies,
+  reassertComingSoonRoutes,
   reassertRuntimeOwnedFiles,
   seedInitSettingsFiles,
 } from "./init-settings-seed.server";
@@ -1385,6 +1386,26 @@ export async function runInitBuilderRun(
           runId,
           projectId: ctx.projectId,
           restored,
+        }),
+      );
+    }
+
+    // Init only tasks the model with home + product-detail (see INIT_PHASES);
+    // the other five commerce routes ship as "coming soon" skeletons. They are
+    // editable_baseline so /generate-page can author them later, which means the
+    // reassert above leaves them alone — and the model (ignoring the "do NOT
+    // touch other routes" prompt rule, writing straight to disk via the CLI) can
+    // fill them with full pages mid-init. Revert any such route to its seed so
+    // init ships ONLY home + product-detail as real pages and the check/fix loop
+    // stays focused on those two.
+    const comingSoonReverted = await reassertComingSoonRoutes({ draftWorkspacePath });
+    if (comingSoonReverted.length > 0) {
+      console.warn(
+        JSON.stringify({
+          event: "init_coming_soon_routes_reasserted",
+          runId,
+          projectId: ctx.projectId,
+          reverted: comingSoonReverted,
         }),
       );
     }
