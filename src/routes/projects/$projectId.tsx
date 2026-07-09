@@ -86,6 +86,7 @@ import type {
 import { parseGeneratePageCommand } from "@/features/agents/codex/runtime/generate-page";
 
 type DetailMode = "preview" | "code";
+type PreviewDevice = "desktop" | "tablet" | "mobile";
 type PreviewTokenState = {
   status: "idle" | "refreshing" | "ready" | "failed";
   error: string | null;
@@ -187,6 +188,7 @@ function ProjectDetailPage() {
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
   const [detailMode, setDetailMode] = useState<DetailMode>("preview");
+  const [activeDevice, setActiveDevice] = useState<PreviewDevice>("desktop");
   const [previewDraftPath, setPreviewDraftPath] = useState("/");
   const [previewCommittedPath, setPreviewCommittedPath] = useState("/");
   // Live location reported by the preview itself (in-preview link clicks,
@@ -1256,6 +1258,8 @@ function ProjectDetailPage() {
               runtimeState={runtimeState}
               previewStopping={previewStopping}
               projectStatus={project.status}
+              activeDevice={activeDevice}
+              onDeviceChange={setActiveDevice}
               onPathChange={handlePreviewPathChange}
               onPathSubmit={handlePreviewReload}
               onPathReset={handlePreviewPathReset}
@@ -1267,6 +1271,7 @@ function ProjectDetailPage() {
                   <PreviewWorkspace
                     previewUrl={activePreviewUrl}
                     previewReloadKey={previewReloadKey}
+                    activeDevice={activeDevice}
                     runtimeState={runtimeState}
                     projectId={project?.id ?? ""}
                     previewStarting={previewStarting}
@@ -1494,6 +1499,8 @@ function PreviewToolbar({
   runtimeState,
   previewStopping,
   projectStatus,
+  activeDevice,
+  onDeviceChange,
   onPathChange,
   onPathSubmit,
   onPathReset,
@@ -1507,6 +1514,8 @@ function PreviewToolbar({
   runtimeState: DevRuntimeUIState;
   previewStopping: boolean;
   projectStatus: Project["status"];
+  activeDevice: PreviewDevice;
+  onDeviceChange: (device: PreviewDevice) => void;
   onPathChange: (path: string) => void;
   onPathSubmit: () => void;
   onPathReset: () => void;
@@ -1516,7 +1525,6 @@ function PreviewToolbar({
     projectStatus,
   });
   const pathInputId = "preview-path";
-  const [activeDevice, setActiveDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const versionLabel = "v12";
   const lastBuildLabel = runtimeState.status === "running" ? "last build 23s ago" : "no preview";
 
@@ -1525,33 +1533,39 @@ function PreviewToolbar({
       {/* Left: Device toggle */}
       <div className="flex items-center gap-2">
         <div className="preview-device-group" role="group" aria-label="Device preview">
-          <button
+          <Button
+            variant="unstyled"
             type="button"
             className={`preview-device-btn ${activeDevice === "desktop" ? "preview-device-btn-active" : ""}`}
-            onClick={() => setActiveDevice("desktop")}
+            onClick={() => onDeviceChange("desktop")}
             aria-label="Desktop"
+            aria-pressed={activeDevice === "desktop"}
             title="Desktop"
           >
             <Laptop aria-hidden="true" size={14} />
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="unstyled"
             type="button"
             className={`preview-device-btn ${activeDevice === "tablet" ? "preview-device-btn-active" : ""}`}
-            onClick={() => setActiveDevice("tablet")}
+            onClick={() => onDeviceChange("tablet")}
             aria-label="Tablet"
-            title="Tablet — visual only"
+            aria-pressed={activeDevice === "tablet"}
+            title="Tablet"
           >
             <Tablet aria-hidden="true" size={14} />
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="unstyled"
             type="button"
             className={`preview-device-btn ${activeDevice === "mobile" ? "preview-device-btn-active" : ""}`}
-            onClick={() => setActiveDevice("mobile")}
+            onClick={() => onDeviceChange("mobile")}
             aria-label="Mobile"
-            title="Mobile — visual only"
+            aria-pressed={activeDevice === "mobile"}
+            title="Mobile"
           >
             <Smartphone aria-hidden="true" size={14} />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1663,6 +1677,7 @@ function PreviewToolbar({
 function PreviewWorkspace({
   previewUrl,
   previewReloadKey,
+  activeDevice,
   runtimeState,
   projectId,
   previewStarting,
@@ -1674,6 +1689,7 @@ function PreviewWorkspace({
 }: {
   previewUrl: string | null;
   previewReloadKey: number;
+  activeDevice: PreviewDevice;
   runtimeState: DevRuntimeUIState;
   projectId: string;
   previewStarting: boolean;
@@ -1684,6 +1700,12 @@ function PreviewWorkspace({
   onRefreshPreviewToken: () => void;
 }) {
   const showIframe = !!previewUrl;
+  const deviceWidth =
+    activeDevice === "mobile"
+      ? 390
+      : activeDevice === "tablet"
+        ? 820
+        : null;
   const previewTemporarilyUnavailable = isProjectPreviewTemporarilyUnavailable({
     projectStatus,
   });
@@ -1693,15 +1715,24 @@ function PreviewWorkspace({
     runtimeState.status !== "running";
   return (
     <section className="preview-theme-isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-paper transition-colors duration-300">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-paper transition-colors duration-300">
+      <div
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-paper transition-colors duration-300 ${
+          deviceWidth ? "items-center py-3" : ""
+        }`}
+      >
         {showIframe ? (
           <iframe
             key={`${previewUrl}:${previewTokenState.refreshedAt ?? "ready"}:${previewReloadKey}`}
             src={previewUrl}
-            className="h-full w-full border-0"
+            className={`h-full w-full border-0 transition-[max-width] duration-300 ${
+              deviceWidth
+                ? "rounded-lg border border-hairline bg-surface shadow-sm"
+                : ""
+            }`}
             style={{
               colorScheme: "light",
               backgroundColor: "rgb(var(--color-surface))",
+              maxWidth: deviceWidth ? `${deviceWidth}px` : undefined,
             }}
             title="Project preview"
             sandbox="allow-scripts allow-same-origin allow-forms"
