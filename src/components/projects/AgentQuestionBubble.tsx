@@ -14,7 +14,7 @@ function MotionIndicator({ level }: { level: number }) {
     <span
       key={i}
       className={`inline-block h-[6px] w-[6px] rounded-full ${
-        i < level ? "bg-[var(--app-accent)]" : "bg-[var(--app-border)]"
+        i < level ? "bg-ink" : "bg-hairline-soft"
       }`}
     />
   ));
@@ -63,7 +63,7 @@ export function AgentQuestionBubble({ message, onSelectOption }: AgentQuestionBu
 
   if (!metadata?.options?.length) {
     return (
-      <div className="text-[12px] text-[var(--app-icon-muted)] italic">
+      <div className="text-[12px] text-muted italic">
         (No suggestions to display)
       </div>
     );
@@ -104,8 +104,8 @@ export function AgentQuestionBubble({ message, onSelectOption }: AgentQuestionBu
   // T048: checkbox-style for optional pages
   if (isCheckbox) {
     return (
-      <div className="flex flex-col gap-xs">
-        <p className="text-[11px] text-[var(--app-icon-muted)]">
+      <div className="flex flex-col gap-2">
+        <p className="text-[11px] text-muted">
           Select pages you want to add:
         </p>
         {variants.map((variant) => {
@@ -113,23 +113,23 @@ export function AgentQuestionBubble({ message, onSelectOption }: AgentQuestionBu
           return (
             <label
               key={variant.id}
-              className={`flex items-center gap-xs rounded-md border p-sm transition-all ${
+              className={`flex items-center gap-2 rounded-md border p-3 transition-all ${
                 canToggle
-                  ? "cursor-pointer border-[var(--app-border-soft)] bg-[var(--app-panel-bg)] hover:border-[var(--app-border-strong)]"
-                  : "cursor-default border-[var(--app-border)] opacity-60"
+                  ? "cursor-pointer border-hairline bg-surface hover:border-hairline-soft"
+                  : "cursor-default border-hairline opacity-60"
               }`}
             >
               <Checkbox
                 checked={checked}
                 disabled={!canToggle}
                 onChange={() => toggleDispatch({ type: "toggle", optionId: variant.id })}
-                className="accent-[var(--app-accent)]"
+                className="accent-ink"
               />
               <div className="flex-1">
-                <span className="text-[12px] font-medium text-[var(--app-panel-text)]">
+                <span className="text-[12px] font-medium text-ink">
                   {variant.label}
                 </span>
-                <p className="text-[11px] text-[var(--app-icon-muted)]">
+                <p className="text-[11px] text-muted">
                   {variant.description}
                 </p>
               </div>
@@ -142,7 +142,7 @@ export function AgentQuestionBubble({ message, onSelectOption }: AgentQuestionBu
             type="button"
             disabled={!!selecting}
             onClick={handleConfirmPages}
-            className="mt-xs w-full rounded-pill border border-[var(--app-accent)] bg-[var(--app-accent)] px-sm py-xxs text-[12px] font-semibold text-[var(--app-panel-bg)] transition-all hover:opacity-90 disabled:opacity-50"
+            className="mt-1 w-full rounded-pill border border-ink bg-ink px-3 py-1 text-[12px] font-semibold text-paper transition-all hover:opacity-90 disabled:opacity-50"
           >
             {selecting ? "Confirming..." : "Confirm selected pages"}
           </Button>
@@ -153,7 +153,7 @@ export function AgentQuestionBubble({ message, onSelectOption }: AgentQuestionBu
 
   // Original: radio-style design variant cards
   return (
-    <div className="flex flex-col gap-xs">
+    <div className="flex flex-col gap-2">
       {variants.map((variant) => {
         const isSelected = selectedOptionId === variant.id;
         const isSelecting = selecting === variant.id;
@@ -166,54 +166,54 @@ export function AgentQuestionBubble({ message, onSelectOption }: AgentQuestionBu
             type="button"
             disabled={!!selectedOptionId || !!selecting}
             onClick={() => handleRadioClick(variant.id)}
-            className={`w-full rounded-md border p-sm text-left transition-all duration-200 ${
+            className={`w-full rounded-md border p-3 text-left transition-all duration-200 ${
               isSelected
-                ? "border-[var(--app-accent)] bg-[var(--app-selected-bg)]"
+                ? "border-ink bg-ink/[0.06]"
                 : dimmed
-                  ? "border-[var(--app-border)] opacity-40"
-                  : "border-[var(--app-border-soft)] bg-[var(--app-panel-bg)] hover:border-[var(--app-border-strong)] hover:bg-[var(--app-control)]"
+                  ? "border-hairline opacity-40"
+                  : "border-hairline bg-surface hover:border-hairline-soft hover:bg-ink/[0.03]"
             } ${selecting ? "cursor-wait" : selectedOptionId ? "cursor-default" : "cursor-pointer"}`}
             aria-pressed={isSelected}
             aria-label={`${variant.label}: ${variant.description}`}
           >
-            <div className="mb-xxs flex items-center justify-between">
-              <span className="text-[12px] font-semibold text-[var(--app-panel-text)]">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[12px] font-semibold text-ink">
                 {variant.label}
               </span>
               <span
-                className="text-[10px] font-medium text-[var(--app-icon-muted)]"
+                className="text-[10px] font-medium text-muted"
                 style={{ fontFamily: variant.preview.font }}
               >
                 {variant.preview.font}
               </span>
             </div>
 
-            <p className="mb-xs text-[11px] leading-[1.35] text-[var(--app-icon-muted)]">
+            <p className="mb-2 text-[11px] leading-[1.35] text-muted">
               {variant.description}
             </p>
 
             {/* Color swatches */}
-            <div className="mb-xs flex items-center gap-[4px]">
+            <div className="mb-2 flex items-center gap-[4px]">
               {variant.preview.palette.map((hex) => (
                 <span
                   key={hex}
-                  className="h-[18px] w-[18px] rounded-sm border border-[var(--app-border)]"
+                  className="h-[18px] w-[18px] rounded-sm border border-hairline"
                   style={{ backgroundColor: hex }}
                   title={hex}
                 />
               ))}
-              <span className="ml-xs">
+              <span className="ml-2">
                 <MotionIndicator level={variant.preview.motion} />
               </span>
             </div>
 
             {isSelected && (
-              <div className="mt-xxs text-[11px] font-medium text-[var(--app-accent)]">
+              <div className="mt-1 text-[11px] font-medium text-ink">
                 You selected: {variant.label}
               </div>
             )}
             {isSelecting && (
-              <div className="mt-xxs text-[11px] text-[var(--app-icon-muted)]">
+              <div className="mt-1 text-[11px] text-muted">
                 Selecting...
               </div>
             )}

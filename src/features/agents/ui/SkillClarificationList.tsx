@@ -48,13 +48,13 @@ export function SkillClarificationList({
   if (committed) {
     return (
       <div
-        className="rounded-md border border-[var(--app-border-strong)] bg-[var(--app-panel-strong)] p-3"
+        className="rounded-md border border-hairline-soft bg-ink/[0.06] p-3"
         aria-live="polite"
       >
-        <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--app-muted)]">
+        <div className="text-[11px] font-medium uppercase tracking-wide text-muted">
           Selected
         </div>
-        <div className="mt-1 text-sm font-medium text-[var(--app-panel-text)]">
+        <div className="mt-1 text-sm font-medium text-ink">
           {committed.label}
         </div>
       </div>
@@ -64,7 +64,7 @@ export function SkillClarificationList({
   return (
     <div className="space-y-3">
       {question ? (
-        <p className="text-sm text-[var(--app-panel-text)]">{question}</p>
+        <p className="text-sm text-ink">{question}</p>
       ) : null}
       <ul
         className="flex flex-col gap-2"
@@ -82,25 +82,25 @@ export function SkillClarificationList({
                 aria-checked={isPicked}
                 disabled={isBusy}
                 onClick={() => setPickedId(option.id)}
-                className={`flex w-full items-center gap-3 rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:opacity-60 disabled:cursor-not-allowed ${
+                className={`flex w-full items-center gap-3 rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 disabled:opacity-60 disabled:cursor-not-allowed ${
                   isPicked
-                    ? "border-[var(--app-border-strong)] bg-[var(--app-panel-strong)]"
-                    : "border-[var(--app-border)] bg-[var(--app-panel-bg)] hover:border-[var(--app-border-strong)]"
+                    ? "border-hairline-soft bg-ink/[0.06]"
+                    : "border-hairline bg-surface hover:border-hairline-soft"
                 }`}
               >
                 <span
                   className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
                     isPicked
-                      ? "border-[var(--app-border-strong)] bg-[var(--color-primary)]"
-                      : "border-[var(--app-border)] bg-[var(--app-panel-bg)]"
+                      ? "border-ink bg-ink"
+                      : "border-hairline bg-surface"
                   }`}
                   aria-hidden="true"
                 >
                   {isPicked ? (
-                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-on-primary)]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-paper" />
                   ) : null}
                 </span>
-                <span className="flex-1 text-sm text-[var(--app-panel-text)]">
+                <span className="flex-1 text-sm text-ink">
                   {option.label}
                 </span>
               </Button>
@@ -111,7 +111,7 @@ export function SkillClarificationList({
 
       {errorMessage ? (
         <p
-          className="rounded-md border border-[var(--app-border-strong)] bg-[var(--app-danger-bg)] px-3 py-2 text-xs leading-snug text-[var(--app-danger-text)]"
+          className="rounded-md border border-hairline bg-danger-bg px-3 py-2 text-xs leading-snug text-danger-fg"
           role="alert"
         >
           {errorMessage}
@@ -124,7 +124,7 @@ export function SkillClarificationList({
           type="button"
           disabled={isBusy || !pickedId}
           onClick={handleSubmit}
-          className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-[var(--app-text)] px-4 text-xs font-[580] text-[var(--app-bg)] outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--app-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-ink px-4 text-xs font-[580] text-paper outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ink/30 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting ? (
             <>
