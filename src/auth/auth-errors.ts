@@ -25,6 +25,7 @@ const safeMessages: Record<LoginErrorCode, string> = {
   'episcloud-models-failed': 'Could not load available models from EpisCloud. Please try again.',
   'payment-config-failed': 'Could not load payment options. Please try again.',
   'payment-methods-failed': 'Could not load your payment methods. Please try again.',
+  'topup-failed': 'Could not top up your balance. Please try again.',
   unknown: 'Something went wrong. Please try again.'
 }
 

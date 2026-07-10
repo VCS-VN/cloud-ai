@@ -10,6 +10,7 @@ import type {
   EpisCloudModel,
   PaymentConfig,
   PaymentMethodsResult,
+  TopupBalanceResult,
 } from "./types";
 
 type EpisCloudAccount = {
@@ -175,6 +176,42 @@ export class EpisCloudClient {
       if (error instanceof AuthError) throw error;
       logEpisCloudError("episcloud_payment_methods_failed", error);
       throw new AuthError("payment-methods-failed");
+    }
+  }
+
+  async topupBalance(
+    intentId: string,
+    input: {
+      amountMicroUsd: number;
+      reason: string;
+      paymentMethodId?: string;
+    },
+  ): Promise<TopupBalanceResult> {
+    try {
+      const response = await axios.post<TopupBalanceResult>(
+        `${getEpisCloudBaseUrl()}/v1/partner/accounts/${encodeURIComponent(intentId)}/balance/topup`,
+        {
+          amount_micro_usd: input.amountMicroUsd,
+          currency: "USD",
+          reason: input.reason,
+          ...(input.paymentMethodId
+            ? { payment_method_id: input.paymentMethodId }
+            : {}),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${getEpisCloudPartnerToken()}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+      if (typeof response.data?.balance_micro_usd_after !== "number")
+        throw new AuthError("topup-failed");
+      return response.data;
+    } catch (error) {
+      if (error instanceof AuthError) throw error;
+      logEpisCloudError("episcloud_topup_failed", error);
+      throw new AuthError("topup-failed");
     }
   }
 }

@@ -7,7 +7,11 @@ import {
 import { encryptUserApiKey, decryptUserApiKey } from "./api-key-crypto.server";
 import { MerchantGatewayClient } from "./oauth-client.server";
 import { EpisCloudClient } from "./episcloud-client.server";
-import type { EpisCloudModelsResult, LoginResult } from "./types";
+import type {
+  EpisCloudModelsResult,
+  LoginResult,
+  TopupBalanceInput,
+} from "./types";
 import { toAuthUserSummary, UserRepository } from "./user-repository";
 import { UserSettingsRepository } from "./user-settings-repository";
 import { SessionService } from "./session-service.server";
@@ -157,6 +161,19 @@ export class AuthService {
     if (!current.episCloudTenantId)
       throw new AuthError("episcloud-not-activated");
     return this.episCloud.listPaymentMethods(current.episCloudTenantId);
+  }
+
+  async topupBalance(input: TopupBalanceInput) {
+    const current = await this.requireActionUser();
+    if (!current.episCloudTenantId)
+      throw new AuthError("episcloud-not-activated");
+    if (!Number.isInteger(input.amountMicroUsd) || input.amountMicroUsd <= 0)
+      throw new AuthError("topup-failed");
+    return this.episCloud.topupBalance(current.episCloudTenantId, {
+      amountMicroUsd: input.amountMicroUsd,
+      reason: input.reason,
+      paymentMethodId: input.paymentMethodId,
+    });
   }
 
   async listEpisCloudModels(): Promise<EpisCloudModelsResult> {

@@ -80,6 +80,18 @@ export type PaymentMethodsResult = {
   payment_methods: PaymentMethod[]
 }
 
+export type TopupBalanceInput = {
+  amountMicroUsd: number
+  reason: string
+  paymentMethodId?: string
+}
+
+export type TopupBalanceResult = {
+  balance_micro_usd_after: number
+  reason: string
+  credited_amount_micro_usd: number
+}
+
 export type EpisCloudModel = {
   id: string
   ownedBy?: string
@@ -148,6 +160,7 @@ export type LoginErrorCode =
   | 'episcloud-models-failed'
   | 'payment-config-failed'
   | 'payment-methods-failed'
+  | 'topup-failed'
   | 'unknown'
 
 export type LoginError = {

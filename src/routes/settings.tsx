@@ -18,10 +18,12 @@ import {
   Sun,
   User,
   Users,
+  Wallet,
 } from "lucide-react";
 import { UserAvatar, UserMenu } from "@/components/auth/UserMenu";
 import { AddPaymentMethodDialog } from "@/components/profile/AddPaymentMethodDialog";
 import { EpisCloudActivateDialog } from "@/components/profile/EpisCloudActivateDialog";
+import { TopupDialog } from "@/components/profile/TopupDialog";
 import { Button } from "@/components/ui/button";
 import {
   activateEpisCloud,
@@ -591,6 +593,7 @@ function UsageSection() {
 
 function PaymentSection({ user }: { user: AuthUserSummary }) {
   const [addOpen, setAddOpen] = useState(false);
+  const [topupOpen, setTopupOpen] = useState(false);
   const activated = Boolean(user.episCloudTenantId);
   const fetchPaymentMethods = useServerFn(listPaymentMethods);
 
@@ -607,14 +610,25 @@ function PaymentSection({ user }: { user: AuthUserSummary }) {
       id="payment"
       className="scroll-mt-20 rounded-2xl border border-hairline bg-surface"
     >
-      <header className="border-b border-hairline px-6 py-5">
-        <h2 className="text-base font-semibold tracking-tight">
-          Payment methods
-        </h2>
-        <p className="mt-0.5 text-xs text-muted">
-          Primary card is charged automatically on the{" "}
-          <span className="font-mono">28th</span> each month.
-        </p>
+      <header className="flex items-start justify-between gap-4 border-b border-hairline px-6 py-5">
+        <div>
+          <h2 className="text-base font-semibold tracking-tight">
+            Payment methods
+          </h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Primary card is charged automatically on the{" "}
+            <span className="font-mono">28th</span> each month.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="!h-9 shrink-0"
+          disabled={!activated || paymentMethods.length === 0}
+          onClick={() => setTopupOpen(true)}
+        >
+          <Wallet aria-hidden="true" size={14} /> Top up
+        </Button>
       </header>
       <div className="space-y-3 p-6">
         {activated && methodsQuery.isPending ? (
@@ -666,6 +680,11 @@ function PaymentSection({ user }: { user: AuthUserSummary }) {
         <AddPaymentMethodDialog
           open={addOpen}
           onClose={() => setAddOpen(false)}
+        />
+        <TopupDialog
+          open={topupOpen}
+          onClose={() => setTopupOpen(false)}
+          paymentMethods={paymentMethods}
         />
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <SettingsInput label="Tax ID / VAT" value="TAX 0314887621" mono />

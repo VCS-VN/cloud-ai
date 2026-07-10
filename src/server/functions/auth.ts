@@ -49,6 +49,22 @@ export const listPaymentMethods = createServerFn({ method: 'GET' }).handler(asyn
   (await loadAuthService()).listPaymentMethods()
 )
 
+type TopupInput = {
+  amountMicroUsd: number
+  reason: string
+  paymentMethodId?: string
+}
+
+export const topupBalance = createServerFn({ method: 'POST' })
+  .inputValidator((data: TopupInput) => data)
+  .handler(async ({ data }) =>
+    (await loadAuthService()).topupBalance({
+      amountMicroUsd: data.amountMicroUsd,
+      reason: data.reason,
+      paymentMethodId: data.paymentMethodId
+    })
+  )
+
 export const listEpisCloudModels = createServerFn({ method: 'GET' }).handler(async () =>
   (await loadAuthService()).listEpisCloudModels()
 )
