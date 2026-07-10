@@ -1,3 +1,57 @@
+import type { Project } from "@/shared/project-types";
+
+export type ProjectFilter = "all" | "active" | "draft" | "archived";
+export type ProjectSort = "modified" | "created" | "name";
+
+export const SORT_LABELS: Record<ProjectSort, string> = {
+  modified: "Last modified",
+  created: "Date created",
+  name: "Name",
+};
+
+export function matchesFilter(project: Project, filter: ProjectFilter): boolean {
+  switch (filter) {
+    case "all":
+      return true;
+    case "active":
+      return project.status === "ready" || project.status === "generating";
+    case "draft":
+      return project.status === "draft" || project.status === 0;
+    case "archived":
+      return project.status === "failed";
+  }
+}
+
+export function filterProjects(
+  projects: Project[],
+  filter: ProjectFilter,
+): Project[] {
+  return projects.filter((project) => matchesFilter(project, filter));
+}
+
+export function sortProjects(
+  projects: Project[],
+  sort: ProjectSort,
+): Project[] {
+  const sorted = [...projects];
+  switch (sort) {
+    case "modified":
+      return sorted.sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      );
+    case "created":
+      return sorted.sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+    case "name":
+      return sorted.sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+      );
+  }
+}
+
 export function formatDashboardDate() {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",

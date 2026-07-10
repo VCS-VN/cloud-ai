@@ -1,13 +1,18 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   getRouteApi,
   useNavigate,
   useRouter,
 } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronDown, Loader2, Paperclip } from "lucide-react";
+import { Check, ChevronDown, Loader2, Paperclip } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { ModelPicker } from "@/components/projects/ModelPicker";
 import {
   createProjectFromPrompt,
@@ -17,9 +22,14 @@ import { DashboardTopNav } from "./components/DashboardTopNav";
 import { DashboardSidebar } from "./components/DashboardSidebar";
 import { ProjectCard } from "./components/ProjectCard";
 import {
+  filterProjects,
   formatDashboardDate,
   getFirstName,
   getInitials,
+  sortProjects,
+  SORT_LABELS,
+  type ProjectFilter,
+  type ProjectSort,
 } from "./utils";
 
 const route = getRouteApi("/dashboard/");
@@ -32,6 +42,15 @@ const SUGGESTIONS = [
 ] as const;
 
 const SELECTED_MODEL_KEY = "project-detail-selected-model";
+
+const FILTERS: { id: ProjectFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "active", label: "Active" },
+  { id: "draft", label: "Draft" },
+  { id: "archived", label: "Archived" },
+];
+
+const SORT_OPTIONS: ProjectSort[] = ["modified", "created", "name"];
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -46,6 +65,26 @@ export function DashboardPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [filter, setFilter] = useState<ProjectFilter>("all");
+  const [sort, setSort] = useState<ProjectSort>("modified");
+  const [sortOpen, setSortOpen] = useState(false);
+
+  const filterCounts = useMemo(
+    () =>
+      FILTERS.reduce<Record<ProjectFilter, number>>(
+        (counts, { id }) => {
+          counts[id] = filterProjects(projects, id).length;
+          return counts;
+        },
+        { all: 0, active: 0, draft: 0, archived: 0 },
+      ),
+    [projects],
+  );
+
+  const visibleProjects = useMemo(
+    () => sortProjects(filterProjects(projects, filter), sort),
+    [projects, filter, sort],
+  );
 
   useEffect(() => {
     const stored = window.localStorage.getItem("lumen.dashboard.sidebar");
@@ -242,58 +281,98 @@ export function DashboardPage() {
 
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <nav className="inline-flex items-center gap-1 rounded-xl bg-ink/[0.04] p-1 text-ui-sm">
-              <button
-                className="h-8 rounded-lg bg-surface px-3 font-medium text-ink shadow-sm"
-                type="button"
-              >
-                All{" "}
-                <span className="ml-1 font-mono text-subtle">
-                  {projects.length}
-                </span>
-              </button>
-              <button
-                className="h-8 rounded-lg px-3 text-muted hover:text-ink"
-                type="button"
-              >
-                Active
-              </button>
-              <button
-                className="h-8 rounded-lg px-3 text-muted hover:text-ink"
-                type="button"
-              >
-                Draft
-              </button>
-              <button
-                className="h-8 rounded-lg px-3 text-muted hover:text-ink"
-                type="button"
-              >
-                Archived
-              </button>
+              {FILTERS.map(({ id, label }) => {
+                const active = filter === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setFilter(id)}
+                    className={
+                      active
+                        ? "h-8 rounded-lg bg-surface px-3 font-medium text-ink shadow-sm"
+                        : "h-8 rounded-lg px-3 text-muted hover:text-ink"
+                    }
+                  >
+                    {label}
+                    <span
+                      className={`ml-1 font-mono ${active ? "text-subtle" : "text-subtle/70"}`}
+                    >
+                      {filterCounts[id]}
+                    </span>
+                  </button>
+                );
+              })}
             </nav>
-            <button
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-hairline bg-surface px-3 text-ui-sm text-ink hover:bg-ink/[0.02]"
-              type="button"
-            >
-              Last modified
-              <ChevronDown
-                aria-hidden="true"
-                className="text-muted"
-                size={14}
-              />
-            </button>
+            <Popover open={sortOpen} onOpenChange={setSortOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded={sortOpen}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-hairline bg-surface px-3 text-ui-sm text-ink hover:bg-ink/[0.02]"
+                >
+                  {SORT_LABELS[sort]}
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="text-muted"
+                    size={14}
+                  />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" sideOffset={6} className="w-48 p-1">
+                <div role="listbox" aria-label="Sort projects">
+                  {SORT_OPTIONS.map((option) => {
+                    const active = sort === option;
+                    return (
+                      <Button
+                        key={option}
+                        variant="unstyled"
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        onClick={() => {
+                          setSort(option);
+                          setSortOpen(false);
+                        }}
+                        className={`composer-effort-option ${active ? "composer-effort-option-active" : ""}`}
+                      >
+                        <span className="flex-1 truncate text-ui-sm font-medium text-ink">
+                          {SORT_LABELS[option]}
+                        </span>
+                        {active ? (
+                          <Check
+                            aria-hidden="true"
+                            size={12}
+                            className="shrink-0 text-success-fg"
+                          />
+                        ) : null}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {projects.map((project, index) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                index={index}
-                initials={getInitials(user.displayName || user.email)}
-                onDelete={handleDeleteProject}
-              />
-            ))}
-          </div>
+          {visibleProjects.length === 0 ? (
+            <p className="py-12 text-center text-ui-sm text-muted">
+              No projects match this filter.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {visibleProjects.map((project, index) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  index={index}
+                  initials={getInitials(user.displayName || user.email)}
+                  onDelete={handleDeleteProject}
+                />
+              ))}
+            </div>
+          )}
         </section>
       </main>
 
