@@ -35,10 +35,10 @@ import {
 const route = getRouteApi("/dashboard/");
 
 const SUGGESTIONS = [
-  "B2B SaaS landing page",
-  "Handmade online store",
-  "Photography portfolio",
-  "Event page",
+  "Fashion clothing store",
+  "Handmade jewelry shop",
+  "Coffee bean online store",
+  "Sneaker retail store",
 ] as const;
 
 const SELECTED_MODEL_KEY = "project-detail-selected-model";
@@ -176,6 +176,15 @@ export function DashboardPage() {
                 disabled={creating}
                 placeholder="Describe the website you want to build — SaaS analytics landing page, handmade store, photographer portfolio..."
                 onChange={(event) => setPrompt(event.target.value)}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" &&
+                    (event.metaKey || event.ctrlKey)
+                  ) {
+                    event.preventDefault();
+                    void handleCreateProject();
+                  }
+                }}
               />
             </div>
             <div className="flex items-center justify-between gap-2 px-2.5 pb-1.5 pt-1">
