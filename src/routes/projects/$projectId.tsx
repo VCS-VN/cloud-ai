@@ -1570,8 +1570,8 @@ function PreviewToolbar({
       </div>
 
       {/* Center: URL pill */}
-      <div className="preview-url-pill">
-        <Globe aria-hidden="true" size={14} className="text-muted shrink-0" />
+      <div className="preview-url-pill" data-error={previewPathError ? "true" : undefined}>
+        <Globe aria-hidden="true" size={14} className="preview-url-icon" />
         <label htmlFor={pathInputId} className="flex-1 min-w-0">
           <Input
             id={pathInputId}
@@ -1593,10 +1593,10 @@ function PreviewToolbar({
           </span>
         ) : (
           <>
-            <span aria-hidden="true" className="text-subtle">·</span>
-            <span className="text-eyebrow font-mono text-muted shrink-0">{versionLabel}</span>
-            <span aria-hidden="true" className="text-subtle">·</span>
-            <span className="text-eyebrow text-muted shrink-0">{lastBuildLabel}</span>
+            <span className="preview-url-meta font-mono">{versionLabel}</span>
+            <span aria-hidden="true" className="w-px h-3 bg-hairline shrink-0" />
+            <span className="preview-url-status-dot" data-live={runtimeState.status === "running" ? "true" : undefined} />
+            <span className="preview-url-meta">{lastBuildLabel}</span>
           </>
         )}
       </div>

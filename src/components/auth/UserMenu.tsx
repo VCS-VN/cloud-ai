@@ -144,18 +144,18 @@ export function UserMenu({
             </div>
           </div>
 
-          {/* <nav className="py-1.5">
-            <MenuItem
+          <nav className="py-1.5">
+            {/* <MenuItem
               icon={UserRound}
               label="Profile"
               onClick={handleProfile}
-            />
+            /> */}
             <MenuItem
               icon={Settings}
               label="Settings"
               onClick={() => closeAndNavigate("/settings")}
             />
-          </nav> */}
+          </nav>
 
           <div className="px-3 py-2.5">
             <div className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-subtle">

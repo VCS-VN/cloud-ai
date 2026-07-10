@@ -1095,10 +1095,13 @@ function ToggleRow({
         type="button"
         onClick={onToggle}
         aria-pressed={enabled}
-        className={`focus-ring relative h-5 w-9 shrink-0 rounded-full transition-colors duration-base active:translate-y-px ${enabled ? "bg-ink" : "bg-hairline-soft"}`}
+        data-on={enabled ? "true" : "false"}
+        className="switch-track"
       >
         <span
-          className={`absolute top-0.5 h-4 w-4 rounded-full bg-paper shadow-sm ring-1 ring-ink/10 transition-transform duration-base ${enabled ? "translate-x-[18px]" : "translate-x-0.5"}`}
+          aria-hidden="true"
+          data-on={enabled ? "true" : "false"}
+          className="switch-thumb"
         />
       </button>
     </li>

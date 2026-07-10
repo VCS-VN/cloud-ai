@@ -305,7 +305,36 @@
   }
 
   .preview-url-pill {
-    @apply flex-1 max-w-xl mx-auto hidden md:flex items-center gap-2 h-8 px-3 rounded-lg bg-surface border border-hairline shadow-sm;
+    @apply flex-1 max-w-xl mx-auto hidden md:flex items-center gap-2 h-8 px-3 rounded-lg bg-surface border border-hairline shadow-sm transition-[border-color,box-shadow] duration-base ease-standard;
+    @apply hover:border-hairline-soft;
+    @apply focus-within:border-ink/40 focus-within:shadow-focus;
+  }
+
+  .preview-url-pill[data-error='true'],
+  .preview-url-pill[data-error='true']:focus-within {
+    @apply border-danger-fg/40;
+    background-color: rgb(var(--color-danger-bg) / 0.4);
+  }
+
+  .preview-url-icon {
+    @apply text-subtle shrink-0 transition-colors duration-base;
+  }
+
+  .preview-url-pill:focus-within .preview-url-icon {
+    @apply text-ink;
+  }
+
+  .preview-url-meta {
+    @apply text-eyebrow text-muted shrink-0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .preview-url-status-dot {
+    @apply w-1.5 h-1.5 rounded-pill shrink-0 bg-subtle transition-colors duration-base;
+  }
+
+  .preview-url-status-dot[data-live='true'] {
+    @apply bg-success-dot;
   }
 
   /* ─── Live build status pill (bottom-right of preview) ────── */
@@ -336,6 +365,41 @@
   .plan-checklist-toggle {
     @apply flex h-10 w-full items-center justify-between gap-3 px-3 text-left transition-colors duration-base hover:bg-ink/[0.025];
     @apply focus-ring;
+  }
+
+  /* ─── Toggle switch ──────────────────────────────────────────
+   * Track ON uses bg-ink (brand accent, flips with theme). The thumb
+   * must stay a constant light circle so it reads against the track in
+   * BOTH themes — bg-paper flips to dark in dark mode, which inverted
+   * the ON state. Override the thumb to a fixed light fill in dark. */
+  .switch-track {
+    @apply relative h-5 w-9 shrink-0 rounded-full transition-colors duration-base active:translate-y-px focus-ring;
+  }
+  .switch-track[data-on="true"] {
+    @apply bg-ink;
+  }
+  .switch-track[data-on="false"] {
+    @apply bg-hairline-soft;
+  }
+  /* Anchor the thumb to the track's left inset (left-0.5 = 2px). Without an
+     explicit `left`, an absolute element falls back to its static position
+     (~18px here), and the translate then stacks on top of it — pushing the
+     thumb off the right edge. Track is w-9 (36px), thumb w-4 (16px), so the
+     ON travel is 36 − 16 − 2 − 2 = 16px, leaving a symmetric 2px gap. */
+  .switch-thumb {
+    @apply absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-paper shadow-sm ring-1 ring-ink/10 transition-transform duration-base;
+  }
+  .switch-thumb[data-on="true"] {
+    @apply translate-x-4;
+  }
+  .switch-thumb[data-on="false"] {
+    @apply translate-x-0;
+  }
+  :root[data-theme='dark'] .switch-thumb {
+    /* bg-paper flips to dark in dark mode, which inverted the ON
+       state (cream track + dark thumb). Pin the thumb to a fixed
+       light fill so it stays readable on the cream bg-ink track. */
+    background-color: #fdfaf6;
   }
 
   .plan-checklist-iconbox {
