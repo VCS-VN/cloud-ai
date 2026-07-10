@@ -2993,3 +2993,535 @@ export async function runSmallUpdateBuilderRun(
     optionalRouteWarnings: [],
   });
 }
+
+// Load the redesign-rewrite template and fill its placeholders. The template
+// has the model author a fresh DESIGN.md then restyle the storefront UI to
+// match; tokenHints carries any concrete tokens detected from the prompt.
+async function loadRedesignRewritePrompt(input: {
+  originalPrompt: string;
+  tokenHints: string;
+}): Promise<string> {
+  const loaded = await loadInstruction({
+    name: "redesign-rewrite",
+    relativePath: "redesign/redesign-rewrite.md",
+    source: "template_required",
+  });
+  return loaded.content
+    .replace(
+      "{{originalPrompt}}",
+      input.originalPrompt ||
+        "(no extra detail — choose a strong, distinct new visual direction for the store)",
+    )
+    .replace("{{tokenHints}}", input.tokenHints);
+}
+
+// Smart design-direction clarification for a /redesign run. Reuses the init
+// detect+variant flow: if the user's prompt already names a concrete direction
+// (palette/typography/vibe), extract it and skip the pause; otherwise propose
+// four directions and pause on awaiting_clarification for the user's pick (or
+// free-text). Returns the build-prompt addendum describing the chosen
+// direction, or "" when the flow degrades (never blocks the redesign).
+// `{ aborted: true }` when the user cancels mid-clarification.
+async function resolveRedesignDirection(
+  ctx: BuilderRunContext,
+  emit: EmitFn,
+): Promise<{ aborted: true } | { aborted: false; addendum: string }> {
+  const { runId } = ctx;
+  try {
+    const {
+      generateRetailVariants,
+      buildVariantBuildPrompt,
+      detectStyleDirection,
+      buildDetectedStyleBuildPrompt,
+    } = await import("./design-variants.server");
+    const { runResponsesTurn } = await import("./responses-http-client.server");
+
+    const designBrief = [
+      "Project: EXISTING retail e-commerce storefront being redesigned.",
+      "Audience: shoppers; keep it a storefront shopping experience.",
+      "Taste dials (1=low, 10=high) — pick values that fit the request:",
+      "- designVariance: 1=perfect symmetry, 10=artsy chaos",
+      "- motionIntensity: 1=static, 10=cinematic / physics",
+      "- visualDensity: 1=airy gallery, 10=packed cockpit",
+      "Avoid generic defaults (AI-purple/blue gradient, beige+brass luxury,",
+      "Inter-as-default). Read the request for real cultural / category /",
+      "price-tier cues and tailor the direction to THIS store.",
+    ].join("\n");
+
+    const detectPrompt = [
+      "You are a senior retail UX designer. Decide whether the user's redesign",
+      "request ALREADY specifies a concrete design direction — a named",
+      "aesthetic, a palette, a typography choice, or a strong, specific vibe",
+      '(e.g. "neo-luxe gold and black", "warm earth-tone artisan", "playful',
+      'pastel for kids"). A bare "make it look better / more modern" with no',
+      "visual cue is NOT a direction.",
+      "",
+      "<user_request>",
+      ctx.userPrompt.trim() || "(empty — the user only typed /redesign)",
+      "</user_request>",
+      "",
+      "<project_brief>",
+      designBrief,
+      "</project_brief>",
+      "",
+      "Output JSON only — no prose, no code fence. Shape:",
+      '{ "hasStyleDirection": boolean, "style"?: { "label": string, "summary": string, "palette"?: string[], "font"?: string, "motion"?: number } }',
+      "- hasStyleDirection: true ONLY if the request names a clear visual direction.",
+      "- style.label: short name for the direction (≤80 chars).",
+      "- style.summary: one line on aesthetic, audience, mood (≤400 chars).",
+      "- style.palette: hex colors the user named, if any (omit if none).",
+      "Omit `style` entirely when hasStyleDirection is false.",
+    ].join("\n");
+
+    const detectResult = await detectStyleDirection({
+      runTurn: async () =>
+        runResponsesTurn({
+          env: ctx.env,
+          prompt: detectPrompt,
+          reasoningEffort: "high",
+          signal: ctx.signal,
+          onReasoning: (text) => emit({ type: "thinking", runId, text, at: Date.now() }),
+        }),
+    });
+
+    if (detectResult.ok && detectResult.hasStyleDirection) {
+      return {
+        aborted: false,
+        addendum: "\n\n" + buildDetectedStyleBuildPrompt(detectResult.style),
+      };
+    }
+
+    // Vague prompt — propose four directions and pause for the user's pick.
+    const variantReasoningPrompt = [
+      "You are a senior retail UX designer. The user wants to REDESIGN their",
+      "existing storefront. Read their request, REASON about the store",
+      "(audience, category, brand personality, price tier, cultural context),",
+      "then propose FOUR distinct new design directions. Prefer directions that",
+      'name a real aesthetic (e.g. "Phố cổ artisan", "Studio café", "Neo-luxe',
+      'gold") over generic buckets.',
+      "",
+      "<user_request>",
+      ctx.userPrompt.trim() || "(empty — the user only typed /redesign)",
+      "</user_request>",
+      "",
+      "<project_brief>",
+      designBrief,
+      "</project_brief>",
+      "",
+      "Output JSON only — no prose, no code fence. Shape:",
+      '{ "question": string, "variants": [v1, v2, v3, v4] }',
+      "- question: a SHORT Vietnamese question (≤120 chars) framing the choice,",
+      "  referencing the store concept (no paths/code/framework names).",
+      "- variants[*]: { id (kebab-case), label (≤40 chars), description",
+      "  (Vietnamese, 80–160 chars, hard cap 240, no paths/code/framework),",
+      '  preview { font (string), palette (3–5 hex like "#aabbcc"),',
+      "  motion (0..1), density (optional 0..1) } }.",
+      'All four MUST be meaningfully distinct. Use "label"/"id" — never',
+      '"name"/"vibe". Do NOT wrap output in ```json fences.',
+    ].join("\n");
+
+    const result = await generateRetailVariants({
+      runTurn: async () =>
+        runResponsesTurn({
+          env: ctx.env,
+          prompt: variantReasoningPrompt,
+          reasoningEffort: "high",
+          signal: ctx.signal,
+          onReasoning: (text) => emit({ type: "thinking", runId, text, at: Date.now() }),
+        }),
+    });
+    if (!result.ok) {
+      console.warn(
+        JSON.stringify({
+          event: "redesign_variants_generation_failed",
+          runId,
+          projectId: ctx.projectId,
+          reason: result.reason,
+        }),
+      );
+      return { aborted: false, addendum: "" };
+    }
+
+    const handle = getBuilderRunHandle(runId);
+    if (!handle) return { aborted: false, addendum: "" };
+    const variantOptions = result.variants.map((v) => ({ id: v.id, label: v.label }));
+    const question = result.question ?? "Chọn hướng thiết kế mới cho cửa hàng";
+    const choice = await new Promise<{ optionId?: string; freeText?: string }>(
+      (resolveChoice) => {
+        handle.clarificationPrompt = { question, options: variantOptions };
+        handle.resumeFn = async (answer) => {
+          handle.resumeFn = null;
+          handle.clarificationPrompt = null;
+          resolveChoice(answer);
+        };
+        publishBuilderRunEvent(handle, {
+          type: "awaiting_clarification",
+          runId,
+          milestone: "awaiting_clarification",
+          question,
+          options: variantOptions,
+          metadata: {
+            questionType: "design_variant",
+            options: result.variants,
+            customAnswerAllowed: true,
+          },
+          at: Date.now(),
+        });
+      },
+    );
+    if (ctx.signal?.aborted) return { aborted: true };
+    const selectedVariant = result.variants.find((v) => v.id === choice.optionId);
+    return {
+      aborted: false,
+      addendum: "\n\n" + buildVariantBuildPrompt({ selectedVariant, freeText: choice.freeText }),
+    };
+  } catch (error) {
+    if (ctx.signal?.aborted) return { aborted: true };
+    console.warn(
+      JSON.stringify({
+        event: "redesign_direction_resolution_threw",
+        runId,
+        projectId: ctx.projectId,
+        rawMessage: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return { aborted: false, addendum: "" };
+  }
+}
+
+// Author a new visual identity for an existing storefront via the `/redesign`
+// command. The model rewrites DESIGN.md, the runtime refreshes the app.css
+// token region from it, and the model restyles the storefront UI to match —
+// without renaming existing CSS class names or touching data / cart / routing.
+export async function runRedesignBuilderRun(
+  ctx: BuilderRunContext,
+  emit: EmitFn,
+): Promise<BuilderRunOutcome> {
+  const { runId } = ctx;
+  emitMilestoneInternal(emit, runId, "loading_context");
+
+  const skillSelection = await runSkillSelection(
+    ctx,
+    ["ui_mutation"],
+    emit,
+    async (rerunPrompt) => {
+      await runRedesignBuilderRun({ ...ctx, userPrompt: rerunPrompt }, emit);
+    },
+  );
+  if (skillSelection.kind === "required_unavailable") {
+    return requiredUnavailableOutcome(ctx, emit, skillSelection.missing);
+  }
+  if (skillSelection.kind === "paused") {
+    return pausedOutcome(ctx, skillSelection);
+  }
+
+  const draftWorkspacePath = await ensureProjectWorkspace({
+    projectId: ctx.projectId,
+  });
+  await ensureProjectGitignore({ draftWorkspacePath });
+  const fileManifest = await listFiles(draftWorkspacePath);
+  const foundationInstructions = await loadFoundationInstructions({
+    entries: UPDATE_FOUNDATION_INSTRUCTIONS,
+    embedProjectRuleDocs: false,
+  });
+
+  // Smart clarification: detect a concrete direction in the prompt (skip the
+  // pause) or propose four and pause for a pick. Runs before the build turn so
+  // the chosen direction feeds the redesign prompt.
+  emitMilestoneInternal(emit, runId, "planning");
+  const direction = await resolveRedesignDirection(ctx, emit);
+  if (direction.aborted) {
+    emit({ type: "cancelled", runId, milestone: "cancelled", at: Date.now() });
+    return finalize({
+      runId,
+      status: "cancelled",
+      failureCode: "cancelled",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: [],
+      optionalRouteWarnings: [],
+    });
+  }
+
+  // The redesign template drives DESIGN.md authoring + UI restyle. Append a hard
+  // constraint (user requirement): change token/palette/typography values but do
+  // NOT rename existing CSS class names — keeps JSX className references valid.
+  const redesignPrompt = await loadRedesignRewritePrompt({
+    originalPrompt: ctx.userPrompt.trim(),
+    tokenHints: direction.addendum,
+  });
+  const classNamePreservation =
+    "\n\nHARD CONSTRAINT: change design TOKEN VALUES (palette hex, typography, " +
+    "spacing, radii) in DESIGN.md and src/styles/app.css only. Do NOT rename, " +
+    "remove, or invent CSS class names, and do NOT change any JSX `className` " +
+    "strings in components/routes. The visual change must come from the token " +
+    "values the existing classes already read — not from renamed classes.";
+
+  const bundle = buildContextBundle({
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    draftWorkspacePath,
+    userPrompt: `${redesignPrompt}${classNamePreservation}`,
+    locale: ctx.locale,
+    projectSummary: ctx.projectSummary,
+    fileManifest,
+    protectedPaths: {
+      blocked: BLOCKED_PROJECT_PATHS,
+      allowedAudit: ALLOWED_AUDIT_PROJECT_PATH_PATTERNS.map((p) => p.source),
+    },
+    validationRules: { typecheck: true, build: true, previewHealth: true },
+    selectedInstructions: foundationInstructions,
+    selectedSkills: skillSelection.selected,
+    skillRegistry: skillSelection.registry,
+  });
+
+  const symlinkScan = await scanDraftForSymlinks(draftWorkspacePath);
+  if (!symlinkScan.ok) {
+    emitBoundaryViolation(emit, ctx, "symlink", "request blocked by safety check");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "boundary_violation",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  let thread: BoundedCodexThread;
+  try {
+    thread = createBoundedCodexThread({
+      env: ctx.env,
+      draftWorkspacePath,
+      skillToolCallbacks: buildSkillToolCallbacks(runId),
+      modelReasoningEffort: ctx.reasoningEffort ?? "high",
+    });
+  } catch {
+    emitFailure(emit, runId, "codex_runtime_failed", "failed to start codex thread");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "codex_runtime_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "creating_draft");
+  const beforeSnapshot = await takeSnapshot(draftWorkspacePath);
+
+  emitMilestoneInternal(emit, runId, "building_pages");
+  let finalResponse = "";
+  try {
+    const summary = await runTurnAndBridge(thread, runId, emit, {
+      prompt: bundle.prompt,
+      signal: ctx.signal,
+      emitAnswer: false,
+      locale: toProgressLocale(ctx.locale),
+    });
+    if (summary.finalResponse) finalResponse = summary.finalResponse;
+  } catch (error) {
+    if (ctx.signal?.aborted) {
+      emit({ type: "cancelled", runId, milestone: "cancelled", at: Date.now() });
+      return finalize({
+        runId,
+        status: "cancelled",
+        failureCode: "cancelled",
+        changedFiles: [],
+        draftWorkspacePath,
+        selectedInstructionMeta: bundle.selectedInstructionMeta,
+        optionalRouteWarnings: [],
+      });
+    }
+    emitFailure(emit, runId, "codex_runtime_failed", "redesign turn ended unexpectedly");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "codex_runtime_failed",
+      changedFiles: [],
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  // Refresh the app.css DESIGN_TOKENS region from the model's rewritten
+  // DESIGN.md (the template tells the model this happens automatically), then
+  // keep the tailwind directives pinned at the top.
+  const paletteInjected = await injectDesignPaletteIntoAppCss({ draftWorkspacePath });
+  await enforceTailwindDirectivesAtTop({ draftWorkspacePath });
+  console.warn(
+    JSON.stringify({
+      event: "redesign_design_palette_injected",
+      runId,
+      projectId: ctx.projectId,
+      injected: paletteInjected,
+    }),
+  );
+
+  const afterSnapshot = await takeSnapshot(draftWorkspacePath);
+  const diff = diffSnapshots(beforeSnapshot, afterSnapshot);
+  const diffGate = runDiffGate({ draftWorkspacePath, diff });
+  console.log(
+    JSON.stringify({
+      event: "redesign_diff_gate_result",
+      runId,
+      projectId: ctx.projectId,
+      ok: diffGate.ok,
+      changedFilesCount: diffGate.changedFiles.length,
+      changedFilesPreview: diffGate.changedFiles.slice(0, 30),
+      violationsPreview: diffGate.violations.slice(0, 30),
+    }),
+  );
+  if (!diffGate.ok) {
+    const code: BuilderRunFailureCode = diffGate.violations.some(
+      (v) => v.reason === "outside_draft_workspace",
+    )
+      ? "boundary_violation"
+      : "blocked_request";
+    if (code === "boundary_violation") {
+      emitBoundaryViolation(emit, ctx, "diff_gate", "request blocked by safety check");
+    } else {
+      emitFailure(emit, runId, code, "request touched a protected file");
+    }
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "checking_preview");
+  const styleRepair = await runRepairLoop({
+    thread,
+    validate: () => runRootStyleContract(draftWorkspacePath),
+    signal: ctx.signal,
+    onCycleStart: () => emitMilestoneInternal(emit, runId, "repairing"),
+    onProgress: (ev) => emitCodexProgressEvent(ev, runId, emit, toProgressLocale(ctx.locale)),
+    createRepairThread: () => createCompactRepairThread(ctx, draftWorkspacePath),
+    stage: "root_style_contract",
+    runId,
+    projectId: ctx.projectId,
+    changedFilesCount: diffGate.changedFiles.length,
+    context: buildCompactRepairContext({
+      ctx,
+      draftWorkspacePath,
+      changedFiles: diffGate.changedFiles,
+      stage: "root_style_contract",
+    }),
+  });
+  if (!styleRepair.finalOutcome.ok) {
+    const code: BuilderRunFailureCode =
+      styleRepair.cyclesUsed >= 2 ? "repair_exhausted" : "validation_failed";
+    emitFailure(emit, runId, code, `root/style contract failed: ${truncate(styleRepair.finalOutcome.summary, 1500)}`);
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+  const typecheckRepair = await runRepairLoop({
+    thread,
+    validate: () => runTypecheck(draftWorkspacePath, { signal: ctx.signal }),
+    signal: ctx.signal,
+    onCycleStart: () => emitMilestoneInternal(emit, runId, "repairing"),
+    onProgress: (ev) => emitCodexProgressEvent(ev, runId, emit, toProgressLocale(ctx.locale)),
+    createRepairThread: () => createCompactRepairThread(ctx, draftWorkspacePath),
+    stage: "typecheck",
+    runId,
+    projectId: ctx.projectId,
+    changedFilesCount: diffGate.changedFiles.length,
+    context: buildCompactRepairContext({
+      ctx,
+      draftWorkspacePath,
+      changedFiles: diffGate.changedFiles,
+      stage: "typecheck",
+    }),
+  });
+  if (!typecheckRepair.finalOutcome.ok) {
+    const code: BuilderRunFailureCode =
+      typecheckRepair.cyclesUsed >= 2 ? "repair_exhausted" : "validation_failed";
+    emitFailure(emit, runId, code, `typecheck failed: ${truncate(typecheckRepair.finalOutcome.summary, 1500)}`);
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+  const buildRepair = await runRepairLoop({
+    thread,
+    validate: () => runBuild(draftWorkspacePath, { signal: ctx.signal }),
+    signal: ctx.signal,
+    onCycleStart: () => emitMilestoneInternal(emit, runId, "repairing"),
+    onProgress: (ev) => emitCodexProgressEvent(ev, runId, emit, toProgressLocale(ctx.locale)),
+    createRepairThread: () => createCompactRepairThread(ctx, draftWorkspacePath),
+    stage: "build",
+    runId,
+    projectId: ctx.projectId,
+    changedFilesCount: diffGate.changedFiles.length,
+    context: buildCompactRepairContext({
+      ctx,
+      draftWorkspacePath,
+      changedFiles: diffGate.changedFiles,
+      stage: "build",
+    }),
+  });
+  if (!buildRepair.finalOutcome.ok) {
+    const code: BuilderRunFailureCode =
+      buildRepair.cyclesUsed >= 2 ? "repair_exhausted" : "validation_failed";
+    emitFailure(emit, runId, code, `build failed: ${truncate(buildRepair.finalOutcome.summary, 1500)}`);
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: code,
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitMilestoneInternal(emit, runId, "publishing");
+  const promotion = runPromotionGate({
+    expected: { projectId: ctx.projectId, userId: ctx.userId, draftWorkspacePath },
+    current: { projectId: ctx.projectId, userId: ctx.userId, draftWorkspacePath },
+  });
+  if (!promotion.ok) {
+    emitBoundaryViolation(emit, ctx, "promotion_gate", "request blocked by safety check");
+    return finalize({
+      runId,
+      status: "failed",
+      failureCode: "boundary_violation",
+      changedFiles: diffGate.changedFiles,
+      draftWorkspacePath,
+      selectedInstructionMeta: bundle.selectedInstructionMeta,
+      optionalRouteWarnings: [],
+    });
+  }
+
+  emitFinalAnswer(emit, runId, finalResponse);
+  emit({ type: "done", runId, milestone: "done", at: Date.now() });
+  return finalize({
+    runId,
+    status: "done",
+    changedFiles: diffGate.changedFiles,
+    draftWorkspacePath,
+    selectedInstructionMeta: bundle.selectedInstructionMeta,
+    optionalRouteWarnings: [],
+  });
+}

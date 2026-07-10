@@ -14,6 +14,7 @@ import {
   runGeneratePageBuilderRun,
   runInitBuilderRun,
   runNewRouteBuilderRun,
+  runRedesignBuilderRun,
   runSmallUpdateBuilderRun,
   runWithPlanModeIfRequested,
   type BuilderRunContext,
@@ -23,6 +24,7 @@ import {
   parseGeneratePageCommand,
   type GeneratePageTarget,
 } from "@/features/agents/codex/runtime/generate-page";
+import { parseRedesignCommand } from "@/features/agents/codex/runtime/redesign";
 import { getCodexEnv, isCodexFeatureAvailable } from "@/features/agents/codex/runtime/feature-flag.server";
 import type { BuilderRunEvent } from "@/features/agents/ui/builder-events";
 import {
@@ -59,7 +61,7 @@ export type BuilderRunStartInput = {
   runId?: string;
   /** Optional callback fired after R5 resolves the kind, before the driver starts. */
   onKindResolved?: (
-    kind: "init" | "update" | "new_route" | "generate_page",
+    kind: "init" | "update" | "new_route" | "generate_page" | "redesign",
   ) => Promise<void> | void;
   /** Persistence wiring for the bridge (translator → message repo + run store + agent run repo). */
   persistence?: BuilderRunPersistence;
@@ -220,6 +222,11 @@ export async function startBuilderRunForChat(
   // is still empty/draft, fall through to normal resolution (init must run
   // first before any single page can be generated).
   const generatePage = parseGeneratePageCommand(input.prompt);
+  // A /redesign command routes straight to the redesign driver (author a new
+  // DESIGN.md + refresh tokens + restyle the storefront). Like /generate-page,
+  // the intent is explicit so the classifier is skipped — but an empty/draft
+  // workspace still falls through to init (there is nothing to redesign yet).
+  const redesign = parseRedesignCommand(input.prompt);
   const isEmptyOrDraft =
     workspaceFiles.length === 0 || input.project.status === "draft";
   let generatePageTarget: GeneratePageTarget | undefined;
@@ -229,6 +236,9 @@ export async function startBuilderRunForChat(
     kind = "generate_page";
     generatePageTarget = generatePage.target;
     runPrompt = generatePage.restPrompt;
+  } else if (redesign && !isEmptyOrDraft) {
+    kind = "redesign";
+    runPrompt = redesign.restPrompt;
   } else {
     kind = resolveBuilderRunKind({
       project: input.project,
@@ -301,9 +311,11 @@ export async function startBuilderRunForChat(
       ? runInitBuilderRun
       : kind === "generate_page"
         ? runGeneratePageBuilderRun
-        : kind === "new_route"
-          ? runNewRouteBuilderRun
-          : runSmallUpdateBuilderRun;
+        : kind === "redesign"
+          ? runRedesignBuilderRun
+          : kind === "new_route"
+            ? runNewRouteBuilderRun
+            : runSmallUpdateBuilderRun;
 
   const events = subscribeAsAsyncIterable(handle);
 
@@ -393,9 +405,11 @@ export async function startBuilderRunForChat(
           ? "runInitBuilderRun"
           : kind === "generate_page"
             ? "runGeneratePageBuilderRun"
-            : kind === "new_route"
-              ? "runNewRouteBuilderRun"
-              : "runSmallUpdateBuilderRun",
+            : kind === "redesign"
+              ? "runRedesignBuilderRun"
+              : kind === "new_route"
+                ? "runNewRouteBuilderRun"
+                : "runSmallUpdateBuilderRun",
     }),
   );
 

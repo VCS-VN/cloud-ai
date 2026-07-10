@@ -81,6 +81,7 @@ export type ResolvedBuilderRunKind =
   | "update"
   | "new_route"
   | "generate_page"
+  | "redesign"
   | "unsupported";
 
 export type ResolveBuilderRunKindInput = {

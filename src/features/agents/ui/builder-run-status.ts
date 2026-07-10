@@ -3,6 +3,7 @@ export type BuilderRunKind =
   | "update"
   | "new_route"
   | "generate_page"
+  | "redesign"
   | "repair";
 
 export type BuilderRunStatus =

@@ -9,7 +9,7 @@ export type ProjectProcessingStatus = 'idle' | 'processing'
 export type MessageProcessingStatus = 'pending' | 'streaming' | 'completed' | 'failed' | 'stopped'
 export type AgentMessageKind = 'plan' | 'answer' | 'clarification' | 'error' | 'review_required' | 'agent_question' | 'thinking' | 'reasoning' | 'agent_message'
 export type AgentRunStatus = 'streaming' | 'awaiting_input' | 'completed' | 'failed' | 'stopped' | 'interrupted'
-export type BuilderRunKind = 'init' | 'update' | 'new_route' | 'generate_page'
+export type BuilderRunKind = 'init' | 'update' | 'new_route' | 'generate_page' | 'redesign'
 export type SkeletonPhase =
   | 'starting'
   | 'understanding'

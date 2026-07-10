@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { KNOWN_PAGES, GENERATE_PAGE_COMMAND } from "@/features/agents/codex/runtime/generate-page";
+import { REDESIGN_COMMAND } from "@/features/agents/codex/runtime/redesign";
 import type {
   ComposerReasoningEffort,
   TokenContext,
@@ -565,6 +566,11 @@ const SLASH_COMMANDS: SlashCommand[] = [
     name: "Modify page",
     command: GENERATE_PAGE_COMMAND,
     description: "Regenerate or refine a storefront page",
+  },
+  {
+    name: "Redesign",
+    command: REDESIGN_COMMAND,
+    description: "Restyle the whole storefront — palette, type, tokens",
   },
 ];
 
