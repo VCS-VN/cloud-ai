@@ -163,6 +163,13 @@ export class AuthService {
     return this.episCloud.listPaymentMethods(current.episCloudTenantId);
   }
 
+  async getBalanceSummary() {
+    const current = await this.requireActionUser();
+    if (!current.episCloudTenantId)
+      throw new AuthError("episcloud-not-activated");
+    return this.episCloud.getBalanceSummary(current.episCloudTenantId);
+  }
+
   async topupBalance(input: TopupBalanceInput) {
     const current = await this.requireActionUser();
     if (!current.episCloudTenantId)

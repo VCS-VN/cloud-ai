@@ -92,6 +92,16 @@ export type TopupBalanceResult = {
   credited_amount_micro_usd: number
 }
 
+export type BalanceSummary = {
+  tenant_id: string
+  remaining_micro_usd: number
+  credited_total_micro_usd: number
+  used_total_micro_usd: number
+  topup_count: number
+  currency: string
+  updated_at: number
+}
+
 export type EpisCloudModel = {
   id: string
   ownedBy?: string
@@ -161,6 +171,7 @@ export type LoginErrorCode =
   | 'payment-config-failed'
   | 'payment-methods-failed'
   | 'topup-failed'
+  | 'balance-summary-failed'
   | 'unknown'
 
 export type LoginError = {

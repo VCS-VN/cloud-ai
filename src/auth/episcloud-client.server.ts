@@ -7,6 +7,7 @@ import {
   getEpisCloudPartnerToken,
 } from "./episcloud-config";
 import type {
+  BalanceSummary,
   EpisCloudModel,
   PaymentConfig,
   PaymentMethodsResult,
@@ -212,6 +213,26 @@ export class EpisCloudClient {
       if (error instanceof AuthError) throw error;
       logEpisCloudError("episcloud_topup_failed", error);
       throw new AuthError("topup-failed");
+    }
+  }
+
+  async getBalanceSummary(intentId: string): Promise<BalanceSummary> {
+    try {
+      const response = await axios.get<BalanceSummary>(
+        `${getEpisCloudBaseUrl()}/v1/partner/accounts/${encodeURIComponent(intentId)}/balance/summary`,
+        {
+          headers: {
+            Authorization: `Bearer ${getEpisCloudPartnerToken()}`,
+          },
+        },
+      );
+      if (typeof response.data?.remaining_micro_usd !== "number")
+        throw new AuthError("balance-summary-failed");
+      return response.data;
+    } catch (error) {
+      if (error instanceof AuthError) throw error;
+      logEpisCloudError("episcloud_balance_summary_failed", error);
+      throw new AuthError("balance-summary-failed");
     }
   }
 }

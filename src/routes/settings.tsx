@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
   Check,
@@ -22,6 +22,10 @@ import {
 } from "lucide-react";
 import { UserAvatar, UserMenu } from "@/components/auth/UserMenu";
 import { AddPaymentMethodDialog } from "@/components/profile/AddPaymentMethodDialog";
+import {
+  BALANCE_SUMMARY_KEY,
+  BalanceSummaryCard,
+} from "@/components/profile/BalanceSummaryCard";
 import { EpisCloudActivateDialog } from "@/components/profile/EpisCloudActivateDialog";
 import { TopupDialog } from "@/components/profile/TopupDialog";
 import { Button } from "@/components/ui/button";
@@ -129,12 +133,6 @@ function SettingsPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Link
-              to="/dashboard"
-              className="hidden text-ui-sm text-muted hover:text-ink md:inline"
-            >
-              Back to Projects
-            </Link>
             <UserMenu user={user} compact placement="bottom" align="right" />
           </div>
         </div>
@@ -148,8 +146,7 @@ function SettingsPage() {
           Settings &amp; Billing
         </h1>
         <p className="mt-2 max-w-xl leading-relaxed text-muted">
-          Manage profile, plan, billing, and team settings. Changes apply as
-          soon as you save.
+          Manage profile, plan, billing. Changes apply as soon as you save.
         </p>
       </header>
 
@@ -190,6 +187,7 @@ function SettingsPage() {
           />
           {/* <PlanSection /> */}
           {/* <UsageSection /> */}
+          <BalanceSummaryCard activated={Boolean(user.episCloudTenantId)} />
           <PaymentSection user={user} />
           {/* <InvoicesSection /> */}
           {/* <TeamSection displayName={displayName} email={user.email} /> */}
@@ -252,7 +250,7 @@ function ProfileSection({
           <SettingsInput
             label="Username"
             value={getFirstName(user.email)}
-            prefix="lumen.app/"
+            prefix="builder.myepis.cloud/"
             mono
           />
           <label className="flex flex-col gap-1.5 sm:col-span-2">
@@ -595,6 +593,7 @@ function PaymentSection({ user }: { user: AuthUserSummary }) {
   const [addOpen, setAddOpen] = useState(false);
   const [topupOpen, setTopupOpen] = useState(false);
   const activated = Boolean(user.episCloudTenantId);
+  const queryClient = useQueryClient();
   const fetchPaymentMethods = useServerFn(listPaymentMethods);
 
   const methodsQuery = useQuery({
@@ -685,14 +684,19 @@ function PaymentSection({ user }: { user: AuthUserSummary }) {
           open={topupOpen}
           onClose={() => setTopupOpen(false)}
           paymentMethods={paymentMethods}
+          onSuccess={() =>
+            void queryClient.invalidateQueries({
+              queryKey: BALANCE_SUMMARY_KEY,
+            })
+          }
         />
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <SettingsInput label="Tax ID / VAT" value="TAX 0314887621" mono />
           <SettingsInput
             label="Billing address"
             value="48 Nguyen Hue, District 1, HCMC"
           />
-        </div>
+        </div> */}
       </div>
     </section>
   );

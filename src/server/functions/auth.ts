@@ -49,6 +49,10 @@ export const listPaymentMethods = createServerFn({ method: 'GET' }).handler(asyn
   (await loadAuthService()).listPaymentMethods()
 )
 
+export const getBalanceSummary = createServerFn({ method: 'GET' }).handler(async () =>
+  (await loadAuthService()).getBalanceSummary()
+)
+
 type TopupInput = {
   amountMicroUsd: number
   reason: string
