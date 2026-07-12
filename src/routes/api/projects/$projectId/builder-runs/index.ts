@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { requireServerUser } from "@/server/functions/auth";
 import { getProjectServices } from "@/server/services/project-services";
 import { startBuilderRunForChat } from "@/server/services/builder-run-dispatcher.server";
+import { getAuthService } from "@/auth/auth-service";
 import type { ComposerReasoningEffort } from "@/shared/project-types";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -33,6 +34,7 @@ export const Route = createFileRoute(
         const body = (await request.json().catch(() => ({}))) as {
           prompt?: unknown;
           reasoningEffort?: unknown;
+          model?: unknown;
           planMode?: unknown;
           locale?: unknown;
           // kind is intentionally NOT accepted from clients (R5).
@@ -48,6 +50,12 @@ export const Route = createFileRoute(
         }
 
         const reasoningEffort = parseReasoningEffort(body.reasoningEffort);
+        // Model ids are dynamic (fetched per-user from Epis Cloud), so no enum
+        // check — just trim and forward.
+        const model =
+          typeof body.model === "string" && body.model.trim()
+            ? body.model.trim()
+            : undefined;
         const planMode = body.planMode === true;
         const locale = typeof body.locale === "string" ? body.locale : "en";
 
@@ -67,6 +75,22 @@ export const Route = createFileRoute(
             ok: false,
             code: "active_run_exists",
             message: "This project already has an active builder run.",
+          });
+        }
+
+        // Block BEFORE persisting anything when the user hasn't activated Epis
+        // Cloud — the codex build authenticates against the user's Epis Cloud
+        // key, so without it there is nothing to run. Checking here (not just
+        // inside the dispatcher) avoids leaving a message + run row + project
+        // "processing" state stranded.
+        const episCloudApiKey = await getAuthService().getEpisCloudApiKeyForUserId(
+          user.id,
+        );
+        if (!episCloudApiKey) {
+          return jsonResponse(403, {
+            ok: false,
+            code: "episcloud_not_activated",
+            message: "Activate EpisCloud to run AI builds on your account.",
           });
         }
 
@@ -94,6 +118,7 @@ export const Route = createFileRoute(
           parentMessageId: userMessage.id,
           userPrompt: prompt,
           reasoningEffort,
+          model,
           planMode,
           status: "streaming",
         });
@@ -115,6 +140,7 @@ export const Route = createFileRoute(
           prompt,
           locale: locale.startsWith("vi") ? "vi" : "en",
           reasoningEffort,
+          model,
           planMode,
           project: { status: project.status },
           runId: created.runId,
@@ -133,7 +159,9 @@ export const Route = createFileRoute(
               ? 503
               : dispatch.code === "active_run_exists"
                 ? 409
-                : 400;
+                : dispatch.code === "episcloud_not_activated"
+                  ? 403
+                  : 400;
           return jsonResponse(httpStatus, {
             ok: false,
             code: dispatch.code,

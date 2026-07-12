@@ -35,6 +35,7 @@ import type {
 } from "@/shared/project-types";
 import { TokenBar } from "./TokenBar";
 import { ModelPicker } from "./ModelPicker";
+import { EpisCloudBlockedNotice } from "@/components/profile/EpisCloudBlockedNotice";
 
 type MessageComposerProps = {
   value: string;
@@ -46,6 +47,10 @@ type MessageComposerProps = {
   error?: string;
   disabled?: boolean;
   tokenContext?: TokenContext | null;
+  /** When true, the build was blocked because Epis Cloud isn't activated yet. */
+  episCloudBlocked?: boolean;
+  /** Opens the Epis Cloud activation dialog from the blocking notice CTA. */
+  onActivateClick?: () => void;
   /** Slugs of pages already authored by the AI — drives /generate-page badges. */
   generatedPageSlugs?: string[];
   onChange: (value: string) => void;
@@ -142,6 +147,8 @@ export function MessageComposer({
   sending = false,
   processing = false,
   error,
+  episCloudBlocked = false,
+  onActivateClick,
   disabled = false,
   tokenContext,
   generatedPageSlugs = [],
@@ -442,7 +449,11 @@ export function MessageComposer({
         </Popover>
       </div>
 
-      {displayedError ? (
+      {episCloudBlocked ? (
+        <div className="px-3 pb-2">
+          <EpisCloudBlockedNotice onActivateClick={onActivateClick ?? (() => {})} />
+        </div>
+      ) : displayedError ? (
         <div className="px-3 pb-2">
           <p
             className="rounded-md border border-hairline bg-danger-bg p-2 text-ui-sm text-danger-fg"

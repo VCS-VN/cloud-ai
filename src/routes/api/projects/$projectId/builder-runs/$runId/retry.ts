@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { requireServerUser } from "@/server/functions/auth";
+import { getAuthService } from "@/auth/auth-service";
 import { getProjectServices } from "@/server/services/project-services";
 import { startBuilderRunForChat } from "@/server/services/builder-run-dispatcher.server";
 
@@ -59,6 +60,20 @@ export const Route = createFileRoute(
           });
         }
 
+        // Block BEFORE persisting anything when the user hasn't activated Epis
+        // Cloud — the codex build authenticates against the user's Epis Cloud
+        // key, so without it there is nothing to run.
+        const episCloudApiKey = await getAuthService().getEpisCloudApiKeyForUserId(
+          user.id,
+        );
+        if (!episCloudApiKey) {
+          return jsonResponse(403, {
+            ok: false,
+            code: "episcloud_not_activated",
+            message: "Activate EpisCloud to run AI builds on your account.",
+          });
+        }
+
         // Retry replays the original run's prompt. The client sends no body —
         // load the failed/stopped run to recover its prompt + reasoning effort.
         const previous = await runStore.load(runId, user.id).catch(() => undefined);
@@ -104,6 +119,7 @@ export const Route = createFileRoute(
           userPrompt: prompt,
           reasoningEffort: previous.reasoningEffort,
           planMode: previous.planMode ?? false,
+          model: previous.model,
           status: "streaming",
         });
         const updatedProject = await projectRepository.updateProjectProcessingState(
@@ -127,6 +143,7 @@ export const Route = createFileRoute(
           locale: retryLocale,
           reasoningEffort: previous.reasoningEffort ?? undefined,
           planMode: previous.planMode ?? false,
+          model: previous.model,
           project: { status: project.status },
           runId: run.id,
           parentMessageId: userMessage.id,
@@ -142,9 +159,11 @@ export const Route = createFileRoute(
           const httpStatus =
             dispatch.code === "config_unavailable"
               ? 503
-              : dispatch.code === "active_run_exists"
-                ? 409
-                : 400;
+              : dispatch.code === "episcloud_not_activated"
+                ? 403
+                : dispatch.code === "active_run_exists"
+                  ? 409
+                  : 400;
           return jsonResponse(httpStatus, {
             ok: false,
             code: dispatch.code,

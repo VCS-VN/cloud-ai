@@ -34,6 +34,9 @@ import {
   ChatPanelTabs,
 } from "@/components/projects/ChatPanelHeader";
 import { MessageComposer } from "@/components/projects/MessageComposer";
+import { EpisCloudBlockedNotice } from "@/components/profile/EpisCloudBlockedNotice";
+import { EpisCloudActivateDialog } from "@/components/profile/EpisCloudActivateDialog";
+import { useEpisCloudActivate } from "@/auth/use-episcloud-activate";
 import { PlanChecklist } from "@/features/agents/ui/PlanChecklist";
 import { ProjectDetailTopBar } from "@/components/projects/ProjectDetailTopBar";
 import { ProjectMessagesPanel } from "@/components/projects/ProjectMessagesPanel";
@@ -108,6 +111,8 @@ export function ProjectDetailPage() {
   const [planModeEnabled, setPlanModeEnabled] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | undefined>();
+  const [episCloudBlocked, setEpisCloudBlocked] = useState(false);
+  const activate = useEpisCloudActivate(() => setEpisCloudBlocked(false));
   const [previewStarting, setPreviewStarting] = useState(false);
   const [previewStopping, setPreviewStopping] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -827,13 +832,22 @@ export function ProjectDetailPage() {
       prompt: content,
       reasoningEffort,
       planMode: planModeEnabled,
+      model: selectedModel,
     });
     if (!result.ok) {
+      // Preserve the draft so the prompt isn't lost. When the block is an
+      // un-activated Epis Cloud account, show the actionable notice instead of
+      // the generic error banner — the user can activate inline and re-send.
       setDraft(content);
-      setSendError(result.message);
+      if (result.code === "episcloud_not_activated") {
+        setEpisCloudBlocked(true);
+      } else {
+        setSendError(result.message);
+      }
       setSending(false);
       return;
     }
+    setEpisCloudBlocked(false);
     setProject((currentProject) =>
       currentProject
         ? {
@@ -1223,6 +1237,8 @@ export function ProjectDetailPage() {
                   sending={sending}
                   processing={isProcessing}
                   error={sendError}
+                  episCloudBlocked={episCloudBlocked}
+                  onActivateClick={activate.open}
                   disabled={false}
                   generatedPageSlugs={
                     project.generatedPages?.map((page) => page.slug) ?? []
@@ -1353,6 +1369,14 @@ export function ProjectDetailPage() {
               setDeleteError(null);
             }}
             onConfirm={() => void confirmDeleteProject()}
+          />
+
+          <EpisCloudActivateDialog
+            open={activate.dialogOpen}
+            activating={activate.activating}
+            error={activate.error}
+            onCancel={activate.cancel}
+            onConfirm={() => void activate.confirm()}
           />
         </div>
       ) : (

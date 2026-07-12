@@ -14,6 +14,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ModelPicker } from "@/components/projects/ModelPicker";
+import { EpisCloudBlockedNotice } from "@/components/profile/EpisCloudBlockedNotice";
+import { EpisCloudActivateDialog } from "@/components/profile/EpisCloudActivateDialog";
+import { useEpisCloudActivate } from "@/auth/use-episcloud-activate";
 import {
   createProjectFromPrompt,
   deleteProject,
@@ -63,11 +66,13 @@ export function DashboardPage() {
   const [prompt, setPrompt] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [episCloudBlocked, setEpisCloudBlocked] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [filter, setFilter] = useState<ProjectFilter>("all");
   const [sort, setSort] = useState<ProjectSort>("modified");
   const [sortOpen, setSortOpen] = useState(false);
+  const activate = useEpisCloudActivate(() => setEpisCloudBlocked(false));
 
   const filterCounts = useMemo(
     () =>
@@ -118,11 +123,18 @@ export function DashboardPage() {
 
     setCreating(true);
     setCreateError(null);
+    setEpisCloudBlocked(false);
     try {
-      const workspace = await createProject({ data: { prompt: nextPrompt } });
+      const result = await createProject({
+        data: { prompt: nextPrompt, model: selectedModel ?? undefined },
+      });
+      if (!result.ok) {
+        setEpisCloudBlocked(true);
+        return;
+      }
       await navigate({
         to: "/projects/$projectId",
-        params: { projectId: workspace.project.id },
+        params: { projectId: result.workspace.project.id },
       });
     } catch (cause) {
       setCreateError(
@@ -243,7 +255,11 @@ export function DashboardPage() {
             </div>
           </form>
 
-          {createError ? (
+          {episCloudBlocked ? (
+            <div className="mt-3">
+              <EpisCloudBlockedNotice onActivateClick={activate.open} />
+            </div>
+          ) : createError ? (
             <p
               className="mt-3 rounded-input border border-danger-bg bg-danger-bg p-3 text-ui-sm text-danger-fg"
               role="alert"
@@ -406,6 +422,14 @@ export function DashboardPage() {
           </span>
         </div>
       </footer>
+
+      <EpisCloudActivateDialog
+        open={activate.dialogOpen}
+        activating={activate.activating}
+        error={activate.error}
+        onCancel={activate.cancel}
+        onConfirm={() => void activate.confirm()}
+      />
     </div>
   );
 }

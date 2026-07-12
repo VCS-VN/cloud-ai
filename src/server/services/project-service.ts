@@ -88,6 +88,10 @@ export type StartPreviewResult =
   | { success: true; previewUrl: string; port: number; alreadyRunning?: boolean }
   | { success: false; error: string; errorTier: "code" | "config" | "system" };
 
+export type CreateProjectFromPromptResult =
+  | { ok: true; workspace: ProjectWorkspace }
+  | { ok: false; code: "episcloud_not_activated"; message: string };
+
 type PreviewReconcileResult =
   | { status: "ready"; previewUrl: string; port: number; alreadyRunning?: boolean }
   | { status: "start"; requestedPort?: number | null }
@@ -129,8 +133,26 @@ export class ProjectService {
   async createProjectFromPrompt(
     prompt: string,
     userId?: string,
-  ): Promise<ProjectWorkspace> {
+    model?: string,
+  ): Promise<CreateProjectFromPromptResult> {
     const initialPrompt = assertPrompt(prompt);
+
+    // Block BEFORE creating the project row when the user hasn't activated Epis
+    // Cloud — the codex init build authenticates against the user's Epis Cloud
+    // key. Checking here (not just inside the dispatcher) avoids leaving an
+    // orphaned project + message + run row stuck "processing".
+    const { getAuthService } = await import("@/auth/auth-service");
+    const episCloudApiKey = userId
+      ? await getAuthService().getEpisCloudApiKeyForUserId(userId)
+      : null;
+    if (!episCloudApiKey) {
+      return {
+        ok: false,
+        code: "episcloud_not_activated",
+        message: "Activate EpisCloud to run AI builds on your account.",
+      };
+    }
+
     const now = new Date().toISOString();
     const projectName = deriveProjectName(initialPrompt);
 
@@ -184,6 +206,7 @@ export class ProjectService {
           userId,
           parentMessageId: userMessage.id,
           userPrompt: initialPrompt,
+          model,
           status: "streaming",
         })
       : undefined;
@@ -219,6 +242,7 @@ export class ProjectService {
           userId,
           prompt: initialPrompt,
           locale: "en",
+          model,
           project: { status: "draft" },
           runId: agentRun.id,
           parentMessageId: userMessage.id,
@@ -273,14 +297,17 @@ export class ProjectService {
     }
 
     return {
-      project:
-        nextProject ?? {
-          ...project,
-          activeRunId: agentRun?.id,
-          processingStartedAt: now,
-        },
-      messages: [userMessage],
-      fileTree: [],
+      ok: true,
+      workspace: {
+        project:
+          nextProject ?? {
+            ...project,
+            activeRunId: agentRun?.id,
+            processingStartedAt: now,
+          },
+        messages: [userMessage],
+        fileTree: [],
+      },
     };
   }
 

@@ -9,6 +9,7 @@ export type CreateAgentRunInput = {
   retryOfRunId?: string;
   userPrompt: string;
   reasoningEffort?: AgentRun["reasoningEffort"];
+  model?: string;
   planMode?: boolean;
   status?: AgentRunStatus;
 };
@@ -26,6 +27,7 @@ export class ProjectRunStore {
       retryOfRunId: input.retryOfRunId,
       userPrompt: input.userPrompt,
       reasoningEffort: input.reasoningEffort,
+      model: input.model,
       planMode: input.planMode ?? false,
       status: input.status ?? "streaming",
       affectedFiles: [],

@@ -277,6 +277,7 @@ export type AgentRun = {
   retryOfRunId?: string;
   userPrompt: string;
   reasoningEffort?: "low" | "medium" | "high" | "xhigh";
+  model?: string;
   planMode: boolean;
   kind?: AgentRunKind;
   intent?: BuilderIntent;

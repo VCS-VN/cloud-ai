@@ -105,6 +105,7 @@ export type UseChatStreamArgs = {
 export type SendPromptInput = {
   prompt: string;
   reasoningEffort?: ComposerReasoningEffort;
+  model?: string | null;
   planMode?: boolean;
 };
 
@@ -296,6 +297,7 @@ export function useChatStream({
           body: JSON.stringify({
             prompt: input.prompt,
             reasoningEffort: input.reasoningEffort,
+            model: input.model ?? undefined,
             planMode: input.planMode ?? false,
             // Detect the browser locale so the server picks the right task-list
             // language and fallback messages. Falls back to "en" when the

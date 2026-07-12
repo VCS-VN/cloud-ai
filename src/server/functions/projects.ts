@@ -24,13 +24,13 @@ export const getProjectWorkspace = createServerFn({ method: "GET" })
   });
 
 export const createProjectFromPrompt = createServerFn({ method: "POST" })
-  .inputValidator((data: { prompt: string }) => data)
+  .inputValidator((data: { prompt: string; model?: string }) => data)
   .handler(async ({ data }) => {
     const user = await requireServerUser();
 
     const { projectService } = await loadProjectServices();
 
-    return projectService.createProjectFromPrompt(data.prompt, user.id);
+    return projectService.createProjectFromPrompt(data.prompt, user.id, data.model);
   });
 
 export const deleteProject = createServerFn({ method: "POST" })

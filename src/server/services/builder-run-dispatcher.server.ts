@@ -26,6 +26,7 @@ import {
 } from "@/features/agents/codex/runtime/generate-page";
 import { parseRedesignCommand } from "@/features/agents/codex/runtime/redesign";
 import { getCodexEnv, isCodexFeatureAvailable } from "@/features/agents/codex/runtime/feature-flag.server";
+import { resolveUserCodexEnv } from "@/features/agents/codex/runtime/user-codex-env.server";
 import type { BuilderRunEvent } from "@/features/agents/ui/builder-events";
 import {
   shouldForceTerminalOnDriverResolve,
@@ -55,6 +56,8 @@ export type BuilderRunStartInput = {
   prompt: string;
   locale: string;
   reasoningEffort?: ComposerReasoningEffort | null;
+  /** Epis Cloud model id selected by the user. Falls back to CODEX_MODEL when absent. */
+  model?: string;
   planMode?: boolean;
   project: Pick<Project, "status">;
   /** Existing agent_runs row id to attach the codex driver run to. */
@@ -83,7 +86,11 @@ export type BuilderRunStartOutcome =
   | { ok: true; runId: string; events: AsyncIterable<BuilderRunEvent>; signal: AbortSignal }
   | {
       ok: false;
-      code: "config_unavailable" | "active_run_exists" | "blocked_request";
+      code:
+        | "config_unavailable"
+        | "active_run_exists"
+        | "blocked_request"
+        | "episcloud_not_activated";
       message: string;
     };
 
@@ -199,14 +206,14 @@ export async function startBuilderRunForChat(
       message: "AI builder is unavailable. Try again later.",
     };
   }
-  const env = getCodexEnv();
-  if (!env.available) {
+  const baseEnv = getCodexEnv();
+  if (!baseEnv.available) {
     console.warn(
       JSON.stringify({
         event: "builder_run_dispatch_env_unavailable",
         projectId: input.projectId,
-        reason: env.reason,
-        missing: env.missing,
+        reason: baseEnv.reason,
+        missing: baseEnv.missing,
       }),
     );
     return {
@@ -215,6 +222,30 @@ export async function startBuilderRunForChat(
       message: "AI builder is unavailable. Try again later.",
     };
   }
+
+  // Every codex spawn in this run authenticates with the user's own Epis Cloud
+  // key + selected model (resolved here, then threaded via ctx.env). No key ->
+  // block the run; the .env key is never used as a per-user fallback.
+  const userEnv = await resolveUserCodexEnv({
+    userId: input.userId,
+    baseEnv,
+    model: input.model,
+  });
+  if (!userEnv.available) {
+    console.warn(
+      JSON.stringify({
+        event: "builder_run_dispatch_episcloud_not_activated",
+        projectId: input.projectId,
+        hasUserId: Boolean(input.userId),
+      }),
+    );
+    return {
+      ok: false,
+      code: "episcloud_not_activated",
+      message: "Activate EpisCloud to run AI builds on your account.",
+    };
+  }
+  const env = userEnv.env;
 
   const workspaceFiles = await listWorkspaceFiles(input.projectId);
   // A /generate-page command routes straight to the generate_page driver — the

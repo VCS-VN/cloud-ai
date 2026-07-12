@@ -57,6 +57,13 @@
       "when": 1783425511436,
       "tag": "0007_tan_gertrude_yorkes",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783425611436,
+      "tag": "0008_worried_the_hand",
+      "breakpoints": true
     }
   ]
 }

@@ -17,6 +17,7 @@ export const agentRuns = pgTable(
     retryOfRunId: text("retry_of_run_id"),
     userPrompt: text("user_prompt").notNull(),
     reasoningEffort: text("reasoning_effort"),
+    model: text("model"),
     planMode: boolean("plan_mode").notNull().default(false),
     kind: text("kind"),
     intent: json("intent"),
