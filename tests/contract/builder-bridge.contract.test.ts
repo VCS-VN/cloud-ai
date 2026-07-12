@@ -87,7 +87,7 @@ describe("BuilderRunEvent → RunStreamEvent translator (Phase 1 contract)", () 
     });
   });
 
-  it("turn_completed keeps the raw finalResponse verbatim (no privacy filter)", () => {
+  it("turn_completed strips a finalResponse sentence that leaks a file path, falling back to the safe default", () => {
     const raw = "Updated src/components/storefront/Hero.tsx successfully";
     const out = translateBuilderEventToRunStreamEvent(
       {
@@ -98,8 +98,22 @@ describe("BuilderRunEvent → RunStreamEvent translator (Phase 1 contract)", () 
       },
       ctx,
     );
-    expect(out.events[0]).toMatchObject({ content: raw });
-    expect(out.persist).toMatchObject({ content: raw });
+    expect(out.events[0]).toMatchObject({ content: "Đã hoàn tất yêu cầu của bạn." });
+    expect(out.persist).toMatchObject({ content: "Đã hoàn tất yêu cầu của bạn." });
+  });
+
+  it("turn_completed keeps plain-language sentences verbatim alongside a leaking sentence, dropping only the unsafe one", () => {
+    const out = translateBuilderEventToRunStreamEvent(
+      {
+        type: "turn_completed",
+        runId: "run-1",
+        finalResponse:
+          "Đã thêm ảnh mới vào phần hero. Updated product?.defaultModel?.price for the sale.",
+        at: 1234,
+      },
+      ctx,
+    );
+    expect(out.events[0]).toMatchObject({ content: "Đã thêm ảnh mới vào phần hero." });
   });
 
   it("turn_completed falls back to the safe default only when finalResponse is empty", () => {
@@ -128,7 +142,7 @@ describe("BuilderRunEvent → RunStreamEvent translator (Phase 1 contract)", () 
     });
   });
 
-  it("thinking emits a skeleton.update AND a persisted reasoning message (raw text)", () => {
+  it("thinking emits a skeleton.update AND a persisted reasoning message, stripped of code leaks", () => {
     const raw = "Reading src/routes/index.tsx to plan the hero edit";
     const out = translateBuilderEventToRunStreamEvent(
       { type: "thinking", runId: "run-1", text: raw, at: 55 },
@@ -139,16 +153,28 @@ describe("BuilderRunEvent → RunStreamEvent translator (Phase 1 contract)", () 
       "message.created",
       "message.completed",
     ]);
-    expect(out.events[1]).toMatchObject({ kind: "reasoning", content: raw });
+    expect(out.events[1]).toMatchObject({
+      kind: "reasoning",
+      content: "Đã hoàn tất yêu cầu của bạn.",
+    });
     expect(out.persist).toEqual({
       kind: "reasoning",
       messageId: "msg-run-1-reasoning-55",
-      content: raw,
+      content: "Đã hoàn tất yêu cầu của bạn.",
       processingStatus: "completed",
     });
   });
 
-  it("agent_message emits a persisted agent_message message (raw text)", () => {
+  it("thinking keeps a plain-language sentence verbatim when it contains no code leak", () => {
+    const raw = "Mình đang xem lại cấu trúc trang chủ để lên phương án chỉnh sửa.";
+    const out = translateBuilderEventToRunStreamEvent(
+      { type: "thinking", runId: "run-1", text: raw, at: 55 },
+      ctx,
+    );
+    expect(out.events[1]).toMatchObject({ kind: "reasoning", content: raw });
+  });
+
+  it("agent_message emits a persisted agent_message message, stripped of code leaks", () => {
     const raw = "I edited `Hero.tsx` and added the promo banner.";
     const out = translateBuilderEventToRunStreamEvent(
       { type: "agent_message", runId: "run-1", text: raw, at: 77 },
@@ -158,12 +184,27 @@ describe("BuilderRunEvent → RunStreamEvent translator (Phase 1 contract)", () 
       "message.created",
       "message.completed",
     ]);
-    expect(out.events[0]).toMatchObject({ kind: "agent_message", content: raw });
+    expect(out.events[0]).toMatchObject({
+      kind: "agent_message",
+      content: "Đã hoàn tất yêu cầu của bạn.",
+    });
     expect(out.persist).toEqual({
       kind: "agent_message",
       messageId: "msg-run-1-agent-77",
-      content: raw,
+      content: "Đã hoàn tất yêu cầu của bạn.",
       processingStatus: "completed",
+    });
+  });
+
+  it("agent_message keeps a plain-language sentence verbatim, dropping only a code-identifier leak in the same text", () => {
+    const raw = "Đã cập nhật giá sản phẩm. This calls updateItemQuantity internally.";
+    const out = translateBuilderEventToRunStreamEvent(
+      { type: "agent_message", runId: "run-1", text: raw, at: 77 },
+      ctx,
+    );
+    expect(out.events[0]).toMatchObject({
+      kind: "agent_message",
+      content: "Đã cập nhật giá sản phẩm.",
     });
   });
 

@@ -26,7 +26,7 @@ You MUST follow this sequence for every request:
 5. REPORT results:
    - Summarize what changed and why.
    - Note any issues or follow-up needed.
-   - Your final summary is USER-VISIBLE TEXT: close with 1-2 short, non-technical sentences in the user's language describing the outcome (what changed, how it affects the storefront) — not file paths, not tool names, not internal steps.
+   - Your final summary is USER-VISIBLE TEXT: close with 1-2 short, non-technical sentences in the user's language describing the outcome (what changed, how it affects the storefront) — not file paths, not tool names, not internal steps, and not code identifiers/property access/function names (e.g. `product?.defaultModel?.price`, `updateItemQuantity`, `DOMPurify.sanitize`). Describe outcomes in plain words a non-developer would understand (e.g. "updated the product price" instead of naming the field or function).
 
 IMPORTANT: You MUST write your reasoning as text output BEFORE calling mutation tools.
 This helps catch mistakes and lets the user understand your approach.

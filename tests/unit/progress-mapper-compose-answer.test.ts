@@ -9,8 +9,8 @@ describe("composeAnswerMessage — backward compat (runKind undefined)", () => {
   });
 
   it("returns finalResponse.trim() verbatim when runKind is undefined (en)", () => {
-    const raw = "Updated src/components/storefront/Hero.tsx with new content";
-    expect(composeAnswerMessage({ finalResponse: raw, locale: "en" })).toBe(raw);
+    const raw = "Added the new hero image to your homepage.";
+    expect(composeAnswerMessage({ finalResponse: `  ${raw}  `, locale: "en" })).toBe(raw);
   });
 
   it("falls back to SUMMARY_FALLBACK[locale] when finalResponse is empty/whitespace (vi)", () => {
@@ -223,8 +223,8 @@ describe("composeAnswerMessage — section joining", () => {
   });
 });
 
-describe("composeAnswerMessage — no content filter on finalResponse when runKind is set", () => {
-  it("preserves a raw file path in finalResponse verbatim", () => {
+describe("composeAnswerMessage — strips code leaks from finalResponse when runKind is set", () => {
+  it("drops a sentence with a raw file path/backticked identifier, falling back to the headline alone", () => {
     const ugly = "Updated src/components/storefront/Hero.tsx directly, see `useHero()`.";
     const out = composeAnswerMessage({
       runKind: "update",
@@ -232,17 +232,32 @@ describe("composeAnswerMessage — no content filter on finalResponse when runKi
       finalResponse: ugly,
       locale: "en",
     });
-    expect(out).toContain(ugly);
+    expect(out).toBe("Updated the hero section.");
+    expect(out).not.toContain("src/components");
+    expect(out).not.toContain("useHero");
   });
 
-  it("preserves a code fence in finalResponse verbatim", () => {
+  it("keeps a plain-language sentence verbatim alongside a dropped code-leaking sentence", () => {
+    const mixed =
+      "We refreshed the hero section for you. Internally this calls `useHero()` on Hero.tsx.";
+    const out = composeAnswerMessage({
+      runKind: "update",
+      changedFiles: ["src/components/storefront/Hero.tsx"],
+      finalResponse: mixed,
+      locale: "en",
+    });
+    expect(out).toBe("Updated the hero section. We refreshed the hero section for you.");
+  });
+
+  it("strips a code fence entirely, falling back to the headline alone", () => {
     const ugly = "```ts\nconst x = 1;\n```";
     const out = composeAnswerMessage({
       runKind: "redesign",
       finalResponse: ugly,
       locale: "en",
     });
-    expect(out).toContain(ugly);
+    expect(out).toBe("Redesigned your storefront.");
+    expect(out).not.toContain("```");
   });
 
   it("returns just '<headline>.' with no trailing space/artifact when finalResponse is empty and runKind is set", () => {

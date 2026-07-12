@@ -8,6 +8,7 @@ import type {
   StreamError,
 } from "@/shared/project-types";
 import type { DevRuntimeEvent } from "@/features/runtime/legacy/runtime-events";
+import { stripUnsafeContent } from "@/shared/agent-text-safety";
 
 export type DevRuntimeUIState = {
   status: "idle" | "installing" | "installed" | "starting" | "running" | "stopped" | "error" | "fixing";
@@ -164,8 +165,14 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
     }
 
     case "message.delta": {
+      // Streaming deltas render straight into chat state without ever
+      // passing through the server translator's per-message sanitize
+      // (sanitizeAgentText / composeAnswerMessage). Re-run the same
+      // detectors here so a code identifier can't leak mid-stream even if
+      // this event type is wired up to a live-token path in the future.
       const existing = state.messages.find((m) => m.id === event.messageId);
-      const content = (existing?.content ?? "") + event.delta;
+      const raw = (existing?.content ?? "") + event.delta;
+      const content = stripUnsafeContent(raw);
       return {
         ...state,
         messages: patchMessage(state.messages, event.messageId, {

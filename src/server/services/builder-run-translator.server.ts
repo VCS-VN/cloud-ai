@@ -3,6 +3,7 @@ import {
   fileChangeToSection,
   isPrivacySafe,
   phaseLabel,
+  sanitizeAgentText,
   sanitizeReasoningSnippet,
   sectionFraming,
   THINKING_LABEL,
@@ -220,7 +221,7 @@ export function translateBuilderEventToRunStreamEvent(
       // transient indicator; the message is the durable record.
       const detail = sanitizeReasoningSnippet(event.text) ?? undefined;
       const messageId = `msg-${runId}-reasoning-${event.at}`;
-      const content = event.text;
+      const content = sanitizeAgentText(event.text, locale);
       const events: RunStreamEvent[] = [
         {
           type: "skeleton.update",
@@ -255,7 +256,7 @@ export function translateBuilderEventToRunStreamEvent(
     }
     case "agent_message": {
       const messageId = `msg-${runId}-agent-${event.at}`;
-      const content = event.text;
+      const content = sanitizeAgentText(event.text, locale);
       const events: RunStreamEvent[] = [
         {
           type: "message.created",
@@ -370,6 +371,7 @@ export function translateBuilderEventToRunStreamEvent(
               : null,
         }),
       );
+      const safeQuestion = sanitizeAgentText(event.question, locale);
       return {
         events: [
           {
@@ -377,7 +379,7 @@ export function translateBuilderEventToRunStreamEvent(
             runId,
             messageId,
             kind: "agent_question",
-            content: event.question,
+            content: safeQuestion,
             processingStatus: "completed",
             createdAt: new Date(event.at).toISOString(),
             metadata: questionMetadata,
@@ -387,7 +389,7 @@ export function translateBuilderEventToRunStreamEvent(
         persist: {
           kind: "agent_question",
           messageId,
-          question: event.question,
+          question: safeQuestion,
           options: event.options,
           metadata: questionMetadata,
         },

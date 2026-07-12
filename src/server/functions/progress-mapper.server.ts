@@ -1,5 +1,6 @@
 import type { BuilderRunMilestone } from "@/features/agents/ui/builder-events";
 import type { BuilderRunKind } from "@/features/agents/ui/builder-run-status";
+import { isPrivacySafe as isPrivacySafeShared, stripUnsafeContent } from "@/shared/agent-text-safety";
 
 export type ProgressLocale = "vi" | "en";
 
@@ -143,47 +144,10 @@ export function fileChangeToSection(
   return null;
 }
 
-const FRAMEWORK_TOKENS = [
-  "tsx",
-  "jsx",
-  "vite",
-  "tanstack",
-  "drizzle",
-  "eslint",
-  "prettier",
-  "pnpm",
-  "npm",
-  "yarn",
-  "tailwind",
-  "react",
-  "node_modules",
-  "pm2",
-  "playwright",
-  "vitest",
-];
-
-const FILE_EXT_PATTERN =
-  /[\w./-]+\.(?:tsx?|jsx?|css|scss|json|md|sql|sh|ya?ml)\b/i;
-const MULTI_SEGMENT_PATH = /(?:^|\s|`)\/?[\w-]+\/[\w./-]+/;
-const CODE_IDENT_BACKTICK = /`[\w_$]{3,}`/;
-const CODE_FENCE = /```/;
-const HTML_JSX_TAG = /<\/?[A-Za-z][\w-]*(?:\s|>|\/)/;
-
-const FRAMEWORK_TOKEN_RE = new RegExp(
-  `\\b(?:${FRAMEWORK_TOKENS.join("|")})\\b`,
-  "i",
-);
-
-export function isPrivacySafe(text: string): boolean {
-  if (!text) return true;
-  if (FILE_EXT_PATTERN.test(text)) return false;
-  if (MULTI_SEGMENT_PATH.test(text)) return false;
-  if (CODE_IDENT_BACKTICK.test(text)) return false;
-  if (CODE_FENCE.test(text)) return false;
-  if (HTML_JSX_TAG.test(text)) return false;
-  if (FRAMEWORK_TOKEN_RE.test(text)) return false;
-  return true;
-}
+// Re-exported from the shared, environment-agnostic module so both this
+// server-side mapper and the client-side reducer (agent-event-reducer.ts,
+// for the message.delta streaming path) apply the exact same rules.
+export const isPrivacySafe = isPrivacySafeShared;
 
 const SUMMARY_FALLBACK: Record<ProgressLocale, string> = {
   vi: "Đã hoàn tất yêu cầu của bạn.",
@@ -257,6 +221,18 @@ const UPDATE_FALLBACK_HEADLINE: Record<ProgressLocale, string> = {
   en: "Updated your storefront",
 };
 
+/**
+ * Public wrapper for message kinds (reasoning / agent_message processing
+ * notes) that always need a displayable string: falls back to the locale
+ * summary default when filtering removes everything.
+ */
+export function sanitizeAgentText(
+  text: string,
+  locale: ProgressLocale = "en",
+): string {
+  return stripUnsafeContent(text) || SUMMARY_FALLBACK[locale];
+}
+
 const SECTION_LIST_MAX = 4;
 
 function joinSections(sections: string[], locale: ProgressLocale): string {
@@ -300,11 +276,13 @@ function buildHeadline(
   return RUN_KIND_HEADLINES[runKind][locale];
 }
 
-// NOTE: `finalResponse` is intentionally appended verbatim, with no privacy
-// filter / truncation applied (see commit 46b2d56 "unblock codex SDK
-// messages" — the model's own text is shown as-is by design). Only a
-// product-copy headline is prepended; do not reintroduce isPrivacySafe /
-// extractSummary filtering here.
+// NOTE: commit 46b2d56 ("unblock codex SDK messages") removed content
+// filtering here so the model's raw text passed through untouched. That
+// caused code identifiers (`product?.defaultModel?.price`,
+// `updateItemQuantity`, `DOMPurify.sanitize`, ...) to leak into user-facing
+// chat. `stripUnsafeContent` now runs per-sentence so plain-language
+// sentences are still kept verbatim — only sentences that read as code are
+// dropped. Only a product-copy headline is prepended on top.
 export function composeAnswerMessage(input: {
   runKind?: BuilderRunKind;
   changedFiles?: string[];
@@ -313,10 +291,10 @@ export function composeAnswerMessage(input: {
 }): string {
   const locale = input.locale ?? "en";
   if (input.runKind === undefined) {
-    return input.finalResponse.trim() || SUMMARY_FALLBACK[locale];
+    return stripUnsafeContent(input.finalResponse) || SUMMARY_FALLBACK[locale];
   }
   const headline = buildHeadline(input.runKind, input.changedFiles ?? [], locale);
-  const rest = input.finalResponse.trim();
+  const rest = stripUnsafeContent(input.finalResponse);
   return rest ? `${headline}. ${rest}` : `${headline}.`;
 }
 
