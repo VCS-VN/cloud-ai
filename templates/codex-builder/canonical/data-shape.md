@@ -61,10 +61,10 @@ DESCRIPTIONS RENDERING (hard rule):
 
 PRICE FORMATTING:
 - Prices live as integer cents everywhere — state, hooks, sample data, API. Never pre-divide.
-- Render price ONLY via `formatMoney(resolveProductPrice(product), { currency })` where `currency = useStore().storeDetail?.setting?.currency ?? 'AUD'`.
-- `resolveProductPrice` falls back: `defaultModel.price → models[0].price → price` using `lodash.get`.
-- `formatMoney` divides cents by 100 internally with `lodash.divide` and rounds with `lodash.round` before `Intl.NumberFormat`. Components MUST NOT call `formatMoney(product.price)` directly.
-- Lodash is CommonJS in the generated app: `import lodash from 'lodash'`, then `lodash.get(...)`, `lodash.divide(...)`, `lodash.round(...)`. NEVER use named imports from `'lodash'`.
+- Render price ONLY via `formatMoney(resolveProductPrice(product), { currency })` where `currency = useStore().storeDetail?.setting?.currency ?? 'AUD'`. Both functions are imported from `@/lib/format-money` — this file is pre-seeded and runtime-owned; do NOT redefine or reimplement it.
+- `resolveProductPrice` falls back: `defaultModel.price → models[0].price → price`.
+- `formatMoney` divides cents by 100 with `Math.round(amountInCents) / 100` before `Intl.NumberFormat`. Components MUST NOT call `formatMoney(product.price)` directly — always go through `resolveProductPrice` first.
+- Do NOT import `lodash` for price math (`get`/`divide`/`round`) — `@/lib/format-money` does not use lodash. Lodash remains available for other use cases, imported as `import lodash from 'lodash'` (CommonJS default import; never named imports from `'lodash'`).
 
 DIRECT DATA IMPORTS (forbidden in UI):
 - Routes (`src/routes/**`) and storefront components (`src/components/**`) MUST NOT import `@/data/products`, `@/data/categories`, or `@/data/sample-store`. Always consume via the hooks: `useProductsList`, `useProductDetail`, `useCategoriesList`, `useProductSuggestions`, `useStore`.

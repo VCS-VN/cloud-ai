@@ -33,7 +33,7 @@ The current `init/pages/checkout.md` checkout is a **placeholder skeleton**: an 
 1. **Empty inputs, placeholders only** (hard rule from `init/pages/checkout.md`):
    - Inputs MUST be empty by default; show example content via `placeholder` props only.
    - Do **NOT** seed `defaultValues` with fake customer data ("John Doe", phone numbers, emails, addresses, postcodes). Example values belong in placeholder text, never in the input value.
-2. **Validation lives in a schema module**, not scattered `if` checks in JSX. If you introduce zod + react-hook-form, add the schema in its own file, export both the schema and its `z.infer` type, and keep error messages in the schema. (Note: no `schemas/` dir or `zodResolver` exists in the templates yet — you are adding it; wire it minimally.)
+2. **Validation lives in a schema module**, not scattered `if` checks in JSX. `zod`, `react-hook-form`, and `@hookform/resolvers` (for `zodResolver`) are already declared dependencies — build the form with `useForm` + `zodResolver(schema)`. Put the schema in its own file, export both the schema and its `z.infer` type, and keep error messages in the schema. (Note: no `schemas/` dir exists in the templates yet — you are adding it; wire it minimally.)
 3. **AU market domain rules** for address/phone fields, when present:
    - phone: 10 digits, starting `0[23478]`.
    - country: literal `"AU"`; state enum `NSW/VIC/QLD/WA/SA/TAS/ACT/NT`.
