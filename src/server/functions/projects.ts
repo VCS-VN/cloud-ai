@@ -71,3 +71,46 @@ export const getStores = createServerFn({ method: "GET" })
       search: data.search,
     });
   });
+
+export const generateRetailSuggestions = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: {
+      storeName?: string;
+      recentUserPrompt?: string;
+      recentAgentAnswer?: string;
+      generatedPageSlugs?: string[];
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    await requireServerUser();
+    try {
+      const { getCodexEnv } = await import(
+        "@/features/agents/codex/runtime/feature-flag.server"
+      );
+      const env = getCodexEnv();
+      if (!env.available) return { suggestions: [] as string[] };
+
+      const [{ runResponsesTurn }, retailSuggestions] = await Promise.all([
+        import("@/features/agents/codex/runtime/responses-http-client.server"),
+        import("@/features/agents/codex/runtime/retail-suggestions.server"),
+      ]);
+
+      const prompt = retailSuggestions.buildRetailSuggestionsPrompt({
+        storeName: data.storeName,
+        recentUserPrompt: data.recentUserPrompt,
+        recentAgentAnswer: data.recentAgentAnswer,
+        generatedPageSlugs: data.generatedPageSlugs,
+      });
+
+      const result = await retailSuggestions.generateRetailSuggestions({
+        runTurn: () =>
+          runResponsesTurn({ env, prompt, reasoningEffort: "low" }),
+      });
+
+      return { suggestions: result.ok ? result.suggestions : ([] as string[]) };
+    } catch {
+      // Suggestions are a non-critical enhancement — never surface a failure to
+      // the client; an empty list simply hides the chips.
+      return { suggestions: [] as string[] };
+    }
+  });

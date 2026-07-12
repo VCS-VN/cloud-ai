@@ -42,6 +42,7 @@ import { ProjectSettingsDrawer } from "@/components/projects/ProjectSettingsDraw
 import { listProjectMessages } from "@/server/functions/project-messages";
 import {
   deleteProject,
+  generateRetailSuggestions,
   updateProjectSettings,
 } from "@/server/functions/projects";
 import {
@@ -92,6 +93,7 @@ export function ProjectDetailPage() {
   const getRuntimeState = useServerFn(getDevRuntimeState);
   const startProjectPreview = useServerFn(startPreview);
   const stopProjectPreview = useServerFn(stopPreview);
+  const fetchRetailSuggestions = useServerFn(generateRetailSuggestions);
   const { workspace } = route.useLoaderData();
   const router = useRouter();
   const { user } = route.useRouteContext();
@@ -99,6 +101,7 @@ export function ProjectDetailPage() {
     workspace?.project,
   );
   const [draft, setDraft] = useState("");
+  const [retailSuggestions, setRetailSuggestions] = useState<string[]>([]);
   const [reasoningEffort, setReasoningEffort] =
     useState<ComposerReasoningEffort>("high");
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
@@ -566,6 +569,28 @@ export function ProjectDetailPage() {
       ) {
         void handleStartPreview();
       }
+      // On a successful turn, ask the model for retail-oriented next steps and
+      // surface them as clickable chips above the composer. Non-critical: any
+      // failure just leaves the chip row empty.
+      if (chatState.lastRunOutcome === "completed") {
+        const history = chatState.messages;
+        const lastUser = [...history]
+          .reverse()
+          .find((m) => m.role === "user");
+        const lastAgent = [...history]
+          .reverse()
+          .find((m) => m.role === "agent" && m.kind === "agent_message");
+        void fetchRetailSuggestions({
+          data: {
+            storeName: project?.name,
+            recentUserPrompt: lastUser?.content?.slice(0, 1000),
+            recentAgentAnswer: lastAgent?.content?.slice(0, 1000),
+            generatedPageSlugs: project?.generatedPages?.map((p) => p.slug),
+          },
+        })
+          .then((res) => setRetailSuggestions(res.suggestions))
+          .catch(() => setRetailSuggestions([]));
+      }
       if (project?.id) {
         // Refresh derived data the run may have changed. Do NOT call
         // router.invalidate() here — it re-runs the route loader, which
@@ -789,6 +814,7 @@ export function ProjectDetailPage() {
     setSending(true);
     setSendError(undefined);
     setDraft("");
+    setRetailSuggestions([]);
 
     // Remember a known-page /generate-page target so the composer menu can mark
     // it designed once the run completes (server persists it too).
@@ -1173,6 +1199,22 @@ export function ProjectDetailPage() {
               </div>
 
               <div className="shrink-0 border-t border-hairline bg-paper/95 px-3 py-3">
+                {retailSuggestions.length > 0 && !isProcessing ? (
+                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                    <span className="mr-1 text-xs text-subtle">Try next:</span>
+                    {retailSuggestions.map((suggestion) => (
+                      <Button
+                        key={suggestion}
+                        type="button"
+                        variant="unstyled"
+                        className="dashboard-suggestion-chip"
+                        onClick={() => setDraft(suggestion)}
+                      >
+                        {suggestion}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
                 <MessageComposer
                   value={draft}
                   reasoningEffort={reasoningEffort}
