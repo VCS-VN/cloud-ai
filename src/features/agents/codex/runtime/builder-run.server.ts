@@ -62,12 +62,14 @@ import {
 } from "./init-batch-planner.server";
 import {
   InitSettingsSeedError,
+  captureCheckoutRoute,
   enforceTailwindDirectivesAtTop,
   ensureProjectGitignore,
   injectDesignPaletteIntoAppCss,
   installInitWorkspaceDependencies,
   reassertComingSoonRoutes,
   reassertRuntimeOwnedFiles,
+  restoreCheckoutRoute,
   seedInitSettingsFiles,
 } from "./init-settings-seed.server";
 import { runRepairLoop } from "./repair-loop.server";
@@ -2125,6 +2127,7 @@ export async function runNewRouteBuilderRun(
 
   emitMilestoneInternal(emit, runId, "creating_draft");
   const beforeSnapshot = await takeSnapshot(draftWorkspacePath);
+  const capturedCheckoutBody = await captureCheckoutRoute({ draftWorkspacePath });
 
   emitMilestoneInternal(emit, runId, "building_pages");
   try {
@@ -2158,6 +2161,16 @@ export async function runNewRouteBuilderRun(
       selectedInstructionMeta: bundle.selectedInstructionMeta,
       optionalRouteWarnings: [],
     });
+  }
+
+  const checkoutRestored = await restoreCheckoutRoute({
+    draftWorkspacePath,
+    capturedBody: capturedCheckoutBody,
+  });
+  if (checkoutRestored) {
+    console.warn(
+      JSON.stringify({ event: "checkout_route_restored", runId, projectId: ctx.projectId }),
+    );
   }
 
   const afterSnapshot = await takeSnapshot(draftWorkspacePath);
@@ -2490,6 +2503,7 @@ export async function runGeneratePageBuilderRun(
 
   emitMilestoneInternal(emit, runId, "creating_draft");
   const beforeSnapshot = await takeSnapshot(draftWorkspacePath);
+  const capturedCheckoutBody = await captureCheckoutRoute({ draftWorkspacePath });
 
   emitMilestoneInternal(emit, runId, "building_pages");
   let finalResponse = "";
@@ -2524,6 +2538,16 @@ export async function runGeneratePageBuilderRun(
       selectedInstructionMeta: bundle.selectedInstructionMeta,
       optionalRouteWarnings: [],
     });
+  }
+
+  const checkoutRestored = await restoreCheckoutRoute({
+    draftWorkspacePath,
+    capturedBody: capturedCheckoutBody,
+  });
+  if (checkoutRestored) {
+    console.warn(
+      JSON.stringify({ event: "checkout_route_restored", runId, projectId: ctx.projectId }),
+    );
   }
 
   const afterSnapshot = await takeSnapshot(draftWorkspacePath);
@@ -2780,6 +2804,7 @@ export async function runSmallUpdateBuilderRun(
 
   emitMilestoneInternal(emit, runId, "creating_draft");
   const beforeSnapshot = await takeSnapshot(draftWorkspacePath);
+  const capturedCheckoutBody = await captureCheckoutRoute({ draftWorkspacePath });
 
   let thread: BoundedCodexThread;
   try {
@@ -2835,6 +2860,16 @@ export async function runSmallUpdateBuilderRun(
       selectedInstructionMeta: bundle.selectedInstructionMeta,
       optionalRouteWarnings: [],
     });
+  }
+
+  const checkoutRestored = await restoreCheckoutRoute({
+    draftWorkspacePath,
+    capturedBody: capturedCheckoutBody,
+  });
+  if (checkoutRestored) {
+    console.warn(
+      JSON.stringify({ event: "checkout_route_restored", runId, projectId: ctx.projectId }),
+    );
   }
 
   const afterSnapshot = await takeSnapshot(draftWorkspacePath);
@@ -3314,6 +3349,7 @@ export async function runRedesignBuilderRun(
 
   emitMilestoneInternal(emit, runId, "creating_draft");
   const beforeSnapshot = await takeSnapshot(draftWorkspacePath);
+  const capturedCheckoutBody = await captureCheckoutRoute({ draftWorkspacePath });
 
   emitMilestoneInternal(emit, runId, "building_pages");
   let finalResponse = "";
@@ -3363,6 +3399,16 @@ export async function runRedesignBuilderRun(
       injected: paletteInjected,
     }),
   );
+
+  const checkoutRestored = await restoreCheckoutRoute({
+    draftWorkspacePath,
+    capturedBody: capturedCheckoutBody,
+  });
+  if (checkoutRestored) {
+    console.warn(
+      JSON.stringify({ event: "checkout_route_restored", runId, projectId: ctx.projectId }),
+    );
+  }
 
   const afterSnapshot = await takeSnapshot(draftWorkspacePath);
   const diff = diffSnapshots(beforeSnapshot, afterSnapshot);

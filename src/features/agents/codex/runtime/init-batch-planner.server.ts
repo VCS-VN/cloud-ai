@@ -78,6 +78,18 @@ const INIT_PHASES: readonly InitPhase[] = [
     files: ["src/routes/products/$productId.tsx"],
     specPaths: ["pages/product-detail.md"],
   },
+  // Checkout is authored ONCE at init from pages/checkout.md (shipping form,
+  // toast placeholder, "do NOT persist orders"), then frozen: later runs
+  // capture+restore it so it can never be re-authored into a PII-persisting
+  // form (see captureCheckoutRoute/restoreCheckoutRoute). The file is seeded as
+  // a skeleton first, so this batch's one authoring turn overwrites it; it is
+  // deliberately NOT in INIT_COMING_SOON_ROUTES so the post-loop reassert keeps
+  // the authored page instead of reverting it to the skeleton.
+  {
+    marker: "CHECKOUT",
+    files: ["src/routes/checkout.tsx"],
+    specPaths: ["pages/checkout.md"],
+  },
 ];
 
 export type ManifestSource = { layers?: ManifestEntry[] };

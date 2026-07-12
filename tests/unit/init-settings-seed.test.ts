@@ -3,8 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  captureCheckoutRoute,
   enforceTailwindDirectivesAtTop,
   reassertComingSoonRoutes,
+  restoreCheckoutRoute,
   seedInitSettingsFiles,
 } from "@/features/agents/codex/runtime/init-settings-seed.server";
 
@@ -81,12 +83,13 @@ describe("init-settings-seed", () => {
   it("reverts model-authored commerce routes to their coming-soon seed", async () => {
     await seedInitSettingsFiles({ draftWorkspacePath: workspace });
 
-    // Simulate the model writing full pages into the five non-authored commerce
-    // routes mid-init (the exact behavior the reassert exists to undo).
+    // Simulate the model writing full pages into the four non-authored commerce
+    // routes mid-init (the exact behavior the reassert exists to undo). Checkout
+    // is NOT in this list: it is authored at init and frozen via capture/restore,
+    // so reassertComingSoonRoutes must never revert it.
     const overwritten = [
       "src/routes/products/index.tsx",
       "src/routes/cart.tsx",
-      "src/routes/checkout.tsx",
       "src/routes/orders.tsx",
       "src/routes/orders/$orderId.tsx",
     ];
@@ -102,21 +105,27 @@ describe("init-settings-seed", () => {
     }
   });
 
-  it("leaves home and product-detail untouched", async () => {
+  it("leaves home, product-detail and checkout untouched", async () => {
     await seedInitSettingsFiles({ draftWorkspacePath: workspace });
 
-    // The two routes init actually authors — the reassert must never touch them.
+    // The three routes init actually authors — the coming-soon reassert must
+    // never touch them. Checkout is authored at init then frozen separately via
+    // capture/restore, so it is not a coming-soon route.
     const home = "// model-authored homepage\nexport function Home() {}\n";
     const detail = "// model-authored product detail\nexport function Detail() {}\n";
+    const checkout = "// model-authored checkout\nexport function Checkout() {}\n";
     await write("src/routes/index.tsx", home);
     await write("src/routes/products/$productId.tsx", detail);
+    await write("src/routes/checkout.tsx", checkout);
 
     const reverted = await reassertComingSoonRoutes({ draftWorkspacePath: workspace });
     expect(reverted).not.toContain("src/routes/index.tsx");
     expect(reverted).not.toContain("src/routes/products/$productId.tsx");
+    expect(reverted).not.toContain("src/routes/checkout.tsx");
 
     await expect(read("src/routes/index.tsx")).resolves.toBe(home);
     await expect(read("src/routes/products/$productId.tsx")).resolves.toBe(detail);
+    await expect(read("src/routes/checkout.tsx")).resolves.toBe(checkout);
   });
 
   it("is a no-op when the coming-soon routes still match the seed", async () => {
@@ -124,5 +133,40 @@ describe("init-settings-seed", () => {
     await expect(
       reassertComingSoonRoutes({ draftWorkspacePath: workspace }),
     ).resolves.toEqual([]);
+  });
+
+  it("restores the captured init-authored checkout after a model edit", async () => {
+    await seedInitSettingsFiles({ draftWorkspacePath: workspace });
+
+    // Simulate the frozen, init-authored checkout page.
+    const frozen = "// init-authored checkout with a shipping form\nexport const Route = {};\n";
+    await write("src/routes/checkout.tsx", frozen);
+
+    const captured = await captureCheckoutRoute({ draftWorkspacePath: workspace });
+    expect(captured).toBe(frozen);
+
+    // Model re-authors it on a later run (e.g. wiring the form to persist PII).
+    await write("src/routes/checkout.tsx", "// leaky rewrite that persists orders\n");
+
+    const restored = await restoreCheckoutRoute({
+      draftWorkspacePath: workspace,
+      capturedBody: captured,
+    });
+    expect(restored).toBe(true);
+    await expect(read("src/routes/checkout.tsx")).resolves.toBe(frozen);
+  });
+
+  it("capture/restore is a no-op for a legacy project with no checkout file", async () => {
+    // A project predating the seed has no checkout.tsx — capture returns null
+    // and restore does nothing rather than creating a spurious file.
+    const captured = await captureCheckoutRoute({ draftWorkspacePath: workspace });
+    expect(captured).toBeNull();
+
+    const restored = await restoreCheckoutRoute({
+      draftWorkspacePath: workspace,
+      capturedBody: captured,
+    });
+    expect(restored).toBe(false);
+    await expect(read("src/routes/checkout.tsx")).rejects.toThrow();
   });
 });

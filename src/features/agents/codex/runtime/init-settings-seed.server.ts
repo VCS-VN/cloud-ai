@@ -125,19 +125,21 @@ const SEED_TARGETS: readonly SeedTarget[] = [
 ];
 
 // The commerce routes that init does NOT task the agent with. INIT_PHASES
-// (init-batch-planner) only authors home (src/routes/index.tsx) + product-detail
-// (src/routes/products/$productId.tsx); these five ship as "coming soon"
-// skeletons and must stay that way until the user runs /generate-page for them.
+// (init-batch-planner) authors home (src/routes/index.tsx), product-detail
+// (src/routes/products/$productId.tsx), AND checkout (src/routes/checkout.tsx);
+// the remaining four ship as "coming soon" skeletons and must stay that way
+// until the user runs /generate-page for them.
 // They are kept editable_baseline (so /generate-page can author them later and
 // so seed/reassert of runtime-owned plumbing never reverts them), which means
 // reassertRuntimeOwnedFiles does NOT restore them — so the model is free to
 // write full pages into them mid-init and nothing reverts it. This list backs
 // an init-only reassert (reassertComingSoonRoutes) that pins them to the seed
-// after the batch loop, without touching the /generate-page flow.
+// after the batch loop, without touching the /generate-page flow. Checkout is
+// intentionally absent: it IS authored at init, then frozen via
+// captureCheckoutRoute/restoreCheckoutRoute on later runs.
 const INIT_COMING_SOON_ROUTES: readonly string[] = [
   "src/routes/products/index.tsx",
   "src/routes/cart.tsx",
-  "src/routes/checkout.tsx",
   "src/routes/orders.tsx",
   "src/routes/orders/$orderId.tsx",
 ];
@@ -351,6 +353,44 @@ export async function reassertComingSoonRoutes(input: {
     reverted.push(seedTarget.target);
   }
   return reverted;
+}
+
+// Checkout is authored ONCE at init (per pages/checkout.md — a shipping form
+// whose spec is explicit: "do NOT persist orders") and then frozen. On every
+// non-init run the model must not be free to re-author it: it could wire the
+// form to persist customer PII (name, email, phone, address) — a data leak.
+// Blocking the path in the diff-gate is not enough: there is no rollback on a
+// gate failure and the workspace IS the live preview dir, so a stray write
+// would still go live AND clobber the frozen page. Instead the driver captures
+// the checkout body BEFORE the model turn and restores it AFTER, so the frozen
+// init-authored page is what goes live and the diff never sees a checkout
+// change. This reverts ONLY checkout, so other legitimate edits in the same
+// run survive. captureCheckoutRoute returns the current body (or null if the
+// file is missing — a legacy project predating the seed); restoreCheckoutRoute
+// writes it back if the model changed it, returning true when it did.
+const CHECKOUT_ROUTE_REL = "src/routes/checkout.tsx";
+
+export async function captureCheckoutRoute(input: {
+  draftWorkspacePath: string;
+}): Promise<string | null> {
+  const absTarget = path.join(input.draftWorkspacePath, CHECKOUT_ROUTE_REL);
+  if (!(await pathExists(absTarget))) return null;
+  return fs.readFile(absTarget, "utf8");
+}
+
+export async function restoreCheckoutRoute(input: {
+  draftWorkspacePath: string;
+  capturedBody: string | null;
+}): Promise<boolean> {
+  if (input.capturedBody === null) return false;
+  const absTarget = path.join(input.draftWorkspacePath, CHECKOUT_ROUTE_REL);
+  const current = (await pathExists(absTarget))
+    ? await fs.readFile(absTarget, "utf8")
+    : null;
+  if (current === input.capturedBody) return false;
+
+  await writeSeedFile(absTarget, input.capturedBody, CHECKOUT_ROUTE_REL);
+  return true;
 }
 
 const APP_CSS_REL = "src/styles/app.css";

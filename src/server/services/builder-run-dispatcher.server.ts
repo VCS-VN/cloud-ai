@@ -270,6 +270,18 @@ export async function startBuilderRunForChat(
   let generatePageTarget: GeneratePageTarget | undefined;
   let runPrompt = input.prompt;
   let kind: ResolvedBuilderRunKind;
+  // Checkout is authored once at init and then frozen (it must never wire the
+  // shipping form to persist customer PII — see restoreCheckoutRoute). A
+  // /modify-page checkout run would just be reverted before the diff snapshot,
+  // so reject it up-front with an honest message instead of burning a wasted
+  // agent turn.
+  if (generatePage && generatePage.target.slug === "checkout" && !isEmptyOrDraft) {
+    return {
+      ok: false,
+      code: "blocked_request",
+      message: "Trang checkout được khoá để tránh rò rỉ dữ liệu và không thể chỉnh sửa.",
+    };
+  }
   if (generatePage && !isEmptyOrDraft) {
     kind = "generate_page";
     generatePageTarget = generatePage.target;

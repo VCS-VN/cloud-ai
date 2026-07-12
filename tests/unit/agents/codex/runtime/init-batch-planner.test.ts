@@ -38,7 +38,7 @@ describe("init-batch-planner", () => {
     for (const kind of kinds) expect(kind).toBe("foundation_data");
   });
 
-  it("emits the agent-authored phases (DESIGN_DOC, COMPONENTS, HOME, PRODUCT_DETAIL); plumbing is seeded", async () => {
+  it("emits the agent-authored phases (DESIGN_DOC, COMPONENTS, HOME, PRODUCT_DETAIL, CHECKOUT); plumbing is seeded", async () => {
     const plan = await planInitBatches({ manifest: FULL_MANIFEST });
     const foundationMarkers = plan.batches
       .filter((b) => b.kind === "foundation_data")
@@ -48,6 +48,7 @@ describe("init-batch-planner", () => {
       "COMPONENTS",
       "HOME",
       "PRODUCT_DETAIL",
+      "CHECKOUT",
     ]);
   });
 
@@ -60,6 +61,9 @@ describe("init-batch-planner", () => {
     expect(markers.indexOf("COMPONENTS")).toBeLessThan(markers.indexOf("HOME"));
     expect(markers.indexOf("HOME")).toBeLessThan(
       markers.indexOf("PRODUCT_DETAIL"),
+    );
+    expect(markers.indexOf("PRODUCT_DETAIL")).toBeLessThan(
+      markers.indexOf("CHECKOUT"),
     );
   });
 
@@ -84,20 +88,21 @@ describe("init-batch-planner", () => {
     expect(files).not.toContain("src/components/SiteHeader.tsx");
   });
 
-  it("emits the home + product-detail routes; other commerce routes are seeded", async () => {
+  it("emits the home, product-detail + checkout routes; other commerce routes are seeded", async () => {
     const plan = await planInitBatches({ manifest: FULL_MANIFEST });
     const pageBatches = plan.batches.filter((b) => b.kind === "page");
     expect(pageBatches).toHaveLength(0);
     const files = plan.batches.flatMap((b) => b.files);
-    // Home + product-detail are the two routes the agent authors at init.
+    // Home, product-detail + checkout are the three routes the agent authors at
+    // init. Checkout is authored once (per pages/checkout.md) then frozen.
     expect(files).toContain("src/routes/index.tsx");
     expect(files).toContain("src/routes/products/$productId.tsx");
+    expect(files).toContain("src/routes/checkout.tsx");
     // The remaining commerce routes are pre-seeded and must NOT be agent batches;
     // they are authored on demand via /generate-page.
     for (const route of [
       "src/routes/products/index.tsx",
       "src/routes/cart.tsx",
-      "src/routes/checkout.tsx",
       "src/routes/orders.tsx",
       "src/routes/orders/$orderId.tsx",
     ]) {
@@ -162,6 +167,7 @@ describe("init-batch-planner", () => {
     expect(specByMarker.COMPONENTS).toEqual(["data/component.md"]);
     expect(specByMarker.HOME).toEqual(["pages/home.md"]);
     expect(specByMarker.PRODUCT_DETAIL).toEqual(["pages/product-detail.md"]);
+    expect(specByMarker.CHECKOUT).toEqual(["pages/checkout.md"]);
     // DESIGN_DOC has no separate spec body (rules inline in system.md).
     expect(specByMarker.DESIGN_DOC).toEqual([]);
     // The seeded phases must NOT appear as agent batches anymore.

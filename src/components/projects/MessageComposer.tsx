@@ -653,8 +653,11 @@ function buildSuggestions(
 
   const pages = KNOWN_PAGES.filter(
     (page) =>
-      page.slug.toLowerCase().includes(context.query) ||
-      page.label.toLowerCase().includes(context.query),
+      // Checkout is a locked, persistent skeleton — it cannot be modified (the
+      // dispatcher rejects `/modify-page checkout`), so keep it out of the picker.
+      page.slug !== "checkout" &&
+      (page.slug.toLowerCase().includes(context.query) ||
+        page.label.toLowerCase().includes(context.query)),
   )
     .map((page) => ({
       key: page.slug,
