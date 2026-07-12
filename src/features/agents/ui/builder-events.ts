@@ -1,3 +1,5 @@
+import type { BuilderRunKind } from "./builder-run-status";
+
 export type BuilderRunMilestone =
   | "loading_context"
   | "planning"
@@ -76,7 +78,14 @@ export type BuilderRunEvent =
   | { type: "file_change"; runId: string; path: string; at: number }
   | { type: "thinking"; runId: string; text: string; at: number }
   | { type: "agent_message"; runId: string; text: string; at: number }
-  | { type: "turn_completed"; runId: string; finalResponse: string; at: number }
+  | {
+      type: "turn_completed";
+      runId: string;
+      finalResponse: string;
+      runKind?: BuilderRunKind;
+      changedFiles?: string[];
+      at: number;
+    }
   | { type: "plan.todo_updated"; runId: string; items: TodoItem[]; at: number }
   | {
       // Ephemeral live-progress signal fired during a streamed codex turn so

@@ -1,4 +1,5 @@
 import type { BuilderRunMilestone } from "@/features/agents/ui/builder-events";
+import type { BuilderRunKind } from "@/features/agents/ui/builder-run-status";
 
 export type ProgressLocale = "vi" | "en";
 
@@ -240,6 +241,83 @@ export function sectionFraming(
   locale: ProgressLocale = "en",
 ): string {
   return locale === "vi" ? `Đang cập nhật ${section}` : `Updating ${section}`;
+}
+
+const RUN_KIND_HEADLINES: Record<
+  Exclude<BuilderRunKind, "update" | "new_route" | "repair">,
+  Record<ProgressLocale, string>
+> = {
+  init: { vi: "Storefront của bạn đã sẵn sàng", en: "Your storefront is ready" },
+  generate_page: { vi: "Đã dựng xong trang mới", en: "Built the new page" },
+  redesign: { vi: "Đã làm mới thiết kế storefront", en: "Redesigned your storefront" },
+};
+
+const UPDATE_FALLBACK_HEADLINE: Record<ProgressLocale, string> = {
+  vi: "Đã cập nhật storefront của bạn",
+  en: "Updated your storefront",
+};
+
+const SECTION_LIST_MAX = 4;
+
+function joinSections(sections: string[], locale: ProgressLocale): string {
+  if (sections.length === 0) return "";
+  if (sections.length === 1) return sections[0]!;
+  const and = locale === "vi" ? "và" : "and";
+  if (sections.length === 2) return `${sections[0]} ${and} ${sections[1]}`;
+  const head = sections.slice(0, -1).join(", ");
+  const tail = sections[sections.length - 1];
+  return `${head}, ${and} ${tail}`;
+}
+
+function buildSectionClause(
+  changedFiles: string[],
+  locale: ProgressLocale,
+): string {
+  const seen = new Set<string>();
+  const sections: string[] = [];
+  for (const path of changedFiles) {
+    const section = fileChangeToSection(path, locale);
+    if (!section || seen.has(section)) continue;
+    seen.add(section);
+    sections.push(section);
+    if (sections.length >= SECTION_LIST_MAX) break;
+  }
+  return joinSections(sections, locale);
+}
+
+function buildHeadline(
+  runKind: BuilderRunKind,
+  changedFiles: string[],
+  locale: ProgressLocale,
+): string {
+  if (runKind === "update" || runKind === "new_route" || runKind === "repair") {
+    const sections = buildSectionClause(changedFiles, locale);
+    if (sections) {
+      return locale === "vi" ? `Đã cập nhật ${sections}` : `Updated ${sections}`;
+    }
+    return UPDATE_FALLBACK_HEADLINE[locale];
+  }
+  return RUN_KIND_HEADLINES[runKind][locale];
+}
+
+// NOTE: `finalResponse` is intentionally appended verbatim, with no privacy
+// filter / truncation applied (see commit 46b2d56 "unblock codex SDK
+// messages" — the model's own text is shown as-is by design). Only a
+// product-copy headline is prepended; do not reintroduce isPrivacySafe /
+// extractSummary filtering here.
+export function composeAnswerMessage(input: {
+  runKind?: BuilderRunKind;
+  changedFiles?: string[];
+  finalResponse: string;
+  locale?: ProgressLocale;
+}): string {
+  const locale = input.locale ?? "en";
+  if (input.runKind === undefined) {
+    return input.finalResponse.trim() || SUMMARY_FALLBACK[locale];
+  }
+  const headline = buildHeadline(input.runKind, input.changedFiles ?? [], locale);
+  const rest = input.finalResponse.trim();
+  return rest ? `${headline}. ${rest}` : `${headline}.`;
 }
 
 // --- Live step-progress labels ----------------------------------------------

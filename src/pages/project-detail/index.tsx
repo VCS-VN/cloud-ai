@@ -580,7 +580,7 @@ export function ProjectDetailPage() {
         const lastUser = [...history].reverse().find((m) => m.role === "user");
         const lastAgent = [...history]
           .reverse()
-          .find((m) => m.role === "agent" && m.kind === "agent_message");
+          .find((m) => m.role === "agent" && m.kind === "answer");
         void fetchRetailSuggestions({
           data: {
             storeName: project?.name,

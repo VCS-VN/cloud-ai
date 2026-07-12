@@ -180,6 +180,9 @@ function AgentBody({
     return (
       <ClarificationBubble message={message} onSelectOption={onSelectOption} />
     );
+  if (message.kind === "agent_message") {
+    return <ProcessingNoteBubble content={message.content} />;
+  }
   return <MarkdownContent content={message.content} />;
 }
 
@@ -303,6 +306,20 @@ function ThinkingBubble({ content }: { content: string }) {
       <div className="mb-1 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-subtle">
         <Brain aria-hidden="true" size={11} />
         Thinking
+      </div>
+      <div className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-muted">
+        {content}
+      </div>
+    </div>
+  );
+}
+
+function ProcessingNoteBubble({ content }: { content: string }) {
+  return (
+    <div className="rounded-md border border-hairline bg-ink/[0.02] px-3 py-2">
+      <div className="mb-1 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-subtle">
+        <Loader2 aria-hidden="true" size={11} />
+        Processing
       </div>
       <div className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-muted">
         {content}

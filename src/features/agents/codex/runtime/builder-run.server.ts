@@ -447,11 +447,18 @@ async function runScopeAnalysisPhase(
   }
 }
 
-function emitFinalAnswer(emit: EmitFn, runId: string, finalResponse: string): void {
+function emitFinalAnswer(
+  emit: EmitFn,
+  runId: string,
+  finalResponse: string,
+  meta?: { runKind: BuilderRunKind; changedFiles: string[] },
+): void {
   emit({
     type: "turn_completed",
     runId,
     finalResponse: finalResponse || "Done.",
+    runKind: meta?.runKind,
+    changedFiles: meta?.changedFiles,
     at: Date.now(),
   });
 }
@@ -1780,14 +1787,8 @@ export async function runInitBuilderRun(
   }
 
   // Explicit "storefront is ready" notification so the user knows init finished
-  // (the composer unblocks and the client auto-starts the preview). Prefer the
-  // model's own closing summary; fall back to a fixed locale-aware message.
-  const doneMessage =
-    finalResponse.trim() ||
-    (toProgressLocale(ctx.locale) === "vi"
-      ? "Storefront của bạn đã sẵn sàng. Xem preview hoặc gửi yêu cầu chỉnh sửa tiếp."
-      : "Your storefront is ready. Open the preview or send a follow-up to refine it.");
-  emitFinalAnswer(emit, runId, doneMessage);
+  // (the composer unblocks and the client auto-starts the preview).
+  emitFinalAnswer(emit, runId, finalResponse, { runKind: ctx.kind, changedFiles: diffGate.changedFiles });
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({
     runId,
@@ -2358,7 +2359,7 @@ export async function runNewRouteBuilderRun(
   }
 
   // Edits landed in the project root in place — nothing to sync or clean up.
-  emitFinalAnswer(emit, runId, finalResponse);
+  emitFinalAnswer(emit, runId, finalResponse, { runKind: ctx.kind, changedFiles: diffGate.changedFiles });
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({
     runId,
@@ -2665,7 +2666,7 @@ export async function runGeneratePageBuilderRun(
     });
   }
 
-  emitFinalAnswer(emit, runId, finalResponse);
+  emitFinalAnswer(emit, runId, finalResponse, { runKind: ctx.kind, changedFiles: diffGate.changedFiles });
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({
     runId,
@@ -2982,7 +2983,7 @@ export async function runSmallUpdateBuilderRun(
   }
 
   // Edits landed in the project root in place — nothing to sync or clean up.
-  emitFinalAnswer(emit, runId, finalResponse);
+  emitFinalAnswer(emit, runId, finalResponse, { runKind: ctx.kind, changedFiles: diffGate.changedFiles });
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({
     runId,
@@ -3514,7 +3515,7 @@ export async function runRedesignBuilderRun(
     });
   }
 
-  emitFinalAnswer(emit, runId, finalResponse);
+  emitFinalAnswer(emit, runId, finalResponse, { runKind: ctx.kind, changedFiles: diffGate.changedFiles });
   emit({ type: "done", runId, milestone: "done", at: Date.now() });
   return finalize({
     runId,

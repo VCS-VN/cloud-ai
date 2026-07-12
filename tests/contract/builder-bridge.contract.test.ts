@@ -110,6 +110,24 @@ describe("BuilderRunEvent → RunStreamEvent translator (Phase 1 contract)", () 
     expect(out.events[0]).toMatchObject({ content: "Đã hoàn tất yêu cầu của bạn." });
   });
 
+  it("turn_completed with runKind+changedFiles prepends a section-aware headline while keeping finalResponse verbatim", () => {
+    const out = translateBuilderEventToRunStreamEvent(
+      {
+        type: "turn_completed",
+        runId: "run-1",
+        finalResponse: "Đã thêm ảnh mới.",
+        runKind: "update",
+        changedFiles: ["src/components/storefront/Hero.tsx"],
+        at: 1234,
+      },
+      ctx,
+    );
+    expect(out.events[0]).toMatchObject({ content: expect.stringContaining("phần hero") });
+    expect(out.events[0]).toMatchObject({
+      content: expect.stringContaining("Đã thêm ảnh mới."),
+    });
+  });
+
   it("thinking emits a skeleton.update AND a persisted reasoning message (raw text)", () => {
     const raw = "Reading src/routes/index.tsx to plan the hero edit";
     const out = translateBuilderEventToRunStreamEvent(

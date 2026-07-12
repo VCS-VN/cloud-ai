@@ -1,4 +1,5 @@
 import {
+  composeAnswerMessage,
   fileChangeToSection,
   isPrivacySafe,
   phaseLabel,
@@ -281,12 +282,12 @@ export function translateBuilderEventToRunStreamEvent(
       };
     }
     case "turn_completed": {
-      const raw = event.finalResponse.trim();
-      const safe =
-        raw ||
-        (locale === "vi"
-          ? "Đã hoàn tất yêu cầu của bạn."
-          : "Done with your request.");
+      const safe = composeAnswerMessage({
+        runKind: event.runKind,
+        changedFiles: event.changedFiles,
+        finalResponse: event.finalResponse,
+        locale,
+      });
       const messageId = `msg-${runId}-answer`;
       const events: RunStreamEvent[] = [
         {
