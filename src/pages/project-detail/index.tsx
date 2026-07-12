@@ -21,9 +21,7 @@ import {
   type DevRuntimeUIState,
 } from "@/features/agents/ui/agent-event-reducer";
 import { useChatStream as useAgentStream } from "@/features/agents/ui/use-chat-stream";
-import {
-  isProjectPreviewStartAvailable,
-} from "@/features/agents/ui/preview-availability";
+import { isProjectPreviewStartAvailable } from "@/features/agents/ui/preview-availability";
 import {
   buildPreviewUrl,
   normalizePreviewPath,
@@ -579,9 +577,7 @@ export function ProjectDetailPage() {
       // failure just leaves the chip row empty.
       if (chatState.lastRunOutcome === "completed") {
         const history = chatState.messages;
-        const lastUser = [...history]
-          .reverse()
-          .find((m) => m.role === "user");
+        const lastUser = [...history].reverse().find((m) => m.role === "user");
         const lastAgent = [...history]
           .reverse()
           .find((m) => m.role === "agent" && m.kind === "agent_message");
@@ -1257,7 +1253,11 @@ export function ProjectDetailPage() {
 
             <Button
               type="button"
-              className={`left-0 z-40 group relative w-2 shrink-0 cursor-col-resize touch-none border-0 p-0 outline-none transition-[opacity] duration-200 ${chatVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+              variant="unstyled"
+              className={`project-resize-handle ${chatVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+              data-resizing={resizingChat}
+              role="separator"
+              aria-orientation="vertical"
               aria-label="Resize chat panel"
               onPointerDown={beginResize}
               onPointerMove={resize}
@@ -1265,13 +1265,17 @@ export function ProjectDetailPage() {
               onPointerCancel={endResize}
               onLostPointerCapture={endResize}
             >
-              <span
-                className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-hairline-soft transition-colors duration-200 group-hover:bg-ink"
-                aria-hidden="true"
-              />
+              <span className="project-resize-handle-line" aria-hidden="true" />
+              <span className="project-resize-handle-grip" aria-hidden="true" />
             </Button>
 
             <section className="project-preview-shell">
+              {resizingChat ? (
+                <div
+                  className="absolute inset-0 z-30 cursor-col-resize"
+                  aria-hidden="true"
+                />
+              ) : null}
               <PreviewToolbar
                 previewDraftPath={previewDraftPath}
                 previewPathError={previewPathError}

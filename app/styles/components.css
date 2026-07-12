@@ -266,6 +266,30 @@
     @apply flex h-full min-w-0 flex-col overflow-hidden rounded-[18px] border border-hairline bg-surface shadow-sm transition-colors duration-300;
   }
 
+  /* ─── Chat ⇄ preview resize handle ────────────────────────── */
+  .project-resize-handle {
+    @apply relative z-40 flex w-3 shrink-0 cursor-col-resize touch-none items-center justify-center border-0 bg-transparent p-0 transition-opacity duration-200 ease-standard;
+    @apply focus-ring;
+  }
+
+  .project-resize-handle-line {
+    @apply pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-hairline-soft transition-colors duration-200 ease-standard;
+  }
+
+  .project-resize-handle:hover .project-resize-handle-line,
+  .project-resize-handle[data-resizing='true'] .project-resize-handle-line {
+    @apply bg-ink;
+  }
+
+  .project-resize-handle-grip {
+    @apply pointer-events-none h-10 w-1 rounded-pill bg-hairline-soft opacity-0 transition-all duration-200 ease-standard;
+  }
+
+  .project-resize-handle:hover .project-resize-handle-grip,
+  .project-resize-handle[data-resizing='true'] .project-resize-handle-grip {
+    @apply bg-ink opacity-100;
+  }
+
   /* ─── Project detail top bar ──────────────────────────────── */
   .project-topbar {
     @apply sticky top-0 z-50 h-14 bg-paper/90 backdrop-blur-md border-b border-hairline flex items-center justify-between px-4 lg:px-6;

@@ -1,58 +1,100 @@
-import type { LoginErrorCode } from './types'
+import type { LoginErrorCode } from "./types";
 
 const safeMessages: Record<LoginErrorCode, string> = {
-  'missing-token': 'Unable to sign in. Please try again.',
-  'invalid-token': 'Your Google sign-in session is invalid or expired. Please try again.',
-  'email-not-verified': 'Your Google account must have a verified email address to sign in.',
-  'auth-config-error': 'Sign-in is temporarily unavailable. Please try again later.',
-  'user-upsert-failed': 'Unable to save user information. Please try again.',
-  'session-create-failed': 'Unable to create a sign-in session. Please try again.',
-  unauthorized: 'You need to sign in to continue.',
-  'network-error': 'A connection issue occurred. Please check your network and try again.',
-  'popup-cancelled': 'You cancelled Google sign-in.',
-  'popup-blocked': 'Your browser blocked the sign-in window. Please allow popups and try again.',
-  'unauthorized-domain': 'This domain is not authorized for Google sign-in. Add it in Firebase Authentication settings.',
-  'operation-not-allowed': 'Google sign-in is not enabled for this Firebase project.',
-  'invalid-client-config': 'Firebase sign-in configuration is invalid for this environment.',
-  'missing-oauth-config': 'Cloud AI sign-in is not configured yet. Please try again later.',
-  'oauth-exchange-failed': 'Unable to complete sign-in. Please try again.',
-  'oauth-profile-fetch-failed': 'Unable to load your account details. Please try again.',
-  'handoff-code-missing': 'This builder link is missing its access code. Open Cloud AI again from the merchant dashboard.',
-  'handoff-login-failed': 'This builder link has expired or is invalid. Open Cloud AI again from the merchant dashboard.',
-  'episcloud-activation-failed': 'Could not activate EpisCloud. Please try again.',
-  'episcloud-not-activated': 'Activate EpisCloud before adding a payment method.',
-  'episcloud-api-key-failed': 'Could not provision your EpisCloud API key. Please try again.',
-  'episcloud-models-failed': 'Could not load available models from EpisCloud. Please try again.',
-  'payment-config-failed': 'Could not load payment options. Please try again.',
-  'payment-methods-failed': 'Could not load your payment methods. Please try again.',
-  'topup-failed': 'Could not top up your balance. Please try again.',
-  'balance-summary-failed': 'Could not load your balance. Please try again.',
-  unknown: 'Something went wrong. Please try again.'
-}
+  "missing-token": "Unable to sign in. Please try again.",
+  "invalid-token":
+    "Your Google sign-in session is invalid or expired. Please try again.",
+  "email-not-verified":
+    "Your Google account must have a verified email address to sign in.",
+  "auth-config-error":
+    "Sign-in is temporarily unavailable. Please try again later.",
+  "user-upsert-failed": "Unable to save user information. Please try again.",
+  "session-create-failed":
+    "Unable to create a sign-in session. Please try again.",
+  unauthorized: "You need to sign in to continue.",
+  "network-error":
+    "A connection issue occurred. Please check your network and try again.",
+  "popup-cancelled": "You cancelled Google sign-in.",
+  "popup-blocked":
+    "Your browser blocked the sign-in window. Please allow popups and try again.",
+  "unauthorized-domain":
+    "This domain is not authorized for Google sign-in. Add it in Firebase Authentication settings.",
+  "operation-not-allowed":
+    "Google sign-in is not enabled for this Firebase project.",
+  "invalid-client-config":
+    "Firebase sign-in configuration is invalid for this environment.",
+  "missing-oauth-config":
+    "Cloud AI sign-in is not configured yet. Please try again later.",
+  "oauth-exchange-failed": "Unable to complete sign-in. Please try again.",
+  "oauth-profile-fetch-failed":
+    "Unable to load your account details. Please try again.",
+  "handoff-code-missing":
+    "This builder link is missing its access code. Open Cloud AI again from the merchant dashboard.",
+  "handoff-login-failed":
+    "This builder link has expired or is invalid. Open Cloud AI again from the merchant dashboard.",
+  "episcloud-activation-failed":
+    "Could not activate EpisCloud. Please try again.",
+  "episcloud-not-activated":
+    "Activate EpisCloud before adding a payment method.",
+  "episcloud-api-key-failed":
+    "Could not provision your EpisCloud API key. Please try again.",
+  "episcloud-models-failed":
+    "Could not load available models. Please try again",
+  "payment-config-failed": "Could not load payment options. Please try again.",
+  "payment-methods-failed":
+    "Could not load your payment methods. Please try again.",
+  "topup-failed": "Could not top up your balance. Please try again.",
+  "balance-summary-failed": "Could not load your balance. Please try again.",
+  unknown: "Something went wrong. Please try again.",
+};
 
 export class AuthError extends Error {
-  constructor(readonly code: LoginErrorCode, message = safeMessages[code]) {
-    super(message)
-    this.name = 'AuthError'
+  constructor(
+    readonly code: LoginErrorCode,
+    message = safeMessages[code],
+  ) {
+    super(message);
+    this.name = "AuthError";
   }
 }
 
 export function getSafeAuthMessage(code: LoginErrorCode) {
-  return safeMessages[code] ?? safeMessages.unknown
+  return safeMessages[code] ?? safeMessages.unknown;
 }
 
-export function toSafeAuthError(error: unknown, fallback: LoginErrorCode = 'unknown') {
-  if (error instanceof AuthError) return { ok: false as const, code: error.code, message: getSafeAuthMessage(error.code) }
-  return { ok: false as const, code: fallback, message: getSafeAuthMessage(fallback) }
+export function toSafeAuthError(
+  error: unknown,
+  fallback: LoginErrorCode = "unknown",
+) {
+  if (error instanceof AuthError)
+    return {
+      ok: false as const,
+      code: error.code,
+      message: getSafeAuthMessage(error.code),
+    };
+  return {
+    ok: false as const,
+    code: fallback,
+    message: getSafeAuthMessage(fallback),
+  };
 }
 
 export function mapFirebaseClientError(error: unknown): LoginErrorCode {
-  const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: unknown }).code) : ''
-  if (code.includes('unauthorized-domain')) return 'unauthorized-domain'
-  if (code.includes('operation-not-allowed')) return 'operation-not-allowed'
-  if (code.includes('invalid-api-key') || code.includes('invalid-app-credential') || code.includes('app-not-authorized')) return 'invalid-client-config'
-  if (code.includes('popup-closed') || code.includes('cancelled')) return 'popup-cancelled'
-  if (code.includes('popup-blocked')) return 'popup-blocked'
-  if (code.includes('network')) return 'network-error'
-  return 'unknown'
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: unknown }).code)
+      : "";
+  if (code.includes("unauthorized-domain")) return "unauthorized-domain";
+  if (code.includes("operation-not-allowed")) return "operation-not-allowed";
+  if (
+    code.includes("invalid-api-key") ||
+    code.includes("invalid-app-credential") ||
+    code.includes("app-not-authorized")
+  )
+    return "invalid-client-config";
+  if (code.includes("popup-closed") || code.includes("cancelled"))
+    return "popup-cancelled";
+  if (code.includes("popup-blocked")) return "popup-blocked";
+  if (code.includes("network")) return "network-error";
+  return "unknown";
 }
