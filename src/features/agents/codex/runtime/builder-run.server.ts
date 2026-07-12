@@ -1867,6 +1867,7 @@ async function runSkillSelection(
     const prompt = buildClarificationPrompt({
       candidates: outcome.pending,
       registry,
+      locale: toProgressLocale(ctx.locale),
     });
     const handle = getBuilderRunHandle(ctx.runId);
     if (handle) {

@@ -241,7 +241,6 @@ export class ProjectService {
           projectId: project.id,
           userId,
           prompt: initialPrompt,
-          locale: "en",
           model,
           project: { status: "draft" },
           runId: agentRun.id,

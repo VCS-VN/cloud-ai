@@ -299,13 +299,6 @@ export function useChatStream({
             reasoningEffort: input.reasoningEffort,
             model: input.model ?? undefined,
             planMode: input.planMode ?? false,
-            // Detect the browser locale so the server picks the right task-list
-            // language and fallback messages. Falls back to "en" when the
-            // navigator API is unavailable (SSR / non-browser env).
-            locale:
-              typeof navigator !== "undefined" && navigator.language
-                ? navigator.language
-                : "en",
           }),
         });
         const json = (await resp.json().catch(() => null)) as
@@ -358,16 +351,7 @@ export function useChatStream({
     async (runId: string): Promise<SendPromptResult> => {
       const resp = await fetch(
         `/api/projects/${projectId}/builder-runs/${runId}/retry`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            locale:
-              typeof navigator !== "undefined" && navigator.language
-                ? navigator.language
-                : "en",
-          }),
-        },
+        { method: "POST" },
       );
       const json = (await resp.json().catch(() => null)) as
         | { ok: true; runId: string; userMessage: Message }

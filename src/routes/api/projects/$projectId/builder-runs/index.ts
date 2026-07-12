@@ -57,7 +57,6 @@ export const Route = createFileRoute(
             ? body.model.trim()
             : undefined;
         const planMode = body.planMode === true;
-        const locale = typeof body.locale === "string" ? body.locale : "en";
 
         const services = await getProjectServices();
         const project = await services.projectService["projectRepository"]
@@ -138,11 +137,10 @@ export const Route = createFileRoute(
           projectId,
           userId: user.id,
           prompt,
-          locale: locale.startsWith("vi") ? "vi" : "en",
           reasoningEffort,
           model,
           planMode,
-          project: { status: project.status },
+          project: { status: project.status, languageContext: project.languageContext },
           runId: created.runId,
           parentMessageId: userMessage.id,
           persistence: {

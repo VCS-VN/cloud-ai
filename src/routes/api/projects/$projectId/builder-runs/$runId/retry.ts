@@ -24,19 +24,6 @@ export const Route = createFileRoute(
           runId: string;
         };
 
-        // The retry client may send an optional JSON body with a locale hint.
-        // When absent (or when parsing fails), default to "en" so the task list
-        // and fallback messages are not stuck in Vietnamese.
-        let retryLocale = "en";
-        try {
-          const body = await request.json().catch(() => null);
-          if (body && typeof body.locale === "string") {
-            retryLocale = body.locale;
-          }
-        } catch {
-          // Body may not be JSON or may be empty — keep the default.
-        }
-
         const services = await getProjectServices();
         const projectRepository = services.projectService["projectRepository"];
         const messageRepository = services.projectService["messageRepository"];
@@ -140,11 +127,10 @@ export const Route = createFileRoute(
           projectId,
           userId: user.id,
           prompt,
-          locale: retryLocale,
           reasoningEffort: previous.reasoningEffort ?? undefined,
           planMode: previous.planMode ?? false,
           model: previous.model,
-          project: { status: project.status },
+          project: { status: project.status, languageContext: project.languageContext },
           runId: run.id,
           parentMessageId: userMessage.id,
           persistence: {

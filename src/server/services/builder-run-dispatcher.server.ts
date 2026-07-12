@@ -47,6 +47,7 @@ import {
 } from "@/server/services/builder-run-translator.server";
 import { publishChatEvent } from "@/server/services/chat-event-channel.server";
 import type { ProgressLocale } from "@/server/functions/progress-mapper.server";
+import { resolveProjectLanguage } from "@/server/functions/project-language.server";
 import type { PgAgentRunRepository } from "@/server/repositories/agent-run-repository";
 import type { ProjectRunStore } from "@/features/projects/legacy/project-run-store.server";
 
@@ -54,12 +55,18 @@ export type BuilderRunStartInput = {
   projectId: string;
   userId: string | undefined;
   prompt: string;
-  locale: string;
+  /**
+   * Legacy browser-locale hint. No longer used to pick the reply language —
+   * language now follows the prompt text + the project's sticky context (see
+   * resolveProjectLanguage). Kept on the type so existing callers still compile;
+   * safe to drop once all callers stop sending it.
+   */
+  locale?: string;
   reasoningEffort?: ComposerReasoningEffort | null;
   /** Epis Cloud model id selected by the user. Falls back to CODEX_MODEL when absent. */
   model?: string;
   planMode?: boolean;
-  project: Pick<Project, "status">;
+  project: Pick<Project, "status" | "languageContext">;
   /** Existing agent_runs row id to attach the codex driver run to. */
   runId?: string;
   /** Optional callback fired after R5 resolves the kind, before the driver starts. */
@@ -322,13 +329,56 @@ export async function startBuilderRunForChat(
     throw error;
   }
 
+  // Resolve ONE language for this run from the prompt + the project's sticky
+  // context. This drives BOTH the codex agent's reply language (via ctx.locale)
+  // and the server-rendered i18n (via the translator locale below) so the chat
+  // never mixes languages. The browser-sent input.locale is ignored — it was
+  // the source of the mismatch (navigator.language ≠ the language the user
+  // actually typed in).
+  const language = resolveProjectLanguage({
+    prompt: input.prompt,
+    stored: input.project.languageContext ?? null,
+  });
+  console.log(
+    JSON.stringify({
+      event: "builder_run_language_resolved",
+      projectId: input.projectId,
+      runId,
+      locale: language.locale,
+      source: language.source,
+      storedContext: input.project.languageContext ?? null,
+    }),
+  );
+  // Persist the resolved language as the project's sticky lock on the first
+  // detection, and re-persist when an explicit "reply in X" directive changes
+  // it. Once locked, later prompts keep the stored language (no re-detect), so
+  // this only writes when the value actually moves. Fire-and-forget: a
+  // persistence miss must not fail the run.
+  if (
+    input.persistence &&
+    language.source !== "default" &&
+    language.locale !== input.project.languageContext
+  ) {
+    void input.persistence.projectRepository
+      .updateProjectLanguageContext(input.projectId, language.locale, input.userId)
+      .catch((error) => {
+        console.warn(
+          JSON.stringify({
+            event: "builder_run_language_persist_failed",
+            projectId: input.projectId,
+            error: error instanceof Error ? error.message : "unknown",
+          }),
+        );
+      });
+  }
+
   const ctx: BuilderRunContext = {
     projectId: input.projectId,
     userId: input.userId,
     runId,
     kind,
     userPrompt: runPrompt,
-    locale: input.locale,
+    locale: language.locale,
     env,
     projectSummary: null,
     signal: handle.abortController.signal,
@@ -354,7 +404,7 @@ export async function startBuilderRunForChat(
   // translate to RunStreamEvent, persist messages + timeline + status, push
   // translated events into the chat event channel for SSE consumers.
   const ctxPersistence = input.persistence;
-  const locale: ProgressLocale = input.locale.startsWith("vi") ? "vi" : "en";
+  const locale: ProgressLocale = language.locale;
   const translatorCtx = { runId, projectId: input.projectId, locale };
   // run.started fires immediately so SSE consumers see the run is alive
   publishChatEvent(runId, emitRunStarted(translatorCtx));

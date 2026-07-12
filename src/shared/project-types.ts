@@ -192,6 +192,14 @@ export type Project = {
    * status badges. Absent on records loaded without project-state join.
    */
   generatedPages?: Array<{ slug: string; generatedAt: string }>
+  /**
+   * Sticky language context for the project's chat session. Drives BOTH the
+   * server-rendered i18n and the agent's reply language so they never drift.
+   * Set from the first prompt's detected language, auto-follows later prompts,
+   * and is overridden by explicit "reply in X" directives. Absent until the
+   * first run resolves a language.
+   */
+  languageContext?: 'vi' | 'en'
 }
 
 export type Message = {
@@ -416,6 +424,11 @@ export interface ProjectRepository {
     activeRunId?: string,
     processingStartedAt?: string
   ): Promise<Project | undefined>
+  updateProjectLanguageContext(
+    id: string,
+    languageContext: 'vi' | 'en',
+    userId?: string
+  ): Promise<void>
 }
 
 export interface ProjectMessageRepository {

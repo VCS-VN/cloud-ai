@@ -163,6 +163,28 @@ export class PgProjectRepository implements ProjectRepository {
     return row ? toProject(row) : undefined;
   }
 
+  async updateProjectLanguageContext(
+    id: string,
+    languageContext: "vi" | "en",
+    userId?: string,
+  ): Promise<void> {
+    let filter = and(eq(projects.id, id), eq(projects.status, 1));
+    if (userId) filter = and(filter, eq(projects.userId, userId));
+
+    // Merge into the data jsonb without clobbering other fields. The whole
+    // Project snapshot lives in `data`, so read-merge-write the single key.
+    const [row] = await this.db.select().from(projects).where(filter);
+    if (!row) return;
+    const data = (row.data as Record<string, unknown> | null) ?? {};
+    await this.db
+      .update(projects)
+      .set({
+        data: { ...data, languageContext },
+        updatedAt: new Date(),
+      })
+      .where(filter);
+  }
+
   async updateProjectProcessingState(
     id: string,
     processingStatus: Project["processingStatus"],

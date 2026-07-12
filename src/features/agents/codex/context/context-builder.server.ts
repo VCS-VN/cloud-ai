@@ -54,6 +54,16 @@ export function buildContextBundle(input: ContextBundleInput): ContextBundleOutp
   const lines: string[] = [];
   lines.push("<builder_context>");
   lines.push(`<locale>${input.locale}</locale>`);
+  lines.push(
+    `<reply_language>${input.locale === "vi" ? "Vietnamese" : "English"}</reply_language>`,
+  );
+  lines.push(
+    "<language_directive>Write ALL user-visible text — chat messages, the closing " +
+      "summary, and any clarification questions — in the language named by " +
+      "<reply_language>. This is the resolved session language and OVERRIDES the " +
+      "\"reply in the user's input language\" default: even if this specific prompt " +
+      "is written in another language, reply in <reply_language>.</language_directive>",
+  );
   lines.push(`<draft_workspace>${input.draftWorkspacePath}</draft_workspace>`);
   lines.push(projectSummaryToContextBlock(input.projectSummary));
   lines.push("<file_manifest>");

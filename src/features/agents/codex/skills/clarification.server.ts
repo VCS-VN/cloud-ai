@@ -1,4 +1,8 @@
-import { BUILDER_RUN_LOCALE_EN } from "@/features/agents/ui/builder-run-i18n";
+import {
+  BUILDER_RUN_LOCALE_EN,
+  BUILDER_RUN_LOCALE_VI,
+} from "@/features/agents/ui/builder-run-i18n";
+import type { ProgressLocale } from "@/server/functions/progress-mapper.server";
 import type { SelectionPending } from "./selection.server";
 import type { LoadedSkill } from "./skill-loader.server";
 
@@ -28,8 +32,9 @@ function truncateLabel(description: string): string {
 export function buildClarificationPrompt(input: {
   candidates: SelectionPending[];
   registry: LoadedSkill[];
+  locale: ProgressLocale;
 }): ClarificationPrompt {
-  const { candidates, registry } = input;
+  const { candidates, registry, locale } = input;
 
   const sorted = [...candidates].sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
@@ -62,8 +67,9 @@ export function buildClarificationPrompt(input: {
     };
   });
 
+  const i18n = locale === "vi" ? BUILDER_RUN_LOCALE_VI : BUILDER_RUN_LOCALE_EN;
   return {
-    question: BUILDER_RUN_LOCALE_EN.clarification.questionScaffold,
+    question: i18n.clarification.questionScaffold,
     options,
   };
 }
