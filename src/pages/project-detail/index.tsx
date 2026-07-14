@@ -35,9 +35,10 @@ import { MessageComposer } from "@/components/projects/MessageComposer";
 import { EpisCloudBlockedNotice } from "@/components/profile/EpisCloudBlockedNotice";
 import { EpisCloudActivateDialog } from "@/components/profile/EpisCloudActivateDialog";
 import { useEpisCloudActivate } from "@/auth/use-episcloud-activate";
-import { PlanChecklist } from "@/features/agents/ui/PlanChecklist";
 import { ProjectDetailTopBar } from "@/components/projects/ProjectDetailTopBar";
 import { ProjectMessagesPanel } from "@/components/projects/ProjectMessagesPanel";
+import { ClarificationSlot } from "./components/ClarificationSlot";
+import { RunnerDetailPanel } from "./components/RunnerDetailPanel";
 import { ProjectDeleteConfirmDialog } from "@/components/projects/ProjectDeleteConfirmDialog";
 import { ProjectSettingsDrawer } from "@/components/projects/ProjectSettingsDrawer";
 import { listProjectMessages } from "@/server/functions/project-messages";
@@ -142,6 +143,12 @@ export function ProjectDetailPage() {
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
   const [detailMode, setDetailMode] = useState<DetailMode>("preview");
+  // runId whose runner-detail view currently occupies the preview shell, or
+  // null when the preview/code view is showing. Only one runner's detail shows
+  // at a time — the last one whose "Details" footer button was clicked.
+  const [runnerDetailRunId, setRunnerDetailRunId] = useState<string | null>(
+    null,
+  );
   const [activeDevice, setActiveDevice] = useState<PreviewDevice>("desktop");
   const [previewDraftPath, setPreviewDraftPath] = useState("/");
   const [previewCommittedPath, setPreviewCommittedPath] = useState("/");
@@ -200,6 +207,44 @@ export function ProjectDetailPage() {
   const isProcessing = streamConnected
     ? chatState.activeRun!.status === "streaming"
     : project?.processingStatus === "processing" && hasRecordedActiveRun;
+
+  // The run is paused waiting on the user. Its runId drives plan-review mode.
+  const awaitingInputRunId =
+    chatState.activeRun?.status === "awaiting_input"
+      ? chatState.activeRun.runId
+      : null;
+
+  // The single pending interactive message (design variant / skill
+  // clarification / free-text clarification / plan review) that the agent is
+  // blocked on. It renders in the ClarificationSlot at the tasks-list position,
+  // not as a chat bubble. Pick the newest un-answered one; once answered it's
+  // gone from state, so the slot clears itself.
+  const pendingClarification = useMemo<Message | null>(() => {
+    const interactive = messages.filter(
+      (m) =>
+        m.kind === "agent_question" ||
+        m.kind === "clarification" ||
+        m.kind === "plan",
+    );
+    for (let i = interactive.length - 1; i >= 0; i -= 1) {
+      const m = interactive[i];
+      const selectedOptionId = (
+        m.metadata as { selectedOptionId?: string | null } | null
+      )?.selectedOptionId;
+      if (m.kind === "plan") {
+        // A plan only needs review while its run is the one awaiting input.
+        if (m.runId && m.runId === awaitingInputRunId) return m;
+        continue;
+      }
+      if (!selectedOptionId) return m;
+    }
+    return null;
+  }, [messages, awaitingInputRunId]);
+
+  // Inner steps of the runner whose detail view is open, sorted by the panel.
+  const runnerDetailSteps = runnerDetailRunId
+    ? (chatState.runnerMessages[runnerDetailRunId] ?? [])
+    : [];
 
   const messagesQuery = useInfiniteQuery({
     queryKey: getProjectMessagesQueryKey(project?.id),
@@ -374,6 +419,7 @@ export function ProjectDetailPage() {
     setManualRuntime(null);
     setSelectedNodeId(firstFileNode(workspace?.fileTree ?? [])?.id);
     setDetailMode("preview");
+    setRunnerDetailRunId(null);
     setPreviewDraftPath("/");
     setPreviewCommittedPath("/");
     setPreviewLivePath("/");
@@ -701,6 +747,27 @@ export function ProjectDetailPage() {
       window.localStorage.setItem(CHAT_VISIBLE_KEY, String(next));
       return next;
     });
+  }
+
+  // Runner-card "Details" footer button. Toggles the right-hand detail view for
+  // the clicked run: showing it if hidden (or if a different run's detail was
+  // showing), hiding it if this run's detail was already the one showing. Only
+  // one run's detail shows at a time.
+  function handleToggleRunnerDetails(runId: string) {
+    setRunnerDetailRunId((current) => {
+      const next = current === runId ? null : runId;
+      // Lazy-load the run's inner steps when opening its detail view. Live runs
+      // already hold theirs from the SSE stream; this fills archived runs whose
+      // steps were never streamed to this client.
+      if (next) void agentStream.fetchRunnerMessages(next);
+      return next;
+    });
+  }
+
+  // Runner-card "Preview" footer button. Returns to the preview/code view by
+  // clearing the active runner detail.
+  function handlePreviewRunner() {
+    setRunnerDetailRunId(null);
   }
 
   function beginResize(event: PointerEvent<HTMLButtonElement>) {
@@ -1147,8 +1214,9 @@ export function ProjectDetailPage() {
                   <div className="min-h-0 flex-1 overflow-hidden">
                     <ProjectMessagesPanel
                       messages={messages}
-                      runnerMessages={chatState.runnerMessages}
-                      onExpandRunner={agentStream.fetchRunnerMessages}
+                      runnerDetailRunId={runnerDetailRunId}
+                      onToggleRunnerDetails={handleToggleRunnerDetails}
+                      onPreviewRunner={handlePreviewRunner}
                       activeRunId={chatState.activeRun?.runId ?? null}
                       skeleton={
                         chatState.activeRun?.skeleton ??
@@ -1167,47 +1235,41 @@ export function ProjectDetailPage() {
                       hasMore={hasMoreMessages}
                       onLoadOlder={loadOlderMessages}
                       onRetryMessage={handleRetryMessage}
-                      onSelectOption={handleSelectOption}
-                      onPlanAction={async (message, action) => {
-                        if (!message.runId) return;
-                        const result = await agentStream.submitAnswer(
-                          message.runId,
-                          {
-                            planAction: action,
-                          },
-                        );
-                        if (!result.ok) {
-                          setSendError(result.message);
-                        }
-                      }}
-                      awaitingPlanReviewRunId={
-                        chatState.activeRun?.status === "awaiting_input"
-                          ? chatState.activeRun.runId
-                          : null
-                      }
-                      onSubmitFreeText={async (message, freeText) => {
-                        if (!message.runId) return false;
-                        const result = await agentStream.submitAnswer(
-                          message.runId,
-                          {
-                            freeText,
-                          },
-                        );
-                        if (!result.ok) {
-                          setSendError(result.message);
-                          return false;
-                        }
-                        return true;
-                      }}
                     />
                   </div>
                 </div>
               </div>
 
               <div className="shrink-0 px-3 pb-2">
-                <PlanChecklist
-                  todoItems={chatState.activeRun?.todoItems ?? null}
-                  runClosed={chatState.activeRun === null}
+                <ClarificationSlot
+                  message={pendingClarification}
+                  planAwaitingReview={
+                    pendingClarification?.kind === "plan" &&
+                    chatState.activeRun?.status === "awaiting_input"
+                  }
+                  onSelectOption={handleSelectOption}
+                  onPlanAction={async (message, action) => {
+                    if (!message.runId) return;
+                    const result = await agentStream.submitAnswer(
+                      message.runId,
+                      { planAction: action },
+                    );
+                    if (!result.ok) {
+                      setSendError(result.message);
+                    }
+                  }}
+                  onSubmitFreeText={async (message, freeText) => {
+                    if (!message.runId) return false;
+                    const result = await agentStream.submitAnswer(
+                      message.runId,
+                      { freeText },
+                    );
+                    if (!result.ok) {
+                      setSendError(result.message);
+                      return false;
+                    }
+                    return true;
+                  }}
                 />
               </div>
 
@@ -1279,25 +1341,35 @@ export function ProjectDetailPage() {
                   aria-hidden="true"
                 />
               ) : null}
-              <PreviewToolbar
-                previewDraftPath={previewDraftPath}
-                previewPathError={previewPathError}
-                previewReady={previewReady}
-                previewControlsLoading={previewControlsLoading}
-                activePreviewUrl={livePreviewUrl ?? activePreviewUrl}
-                runtimeState={runtimeState}
-                previewStopping={previewStopping}
-                projectStatus={project.status}
-                activeDevice={activeDevice}
-                onDeviceChange={setActiveDevice}
-                onPathChange={handlePreviewPathChange}
-                onPathSubmit={handlePreviewReload}
-                onPathReset={handlePreviewPathReset}
-                onStopPreview={handleStopPreview}
-              />
+              {runnerDetailRunId ? null : (
+                <PreviewToolbar
+                  previewDraftPath={previewDraftPath}
+                  previewPathError={previewPathError}
+                  previewReady={previewReady}
+                  previewControlsLoading={previewControlsLoading}
+                  activePreviewUrl={livePreviewUrl ?? activePreviewUrl}
+                  runtimeState={runtimeState}
+                  previewStopping={previewStopping}
+                  projectStatus={project.status}
+                  activeDevice={activeDevice}
+                  onDeviceChange={setActiveDevice}
+                  onPathChange={handlePreviewPathChange}
+                  onPathSubmit={handlePreviewReload}
+                  onPathReset={handlePreviewPathReset}
+                  onStopPreview={handleStopPreview}
+                />
+              )}
               <div className="min-h-0 flex-1 overflow-hidden p-2 lg:p-3">
                 <div className="project-preview-frame">
-                  {detailMode === "preview" ? (
+                  {runnerDetailRunId ? (
+                    <RunnerDetailPanel
+                      steps={runnerDetailSteps}
+                      runActive={
+                        chatState.activeRun?.runId === runnerDetailRunId
+                      }
+                      onClose={handlePreviewRunner}
+                    />
+                  ) : detailMode === "preview" ? (
                     <PreviewWorkspace
                       previewUrl={activePreviewUrl}
                       previewReloadKey={previewReloadKey}

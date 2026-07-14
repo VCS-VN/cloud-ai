@@ -10,8 +10,13 @@ import { SkeletonMessageBubble } from "./SkeletonMessageBubble";
 
 type ProjectMessagesPanelProps = {
   messages: Message[];
-  runnerMessages?: Record<string, Message[]>;
-  onExpandRunner?: (runId: string) => void;
+  // Runner-card footer wiring. The inner steps render in the right-hand
+  // RunnerDetailPanel, not inline; the card only needs to know whether its own
+  // run's detail is the one currently showing and how to toggle it / return to
+  // preview.
+  runnerDetailRunId?: string | null;
+  onToggleRunnerDetails?: (runId: string) => void;
+  onPreviewRunner?: () => void;
   activeRunId?: string | null;
   skeleton?: SkeletonState | null;
   loading?: boolean;
@@ -20,19 +25,6 @@ type ProjectMessagesPanelProps = {
   error?: string;
   onLoadOlder?: () => void;
   onRetryMessage?: (message: Message) => void;
-  onSelectOption?: (
-    messageId: string,
-    optionId: string,
-  ) => Promise<boolean | void>;
-  onPlanAction?: (
-    message: Message,
-    action: "approve" | "reject",
-  ) => Promise<void>;
-  awaitingPlanReviewRunId?: string | null;
-  onSubmitFreeText?: (
-    message: Message,
-    freeText: string,
-  ) => Promise<boolean | void>;
 };
 
 const STICK_TO_BOTTOM_THRESHOLD = 72;
@@ -107,8 +99,9 @@ function formatDayDivider(iso: string): string {
 
 export function ProjectMessagesPanel({
   messages,
-  runnerMessages,
-  onExpandRunner,
+  runnerDetailRunId,
+  onToggleRunnerDetails,
+  onPreviewRunner,
   activeRunId,
   skeleton,
   loading = false,
@@ -117,19 +110,23 @@ export function ProjectMessagesPanel({
   error,
   onLoadOlder,
   onRetryMessage,
-  onSelectOption,
-  onPlanAction,
-  awaitingPlanReviewRunId,
-  onSubmitFreeText,
 }: ProjectMessagesPanelProps) {
   const viewportRef = useRef<HTMLElement | null>(null);
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const orderedMessages = useMemo(
     () =>
-      [...messages].sort((left, right) =>
-        left.createdAt.localeCompare(right.createdAt),
-      ),
+      [...messages]
+        // Clarification-family kinds render in the ClarificationSlot (at the
+        // tasks-list position), never as chat bubbles. Once answered they're
+        // gone from both places, so filtering them here keeps the chat clean.
+        .filter(
+          (m) =>
+            m.kind !== "agent_question" &&
+            m.kind !== "clarification" &&
+            m.kind !== "plan",
+        )
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
     [messages],
   );
   const renderItems = useMemo(
@@ -264,20 +261,12 @@ export function ProjectMessagesPanel({
                     !!activeRunId && item.message.runId === activeRunId
                   }
                   onRetry={onRetryMessage}
-                  onSelectOption={onSelectOption}
-                  onPlanAction={onPlanAction}
-                  onSubmitFreeText={onSubmitFreeText}
-                  runnerMessages={
-                    item.message.runId
-                      ? runnerMessages?.[item.message.runId]
-                      : undefined
+                  runnerDetailActive={
+                    !!item.message.runId &&
+                    item.message.runId === runnerDetailRunId
                   }
-                  onExpandRunner={onExpandRunner}
-                  planAwaitingReview={
-                    item.message.kind === "plan" &&
-                    awaitingPlanReviewRunId !== undefined &&
-                    item.message.runId === awaitingPlanReviewRunId
-                  }
+                  onToggleRunnerDetails={onToggleRunnerDetails}
+                  onPreviewRunner={onPreviewRunner}
                 />
               </div>
             ) : (
@@ -294,16 +283,9 @@ export function ProjectMessagesPanel({
                         !!activeRunId && item.runId === activeRunId
                       }
                       onRetry={onRetryMessage}
-                      onSelectOption={onSelectOption}
-                      onPlanAction={onPlanAction}
-                      onSubmitFreeText={onSubmitFreeText}
-                      runnerMessages={runnerMessages?.[item.runId]}
-                      onExpandRunner={onExpandRunner}
-                      planAwaitingReview={
-                        message.kind === "plan" &&
-                        awaitingPlanReviewRunId !== undefined &&
-                        item.runId === awaitingPlanReviewRunId
-                      }
+                      runnerDetailActive={item.runId === runnerDetailRunId}
+                      onToggleRunnerDetails={onToggleRunnerDetails}
+                      onPreviewRunner={onPreviewRunner}
                     />
                   </div>
                 ))}
