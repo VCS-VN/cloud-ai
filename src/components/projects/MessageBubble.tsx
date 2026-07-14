@@ -243,10 +243,9 @@ export function MessageBubble({
 
   if (isUser) {
     return (
-      <article className="flex">
+      <article className="flex justify-end">
         <div className="msg-bubble-user">
-          <div className="msg-meta">
-            <span className="msg-author">You</span>
+          <div className="msg-meta justify-end">
             {time ? <span className="msg-time">{time}</span> : null}
           </div>
           <div className="msg-prose">
@@ -279,13 +278,8 @@ export function MessageBubble({
 
   return (
     <article className="msg-row mt-4">
-      <div className="msg-avatar-agent">
-        <Sparkles aria-hidden="true" size={14} />
-      </div>
-
       <div className="msg-content">
         <div className="msg-meta flex-wrap">
-          <span className="msg-author">Cloud AI</span>
           {time ? <span className="msg-time">{time}</span> : null}
           {modelLabel ? <span className="msg-model">{modelLabel}</span> : null}
           {isStreaming ? (
@@ -358,13 +352,8 @@ function RunnerCard({
 
   return (
     <article className="msg-row mt-4">
-      <div className="msg-avatar-agent">
-        <Sparkles aria-hidden="true" size={14} />
-      </div>
-
       <div className="msg-content">
         <div className="msg-meta flex-wrap">
-          <span className="msg-author">Cloud AI</span>
           {time ? <span className="msg-time">{time}</span> : null}
         </div>
 
