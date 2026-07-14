@@ -73,6 +73,7 @@ const env: CodexEnvAvailable = {
   maxSkillChars: 1000,
   llmTieBreakGap: 5,
   maxSelectedSkills: 3,
+  initBatchConcurrency: 3,
 };
 
 const baseCtx: BuilderRunContext = {

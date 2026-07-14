@@ -156,6 +156,7 @@ describe("new-route builder run", () => {
       maxSkillChars: 32000,
       llmTieBreakGap: 10,
       maxSelectedSkills: 3,
+      initBatchConcurrency: 3,
     };
 
     const ctx = {

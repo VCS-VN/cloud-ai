@@ -113,6 +113,7 @@ describe("US4 required-skill missing fail-fast", () => {
       maxSkillChars: 32000,
       llmTieBreakGap: 10,
       maxSelectedSkills: 3,
+      initBatchConcurrency: 3,
     };
 
     const ctx = {

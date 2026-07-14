@@ -11,11 +11,13 @@ const codexSchema = z.object({
   MAX_SKILL_CHARS: z.coerce.number().int().positive().optional(),
   LLM_TIE_BREAK_GAP: z.coerce.number().int().nonnegative().optional(),
   MAX_SELECTED_SKILLS: z.coerce.number().int().positive().optional(),
+  INIT_BATCH_CONCURRENCY: z.coerce.number().int().positive().optional(),
 });
 
 export const DEFAULT_MAX_SKILL_CHARS = 32000;
 export const DEFAULT_LLM_TIE_BREAK_GAP = 10;
 export const DEFAULT_MAX_SELECTED_SKILLS = 3;
+export const DEFAULT_INIT_BATCH_CONCURRENCY = 3;
 
 export type CodexEnvAvailable = {
   available: true;
@@ -28,6 +30,7 @@ export type CodexEnvAvailable = {
   maxSkillChars: number;
   llmTieBreakGap: number;
   maxSelectedSkills: number;
+  initBatchConcurrency: number;
 };
 
 export type CodexEnvUnavailable = {
@@ -78,6 +81,8 @@ export function loadCodexEnv(env: NodeJS.ProcessEnv = process.env): CodexEnv {
     maxSkillChars: v.MAX_SKILL_CHARS ?? DEFAULT_MAX_SKILL_CHARS,
     llmTieBreakGap: v.LLM_TIE_BREAK_GAP ?? DEFAULT_LLM_TIE_BREAK_GAP,
     maxSelectedSkills: v.MAX_SELECTED_SKILLS ?? DEFAULT_MAX_SELECTED_SKILLS,
+    initBatchConcurrency:
+      v.INIT_BATCH_CONCURRENCY ?? DEFAULT_INIT_BATCH_CONCURRENCY,
   };
 }
 
@@ -93,6 +98,7 @@ export function redactCodexEnv(env: CodexEnv): Record<string, unknown> {
     maxSkillChars: env.maxSkillChars,
     llmTieBreakGap: env.llmTieBreakGap,
     maxSelectedSkills: env.maxSelectedSkills,
+    initBatchConcurrency: env.initBatchConcurrency,
     apiKey: "[REDACTED]",
   };
 }

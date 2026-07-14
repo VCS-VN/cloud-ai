@@ -38,6 +38,7 @@ const env: CodexEnvAvailable = {
   maxSkillChars: 32000,
   llmTieBreakGap: 10,
   maxSelectedSkills: 3,
+  initBatchConcurrency: 3,
 };
 
 // Verbatim phrasings the model emitted on the VPS run (b3c2f41d) where the

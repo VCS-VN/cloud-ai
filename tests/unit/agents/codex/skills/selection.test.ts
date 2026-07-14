@@ -35,6 +35,7 @@ const env: CodexEnvAvailable = {
   skillsRoot: "/tmp/skills",
   maxSkillChars: 32_000,
   maxSelectedSkills: 3,
+  initBatchConcurrency: 3,
   llmTieBreakGap: 10,
 };
 

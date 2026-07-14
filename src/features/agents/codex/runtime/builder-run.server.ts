@@ -51,6 +51,7 @@ import {
   StreamReconnectError,
   type BoundedCodexThread,
   type CodexProgressEvent,
+  type CodexReasoningEffort,
 } from "./codex-thread.server";
 import { analyzeScope } from "./scope-analysis.server";
 import {
@@ -58,6 +59,7 @@ import {
   validatePlan,
   stripBlockedFromBatches,
   loadBatchSpecs,
+  type InitBatch,
   type InitBatchPlan,
 } from "./init-batch-planner.server";
 import {
@@ -566,6 +568,180 @@ function createIntermediateBuildThread(
   });
 }
 
+// Plan C: the page batches (COMPONENTS/HOME/PRODUCT_DETAIL/CHECKOUT) run in
+// parallel, each on its OWN thread so their transcripts don't interleave. Each
+// thread authors its batch and drives its own no-progress retries. Effort is
+// per batch: COMPONENTS + PRODUCT_DETAIL are the design-heavy, prompt-sensitive
+// surfaces (keep "high"); HOME + CHECKOUT are lighter (drop to "medium" to cut
+// per-turn latency, per the agreed trade-off).
+const INIT_BATCH_REASONING: Record<string, CodexReasoningEffort> = {
+  COMPONENTS: "high",
+  PRODUCT_DETAIL: "high",
+  HOME: "medium",
+  CHECKOUT: "medium",
+};
+
+function createBatchThread(
+  ctx: BuilderRunContext,
+  draftWorkspacePath: string,
+  effort: CodexReasoningEffort,
+): BoundedCodexThread {
+  return createBoundedCodexThread({
+    env: ctx.env,
+    draftWorkspacePath,
+    model: ctx.env.model,
+    skillToolCallbacks: buildSkillToolCallbacks(ctx.runId),
+    modelReasoningEffort: effort,
+    maxRetryAttempts: INIT_CODEX_MAX_RETRY_ATTEMPTS,
+  });
+}
+
+// Fixed-size worker pool. Runs `worker` over `items` with at most `limit`
+// concurrent in-flight. If a worker throws, the rejection propagates (via
+// Promise.all) once the already-started workers settle their current await;
+// no new items are pulled. The caller's try/catch turns that into a run
+// failure (fail-fast), which is what we want when a required batch can't
+// produce its files.
+async function runWithConcurrency<T>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  const cap = Math.max(1, Math.min(limit, items.length));
+  let next = 0;
+  const pull = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      await worker(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: cap }, () => pull()));
+}
+
+// Read the model-authored DESIGN.md so its visual identity (palette,
+// typography, mood) can be injected verbatim into every parallel page batch —
+// otherwise four independent threads each re-invent a look and the storefront
+// ends up visually incoherent. Missing/unreadable DESIGN.md degrades to no
+// anchor (the batches still have their specs + the bundle instructions).
+async function readDesignDoc(draftWorkspacePath: string): Promise<string> {
+  try {
+    return await fs.readFile(path.join(draftWorkspacePath, "DESIGN.md"), "utf8");
+  } catch {
+    return "";
+  }
+}
+
+// Run one init batch: an author turn, then the no-progress "you still owe
+// files" retry loop (same contract as the original serial loop). `authorThread`
+// takes the first turn; `retryThreadFor(turn)` picks the thread for each retry
+// (the serial DESIGN_DOC batch hands back the medium intermediate thread for
+// turns 1+, a parallel batch always reuses its own thread). `contextPrefix` is
+// prepended to the author turn only — empty for DESIGN_DOC (the main thread
+// already holds the bundle) and the bundle+design anchor for parallel batches
+// whose fresh threads have no prior context. Returns the last finalResponse.
+async function runInitBatch(input: {
+  batch: InitBatch;
+  authorThread: BoundedCodexThread;
+  retryThreadFor: (turn: number) => BoundedCodexThread;
+  contextPrefix: string;
+  runId: string;
+  projectId: string;
+  draftWorkspacePath: string;
+  emit: EmitFn;
+  signal?: AbortSignal;
+  locale: ProgressLocale;
+}): Promise<string> {
+  const {
+    batch,
+    authorThread,
+    retryThreadFor,
+    contextPrefix,
+    runId,
+    projectId,
+    draftWorkspacePath,
+    emit,
+    signal,
+    locale,
+  } = input;
+  let finalResponse = "";
+
+  // Load the manifest spec bodies for this batch. They carry the per-file
+  // authoring contract (props, hooks, data rules, required sections) that the
+  // file list alone does not convey — without them the agent only sees paths
+  // and re-invents each file's behavior.
+  const specBodies = await loadBatchSpecs(batch.specPaths);
+  const specBlock =
+    specBodies.length > 0
+      ? `\n\n<batch_spec>\n${specBodies.join("\n\n---\n\n")}\n</batch_spec>`
+      : "";
+  const basePrompt =
+    `Now build batch ${batch.marker} (${batch.kind}). Files in scope: ${batch.files.join(", ")}.\n` +
+    WRITE_FILE_INSTRUCTION +
+    specBlock;
+  const authorSummary = await runTurnAndBridge(authorThread, runId, emit, {
+    prompt: contextPrefix + basePrompt,
+    signal,
+    emitAnswer: false,
+    locale,
+  });
+  if (authorSummary.finalResponse) finalResponse = authorSummary.finalResponse;
+
+  // The model often writes ONE file per turn and ends the turn (codex emits a
+  // single apply_patch then closes, intending to continue next turn). A
+  // component batch needs up to 7 files, so a hard 2-retry cap would kill a run
+  // still making progress. Keep prompting as long as each turn reduces the
+  // missing-file count; bail only after MAX_NO_PROGRESS consecutive turns that
+  // write none of the remaining files. A generous overall cap (files + slack)
+  // guards against an infinite loop.
+  const maxTurns = batch.files.length + MAX_NO_PROGRESS + 2;
+  let prevMissingCount = (await missingBatchFiles(draftWorkspacePath, batch.files))
+    .length;
+  let noProgress = 0;
+  for (
+    let turn = 0;
+    turn < maxTurns && prevMissingCount > 0 && noProgress < MAX_NO_PROGRESS;
+    turn++
+  ) {
+    const missing = await missingBatchFiles(draftWorkspacePath, batch.files);
+    console.warn(
+      JSON.stringify({
+        event: "init_batch_no_files_retry",
+        runId,
+        projectId,
+        marker: batch.marker,
+        turn: turn + 1,
+        missing,
+        noProgress,
+      }),
+    );
+    const retrySummary = await runTurnAndBridge(retryThreadFor(turn), runId, emit, {
+      prompt:
+        `The previous turn did not finish this batch. Your FIRST action now is to write a file — do NOT narrate, do NOT end the turn without running a write command.\n` +
+        `These files are still missing — create as many as you can THIS turn: ${missing.join(", ")}.\n` +
+        WRITE_FILE_INSTRUCTION +
+        "\n" +
+        basePrompt,
+      signal,
+      emitAnswer: false,
+      locale,
+    });
+    if (retrySummary.finalResponse) finalResponse = retrySummary.finalResponse;
+    const remaining = (await missingBatchFiles(draftWorkspacePath, batch.files))
+      .length;
+    // A turn that reduced the missing count is progress — reset the streak. A
+    // turn that wrote none of the remaining files counts toward giving up.
+    if (remaining < prevMissingCount) noProgress = 0;
+    else noProgress += 1;
+    prevMissingCount = remaining;
+  }
+  const stillMissing = await missingBatchFiles(draftWorkspacePath, batch.files);
+  if (stillMissing.length > 0) {
+    throw new BuildProducedNoFilesError(batch.marker, stillMissing);
+  }
+  return finalResponse;
+}
+
 function logValidationFailure(input: {
   stage: "root_style_contract" | "named_exports" | "typecheck" | "build" | "product_sample_parse";
   runId: string;
@@ -938,10 +1114,6 @@ export async function runInitBuilderRun(
 
   try {
     await seedInitSettingsFiles({ draftWorkspacePath });
-    await installInitWorkspaceDependencies({
-      draftWorkspacePath,
-      signal: ctx.signal,
-    });
   } catch (error) {
     const isSeedError = error instanceof InitSettingsSeedError;
     const failureCode: BuilderRunFailureCode =
@@ -1009,6 +1181,24 @@ export async function runInitBuilderRun(
       optionalRouteWarnings: [],
     });
   }
+
+  // Plan B: pnpm install needs no AI, and nothing before the typecheck/build
+  // gates depends on node_modules — file authoring is pure cat-heredoc. Fire it
+  // in the background now and let it run under plan + design detect + the variant
+  // user-pause + the initial turn + DESIGN_DOC. It is awaited once, before the
+  // parallel page batches (the AI-heaviest phase), so a broken install fails the
+  // run before that spend. It is fired AFTER the symlink scan on purpose: that
+  // scan walks the whole tree (it does NOT skip node_modules), so starting
+  // install earlier would race it against pnpm's half-written symlink farm and
+  // emit spurious symlink_dangling boundary violations. Here the tree is the
+  // clean seeded workspace with no node_modules yet.
+  let installError: unknown = null;
+  const installPromise = installInitWorkspaceDependencies({
+    draftWorkspacePath,
+    signal: ctx.signal,
+  }).catch((error: unknown) => {
+    installError = error;
+  });
 
   emitMilestoneInternal(emit, runId, "planning");
   let plan: InitBatchPlan;
@@ -1320,9 +1510,10 @@ export async function runInitBuilderRun(
     if (initialSummary.finalResponse) finalResponse = initialSummary.finalResponse;
 
     // Lazy-spawn a medium-effort thread for intermediate build turns (the
-    // no-progress file loop + corruption sweep). Created once, reused across
-    // turns so there is no per-turn spawn cost. Built lazily so a run that
-    // finishes all files in the first-batch turn (no retry) never pays for it.
+    // DESIGN_DOC no-progress retries + the post-loop corruption sweep +
+    // validator repair). Created once, reused across turns so there is no
+    // per-turn spawn cost. Built lazily so a run that finishes DESIGN.md in one
+    // turn (no retry) and needs no post-loop repair never pays for it.
     let intermediateThread: BoundedCodexThread | null = null;
     const getIntermediateThread = (): BoundedCodexThread => {
       if (!intermediateThread) {
@@ -1331,90 +1522,92 @@ export async function runInitBuilderRun(
       return intermediateThread;
     };
 
-    for (const batch of plan.batches) {
-      // Load the manifest spec bodies for this batch. They carry the per-file
-      // authoring contract (props, hooks, data rules, required sections) that
-      // the file list alone does not convey — without them the agent only sees
-      // paths and re-invents each file's behavior.
-      const specBodies = await loadBatchSpecs(batch.specPaths);
-      const specBlock =
-        specBodies.length > 0
-          ? `\n\n<batch_spec>\n${specBodies.join("\n\n---\n\n")}\n</batch_spec>`
-          : "";
-      const basePrompt =
-        `Now build batch ${batch.marker} (${batch.kind}). Files in scope: ${batch.files.join(", ")}.\n` +
-        WRITE_FILE_INSTRUCTION +
-        specBlock;
-      const batchSummary = await runTurnAndBridge(thread, runId, emit, {
-        prompt: basePrompt,
-        signal: ctx.signal,
-        emitAnswer: false,
-        locale: toProgressLocale(ctx.locale),
-      });
-      if (batchSummary.finalResponse) finalResponse = batchSummary.finalResponse;
+    // Plan C: authoring is split into two phases.
+    //
+    //   Phase 1 (serial, main "high" thread): DESIGN_DOC. It must run first and
+    //   alone — DESIGN.md is the shared visual identity (palette, typography,
+    //   mood) that every page batch reads as its anchor. Running it on the main
+    //   thread reuses the bundle context the initial turn already loaded.
+    //
+    //   Phase 2 (parallel): every remaining batch (COMPONENTS/HOME/
+    //   PRODUCT_DETAIL/CHECKOUT). The page specs are self-describing (behavior +
+    //   prop contracts, not cross-file imports), so the batches are independent
+    //   — a file only has to EXIST before the typecheck gate, and all four
+    //   finish before it. Each runs on its OWN fresh thread (isolated transcript
+    //   so concurrent turns don't corrupt one shared session) seeded with the
+    //   bundle + variant addendum + the DESIGN.md anchor, since a fresh thread
+    //   has none of the main thread's context. A worker pool caps concurrency.
+    const designBatches = plan.batches.filter((b) => b.marker === "DESIGN_DOC");
+    const pageBatches = plan.batches.filter((b) => b.marker !== "DESIGN_DOC");
 
-      // The model often writes ONE file per turn and ends the turn (codex emits
-      // a single apply_patch then closes, intending to continue next turn). A
-      // component batch needs up to 7 files, so a hard 2-retry cap would kill a
-      // run still making progress. Keep prompting as long as each turn reduces
-      // the missing-file count; bail only after MAX_NO_PROGRESS consecutive
-      // turns that write none of the remaining files. A generous overall cap
-      // (files + slack) guards against an infinite loop.
-      {
-        const maxTurns = batch.files.length + MAX_NO_PROGRESS + 2;
-        let prevMissingCount = (
-          await missingBatchFiles(draftWorkspacePath, batch.files)
-        ).length;
-        let noProgress = 0;
-        for (
-          let turn = 0;
-          turn < maxTurns && prevMissingCount > 0 && noProgress < MAX_NO_PROGRESS;
-          turn++
-        ) {
-          const missing = await missingBatchFiles(draftWorkspacePath, batch.files);
-          console.warn(
-            JSON.stringify({
-              event: "init_batch_no_files_retry",
-              runId,
-              projectId: ctx.projectId,
-              marker: batch.marker,
-              turn: turn + 1,
-              missing,
-              noProgress,
-            }),
-          );
-          // The first attempt to finish a batch used the high-reasoning main
-          // thread; subsequent "you still owe files" turns are mechanical and
-          // reuse the medium-effort intermediate thread to cut per-turn latency.
-          const retryThread = turn === 0 ? thread : getIntermediateThread();
-          const retrySummary = await runTurnAndBridge(retryThread, runId, emit, {
-            prompt:
-              `The previous turn did not finish this batch. Your FIRST action now is to write a file — do NOT narrate, do NOT end the turn without running a write command.\n` +
-              `These files are still missing — create as many as you can THIS turn: ${missing.join(", ")}.\n` +
-              WRITE_FILE_INSTRUCTION +
-              "\n" +
-              basePrompt,
-            signal: ctx.signal,
-            emitAnswer: false,
-            locale: toProgressLocale(ctx.locale),
-          });
-          if (retrySummary.finalResponse) finalResponse = retrySummary.finalResponse;
-          const remaining = (
-            await missingBatchFiles(draftWorkspacePath, batch.files)
-          ).length;
-          // A turn that reduced the missing count is progress — reset the streak.
-          // A turn that wrote none of the remaining files counts toward giving up.
-          if (remaining < prevMissingCount) noProgress = 0;
-          else noProgress += 1;
-          prevMissingCount = remaining;
-        }
-        const stillMissing = await missingBatchFiles(draftWorkspacePath, batch.files);
-        if (stillMissing.length > 0) {
-          throw new BuildProducedNoFilesError(batch.marker, stillMissing);
-        }
-      }
-
+    for (const batch of designBatches) {
+      finalResponse =
+        (await runInitBatch({
+          batch,
+          authorThread: thread,
+          // First attempt used the high-reasoning main thread; subsequent "you
+          // still owe files" turns are mechanical → medium intermediate thread.
+          retryThreadFor: (turn) => (turn === 0 ? thread : getIntermediateThread()),
+          contextPrefix: "",
+          runId,
+          projectId: ctx.projectId,
+          draftWorkspacePath,
+          emit,
+          signal: ctx.signal,
+          locale: toProgressLocale(ctx.locale),
+        })) || finalResponse;
     }
+
+    // Install must finish before the page batches: they don't need node_modules
+    // to be authored, but keeping the await here (not later) means a broken
+    // install fails the run BEFORE the AI-heavy parallel phase spends tokens.
+    // It has been running in the background since the symlink scan, hidden under
+    // plan + design detect + the variant user-pause + the initial turn +
+    // DESIGN_DOC — so this await is usually already settled and costs nothing.
+    await installPromise;
+    if (installError) {
+      throw installError instanceof Error
+        ? installError
+        : new Error(String(installError));
+    }
+
+    // Read the model's DESIGN.md so its visual identity anchors every parallel
+    // page batch (prevents four fresh threads each inventing a different look).
+    const designDoc = await readDesignDoc(draftWorkspacePath);
+    const designAnchor = designDoc
+      ? `\n\n<design_doc>\n${designDoc}\n</design_doc>\n` +
+        `Follow this DESIGN.md as the single source of visual truth (palette, ` +
+        `typography, spacing, mood) for every file you author in this batch.\n`
+      : "";
+    const batchContextPrefix = bundle.prompt + variantPromptAddendum + designAnchor + "\n\n";
+
+    await runWithConcurrency(
+      pageBatches,
+      ctx.env.initBatchConcurrency,
+      async (batch) => {
+        // Each parallel batch owns a fresh thread at the effort tuned for its
+        // surface (COMPONENTS/PRODUCT_DETAIL "high", HOME/CHECKOUT "medium").
+        const batchThread = createBatchThread(
+          ctx,
+          draftWorkspacePath,
+          INIT_BATCH_REASONING[batch.marker] ?? "medium",
+        );
+        const last = await runInitBatch({
+          batch,
+          authorThread: batchThread,
+          // The whole batch lives on one isolated thread — retries reuse it.
+          retryThreadFor: () => batchThread,
+          contextPrefix: batchContextPrefix,
+          runId,
+          projectId: ctx.projectId,
+          draftWorkspacePath,
+          emit,
+          signal: ctx.signal,
+          locale: toProgressLocale(ctx.locale),
+        });
+        if (last) finalResponse = last;
+      },
+    );
 
     // Re-assert runtime-owned plumbing. system.md tells the model NOT to touch
     // the seeded plumbing (providers, hooks, ui primitives, __root.tsx, …), but
