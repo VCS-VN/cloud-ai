@@ -258,6 +258,25 @@ export function ProjectDetailPage() {
     }
   }, [pendingClarificationRunId]);
 
+  // Auto-open the runner detail when a run starts so its inner steps
+  // (reasoning / agent_message) are visible live as they stream in, instead of
+  // the user having to click "Details" — by which point the run is usually
+  // done. Only forces it open on the transition into a new active run; the user
+  // can still close it afterward. Backfill via fetchRunnerMessages covers a
+  // client that resumes a run already in flight (it missed the earlier SSE
+  // message.created events, so its live bucket is empty until the fetch).
+  const activeRunId = chatState.activeRun?.runId ?? null;
+  const prevActiveRunIdForDetailRef = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = prevActiveRunIdForDetailRef.current;
+    prevActiveRunIdForDetailRef.current = activeRunId;
+    if (activeRunId && activeRunId !== previous) {
+      setRunnerDetailRunId(activeRunId);
+      void agentStream.fetchRunnerMessages(activeRunId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRunId]);
+
   const messagesQuery = useInfiniteQuery({
     queryKey: getProjectMessagesQueryKey(project?.id),
     initialPageParam: undefined as
