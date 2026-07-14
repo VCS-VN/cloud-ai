@@ -19,7 +19,7 @@ export function PreferencesSection({
   return (
     <section
       id="preferences"
-      className="scroll-mt-20 rounded-2xl border border-hairline bg-surface"
+      className="scroll-mt-20 overflow-hidden rounded-2xl border border-hairline bg-surface"
     >
       <header className="border-b border-hairline px-6 py-5">
         <h2 className="text-base font-semibold tracking-tight">Preferences</h2>

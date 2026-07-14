@@ -32,7 +32,7 @@ export function BalanceSummaryCard({ activated }: { activated: boolean }) {
   return (
     <section
       id="balance"
-      className="scroll-mt-20 rounded-2xl border border-hairline bg-surface"
+      className="scroll-mt-20 overflow-hidden rounded-2xl border border-hairline bg-surface"
     >
       <header className="flex items-center justify-between gap-4 border-b border-hairline px-6 py-5">
         <div>

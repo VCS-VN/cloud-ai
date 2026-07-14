@@ -28,7 +28,7 @@ export function PaymentSection({ user }: { user: AuthUserSummary }) {
   return (
     <section
       id="payment"
-      className="scroll-mt-20 rounded-2xl border border-hairline bg-surface"
+      className="scroll-mt-20 overflow-hidden rounded-2xl border border-hairline bg-surface"
     >
       <header className="flex items-start justify-between gap-4 border-b border-hairline px-6 py-5">
         <div>

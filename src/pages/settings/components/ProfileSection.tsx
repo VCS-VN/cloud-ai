@@ -21,7 +21,7 @@ export function ProfileSection({
   return (
     <section
       id="profile"
-      className="scroll-mt-20 rounded-2xl border border-hairline bg-surface"
+      className="scroll-mt-20 overflow-hidden rounded-2xl border border-hairline bg-surface"
     >
       <header className="flex items-center justify-between border-b border-hairline px-6 py-5">
         <div>
