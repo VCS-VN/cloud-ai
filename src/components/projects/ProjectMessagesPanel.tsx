@@ -117,9 +117,9 @@ export function ProjectMessagesPanel({
   const orderedMessages = useMemo(
     () =>
       [...messages]
-        // Clarification-family kinds render in the ClarificationSlot (at the
-        // tasks-list position), never as chat bubbles. Once answered they're
-        // gone from both places, so filtering them here keeps the chat clean.
+        // Clarification-family kinds render as a message inside the runner
+        // detail (RunnerDetailPanel), never as chat bubbles. Once answered
+        // they're gone from state, so filtering them here keeps the chat clean.
         .filter(
           (m) =>
             m.kind !== "agent_question" &&

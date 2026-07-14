@@ -34,7 +34,9 @@ export function ModelPicker({
     staleTime: 5 * 60 * 1000,
   });
 
-  const triggerLabel = selectedModel ?? "Model";
+  const models = query.data?.status === "ok" ? query.data.models : [];
+  const selectedName = models.find((m) => m.id === selectedModel)?.name;
+  const triggerLabel = selectedName ?? selectedModel ?? "Model";
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

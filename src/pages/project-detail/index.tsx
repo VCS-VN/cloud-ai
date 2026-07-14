@@ -37,7 +37,6 @@ import { EpisCloudActivateDialog } from "@/components/profile/EpisCloudActivateD
 import { useEpisCloudActivate } from "@/auth/use-episcloud-activate";
 import { ProjectDetailTopBar } from "@/components/projects/ProjectDetailTopBar";
 import { ProjectMessagesPanel } from "@/components/projects/ProjectMessagesPanel";
-import { ClarificationSlot } from "./components/ClarificationSlot";
 import { RunnerDetailPanel } from "./components/RunnerDetailPanel";
 import { ProjectDeleteConfirmDialog } from "@/components/projects/ProjectDeleteConfirmDialog";
 import { ProjectSettingsDrawer } from "@/components/projects/ProjectSettingsDrawer";
@@ -215,10 +214,10 @@ export function ProjectDetailPage() {
       : null;
 
   // The single pending interactive message (design variant / skill
-  // clarification / free-text clarification / plan review) that the agent is
-  // blocked on. It renders in the ClarificationSlot at the tasks-list position,
-  // not as a chat bubble. Pick the newest un-answered one; once answered it's
-  // gone from state, so the slot clears itself.
+  // clarification / free-text clarification / plan review) the agent is blocked
+  // on. It renders as a message INSIDE the runner detail (last item), scoped to
+  // its own run. Pick the newest un-answered one; once answered it's gone from
+  // state, so the clarification clears itself.
   const pendingClarification = useMemo<Message | null>(() => {
     const interactive = messages.filter(
       (m) =>
@@ -245,6 +244,20 @@ export function ProjectDetailPage() {
   const runnerDetailSteps = runnerDetailRunId
     ? (chatState.runnerMessages[runnerDetailRunId] ?? [])
     : [];
+
+  // Auto-open the runner detail for a run that's blocked on user input so the
+  // clarification message is visible without the user hunting for the Details
+  // button. Only forces it open on the transition into a pending state; the
+  // user can still close the detail afterward.
+  const pendingClarificationRunId = pendingClarification?.runId ?? null;
+  const prevPendingClarificationRunIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = prevPendingClarificationRunIdRef.current;
+    prevPendingClarificationRunIdRef.current = pendingClarificationRunId;
+    if (pendingClarificationRunId && pendingClarificationRunId !== previous) {
+      setRunnerDetailRunId(pendingClarificationRunId);
+    }
+  }, [pendingClarificationRunId]);
 
   const messagesQuery = useInfiniteQuery({
     queryKey: getProjectMessagesQueryKey(project?.id),
@@ -1240,39 +1253,6 @@ export function ProjectDetailPage() {
                 </div>
               </div>
 
-              <div className="shrink-0 px-3 pb-2">
-                <ClarificationSlot
-                  message={pendingClarification}
-                  planAwaitingReview={
-                    pendingClarification?.kind === "plan" &&
-                    chatState.activeRun?.status === "awaiting_input"
-                  }
-                  onSelectOption={handleSelectOption}
-                  onPlanAction={async (message, action) => {
-                    if (!message.runId) return;
-                    const result = await agentStream.submitAnswer(
-                      message.runId,
-                      { planAction: action },
-                    );
-                    if (!result.ok) {
-                      setSendError(result.message);
-                    }
-                  }}
-                  onSubmitFreeText={async (message, freeText) => {
-                    if (!message.runId) return false;
-                    const result = await agentStream.submitAnswer(
-                      message.runId,
-                      { freeText },
-                    );
-                    if (!result.ok) {
-                      setSendError(result.message);
-                      return false;
-                    }
-                    return true;
-                  }}
-                />
-              </div>
-
               <div className="shrink-0 border-t border-hairline bg-paper/95 px-3 py-3">
                 {retailSuggestions.length > 0 && !isProcessing ? (
                   <div className="mb-2 flex flex-wrap items-center gap-1.5">
@@ -1368,6 +1348,38 @@ export function ProjectDetailPage() {
                         chatState.activeRun?.runId === runnerDetailRunId
                       }
                       onClose={handlePreviewRunner}
+                      clarification={
+                        pendingClarification?.runId === runnerDetailRunId
+                          ? pendingClarification
+                          : null
+                      }
+                      planAwaitingReview={
+                        pendingClarification?.kind === "plan" &&
+                        chatState.activeRun?.status === "awaiting_input"
+                      }
+                      onSelectOption={handleSelectOption}
+                      onPlanAction={async (message, action) => {
+                        if (!message.runId) return;
+                        const result = await agentStream.submitAnswer(
+                          message.runId,
+                          { planAction: action },
+                        );
+                        if (!result.ok) {
+                          setSendError(result.message);
+                        }
+                      }}
+                      onSubmitFreeText={async (message, freeText) => {
+                        if (!message.runId) return false;
+                        const result = await agentStream.submitAnswer(
+                          message.runId,
+                          { freeText },
+                        );
+                        if (!result.ok) {
+                          setSendError(result.message);
+                          return false;
+                        }
+                        return true;
+                      }}
                     />
                   ) : detailMode === "preview" ? (
                     <PreviewWorkspace
