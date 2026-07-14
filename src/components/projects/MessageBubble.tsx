@@ -26,6 +26,7 @@ import { SkillClarificationList } from "@/features/agents/ui/SkillClarificationL
 
 type MessageBubbleProps = {
   message: Message;
+  runActive?: boolean;
   onRetry?: (message: Message) => void;
   onSelectOption?: (
     messageId: string,
@@ -67,12 +68,14 @@ const KIND_META: Partial<Record<AgentMessageKind, KindMeta>> = {
 
 function AgentBody({
   message,
+  runActive,
   onSelectOption,
   onPlanAction,
   planAwaitingReview,
   onSubmitFreeText,
 }: {
   message: Message;
+  runActive?: boolean;
   onSelectOption?: (
     messageId: string,
     optionId: string,
@@ -181,7 +184,9 @@ function AgentBody({
       <ClarificationBubble message={message} onSelectOption={onSelectOption} />
     );
   if (message.kind === "agent_message") {
-    return <ProcessingNoteBubble content={message.content} />;
+    return (
+      <ProcessingNoteBubble content={message.content} runActive={runActive} />
+    );
   }
   return <MarkdownContent content={message.content} />;
 }
@@ -197,6 +202,7 @@ function formatTime(iso: string): string {
 
 export function MessageBubble({
   message,
+  runActive,
   onRetry,
   onSelectOption,
   onPlanAction,
@@ -275,6 +281,7 @@ export function MessageBubble({
 
         <AgentBody
           message={message}
+          runActive={runActive}
           onSelectOption={onSelectOption}
           onPlanAction={onPlanAction}
           planAwaitingReview={planAwaitingReview}
@@ -313,12 +320,27 @@ function ThinkingBubble({ content }: { content: string }) {
   );
 }
 
-function ProcessingNoteBubble({ content }: { content: string }) {
+function ProcessingNoteBubble({
+  content,
+  runActive,
+}: {
+  content: string;
+  runActive?: boolean;
+}) {
   return (
     <div className="rounded-md border border-hairline bg-ink/[0.02] px-3 py-2">
       <div className="mb-1 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-subtle">
-        <Loader2 aria-hidden="true" size={11} />
-        Processing
+        {runActive ? (
+          <>
+            <Loader2 aria-hidden="true" size={11} className="animate-spin" />
+            Processing
+          </>
+        ) : (
+          <>
+            <Check aria-hidden="true" size={11} />
+            Done
+          </>
+        )}
       </div>
       <div className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-muted">
         {content}

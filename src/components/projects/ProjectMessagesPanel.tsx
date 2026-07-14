@@ -10,6 +10,7 @@ import { SkeletonMessageBubble } from "./SkeletonMessageBubble";
 
 type ProjectMessagesPanelProps = {
   messages: Message[];
+  activeRunId?: string | null;
   skeleton?: SkeletonState | null;
   loading?: boolean;
   loadingOlder?: boolean;
@@ -104,6 +105,7 @@ function formatDayDivider(iso: string): string {
 
 export function ProjectMessagesPanel({
   messages,
+  activeRunId,
   skeleton,
   loading = false,
   loadingOlder = false,
@@ -254,6 +256,9 @@ export function ProjectMessagesPanel({
               <div key={item.message.id} data-message-bubble="true">
                 <MessageBubble
                   message={item.message}
+                  runActive={
+                    !!activeRunId && item.message.runId === activeRunId
+                  }
                   onRetry={onRetryMessage}
                   onSelectOption={onSelectOption}
                   onPlanAction={onPlanAction}
@@ -275,6 +280,9 @@ export function ProjectMessagesPanel({
                   <div key={message.id} data-message-bubble="true">
                     <MessageBubble
                       message={message}
+                      runActive={
+                        !!activeRunId && item.runId === activeRunId
+                      }
                       onRetry={onRetryMessage}
                       onSelectOption={onSelectOption}
                       onPlanAction={onPlanAction}

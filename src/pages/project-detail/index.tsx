@@ -1147,6 +1147,7 @@ export function ProjectDetailPage() {
                   <div className="min-h-0 flex-1 overflow-hidden">
                     <ProjectMessagesPanel
                       messages={messages}
+                      activeRunId={chatState.activeRun?.runId ?? null}
                       skeleton={
                         chatState.activeRun?.skeleton ??
                         // Fallback: if the project is processing but the SSE
