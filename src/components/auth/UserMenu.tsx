@@ -69,7 +69,7 @@ export function UserMenu({
       onProfile();
       return;
     }
-    closeAndNavigate("/settings/profile");
+    closeAndNavigate("/profile");
   }
 
   const panelPosition = `${placement === "top" ? "bottom-[calc(100%+8px)]" : "top-[calc(100%+8px)]"} ${align === "right" ? "right-0" : "left-0"}`;
