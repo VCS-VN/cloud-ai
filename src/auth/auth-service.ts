@@ -1,3 +1,4 @@
+console.log("🚀 ~ AuthService ~ listEpisCloudModels ~ error:", error);
 import { redirect } from "@tanstack/react-router";
 import { AuthError, getSafeAuthMessage, toSafeAuthError } from "./auth-errors";
 import {
@@ -194,6 +195,7 @@ export class AuthService {
       const models = await this.episCloud.listModels(apiKey);
       return { status: "ok", models };
     } catch (error) {
+      console.log("ajsdofjoasdosdf", error);
       const code =
         error instanceof AuthError ? error.code : "episcloud-models-failed";
       return { status: "error", message: getSafeAuthMessage(code) };

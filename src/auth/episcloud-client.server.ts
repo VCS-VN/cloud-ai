@@ -142,11 +142,19 @@ export class EpisCloudClient {
       }>(`${getEpisCloudGatewayBaseUrl()}/models`, {
         headers: { Authorization: `Bearer ${apiKey}` },
       });
+
+      console.log(
+        "ajsodfjoasdofjasdf",
+        `${getEpisCloudGatewayBaseUrl()}/models`,
+      );
+
       const rows = response.data?.data;
       if (!Array.isArray(rows)) throw new AuthError("episcloud-models-failed");
       return rows
-        .filter((row): row is { id: string; owned_by?: string } =>
-          Boolean(row?.id) && EPISCLOUD_ALLOWED_MODEL_IDS.has(row.id as string),
+        .filter(
+          (row): row is { id: string; owned_by?: string } =>
+            Boolean(row?.id) &&
+            EPISCLOUD_ALLOWED_MODEL_IDS.has(row.id as string),
         )
         .map((row) => ({
           id: row.id,
