@@ -1233,7 +1233,6 @@ export function ProjectDetailPage() {
               className="project-chat-panel"
               style={{
                 width: chatVisible ? chatWidth : 0,
-                borderRightWidth: chatVisible ? undefined : 0,
                 transitionDuration: resizingChat ? "0ms" : undefined,
               }}
             >
