@@ -37,11 +37,11 @@
     --color-danger-dot: 225 29 72;     /* #E11D48 */
 
     /* ─── Typography stacks ────────────────────────────────────── */
-    --font-sans:    'Instrument Sans', -apple-system, BlinkMacSystemFont,
+    --font-sans:    'Geist', -apple-system, BlinkMacSystemFont,
                     'Segoe UI', system-ui, sans-serif;
-    --font-display: 'Instrument Sans', -apple-system, BlinkMacSystemFont,
+    --font-display: 'Geist', -apple-system, BlinkMacSystemFont,
                     'Segoe UI', system-ui, sans-serif;
-    --font-mono:    ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo,
+    --font-mono:    'Geist Mono', ui-monospace, SFMono-Regular, Menlo,
                     monospace;
 
     color-scheme: light;
