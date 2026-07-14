@@ -71,8 +71,8 @@ describe('AuthService.listEpisCloudModels', () => {
 
   it('decrypts the stored key and returns the gateway model list on success', async () => {
     const models: EpisCloudModel[] = [
-      { id: 'gpt-4o', ownedBy: 'openai' },
-      { id: 'claude-sonnet', ownedBy: 'anthropic' }
+      { id: 'episcloud-ai-coder', name: 'AI Coder', ownedBy: 'episcloud' },
+      { id: 'episcloud-ai-coder-max', name: 'AI Coder Max', ownedBy: 'episcloud' }
     ]
     const findSettings = vi.fn(async () => ({
       userId: 'user-1',

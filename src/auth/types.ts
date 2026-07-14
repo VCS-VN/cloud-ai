@@ -104,6 +104,7 @@ export type BalanceSummary = {
 
 export type EpisCloudModel = {
   id: string
+  name: string
   ownedBy?: string
 }
 

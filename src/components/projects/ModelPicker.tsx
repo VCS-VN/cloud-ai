@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/popover";
 import { listEpisCloudModels } from "@/server/functions/auth";
 import type { EpisCloudModelsResult } from "@/auth/types";
-import { startCase } from "lodash";
 
 export function ModelPicker({
   selectedModel,
@@ -140,7 +139,7 @@ export function ModelPicker({
                   >
                     <span className="flex-1 min-w-0">
                       <span className="block truncate text-ui-sm font-medium text-ink">
-                        {startCase(model?.id)}
+                        {model.name}
                       </span>
                       {/* {model.ownedBy ? (
                         <span className="block truncate text-eyebrow text-muted">

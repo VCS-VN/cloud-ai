@@ -16,13 +16,14 @@ describe('EpisCloudClient.listModels', () => {
     vi.clearAllMocks()
   })
 
-  it('maps the OpenAI-compatible /models response to EpisCloudModel[]', async () => {
+  it('keeps only the allowed episcloud coder models and derives a display name', async () => {
     mockedGet.mockResolvedValueOnce({
       data: {
         object: 'list',
         data: [
           { id: 'gpt-4o', object: 'model', owned_by: 'openai' },
-          { id: 'claude-sonnet', object: 'model', owned_by: 'anthropic' }
+          { id: 'episcloud-ai-coder', object: 'model', owned_by: 'episcloud' },
+          { id: 'episcloud-ai-coder-max', object: 'model', owned_by: 'episcloud' }
         ]
       }
     })
@@ -31,8 +32,8 @@ describe('EpisCloudClient.listModels', () => {
     const models = await client.listModels('epis_sk_secret')
 
     expect(models).toEqual([
-      { id: 'gpt-4o', ownedBy: 'openai' },
-      { id: 'claude-sonnet', ownedBy: 'anthropic' }
+      { id: 'episcloud-ai-coder', name: 'AI Coder', ownedBy: 'episcloud' },
+      { id: 'episcloud-ai-coder-max', name: 'AI Coder Max', ownedBy: 'episcloud' }
     ])
     // Hits the gateway /models endpoint with the user's key as a bearer token.
     expect(mockedGet).toHaveBeenCalledWith('https://gateway.test/v1/models', {
@@ -40,15 +41,23 @@ describe('EpisCloudClient.listModels', () => {
     })
   })
 
-  it('drops entries without an id', async () => {
+  it('drops entries without an id and entries outside the allow-list', async () => {
     mockedGet.mockResolvedValueOnce({
-      data: { data: [{ owned_by: 'openai' }, { id: 'gpt-4o' }] }
+      data: {
+        data: [
+          { owned_by: 'episcloud' },
+          { id: 'gpt-4o' },
+          { id: 'episcloud-ai-coder', owned_by: 'episcloud' }
+        ]
+      }
     })
 
     const client = new EpisCloudClient()
     const models = await client.listModels('epis_sk_secret')
 
-    expect(models).toEqual([{ id: 'gpt-4o', ownedBy: undefined }])
+    expect(models).toEqual([
+      { id: 'episcloud-ai-coder', name: 'AI Coder', ownedBy: 'episcloud' }
+    ])
   })
 
   it('throws episcloud-models-failed when the response shape is invalid', async () => {

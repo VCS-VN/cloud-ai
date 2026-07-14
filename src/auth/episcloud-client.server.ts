@@ -14,6 +14,23 @@ import type {
   TopupBalanceResult,
 } from "./types";
 
+const EPISCLOUD_ALLOWED_MODEL_IDS = new Set<string>([
+  "episcloud-ai-coder",
+  "episcloud-ai-coder-max",
+]);
+
+// "episcloud-ai-coder-max" -> "AI Coder Max": drop the episcloud- prefix,
+// title-case each segment, and uppercase the "ai" acronym.
+function formatEpisCloudModelName(id: string): string {
+  return id
+    .replace(/^episcloud-/, "")
+    .split("-")
+    .map((part) =>
+      part === "ai" ? "AI" : part.charAt(0).toUpperCase() + part.slice(1),
+    )
+    .join(" ");
+}
+
 type EpisCloudAccount = {
   tenant_id: string;
   slug: string;
@@ -129,11 +146,14 @@ export class EpisCloudClient {
       if (!Array.isArray(rows)) throw new AuthError("episcloud-models-failed");
       return rows
         .filter((row): row is { id: string; owned_by?: string } =>
-          Boolean(row?.id),
+          Boolean(row?.id) && EPISCLOUD_ALLOWED_MODEL_IDS.has(row.id as string),
         )
-        .map((row) => ({ id: row.id, ownedBy: row.owned_by }));
+        .map((row) => ({
+          id: row.id,
+          name: formatEpisCloudModelName(row.id),
+          ownedBy: row.owned_by,
+        }));
     } catch (error) {
-      console.log("ajsdofjaosdfjoajsdofjoasdfojasdf", error);
       if (error instanceof AuthError) throw error;
       logEpisCloudError("episcloud_list_models_failed", error);
       throw new AuthError("episcloud-models-failed");

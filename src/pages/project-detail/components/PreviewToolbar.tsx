@@ -51,9 +51,9 @@ export function PreviewToolbar({
     projectStatus,
   });
   const pathInputId = "preview-path";
-  const versionLabel = "v12";
-  const lastBuildLabel =
-    runtimeState.status === "running" ? "last build 23s ago" : "no preview";
+  // const versionLabel = "v12";
+  // const lastBuildLabel =
+  //   runtimeState.status === "running" ? "last build 23s ago" : "no preview";
 
   return (
     <header className="preview-toolbar">
@@ -121,7 +121,7 @@ export function PreviewToolbar({
             }}
           />
         </label>
-        {previewPathError ? (
+        {/* {previewPathError ? (
           <span
             className="text-eyebrow text-danger-fg shrink-0 truncate max-w-[200px]"
             title={previewPathError}
@@ -141,7 +141,7 @@ export function PreviewToolbar({
             />
             <span className="preview-url-meta">{lastBuildLabel}</span>
           </>
-        )}
+        )} */}
       </div>
 
       {/* Right: Actions */}
