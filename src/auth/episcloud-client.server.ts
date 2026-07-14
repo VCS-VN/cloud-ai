@@ -79,15 +79,6 @@ export class EpisCloudClient {
     externalRef: string;
     displayName: string;
   }): Promise<EpisCloudAccount> {
-    console.log(
-      "jasodfjoasjodf",
-      `Bearer ${getEpisCloudPartnerToken()}`,
-      `${getEpisCloudBaseUrl()}/v1/partner/accounts`,
-      JSON.stringify({
-        external_ref: input.externalRef,
-        display_name: input.displayName,
-      }),
-    );
     try {
       const response = await axios.post<EpisCloudAccount>(
         `${getEpisCloudBaseUrl()}/v1/partner/accounts`,
@@ -142,11 +133,6 @@ export class EpisCloudClient {
       }>(`${getEpisCloudGatewayBaseUrl()}/models`, {
         headers: { Authorization: `Bearer ${apiKey}` },
       });
-
-      console.log(
-        "ajsodfjoasdofjasdf",
-        `${getEpisCloudGatewayBaseUrl()}/models`,
-      );
 
       const rows = response.data?.data;
       if (!Array.isArray(rows)) throw new AuthError("episcloud-models-failed");

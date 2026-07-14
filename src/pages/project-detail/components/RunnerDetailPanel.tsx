@@ -1,4 +1,4 @@
-import { HelpCircle, Loader2, X } from "lucide-react";
+import { HelpCircle, Loader2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentBody, RunnerStep } from "@/components/projects/MessageBubble";
 import type { Message } from "@/shared/project-types";
@@ -34,10 +34,22 @@ export function RunnerDetailPanel({
     freeText: string,
   ) => Promise<boolean | void>;
 }) {
-  const ordered = [...steps].sort((a, b) =>
+  const sorted = [...steps].sort((a, b) =>
     a.createdAt.localeCompare(b.createdAt),
   );
-  const stepCount = ordered.length + (clarification ? 1 : 0);
+  // The agent's final answer is pulled out of the timeline and rendered as a
+  // prominent always-open block at the end (see the lovable reference), so the
+  // user reads the completed reply without expanding a collapsed step. The
+  // remaining steps (reasoning / edits / commands) stay in the timeline.
+  const finalAnswer =
+    !runActive && !clarification
+      ? [...sorted].reverse().find((m) => m.kind === "answer") ?? null
+      : null;
+  const ordered = finalAnswer
+    ? sorted.filter((m) => m.id !== finalAnswer.id)
+    : sorted;
+  const stepCount =
+    ordered.length + (clarification ? 1 : 0) + (finalAnswer ? 1 : 0);
   const isEmpty = stepCount === 0;
 
   return (
@@ -75,44 +87,65 @@ export function RunnerDetailPanel({
               : "No steps recorded for this run."}
           </div>
         ) : (
-          <ol className="flex flex-col">
-            {ordered.map((step, index) => (
-              <RunnerStep
-                key={step.id}
-                step={step}
-                isFirst={index === 0}
-                isLast={!clarification && index === ordered.length - 1}
-              />
-            ))}
-            {clarification ? (
-              <li className="relative flex list-none gap-2.5">
-                <span
-                  aria-hidden="true"
-                  className="absolute left-2 top-0 h-2.5 w-px -translate-x-1/2 bg-hairline"
-                />
-                <span className="relative z-10 mt-[3px] flex h-3.5 w-4 shrink-0 items-center justify-center bg-paper text-subtle">
-                  <HelpCircle aria-hidden="true" size={13} />
-                </span>
-                <section
-                  aria-label="Agent needs your input"
-                  className="min-w-0 flex-1 overflow-hidden rounded-lg border border-hairline bg-surface"
-                >
-                  <div className="flex items-center gap-1.5 border-b border-hairline px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-subtle">
-                    Needs your input
-                  </div>
-                  <div className="px-3 py-2.5">
-                    <AgentBody
-                      message={clarification}
-                      planAwaitingReview={planAwaitingReview}
-                      onSelectOption={onSelectOption}
-                      onPlanAction={onPlanAction}
-                      onSubmitFreeText={onSubmitFreeText}
+          <>
+            {ordered.length > 0 || clarification ? (
+              <ol className="flex flex-col">
+                {ordered.map((step, index) => (
+                  <RunnerStep
+                    key={step.id}
+                    step={step}
+                    isFirst={index === 0}
+                    isLast={!clarification && index === ordered.length - 1}
+                  />
+                ))}
+                {clarification ? (
+                  <li className="relative flex list-none gap-2.5">
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-2 top-0 h-2.5 w-px -translate-x-1/2 bg-hairline"
                     />
-                  </div>
-                </section>
-              </li>
+                    <span className="relative z-10 mt-[3px] flex h-3.5 w-4 shrink-0 items-center justify-center bg-paper text-subtle">
+                      <HelpCircle aria-hidden="true" size={13} />
+                    </span>
+                    <section
+                      aria-label="Agent needs your input"
+                      className="min-w-0 flex-1 overflow-hidden rounded-lg border border-hairline bg-surface"
+                    >
+                      <div className="flex items-center gap-1.5 border-b border-hairline px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-subtle">
+                        Needs your input
+                      </div>
+                      <div className="px-3 py-2.5">
+                        <AgentBody
+                          message={clarification}
+                          planAwaitingReview={planAwaitingReview}
+                          onSelectOption={onSelectOption}
+                          onPlanAction={onPlanAction}
+                          onSubmitFreeText={onSubmitFreeText}
+                        />
+                      </div>
+                    </section>
+                  </li>
+                ) : null}
+              </ol>
             ) : null}
-          </ol>
+
+            {finalAnswer ? (
+              <section
+                aria-label="Agent's final message"
+                className={`min-w-0 overflow-hidden rounded-lg border border-hairline bg-surface ${
+                  ordered.length > 0 ? "mt-1" : ""
+                }`}
+              >
+                <div className="flex items-center gap-1.5 border-b border-hairline px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-subtle">
+                  <Sparkles aria-hidden="true" size={12} />
+                  Final message
+                </div>
+                <div className="px-3 py-2.5">
+                  <AgentBody message={finalAnswer} />
+                </div>
+              </section>
+            ) : null}
+          </>
         )}
       </div>
     </section>

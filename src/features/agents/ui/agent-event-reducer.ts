@@ -341,9 +341,17 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
       };
 
     case "run.completed":
-      return { ...state, activeRun: null, lastRunOutcome: "completed" };
+      return {
+        ...finalizeRunMessages(state, event.runId, "completed"),
+        activeRun: null,
+        lastRunOutcome: "completed",
+      };
     case "run.stopped":
-      return { ...state, activeRun: null, lastRunOutcome: "stopped" };
+      return {
+        ...finalizeRunMessages(state, event.runId, "stopped"),
+        activeRun: null,
+        lastRunOutcome: "stopped",
+      };
 
     case "run.failed":
       return finalizeFailure(state, event.error);
@@ -354,6 +362,24 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
     default:
       return state;
   }
+}
+
+// Flip any still-streaming message of a run to its terminal processing status
+// when the run ends. The runner card (kind:"runner", id msg-${runId}-runner) is
+// never streamed via SSE — it enters state from the /messages fetch already
+// "streaming", and no message.* event ever patches it. Without this it stays
+// spinning "Working…" after run.completed/run.stopped clears activeRun.
+function finalizeRunMessages(
+  state: ChatUIState,
+  runId: string,
+  status: "completed" | "stopped",
+): ChatUIState {
+  const messages = state.messages.map((m) =>
+    m.runId === runId && m.processingStatus === "streaming"
+      ? { ...m, processingStatus: status }
+      : m,
+  );
+  return { ...state, messages };
 }
 
 function finalizeFailure(state: ChatUIState, error: StreamError): ChatUIState {

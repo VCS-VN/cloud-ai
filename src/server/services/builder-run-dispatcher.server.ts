@@ -878,6 +878,22 @@ async function persistRunTerminal(
 ): Promise<void> {
   const run = await persistence.runStore.load(runId, userId).catch(() => undefined);
   if (!run) {
+    // The run row is gone (never persisted / lookup failed), but the runner
+    // card row may still be sitting at processingStatus="streaming". Finalize
+    // it anyway on a true terminal so the card doesn't spin "Working…" forever
+    // after a reload — we just can't compute the affected-file count/duration.
+    if (terminal === "completed" || terminal === "failed" || terminal === "stopped") {
+      await finalizeRunnerCard(
+        persistence,
+        runId,
+        userId,
+        terminal,
+        0,
+        undefined,
+        undefined,
+        locale,
+      ).catch(() => undefined);
+    }
     await clearProjectProcessingState(persistence, projectId, runId, userId, terminal);
     return;
   }

@@ -16,7 +16,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
 import {
-  CLIENT_SKELETON_LABELS,
   createInitialChatState,
   type DevRuntimeUIState,
 } from "@/features/agents/ui/agent-event-reducer";
@@ -1231,19 +1230,6 @@ export function ProjectDetailPage() {
                       onToggleRunnerDetails={handleToggleRunnerDetails}
                       onPreviewRunner={handlePreviewRunner}
                       activeRunId={chatState.activeRun?.runId ?? null}
-                      skeleton={
-                        chatState.activeRun?.skeleton ??
-                        // Fallback: if the project is processing but the SSE
-                        // stream hasn't reconnected yet (page reload, brief
-                        // network blip), still show a generic processing
-                        // affordance so the user sees the agent is working.
-                        (isProcessing
-                          ? {
-                              phase: "starting",
-                              label: CLIENT_SKELETON_LABELS.starting,
-                            }
-                          : null)
-                      }
                       loadingOlder={loadingOlder}
                       hasMore={hasMoreMessages}
                       onLoadOlder={loadOlderMessages}

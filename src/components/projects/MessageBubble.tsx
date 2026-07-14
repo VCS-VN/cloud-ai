@@ -610,7 +610,7 @@ const STEP_TYPES: Record<StepTypeKey, StepTypeDef> = {
   },
   generic: {
     icon: Wrench,
-    present: "Working on",
+    present: "Working",
     past: "Done",
     verbs: [],
   },
@@ -703,21 +703,23 @@ function deriveStepView(
   const verb = active ? def.present : def.past;
   const icon = pickIcon(lower, token, def.icon);
 
-  // Rebuild the label around the tensed verb. When we recognized a leading
-  // verb, drop it and keep the remaining object ("Fetched storefront token" →
-  // "Fetched" + "storefront token"). Otherwise prefix the verb onto the
-  // descriptor, except for generic steps where we keep the text as-is.
-  let rest = matchedByVerb ? words.slice(1).join(" ") : firstLine;
-  if (token) rest = rest.replace(token, "").trim();
-  rest = rest
-    .replace(/^[:\-–—]\s*/, "")
-    .replace(/[:\-–—]\s*$/, "")
-    .trim();
-
+  // The title is always a clean action verb. When we recognized an English
+  // leading verb we drop it and keep the remaining object ("Fetched storefront
+  // token" → "Fetched" + "storefront token"). Otherwise — a keyword-only match
+  // or unclassified free text (e.g. Vietnamese prose) — the tensed verb stands
+  // alone as the title and the full text lives in the expandable body.
   let label: string;
-  if (matchedByVerb) label = rest ? `${verb} ${rest}` : verb;
-  else if (typeKey === "generic") label = rest || verb;
-  else label = rest ? `${verb} ${rest}` : verb;
+  if (matchedByVerb) {
+    let rest = words.slice(1).join(" ");
+    if (token) rest = rest.replace(token, "").trim();
+    rest = rest
+      .replace(/^[:\-–—]\s*/, "")
+      .replace(/[:\-–—]\s*$/, "")
+      .trim();
+    label = rest ? `${verb} ${rest}` : verb;
+  } else {
+    label = verb;
+  }
 
   return { icon, label, chip };
 }

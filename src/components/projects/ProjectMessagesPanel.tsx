@@ -4,9 +4,8 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "../common/EmptyState";
 import { ErrorState } from "../common/ErrorState";
 import { LoadingState } from "../common/LoadingState";
-import type { Message, SkeletonState } from "@/shared/project-types";
+import type { Message } from "@/shared/project-types";
 import { MessageBubble } from "./MessageBubble";
-import { SkeletonMessageBubble } from "./SkeletonMessageBubble";
 
 type ProjectMessagesPanelProps = {
   messages: Message[];
@@ -18,7 +17,6 @@ type ProjectMessagesPanelProps = {
   onToggleRunnerDetails?: (runId: string) => void;
   onPreviewRunner?: () => void;
   activeRunId?: string | null;
-  skeleton?: SkeletonState | null;
   loading?: boolean;
   loadingOlder?: boolean;
   hasMore?: boolean;
@@ -103,7 +101,6 @@ export function ProjectMessagesPanel({
   onToggleRunnerDetails,
   onPreviewRunner,
   activeRunId,
-  skeleton,
   loading = false,
   loadingOlder = false,
   hasMore = false,
@@ -214,7 +211,7 @@ export function ProjectMessagesPanel({
 
   if (loading) return <LoadingState label="Loading chat..." />;
   if (error) return <ErrorState title="Unable to load chat" message={error} />;
-  if (messages.length === 0 && !skeleton) {
+  if (messages.length === 0) {
     return (
       <EmptyState
         title="No messages yet"
@@ -292,11 +289,6 @@ export function ProjectMessagesPanel({
               </div>
             ),
           )}
-          {skeleton ? (
-            <div data-skeleton-bubble="true">
-              <SkeletonMessageBubble skeleton={skeleton} />
-            </div>
-          ) : null}
         </div>
       </section>
 
