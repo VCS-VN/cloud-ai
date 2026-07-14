@@ -23,8 +23,8 @@ export function CodeView({
   onSelectNode: (node: ProjectFileNode) => void;
 }) {
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 gap-0 overflow-hidden xl:grid-cols-[360px_minmax(0,1fr)]">
-      <div className="min-h-0 overflow-auto border-r bg-[rgb(var(--color-surface))] p-2 transition-colors duration-300">
+    <div className="flex min-h-0 min-w-0 flex-1 gap-0 overflow-hidden">
+      <div className="min-h-0 w-64 shrink-0 overflow-auto border-r border-hairline bg-[rgb(var(--color-surface))] p-2 transition-colors duration-300 xl:w-72">
         <ProjectFileExplorer
           fileTree={fileTree}
           selectedNodeId={selectedNodeId}

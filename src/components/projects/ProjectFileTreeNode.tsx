@@ -39,10 +39,10 @@ export function ProjectFileTreeNode({ node, selectedNodeId, expandedFolderIds, d
       <Button
         variant="unstyled"
         type="button"
-        className={`flex w-full min-w-0 items-center gap-xs rounded-md px-sm py-xs text-left text-[12px] leading-4 transition-all duration-200 ${
-          selected && !isFolder ? 'bg-[var(--app-selected-bg)] text-[var(--app-selected-text)] [&_svg]:text-[var(--app-icon-selected)]' : isCode ? 'text-[var(--app-muted)] hover:bg-[var(--app-panel-strong)] hover:text-[var(--app-panel-text)] [&_svg]:text-[var(--app-icon-muted)] hover:[&_svg]:text-[var(--app-icon)]' : 'text-[var(--app-muted)] hover:bg-[var(--app-panel-strong)] hover:text-[var(--app-panel-text)] [&_svg]:text-[var(--app-icon-muted)] hover:[&_svg]:text-[var(--app-icon)]'
+        className={`flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[12px] leading-4 transition-all duration-200 ${
+          selected && !isFolder ? 'bg-ink/[0.06] font-medium text-ink [&_svg]:text-ink' : 'text-muted hover:bg-ink/[0.04] hover:text-ink [&_svg]:text-subtle hover:[&_svg]:text-ink'
         }`}
-        style={{ paddingLeft: `calc(var(--space-sm) + ${depth} * var(--space-md))` }}
+        style={{ paddingLeft: `calc(0.5rem + ${depth} * 0.75rem)` }}
         aria-pressed={selected}
         onClick={handleClick}
       >
