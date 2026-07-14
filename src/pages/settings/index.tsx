@@ -1,15 +1,6 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, getRouteApi } from "@tanstack/react-router";
-import {
-  BarChart3,
-  CreditCard,
-  FileText,
-  Settings,
-  ShieldAlert,
-  Star,
-  User,
-  Users,
-} from "lucide-react";
+import { CreditCard, Settings, User, Wallet } from "lucide-react";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { BalanceSummaryCard } from "@/components/profile/BalanceSummaryCard";
 import type { AuthUserSummary } from "@/auth/types";
@@ -30,22 +21,69 @@ const settingsNav: Array<{
   id: string;
   label: string;
   icon: typeof User;
-  badge?: string;
 }> = [
   { id: "profile", label: "Profile", icon: User },
-  // { id: "plan", label: "Plan", icon: Star },
-  // { id: "usage", label: "Usage", icon: BarChart3 },
+  { id: "balance", label: "AI Wallet", icon: Wallet },
   { id: "payment", label: "Payment", icon: CreditCard },
-  // { id: "invoices", label: "Invoices", icon: FileText },
-  // { id: "team", label: "Team", icon: Users, badge: "3" },
   { id: "preferences", label: "Preferences", icon: Settings },
 ];
+
+const SCROLL_SPY_OFFSET = 96;
 
 export function SettingsPage() {
   const { user: initialUser } = route.useRouteContext();
   const { theme, setTheme } = useTheme();
   const [user, setUser] = useState<AuthUserSummary>(initialUser);
+  const [activeSection, setActiveSection] = useState(settingsNav[0].id);
   const displayName = user.displayName || getFirstName(user.email);
+
+  useEffect(() => {
+    const sections = settingsNav
+      .map(({ id }) => document.getElementById(id))
+      .filter((el): el is HTMLElement => el !== null);
+    if (sections.length === 0) return;
+
+    function syncActiveSection() {
+      const marker = SCROLL_SPY_OFFSET + 1;
+      // Bottom of page: last section wins even if it's shorter than the viewport.
+      if (
+        window.innerHeight + window.scrollY >=
+        document.body.scrollHeight - 2
+      ) {
+        setActiveSection(sections[sections.length - 1].id);
+        return;
+      }
+      let current = sections[0].id;
+      for (const section of sections) {
+        if (section.getBoundingClientRect().top <= marker) {
+          current = section.id;
+        }
+      }
+      setActiveSection(current);
+    }
+
+    syncActiveSection();
+    window.addEventListener("scroll", syncActiveSection, { passive: true });
+    window.addEventListener("resize", syncActiveSection);
+    return () => {
+      window.removeEventListener("scroll", syncActiveSection);
+      window.removeEventListener("resize", syncActiveSection);
+    };
+  }, []);
+
+  const handleNavClick = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+      const target = document.getElementById(id);
+      if (!target) return;
+      event.preventDefault();
+      const top =
+        target.getBoundingClientRect().top + window.scrollY - SCROLL_SPY_OFFSET;
+      window.scrollTo({ top, behavior: "smooth" });
+      setActiveSection(id);
+      history.replaceState(null, "", `#${id}`);
+    },
+    [],
+  );
 
   return (
     <div className="min-h-screen bg-paper text-ink">
@@ -115,29 +153,21 @@ export function SettingsPage() {
       <div className="mx-auto grid max-w-[1280px] grid-cols-1 gap-8 px-6 pb-20 md:grid-cols-[220px_1fr] lg:grid-cols-[240px_1fr] lg:px-8">
         <aside className="self-start md:sticky md:top-20">
           <nav className="-mx-2 flex gap-1 overflow-x-auto px-2 pb-2 text-ui-sm md:mx-0 md:flex-col md:overflow-visible md:px-0 md:pb-0">
-            {settingsNav.map(({ id, label, icon: Icon, badge }, index) => (
-              <a
-                key={id}
-                href={`#${id}`}
-                className={`flex h-9 shrink-0 items-center gap-2.5 rounded-md px-3 ${index === 0 ? "bg-ink/[0.05] font-medium text-ink" : "text-muted hover:bg-ink/[0.04] hover:text-ink"}`}
-              >
-                <Icon aria-hidden="true" size={16} />
-                {label}
-                {badge ? (
-                  <span className="ml-auto font-mono text-[10px] text-subtle">
-                    {badge}
-                  </span>
-                ) : null}
-              </a>
-            ))}
-            <div className="mx-2 h-5 w-px shrink-0 bg-hairline md:mx-0 md:my-2 md:h-px md:w-auto" />
-            {/* <a
-              href="#danger"
-              className="flex h-9 shrink-0 items-center gap-2.5 rounded-md px-3 text-rose-700 hover:bg-rose-50"
-            >
-              <ShieldAlert aria-hidden="true" size={16} />
-              Danger zone
-            </a> */}
+            {settingsNav.map(({ id, label, icon: Icon }) => {
+              const isActive = activeSection === id;
+              return (
+                <a
+                  key={id}
+                  href={`#${id}`}
+                  onClick={(event) => handleNavClick(event, id)}
+                  aria-current={isActive ? "true" : undefined}
+                  className={`flex h-9 shrink-0 items-center gap-2.5 rounded-md px-3 transition-colors duration-200 ${isActive ? "bg-ink/[0.05] font-medium text-ink" : "text-muted hover:bg-ink/[0.04] hover:text-ink"}`}
+                >
+                  <Icon aria-hidden="true" size={16} />
+                  {label}
+                </a>
+              );
+            })}
           </nav>
         </aside>
 
