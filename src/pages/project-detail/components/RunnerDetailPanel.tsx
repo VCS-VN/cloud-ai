@@ -1,7 +1,20 @@
-import { HelpCircle, Loader2, Sparkles, X } from "lucide-react";
+import { Loader2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AgentBody, RunnerStep } from "@/components/projects/MessageBubble";
+import {
+  AgentBody,
+  RunnerClarificationStep,
+  RunnerStep,
+} from "@/components/projects/MessageBubble";
 import type { Message } from "@/shared/project-types";
+
+// Clarification-family kinds render as a dedicated always-open timeline row
+// (RunnerClarificationStep) rather than a collapsed action step (RunnerStep):
+// they carry an interactive form while pending and the committed answer after.
+const CLARIFICATION_KINDS: ReadonlySet<string> = new Set([
+  "agent_question",
+  "clarification",
+  "plan",
+]);
 
 export function RunnerDetailPanel({
   steps,
@@ -40,7 +53,8 @@ export function RunnerDetailPanel({
   // The agent's final answer is pulled out of the timeline and rendered as a
   // prominent always-open block at the end (see the lovable reference), so the
   // user reads the completed reply without expanding a collapsed step. The
-  // remaining steps (reasoning / edits / commands) stay in the timeline.
+  // remaining steps (reasoning / edits / commands / clarifications) stay in the
+  // timeline.
   const finalAnswer =
     !runActive && !clarification
       ? [...sorted].reverse().find((m) => m.kind === "answer") ?? null
@@ -48,8 +62,7 @@ export function RunnerDetailPanel({
   const ordered = finalAnswer
     ? sorted.filter((m) => m.id !== finalAnswer.id)
     : sorted;
-  const stepCount =
-    ordered.length + (clarification ? 1 : 0) + (finalAnswer ? 1 : 0);
+  const stepCount = ordered.length + (finalAnswer ? 1 : 0);
   const isEmpty = stepCount === 0;
 
   return (
@@ -88,44 +101,30 @@ export function RunnerDetailPanel({
           </div>
         ) : (
           <>
-            {ordered.length > 0 || clarification ? (
+            {ordered.length > 0 ? (
               <ol className="flex flex-col">
-                {ordered.map((step, index) => (
-                  <RunnerStep
-                    key={step.id}
-                    step={step}
-                    isFirst={index === 0}
-                    isLast={!clarification && index === ordered.length - 1}
-                  />
-                ))}
-                {clarification ? (
-                  <li className="relative flex list-none gap-2.5">
-                    <span
-                      aria-hidden="true"
-                      className="absolute left-2 top-0 h-2.5 w-px -translate-x-1/2 bg-hairline"
+                {ordered.map((step, index) =>
+                  CLARIFICATION_KINDS.has(step.kind ?? "") ? (
+                    <RunnerClarificationStep
+                      key={step.id}
+                      step={step}
+                      isFirst={index === 0}
+                      isLast={index === ordered.length - 1}
+                      pending={clarification?.id === step.id}
+                      planAwaitingReview={planAwaitingReview}
+                      onSelectOption={onSelectOption}
+                      onPlanAction={onPlanAction}
+                      onSubmitFreeText={onSubmitFreeText}
                     />
-                    <span className="relative z-10 mt-[3px] flex h-3.5 w-4 shrink-0 items-center justify-center bg-paper text-subtle">
-                      <HelpCircle aria-hidden="true" size={13} />
-                    </span>
-                    <section
-                      aria-label="Agent needs your input"
-                      className="min-w-0 flex-1 overflow-hidden rounded-lg border border-hairline bg-surface"
-                    >
-                      <div className="flex items-center gap-1.5 border-b border-hairline px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-subtle">
-                        Needs your input
-                      </div>
-                      <div className="px-3 py-2.5">
-                        <AgentBody
-                          message={clarification}
-                          planAwaitingReview={planAwaitingReview}
-                          onSelectOption={onSelectOption}
-                          onPlanAction={onPlanAction}
-                          onSubmitFreeText={onSubmitFreeText}
-                        />
-                      </div>
-                    </section>
-                  </li>
-                ) : null}
+                  ) : (
+                    <RunnerStep
+                      key={step.id}
+                      step={step}
+                      isFirst={index === 0}
+                      isLast={index === ordered.length - 1}
+                    />
+                  ),
+                )}
               </ol>
             ) : null}
 

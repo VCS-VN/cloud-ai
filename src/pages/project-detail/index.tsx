@@ -240,9 +240,23 @@ export function ProjectDetailPage() {
   }, [messages, awaitingInputRunId]);
 
   // Inner steps of the runner whose detail view is open, sorted by the panel.
-  const runnerDetailSteps = runnerDetailRunId
-    ? (chatState.runnerMessages[runnerDetailRunId] ?? [])
-    : [];
+  // Merges the live/lazy-loaded inner steps (reasoning/agent_message/answer)
+  // with the run's clarification-family messages (agent_question/clarification/
+  // plan) so an interactive prompt appears as a timeline row in chronological
+  // position — showing its form while pending and the committed result once
+  // answered (AgentBody renders both states from the same message + metadata).
+  const runnerDetailSteps = useMemo<Message[]>(() => {
+    if (!runnerDetailRunId) return [];
+    const inner = chatState.runnerMessages[runnerDetailRunId] ?? [];
+    const clarifications = messages.filter(
+      (m) =>
+        m.runId === runnerDetailRunId &&
+        (m.kind === "agent_question" ||
+          m.kind === "clarification" ||
+          m.kind === "plan"),
+    );
+    return [...inner, ...clarifications];
+  }, [runnerDetailRunId, chatState.runnerMessages, messages]);
 
   // Auto-open the runner detail for a run that's blocked on user input so the
   // clarification message is visible without the user hunting for the Details

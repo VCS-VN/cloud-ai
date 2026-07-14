@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Check,
   CheckCircle2,
+  ClipboardList,
   ChevronDown,
   ChevronRight,
   Eye,
@@ -711,6 +712,66 @@ function deriveStepView(
   }
 
   return { icon, label, chip };
+}
+
+// A clarification-family message (agent_question / clarification / plan) as a
+// timeline row. Unlike RunnerStep it is never collapsed — the body carries an
+// interactive form while the agent is waiting and the committed result once the
+// user answers, both of which must stay visible. AgentBody picks the right view
+// from the message kind + metadata (pending form vs. CommittedAnswerInline).
+export function RunnerClarificationStep({
+  step,
+  isFirst,
+  isLast,
+  pending,
+  planAwaitingReview,
+  onSelectOption,
+  onPlanAction,
+  onSubmitFreeText,
+}: {
+  step: Message;
+  isFirst?: boolean;
+  isLast?: boolean;
+  // True while the run is still blocked on THIS message (drives the rail
+  // spinner and the "Needs your input" vs "Your answer" label).
+  pending?: boolean;
+  planAwaitingReview?: boolean;
+  onSelectOption?: (
+    messageId: string,
+    optionId: string,
+  ) => Promise<boolean | void>;
+  onPlanAction?: (
+    message: Message,
+    action: "approve" | "reject",
+  ) => Promise<void>;
+  onSubmitFreeText?: (
+    message: Message,
+    freeText: string,
+  ) => Promise<boolean | void>;
+}) {
+  return (
+    <li className="relative flex list-none gap-2.5">
+      <TimelineRail
+        isFirst={isFirst}
+        isLast={isLast}
+        icon={ClipboardList}
+        active={pending}
+      />
+
+      <div className="min-w-0 flex-1 pb-3.5">
+        <div className="mb-2 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-subtle">
+          {pending ? "Needs your input" : "Your answer"}
+        </div>
+        <AgentBody
+          message={step}
+          planAwaitingReview={planAwaitingReview}
+          onSelectOption={onSelectOption}
+          onPlanAction={onPlanAction}
+          onSubmitFreeText={onSubmitFreeText}
+        />
+      </div>
+    </li>
+  );
 }
 
 // One row of the runner activity timeline. Every row is a collapsible: the
