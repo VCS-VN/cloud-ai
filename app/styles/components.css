@@ -613,6 +613,10 @@
     @apply min-w-0 flex-1;
   }
 
+  .msg-bubble-user {
+    @apply min-w-0 max-w-[85%] rounded-xl rounded-tl-md border border-hairline bg-chalk px-3.5 py-2.5;
+  }
+
   .msg-meta {
     @apply mb-1 flex items-baseline gap-2 flex-wrap;
   }

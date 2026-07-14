@@ -208,9 +208,8 @@ export function MessageBubble({
 
   if (isUser) {
     return (
-      <article className="msg-row">
-        <div className="msg-avatar-user">TM</div>
-        <div className="msg-content">
+      <article className="flex">
+        <div className="msg-bubble-user">
           <div className="msg-meta">
             <span className="msg-author">You</span>
             {time ? <span className="msg-time">{time}</span> : null}
