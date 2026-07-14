@@ -190,6 +190,7 @@ export class AuthService {
 
     try {
       const apiKey = decryptUserApiKey(settings.episCloudApiKey);
+      console.log("🚀 ~ AuthService ~ listEpisCloudModels ~ apiKey:", apiKey);
       const models = await this.episCloud.listModels(apiKey);
       return { status: "ok", models };
     } catch (error) {
