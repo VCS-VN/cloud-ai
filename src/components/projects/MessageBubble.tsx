@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Eye,
   FilePen,
+  FilePlus,
   FileStack,
   Globe,
   HelpCircle,
@@ -15,11 +16,14 @@ import {
   Lightbulb,
   ListTree,
   Loader2,
+  Package,
   RefreshCw,
+  Search,
   Settings2,
   ShieldAlert,
   ShoppingCart,
   Sparkles,
+  Terminal,
   Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -424,44 +428,304 @@ function RunnerCard({
 
 type LucideIcon = typeof HelpCircle;
 
-// Maps a free-text agent_message step ("Edited shopify.ts", "Fetched shop
-// domain", "Counted products") to a Lovable-style timeline row: a verb-derived
-// node icon, a terse one-line label, and an optional monospace chip carrying
-// the file/target the step touched.
-const FILE_TOKEN = /([\w./-]+\.(?:tsx?|jsx?|mjs|cjs|css|scss|json|md|html|svg|toml|ya?ml))/;
+// Each runner step has a semantic *type* (thinking / edit / command / fetch /
+// …). The type fixes a verb whose tense follows the step's processing status:
+// present-continuous while the step is running ("Editing"), simple past once it
+// finishes ("Edited"). `present`/`past` are the English verb forms; the icon is
+// a default that a keyword scan can override for the more distinctive targets
+// (key, domain, cart).
+type StepTypeKey =
+  | "thinking"
+  | "answer"
+  | "edit"
+  | "create"
+  | "read"
+  | "list"
+  | "search"
+  | "command"
+  | "fetch"
+  | "install"
+  | "config"
+  | "count"
+  | "generic";
 
-function deriveStepView(content: string): {
+type StepTypeDef = {
   icon: LucideIcon;
-  label: string;
-  chip?: string;
-} {
-  const firstLine = content.trim().split("\n")[0] ?? content.trim();
+  present: string;
+  past: string;
+  // Lowercased leading-verb spellings (any tense) that identify this type.
+  verbs: string[];
+};
+
+const STEP_TYPES: Record<StepTypeKey, StepTypeDef> = {
+  thinking: {
+    icon: Lightbulb,
+    present: "Thinking",
+    past: "Thought",
+    verbs: ["thinking", "thought", "think", "reasoning", "reasoned", "reason"],
+  },
+  answer: {
+    icon: Sparkles,
+    present: "Responding",
+    past: "Responded",
+    verbs: [
+      "responding",
+      "responded",
+      "respond",
+      "answering",
+      "answered",
+      "answer",
+    ],
+  },
+  edit: {
+    icon: FilePen,
+    present: "Editing",
+    past: "Edited",
+    verbs: [
+      "editing",
+      "edited",
+      "edit",
+      "updating",
+      "updated",
+      "update",
+      "modifying",
+      "modified",
+      "modify",
+      "writing",
+      "wrote",
+      "written",
+      "write",
+    ],
+  },
+  create: {
+    icon: FilePlus,
+    present: "Creating",
+    past: "Created",
+    verbs: [
+      "creating",
+      "created",
+      "create",
+      "adding",
+      "added",
+      "add",
+      "generating",
+      "generated",
+      "generate",
+    ],
+  },
+  read: {
+    icon: FileStack,
+    present: "Reading",
+    past: "Read",
+    verbs: [
+      "reading",
+      "read",
+      "opening",
+      "opened",
+      "open",
+      "viewing",
+      "viewed",
+      "inspecting",
+      "inspected",
+    ],
+  },
+  list: {
+    icon: ListTree,
+    present: "Listing",
+    past: "Listed",
+    verbs: ["listing", "listed", "list"],
+  },
+  search: {
+    icon: Search,
+    present: "Searching",
+    past: "Searched",
+    verbs: [
+      "searching",
+      "searched",
+      "search",
+      "scanning",
+      "scanned",
+      "scan",
+      "finding",
+      "found",
+      "glob",
+      "grepping",
+      "grepped",
+      "grep",
+    ],
+  },
+  command: {
+    icon: Terminal,
+    present: "Running",
+    past: "Ran",
+    verbs: [
+      "running",
+      "ran",
+      "run",
+      "runned",
+      "executing",
+      "executed",
+      "execute",
+      "building",
+      "built",
+      "build",
+    ],
+  },
+  fetch: {
+    icon: Globe,
+    present: "Fetching",
+    past: "Fetched",
+    verbs: [
+      "fetching",
+      "fetched",
+      "fetch",
+      "loading",
+      "loaded",
+      "load",
+      "retrieving",
+      "retrieved",
+      "retrieve",
+      "requesting",
+      "requested",
+      "request",
+    ],
+  },
+  install: {
+    icon: Package,
+    present: "Installing",
+    past: "Installed",
+    verbs: ["installing", "installed", "install"],
+  },
+  config: {
+    icon: Settings2,
+    present: "Configuring",
+    past: "Configured",
+    verbs: ["configuring", "configured", "configure", "setting", "setup"],
+  },
+  count: {
+    icon: ShoppingCart,
+    present: "Counting",
+    past: "Counted",
+    verbs: ["counting", "counted", "count"],
+  },
+  generic: {
+    icon: Wrench,
+    present: "Working on",
+    past: "Done",
+    verbs: [],
+  },
+};
+
+const FILE_TOKEN =
+  /([\w./-]+\.(?:tsx?|jsx?|mjs|cjs|css|scss|json|md|html|svg|toml|ya?ml))/;
+
+// Picks the node icon from the step's target keywords, so a token/domain/cart
+// step gets its distinctive glyph even when its leading verb ("Fetched") maps
+// to a generic type. Falls back to the verb type's own icon.
+function pickIcon(
+  lower: string,
+  token: string | undefined,
+  fallback: LucideIcon,
+): LucideIcon {
+  if (/token|api key|\bkey\b|auth|secret|credential/.test(lower))
+    return KeyRound;
+  if (/domain|hostname|\burl\b|http|endpoint/.test(lower)) return Globe;
+  if (/product|\bcart\b|order|checkout|storefront|\bshop\b/.test(lower))
+    return ShoppingCart;
+  if (/instal|\bpackage\b|dependenc|\bnpm\b|\bpnpm\b|\byarn\b/.test(lower))
+    return Package;
+  if (/config|setting|zustand|\bstore\b/.test(lower)) return Settings2;
+  if (token)
+    return /edit|updat|modif|wrote|writ|creat/.test(lower)
+      ? FilePen
+      : FileStack;
+  return fallback;
+}
+
+// Maps a step to a timeline row: a type-derived node icon, a tensed verb label
+// (present while running, past once completed), and an optional monospace chip
+// carrying the file the step touched. Reasoning/answer steps are typed straight
+// from their kind; action steps are classified from their free text.
+function deriveStepView(
+  step: Message,
+  active: boolean,
+): { icon: LucideIcon; label: string; chip?: string } {
+  const isReasoning = step.kind === "reasoning" || step.kind === "thinking";
+  const isAnswer = step.kind === "answer";
+  if (isReasoning || isAnswer) {
+    const def = isReasoning ? STEP_TYPES.thinking : STEP_TYPES.answer;
+    return { icon: def.icon, label: active ? def.present : def.past };
+  }
+
+  const firstLine = (
+    step.content.trim().split("\n")[0] ?? step.content.trim()
+  ).trim();
+  const lower = firstLine.toLowerCase();
   const tokenMatch = firstLine.match(FILE_TOKEN);
   const token = tokenMatch?.[1];
   const chip = token ? (token.split("/").pop() ?? token) : undefined;
-  // Strip the matched path from the label so the chip isn't duplicated inline.
-  const label = (token ? firstLine.replace(token, "").trim() : firstLine)
+
+  // Classify by the leading verb first (so we can retense it), then fall back
+  // to a keyword scan of the whole line.
+  const words = firstLine.split(/\s+/);
+  const firstWord = (words[0] ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  let typeKey: StepTypeKey = "generic";
+  let matchedByVerb = false;
+  for (const key of Object.keys(STEP_TYPES) as StepTypeKey[]) {
+    if (STEP_TYPES[key].verbs.includes(firstWord)) {
+      typeKey = key;
+      matchedByVerb = true;
+      break;
+    }
+  }
+  if (!matchedByVerb) {
+    if (/\b(edit|updat|modif|wrote|writ)/.test(lower)) typeKey = "edit";
+    else if (/\bcreat|\badd(ed|ing)?\b/.test(lower)) typeKey = "create";
+    else if (/\blist/.test(lower)) typeKey = "list";
+    else if (/\b(read|scan|search|glob|grep|find)/.test(lower))
+      typeKey = "search";
+    else if (/\b(run|command|execut|build)/.test(lower)) typeKey = "command";
+    else if (/instal/.test(lower)) typeKey = "install";
+    else if (/config|setting|set up|setup|zustand|\bstore\b/.test(lower))
+      typeKey = "config";
+    else if (/\bcount/.test(lower)) typeKey = "count";
+    else if (
+      /token|api key|\bkey\b|auth|secret|credential|domain|hostname|\burl\b|http|endpoint|fetch|load|retriev/.test(
+        lower,
+      )
+    )
+      typeKey = "fetch";
+    else if (/product|\bcart\b|order|checkout|storefront|\bshop\b/.test(lower))
+      typeKey = "count";
+  }
+
+  const def = STEP_TYPES[typeKey];
+  const verb = active ? def.present : def.past;
+  const icon = pickIcon(lower, token, def.icon);
+
+  // Rebuild the label around the tensed verb. When we recognized a leading
+  // verb, drop it and keep the remaining object ("Fetched storefront token" →
+  // "Fetched" + "storefront token"). Otherwise prefix the verb onto the
+  // descriptor, except for generic steps where we keep the text as-is.
+  let rest = matchedByVerb ? words.slice(1).join(" ") : firstLine;
+  if (token) rest = rest.replace(token, "").trim();
+  rest = rest
+    .replace(/^[:\-–—]\s*/, "")
     .replace(/[:\-–—]\s*$/, "")
     .trim();
-  const lower = firstLine.toLowerCase();
 
-  let icon: LucideIcon = Wrench;
-  if (/\b(edit|updat|modif|wrote|writ|creat)/.test(lower)) icon = FilePen;
-  else if (/\b(list|read|scan|search|glob)/.test(lower)) icon = FileStack;
-  else if (/token|api key|\bkey\b|auth|secret|credential/.test(lower))
-    icon = KeyRound;
-  else if (/domain|hostname|\burl\b|http|endpoint/.test(lower)) icon = Globe;
-  else if (/product|\bcart\b|order|checkout|storefront|shop\b/.test(lower))
-    icon = ShoppingCart;
-  else if (/config|setting|install|set up|setup|zustand|store\b/.test(lower))
-    icon = Settings2;
+  let label: string;
+  if (matchedByVerb) label = rest ? `${verb} ${rest}` : verb;
+  else if (typeKey === "generic") label = rest || verb;
+  else label = rest ? `${verb} ${rest}` : verb;
 
-  return { icon, label: label || firstLine, chip };
+  return { icon, label, chip };
 }
 
-// One row of the runner activity timeline. The vertical connector rail is
-// drawn per-row (full height) so consecutive rows form one continuous line
-// through the icon nodes, matching the Lovable activity-log layout.
+// One row of the runner activity timeline. Every row is a collapsible: the
+// header shows the type + tensed verb, and expanding it reveals the full text
+// of what the step did (or is doing). The vertical connector rail is drawn
+// per-row so consecutive rows form one continuous line through the icon nodes.
 export function RunnerStep({
   step,
   isFirst,
@@ -471,66 +735,61 @@ export function RunnerStep({
   isFirst?: boolean;
   isLast?: boolean;
 }) {
-  const isReasoning = step.kind === "reasoning" || step.kind === "thinking";
+  const active =
+    step.processingStatus === "streaming" ||
+    step.processingStatus === "pending";
   const isAnswer = step.kind === "answer";
-  const view = isReasoning
-    ? { icon: Lightbulb as LucideIcon, label: "Thought process", chip: undefined }
-    : isAnswer
-      ? { icon: Sparkles as LucideIcon, label: "Response", chip: undefined }
-      : deriveStepView(step.content);
-
-  // Reasoning + the final answer carry a body worth reading, so they collapse
-  // behind their timeline row. Plain action steps are the label itself.
-  const collapsible = isReasoning || isAnswer;
+  const view = deriveStepView(step, active);
   const [open, setOpen] = useState(false);
   const Icon = view.icon;
+  const hasBody = step.content.trim().length > 0;
 
   return (
     <li className="relative flex list-none gap-2.5">
-      <TimelineRail isFirst={isFirst} isLast={isLast} icon={Icon} />
+      <TimelineRail
+        isFirst={isFirst}
+        isLast={isLast}
+        icon={Icon}
+        active={active}
+      />
 
       <div className="min-w-0 flex-1 pb-3.5">
-        {collapsible ? (
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-            className="group flex w-full items-center gap-1.5 text-left focus-ring rounded-sm cursor-pointer"
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          disabled={!hasBody}
+          className="group flex w-full items-center gap-1.5 text-left rounded-sm focus-ring transition-colors hover:text-ink disabled:cursor-default cursor-pointer"
+        >
+          <span
+            className="min-w-0 truncate text-[12.5px] leading-5 text-ink"
+            title={view.label}
           >
-            <span className="truncate text-[12.5px] leading-5 text-ink">
-              {view.label}
-            </span>
-            {open ? (
+            {view.label}
+          </span>
+          {view.chip ? (
+            <code className="shrink-0 rounded bg-ink/[0.06] px-1.5 py-px font-mono text-[11px] text-muted">
+              {view.chip}
+            </code>
+          ) : null}
+          {hasBody ? (
+            open ? (
               <ChevronDown
                 aria-hidden="true"
                 size={13}
-                className="shrink-0 text-subtle transition-colors group-hover:text-muted"
+                className="ml-auto shrink-0 text-subtle transition-colors group-hover:text-muted"
               />
             ) : (
               <ChevronRight
                 aria-hidden="true"
                 size={13}
-                className="shrink-0 text-subtle transition-colors group-hover:text-muted"
+                className="ml-auto shrink-0 text-subtle transition-colors group-hover:text-muted"
               />
-            )}
-          </button>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span
-              className="truncate text-[12.5px] leading-5 text-ink"
-              title={view.label}
-            >
-              {view.label}
-            </span>
-            {view.chip ? (
-              <code className="shrink-0 rounded bg-ink/[0.06] px-1.5 py-px font-mono text-[11px] text-muted">
-                {view.chip}
-              </code>
-            ) : null}
-          </div>
-        )}
+            )
+          ) : null}
+        </button>
 
-        {collapsible && open ? (
+        {open && hasBody ? (
           <div className="mt-2">
             {isAnswer ? (
               <MarkdownContent content={step.content} />
@@ -547,16 +806,19 @@ export function RunnerStep({
 }
 
 // The gutter node: a continuous vertical rail with the step's icon centered on
-// it. The rail segment above the icon is hidden on the first row and the
+// it. While the step is running the node shows a spinner instead of its type
+// icon. The rail segment above the icon is hidden on the first row and the
 // segment below on the last, so the line starts and ends at the outer nodes.
 function TimelineRail({
   icon: Icon,
   isFirst,
   isLast,
+  active,
 }: {
   icon: LucideIcon;
   isFirst?: boolean;
   isLast?: boolean;
+  active?: boolean;
 }) {
   return (
     <div className="relative flex w-4 shrink-0 justify-center">
@@ -572,8 +834,20 @@ function TimelineRail({
           isLast ? "opacity-0" : ""
         }`}
       />
-      <span className="relative z-10 mt-[3px] flex h-3.5 w-3.5 items-center justify-center bg-paper text-subtle">
-        <Icon aria-hidden="true" size={13} />
+      <span
+        className={`relative z-10 mt-[3px] flex h-3.5 w-3.5 items-center justify-center bg-paper ${
+          active ? "text-ink" : "text-subtle"
+        }`}
+      >
+        {active ? (
+          <Loader2
+            aria-hidden="true"
+            size={13}
+            className="animate-spin motion-reduce:animate-none"
+          />
+        ) : (
+          <Icon aria-hidden="true" size={13} />
+        )}
       </span>
     </div>
   );

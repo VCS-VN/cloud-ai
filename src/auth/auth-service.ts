@@ -223,7 +223,13 @@ export class AuthService {
   async getEpisCloudApiKeyForUserId(userId: string): Promise<string | null> {
     const settings = await this.userSettings.findByUserId(userId);
     if (!settings?.episCloudApiKey) return null;
-    return decryptUserApiKey(settings.episCloudApiKey);
+
+    const result = decryptUserApiKey(settings.episCloudApiKey);
+    console.log(
+      "🚀 ~ AuthService ~ getEpisCloudApiKeyForUserId ~ result:",
+      result,
+    );
+    return result;
   }
 
   async logout() {

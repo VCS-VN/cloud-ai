@@ -95,7 +95,7 @@ export function RunnerDetailPanel({
                 </span>
                 <section
                   aria-label="Agent needs your input"
-                  className="min-w-0 flex-1 rounded-lg border border-hairline bg-surface"
+                  className="min-w-0 flex-1 overflow-hidden rounded-lg border border-hairline bg-surface"
                 >
                   <div className="flex items-center gap-1.5 border-b border-hairline px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-subtle">
                     Needs your input
