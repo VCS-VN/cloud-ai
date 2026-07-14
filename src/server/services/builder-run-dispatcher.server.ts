@@ -37,6 +37,7 @@ import type {
   Project,
   ProjectMessageRepository,
   ProjectRepository,
+  RunnerMessageRepository,
   RunStreamEvent,
 } from "@/shared/project-types";
 import {
@@ -87,6 +88,7 @@ export type BuilderRunPersistence = {
   projectRepository: ProjectRepository;
   runStore: ProjectRunStore;
   agentRunRepository?: PgAgentRunRepository;
+  runnerMessageRepository?: RunnerMessageRepository;
 };
 
 export type BuilderRunStartOutcome =
@@ -421,6 +423,20 @@ export async function startBuilderRunForChat(
   // run.started fires immediately so SSE consumers see the run is alive
   publishChatEvent(runId, emitRunStarted(translatorCtx));
 
+  // Create the runner card row up-front (kind='runner', streaming). This is the
+  // single top-level chat bubble for the whole run — inner steps (reasoning /
+  // agent_message / answer) land in runner_messages and are revealed on expand.
+  // Finalized (summary + completed/failed status) in persistRunTerminal.
+  if (ctxPersistence) {
+    await ensureRunnerCard(
+      ctxPersistence,
+      input.projectId,
+      runId,
+      input.userId,
+      input.parentMessageId,
+    ).catch(() => undefined);
+  }
+
   const handleBridgeEvent = async (event: BuilderRunEvent) => {
     try {
       const outcome = translateBuilderEventToRunStreamEvent(event, translatorCtx);
@@ -451,6 +467,7 @@ export async function startBuilderRunForChat(
           runId,
           input.userId,
           outcome.terminal,
+          locale,
           event.type === "failed" ? event.failureCode : undefined,
         ).catch(() => undefined);
       }
@@ -617,6 +634,55 @@ async function persistAgentMessage(
   >,
 ): Promise<void> {
   const now = new Date().toISOString();
+
+  // Runner sub-messages (reasoning/agent_message/answer) live in the separate
+  // runner_messages table — they are the "inner" steps revealed when the user
+  // expands the runner card, NOT top-level chat rows. Only plan/agent_question/
+  // error stay in project_messages as their own top-level bubbles.
+  const isRunnerInner =
+    directive.kind === "reasoning" ||
+    directive.kind === "agent_message" ||
+    directive.kind === "answer";
+  if (isRunnerInner && persistence.runnerMessageRepository) {
+    const repo = persistence.runnerMessageRepository;
+    const content = "content" in directive ? directive.content : "";
+    const id = directive.messageId;
+    const updated = await repo
+      .updateRunnerMessage(id, {
+        content,
+        kind: directive.kind,
+        processingStatus: "completed",
+        providerResponseId: "codex-sdk",
+        updatedAt: now,
+      })
+      .catch(() => undefined);
+    if (updated) return;
+    try {
+      await repo.saveRunnerMessage({
+        id,
+        runId,
+        projectId,
+        role: "agent",
+        content,
+        kind: directive.kind,
+        processingStatus: "completed",
+        providerResponseId: "codex-sdk",
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch {
+      await repo
+        .updateRunnerMessage(id, {
+          content,
+          kind: directive.kind,
+          processingStatus: "completed",
+          updatedAt: now,
+        })
+        .catch(() => undefined);
+    }
+    return;
+  }
+
   const kind: AgentMessageKind =
     directive.kind === "answer"
       ? "answer"
@@ -682,6 +748,113 @@ async function persistAgentMessage(
   }
 }
 
+function runnerCardId(runId: string): string {
+  return `msg-${runId}-runner`;
+}
+
+// The runner card is the single top-level chat bubble for an entire run. It is
+// created streaming at dispatch and finalized (summary + status) at terminal.
+async function ensureRunnerCard(
+  persistence: BuilderRunPersistence,
+  projectId: string,
+  runId: string,
+  userId: string | undefined,
+  parentMessageId: string | undefined,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const id = runnerCardId(runId);
+  try {
+    await persistence.messageRepository.saveMessage(
+      {
+        id,
+        userId,
+        projectId,
+        role: "agent",
+        content: "",
+        status: "completed",
+        processingStatus: "streaming",
+        parentMessageId,
+        runId,
+        kind: "runner",
+        provider: "codex-sdk",
+        createdAt: now,
+        updatedAt: now,
+      },
+      userId,
+    );
+  } catch {
+    // Row already exists (retry/replay). Reset it to streaming so the card
+    // re-activates for the new attempt.
+    await persistence.messageRepository
+      .updateMessage(id, { processingStatus: "streaming", updatedAt: now })
+      .catch(() => undefined);
+  }
+}
+
+function runnerCardSummary(
+  affectedFileCount: number,
+  startedAt: string,
+  completedAt: string | undefined,
+  terminal: TerminalKind,
+  locale: ProgressLocale,
+): string {
+  const seconds = completedAt
+    ? Math.max(1, Math.round((Date.parse(completedAt) - Date.parse(startedAt)) / 1000))
+    : null;
+  if (terminal === "failed") {
+    return locale === "vi" ? "Lần chạy thất bại" : "Run failed";
+  }
+  if (terminal === "stopped") {
+    return locale === "vi" ? "Lần chạy đã dừng" : "Run stopped";
+  }
+  const timePart =
+    seconds !== null
+      ? locale === "vi"
+        ? `Đã làm trong ${seconds}s`
+        : `Worked for ${seconds}s`
+      : locale === "vi"
+        ? "Hoàn thành"
+        : "Done";
+  if (affectedFileCount <= 0) return timePart;
+  const filePart =
+    locale === "vi"
+      ? `sửa ${affectedFileCount} tệp`
+      : `edited ${affectedFileCount} file${affectedFileCount === 1 ? "" : "s"}`;
+  return `${timePart} · ${filePart}`;
+}
+
+async function finalizeRunnerCard(
+  persistence: BuilderRunPersistence,
+  runId: string,
+  userId: string | undefined,
+  terminal: TerminalKind,
+  affectedFileCount: number,
+  startedAt: string | undefined,
+  completedAt: string | undefined,
+  locale: ProgressLocale,
+): Promise<void> {
+  const processingStatus =
+    terminal === "failed"
+      ? "failed"
+      : terminal === "stopped"
+        ? "stopped"
+        : "completed";
+  const content = runnerCardSummary(
+    affectedFileCount,
+    startedAt ?? new Date().toISOString(),
+    completedAt,
+    terminal,
+    locale,
+  );
+  await persistence.messageRepository
+    .updateMessage(runnerCardId(runId), {
+      content,
+      processingStatus,
+      updatedAt: new Date().toISOString(),
+    })
+    .catch(() => undefined);
+}
+
 async function persistTimeline(
   agentRunRepository: PgAgentRunRepository,
   runId: string,
@@ -700,6 +873,7 @@ async function persistRunTerminal(
   runId: string,
   userId: string | undefined,
   terminal: TerminalKind,
+  locale: ProgressLocale,
   failureCode?: string,
 ): Promise<void> {
   const run = await persistence.runStore.load(runId, userId).catch(() => undefined);
@@ -720,7 +894,20 @@ async function persistRunTerminal(
   } else if (terminal === "awaiting_input" && run.status !== "awaiting_input") {
     await persistence.runStore.update(run, { status: "awaiting_input" });
   }
+  // The runner card only finalizes on a true terminal (completed/failed/stopped).
+  // awaiting_input keeps the card streaming — the run resumes after the user
+  // answers, and the same card finalizes on the eventual terminal.
   if (terminal === "completed" || terminal === "failed" || terminal === "stopped") {
+    await finalizeRunnerCard(
+      persistence,
+      runId,
+      userId,
+      terminal,
+      run.affectedFiles?.length ?? 0,
+      run.startedAt,
+      run.completedAt,
+      locale,
+    ).catch(() => undefined);
     await clearProjectProcessingState(persistence, projectId, runId, userId, terminal);
   }
 }

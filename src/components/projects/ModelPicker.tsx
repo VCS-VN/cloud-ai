@@ -30,7 +30,7 @@ export function ModelPicker({
   const query = useQuery({
     queryKey: ["episcloud-models"],
     queryFn: () => listModels() as Promise<EpisCloudModelsResult>,
-    enabled: open,
+    // enabled: open,
     staleTime: 5 * 60 * 1000,
   });
 

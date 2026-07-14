@@ -1,9 +1,12 @@
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
   Brain,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   HelpCircle,
   Loader2,
   RefreshCw,
@@ -41,6 +44,8 @@ type MessageBubbleProps = {
     message: Message,
     freeText: string,
   ) => Promise<boolean | void>;
+  runnerMessages?: Message[];
+  onExpandRunner?: (runId: string) => void;
 };
 
 const MARKDOWN_CLASS =
@@ -208,9 +213,22 @@ export function MessageBubble({
   onPlanAction,
   planAwaitingReview,
   onSubmitFreeText,
+  runnerMessages,
+  onExpandRunner,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const time = formatTime(message.createdAt);
+
+  if (message.kind === "runner") {
+    return (
+      <RunnerCard
+        message={message}
+        runActive={runActive}
+        innerMessages={runnerMessages}
+        onExpand={onExpandRunner}
+      />
+    );
+  }
 
   if (isUser) {
     return (
@@ -299,6 +317,129 @@ export function MessageBubble({
               <RefreshCw aria-hidden="true" size={12} />
               Retry
             </Button>
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function RunnerCard({
+  message,
+  runActive,
+  innerMessages,
+  onExpand,
+}: {
+  message: Message;
+  runActive?: boolean;
+  innerMessages?: Message[];
+  onExpand?: (runId: string) => void;
+}) {
+  // null = follow the auto default (open while running, open on failure,
+  // collapsed once done); a boolean = the user overrode it by clicking, and
+  // that choice sticks even as new stream events arrive.
+  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
+  const fetchedRef = useRef(false);
+  const time = formatTime(message.createdAt);
+  const isStreaming = message.processingStatus === "streaming" || runActive;
+  const isFailed = message.processingStatus === "failed";
+  const summary =
+    message.content ||
+    (isStreaming ? "Working…" : isFailed ? "Run failed" : "Done");
+  const inner = innerMessages ?? [];
+
+  // Auto-open while the run is active or after a failure so progress/errors are
+  // visible; a successful, finished run collapses to keep the chat tidy. Vercel
+  // AI Elements + Lovable both follow this "open while running, keep errors
+  // open, collapse successes" pattern.
+  const autoExpanded = isStreaming || isFailed;
+  const expanded = manualExpanded ?? autoExpanded;
+
+  // Lazy-load inner sub-messages the first time the card is effectively open.
+  // Live runs already streamed theirs into state; this fills archived runs
+  // (including auto-opened failures) whose inner steps were never streamed here.
+  useEffect(() => {
+    if (expanded && !fetchedRef.current && message.runId && onExpand) {
+      fetchedRef.current = true;
+      onExpand(message.runId);
+    }
+  }, [expanded, message.runId, onExpand]);
+
+  const toggle = () => setManualExpanded(!expanded);
+
+  return (
+    <article className="msg-row mt-4">
+      <div className="msg-avatar-agent">
+        <Sparkles aria-hidden="true" size={14} />
+      </div>
+
+      <div className="msg-content">
+        <div className="msg-meta flex-wrap">
+          <span className="msg-author">Cloud AI</span>
+          {time ? <span className="msg-time">{time}</span> : null}
+        </div>
+
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={expanded}
+          className="flex w-full items-center gap-2 rounded-md border border-hairline bg-ink/[0.02] px-3 py-2 text-left transition-colors hover:bg-ink/[0.04] focus-ring cursor-pointer"
+        >
+          {isStreaming ? (
+            <Loader2
+              aria-hidden="true"
+              size={13}
+              className="shrink-0 animate-spin text-muted"
+            />
+          ) : isFailed ? (
+            <AlertTriangle
+              aria-hidden="true"
+              size={13}
+              className="shrink-0 text-warn-fg"
+            />
+          ) : (
+            <CheckCircle2
+              aria-hidden="true"
+              size={13}
+              className="shrink-0 text-success-fg"
+            />
+          )}
+          <span className="flex-1 truncate text-[12.5px] font-medium text-ink">
+            {summary}
+          </span>
+          {inner.length > 0 ? (
+            <span className="text-[11px] text-subtle">{inner.length}</span>
+          ) : null}
+          {expanded ? (
+            <ChevronDown aria-hidden="true" size={14} className="shrink-0 text-muted" />
+          ) : (
+            <ChevronRight aria-hidden="true" size={14} className="shrink-0 text-muted" />
+          )}
+        </button>
+
+        {expanded ? (
+          <div className="mt-2 flex flex-col gap-2 border-l border-hairline-soft pl-3">
+            {inner.length === 0 ? (
+              <div className="px-1 py-1 text-[12px] text-subtle">
+                No steps recorded.
+              </div>
+            ) : (
+              inner.map((step) =>
+                step.kind === "reasoning" || step.kind === "thinking" ? (
+                  <ThinkingBubble key={step.id} content={step.content} />
+                ) : step.kind === "answer" ? (
+                  <div key={step.id}>
+                    <MarkdownContent content={step.content} />
+                  </div>
+                ) : (
+                  <ProcessingNoteBubble
+                    key={step.id}
+                    content={step.content}
+                    runActive={false}
+                  />
+                ),
+              )
+            )}
           </div>
         ) : null}
       </div>

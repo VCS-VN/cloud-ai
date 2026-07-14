@@ -7,7 +7,7 @@ export type MessageRole = 'user' | 'agent'
 export type MessageStatus = 0 | 'pending' | 'completed' | 'failed'
 export type ProjectProcessingStatus = 'idle' | 'processing'
 export type MessageProcessingStatus = 'pending' | 'streaming' | 'completed' | 'failed' | 'stopped'
-export type AgentMessageKind = 'plan' | 'answer' | 'clarification' | 'error' | 'review_required' | 'agent_question' | 'thinking' | 'reasoning' | 'agent_message'
+export type AgentMessageKind = 'plan' | 'answer' | 'clarification' | 'error' | 'review_required' | 'agent_question' | 'thinking' | 'reasoning' | 'agent_message' | 'runner'
 export type AgentRunStatus = 'streaming' | 'awaiting_input' | 'completed' | 'failed' | 'stopped' | 'interrupted'
 export type BuilderRunKind = 'init' | 'update' | 'new_route' | 'generate_page' | 'redesign'
 export type SkeletonPhase =
@@ -221,6 +221,21 @@ export type Message = {
   completedAt?: string
   updatedAt?: string
   createdAt: string
+}
+
+export type RunnerMessage = {
+  id: string
+  runId: string
+  projectId: string
+  role: MessageRole
+  content: string
+  kind?: AgentMessageKind
+  processingStatus: MessageProcessingStatus
+  metadata?: AgentQuestionMetadata | null
+  providerResponseId?: string
+  errorMessage?: string
+  createdAt: string
+  updatedAt?: string
 }
 
 export type MessageCursor = {
@@ -460,6 +475,26 @@ export interface ProjectMessageRepository {
   getMessage(projectId: string, messageId: string, userId?: string): Promise<Message | undefined>
   listMessages(projectId: string, userId?: string, cursor?: MessageCursor): Promise<MessagePage>
   listMessagesByRunId(runId: string, userId?: string): Promise<Message[]>
+}
+
+export interface RunnerMessageRepository {
+  saveRunnerMessage(message: RunnerMessage): Promise<RunnerMessage>
+  updateRunnerMessage(
+    id: string,
+    updates: Partial<
+      Pick<
+        RunnerMessage,
+        | 'content'
+        | 'kind'
+        | 'processingStatus'
+        | 'metadata'
+        | 'providerResponseId'
+        | 'errorMessage'
+        | 'updatedAt'
+      >
+    >
+  ): Promise<RunnerMessage | undefined>
+  listRunnerMessagesByRunId(runId: string): Promise<RunnerMessage[]>
 }
 
 export interface ProjectFileNodeRepository {

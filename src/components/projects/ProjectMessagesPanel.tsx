@@ -10,6 +10,8 @@ import { SkeletonMessageBubble } from "./SkeletonMessageBubble";
 
 type ProjectMessagesPanelProps = {
   messages: Message[];
+  runnerMessages?: Record<string, Message[]>;
+  onExpandRunner?: (runId: string) => void;
   activeRunId?: string | null;
   skeleton?: SkeletonState | null;
   loading?: boolean;
@@ -105,6 +107,8 @@ function formatDayDivider(iso: string): string {
 
 export function ProjectMessagesPanel({
   messages,
+  runnerMessages,
+  onExpandRunner,
   activeRunId,
   skeleton,
   loading = false,
@@ -263,6 +267,12 @@ export function ProjectMessagesPanel({
                   onSelectOption={onSelectOption}
                   onPlanAction={onPlanAction}
                   onSubmitFreeText={onSubmitFreeText}
+                  runnerMessages={
+                    item.message.runId
+                      ? runnerMessages?.[item.message.runId]
+                      : undefined
+                  }
+                  onExpandRunner={onExpandRunner}
                   planAwaitingReview={
                     item.message.kind === "plan" &&
                     awaitingPlanReviewRunId !== undefined &&
@@ -287,6 +297,8 @@ export function ProjectMessagesPanel({
                       onSelectOption={onSelectOption}
                       onPlanAction={onPlanAction}
                       onSubmitFreeText={onSubmitFreeText}
+                      runnerMessages={runnerMessages?.[item.runId]}
+                      onExpandRunner={onExpandRunner}
                       planAwaitingReview={
                         message.kind === "plan" &&
                         awaitingPlanReviewRunId !== undefined &&

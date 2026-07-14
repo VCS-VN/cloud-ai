@@ -28,6 +28,7 @@ describe("builder run terminal persistence", () => {
       "run-1",
       "user-1",
       "completed",
+      "en",
     );
 
     expect(runStoreUpdate).not.toHaveBeenCalled();
@@ -58,6 +59,7 @@ describe("builder run terminal persistence", () => {
       "run-1",
       "user-1",
       "completed",
+      "en",
     );
 
     expect(updateProjectProcessingState).toHaveBeenCalledWith(

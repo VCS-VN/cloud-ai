@@ -25,6 +25,7 @@ type StreamAction =
   | { kind: "prepend"; messages: Message[] }
   | { kind: "optimistic"; userMessage: Message }
   | { kind: "rollback"; tempId: string }
+  | { kind: "set-runner-messages"; runId: string; messages: Message[] }
   | { kind: "stopping" };
 
 function streamActionReducer(state: ChatUIState, action: StreamAction): ChatUIState {
@@ -46,6 +47,12 @@ function streamActionReducer(state: ChatUIState, action: StreamAction): ChatUISt
         ...createInitialChatState(preserveSelectedOptions(action.messages, state.messages)),
         runtime: state.runtime,
         activeRun: state.activeRun,
+        // Preserve live-streamed runner sub-messages across the async history
+        // fetch. Like activeRun, `run.started` + inner message.created events
+        // can arrive BEFORE this reset resolves; wiping runnerMessages here
+        // would drop every inner step captured so far, leaving the expanded
+        // card empty until a reconnect re-streams them.
+        runnerMessages: state.runnerMessages,
         lastRunOutcome: state.lastRunOutcome,
       };
     case "clear-run":
@@ -73,6 +80,21 @@ function streamActionReducer(state: ChatUIState, action: StreamAction): ChatUISt
         messages: state.messages.filter((m) => m.id !== action.tempId),
         activeRun: null,
       };
+    case "set-runner-messages": {
+      // Lazy-load result for an expanded runner card. Live SSE sub-messages
+      // already in state win (they're the freshest for an in-flight run); the
+      // fetched rows fill in the rest. Keyed by runId.
+      const live = state.runnerMessages[action.runId] ?? [];
+      const liveIds = new Set(live.map((m) => m.id));
+      const merged = [
+        ...action.messages.filter((m) => !liveIds.has(m.id)),
+        ...live,
+      ].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      return {
+        ...state,
+        runnerMessages: { ...state.runnerMessages, [action.runId]: merged },
+      };
+    }
     case "stopping":
       return state.activeRun
         ? {
@@ -453,12 +475,38 @@ export function useChatStream({
     [],
   );
 
+  // Lazy-load a run's inner sub-messages (reasoning/agent_message/answer) from
+  // runner_messages when the user expands the runner card. Live runs already
+  // hold their inner messages in state from the SSE stream; this fills in
+  // archived runs whose inner steps were never streamed to this client.
+  const fetchRunnerMessages = useCallback(
+    async (runId: string): Promise<void> => {
+      try {
+        const resp = await fetch(
+          `/api/projects/${projectId}/builder-runs/${runId}/runner-messages`,
+        );
+        if (!resp.ok) return;
+        const json = (await resp.json().catch(() => null)) as
+          | { ok: true; messages: Message[] }
+          | { ok: false }
+          | null;
+        if (!json || !("ok" in json) || !json.ok) return;
+        dispatch({ kind: "set-runner-messages", runId, messages: json.messages });
+      } catch {
+        // Best-effort — a fetch miss leaves the card showing whatever live
+        // inner messages already streamed in.
+      }
+    },
+    [projectId],
+  );
+
   return {
     state,
     sendPrompt,
     stopRun,
     retryRun,
     submitAnswer,
+    fetchRunnerMessages,
     // Compat:
     startOptimistic,
     rollbackOptimistic,

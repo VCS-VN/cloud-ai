@@ -83,6 +83,9 @@ describe("agent-event-reducer selected answer persistence", () => {
   });
 
   it("collapses duplicate message.created events with the same id", () => {
+    // answer is a runner-inner kind — it lands in runnerMessages keyed by
+    // runId (revealed on runner-card expand), never as a top-level chat row.
+    // The dedup-by-id invariant still holds, just in that collection.
     const initial = createInitialChatState();
     const first = chatStateReducer(initial, {
       type: "message.created",
@@ -106,8 +109,9 @@ describe("agent-event-reducer selected answer persistence", () => {
       metadata: null,
     });
 
-    expect(next.messages).toHaveLength(1);
-    expect(next.messages[0]).toMatchObject({
+    expect(next.messages).toHaveLength(0);
+    expect(next.runnerMessages["run-1"]).toHaveLength(1);
+    expect(next.runnerMessages["run-1"][0]).toMatchObject({
       id: "msg-run-1-answer",
       content: "Final answer",
     });

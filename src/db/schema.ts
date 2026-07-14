@@ -5,6 +5,7 @@ export * from "./schema/project-revisions.schema";
 export * from "./schema/generation-records.schema";
 export * from "./schema/preview-tokens.schema";
 export * from "./schema/project-messages.schema";
+export * from "./schema/runner-messages.schema";
 export * from "./schema/project-file-nodes.schema";
 export * from "./schema/project-states.schema";
 export * from "./schema/agent-runs.schema";

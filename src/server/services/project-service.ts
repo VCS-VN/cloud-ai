@@ -28,6 +28,7 @@ import type {
   ProjectMessageRepository,
   ProjectRepository,
   ProjectSettingsInput,
+  RunnerMessageRepository,
 } from "@/shared/project-types";
 
 /**
@@ -112,6 +113,7 @@ export class ProjectService {
     private readonly runtimeOrchestrator?: RuntimeOrchestrator,
     private readonly runStore?: ProjectRunStore,
     private readonly agentRunRepository?: PgAgentRunRepository,
+    private readonly runnerMessageRepository?: RunnerMessageRepository,
   ) {
     this.workspaceService = workspaceService ?? new ProjectWorkspaceService(fileNodeRepository);
   }
@@ -251,6 +253,7 @@ export class ProjectService {
                 projectRepository: this.projectRepository,
                 runStore: this.runStore,
                 agentRunRepository: this.agentRunRepository,
+                runnerMessageRepository: this.runnerMessageRepository,
               }
             : undefined,
         });

@@ -64,6 +64,13 @@
       "when": 1783425611436,
       "tag": "0008_worried_the_hand",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784007967813,
+      "tag": "0009_curious_william_stryker",
+      "breakpoints": true
     }
   ]
 }

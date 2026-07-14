@@ -26,6 +26,11 @@ export type DevRuntimeUIState = {
 
 export type ChatUIState = {
   messages: Message[];
+  // Inner sub-messages of a run (reasoning / agent_message / answer), keyed by
+  // runId. These are the steps revealed when the user expands the runner card;
+  // they never render as top-level chat bubbles. Populated live from the SSE
+  // stream and lazy-loaded from runner_messages on expand.
+  runnerMessages: Record<string, Message[]>;
   activeRun: RunUIState | null;
   runtime: DevRuntimeUIState;
   // Terminal outcome of the most recently cleared run. Lets the route decide
@@ -33,6 +38,18 @@ export type ChatUIState = {
   // a new run starts.
   lastRunOutcome: "completed" | "failed" | "stopped" | null;
 };
+
+// Kinds that live inside the runner card (runner_messages), not as top-level
+// chat bubbles. Mirrors the server-side routing in persistAgentMessage.
+const RUNNER_INNER_KINDS: ReadonlySet<string> = new Set([
+  "reasoning",
+  "agent_message",
+  "answer",
+]);
+
+function isRunnerInnerKind(kind: string | undefined): boolean {
+  return kind !== undefined && RUNNER_INNER_KINDS.has(kind);
+}
 
 const INITIAL_RUNTIME: DevRuntimeUIState = {
   status: "idle",
@@ -49,7 +66,57 @@ const INITIAL_RUNTIME: DevRuntimeUIState = {
 };
 
 export function createInitialChatState(messages: Message[] = []): ChatUIState {
-  return { messages, activeRun: null, runtime: { ...INITIAL_RUNTIME }, lastRunOutcome: null };
+  return {
+    messages,
+    runnerMessages: {},
+    activeRun: null,
+    runtime: { ...INITIAL_RUNTIME },
+    lastRunOutcome: null,
+  };
+}
+
+function upsertRunnerMessage(
+  runnerMessages: Record<string, Message[]>,
+  message: Message,
+): Record<string, Message[]> {
+  const runId = message.runId;
+  if (!runId) return runnerMessages;
+  const existing = runnerMessages[runId] ?? [];
+  const idx = existing.findIndex((m) => m.id === message.id);
+  const next =
+    idx >= 0
+      ? existing.map((m, i) => (i === idx ? message : m))
+      : [...existing, message];
+  return { ...runnerMessages, [runId]: next };
+}
+
+// Patch a runner sub-message by id. The delta/completed events don't carry the
+// runId of the containing bucket, so scan every run for the matching message —
+// ids are unique across runs (msg-${runId}-...), so at most one bucket matches.
+function patchRunnerMessage(
+  runnerMessages: Record<string, Message[]>,
+  messageId: string,
+  patch: Partial<Message>,
+): Record<string, Message[]> {
+  for (const [runId, messages] of Object.entries(runnerMessages)) {
+    const idx = messages.findIndex((m) => m.id === messageId);
+    if (idx < 0) continue;
+    const next = [...messages];
+    next[idx] = { ...next[idx], ...patch };
+    return { ...runnerMessages, [runId]: next };
+  }
+  return runnerMessages;
+}
+
+function findRunnerMessage(
+  runnerMessages: Record<string, Message[]>,
+  messageId: string,
+): Message | undefined {
+  for (const messages of Object.values(runnerMessages)) {
+    const found = messages.find((m) => m.id === messageId);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 export const CLIENT_SKELETON_LABELS: Record<SkeletonPhase, string> = {
@@ -127,6 +194,28 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
       };
 
     case "message.created": {
+      // Inner steps (reasoning/agent_message/answer) belong to the runner card,
+      // not the top-level chat. Route them into runnerMessages keyed by runId so
+      // the collapsible card can reveal them on expand. plan/agent_question/error
+      // stay top-level via the normal messages path below.
+      if (isRunnerInnerKind(event.kind)) {
+        const message: Message = {
+          id: event.messageId,
+          projectId: "",
+          role: "agent",
+          kind: event.kind,
+          runId: event.runId,
+          content: event.content,
+          status: "completed",
+          processingStatus: event.processingStatus,
+          createdAt: event.createdAt,
+          metadata: event.metadata ?? null,
+        };
+        return {
+          ...state,
+          runnerMessages: upsertRunnerMessage(state.runnerMessages, message),
+        };
+      }
       const existing = state.messages.find((m) => m.id === event.messageId);
       // SSE replay (reconnect, tab refocus, StrictMode double-mount) re-emits
       // every buffered event including the original agent_question. If the
@@ -170,12 +259,18 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
       // (sanitizeAgentText / composeAnswerMessage). Re-run the same
       // detectors here so a code identifier can't leak mid-stream even if
       // this event type is wired up to a live-token path in the future.
-      const existing = state.messages.find((m) => m.id === event.messageId);
+      const existing =
+        state.messages.find((m) => m.id === event.messageId) ??
+        findRunnerMessage(state.runnerMessages, event.messageId);
       const raw = (existing?.content ?? "") + event.delta;
       const content = stripUnsafeContent(raw);
       return {
         ...state,
         messages: patchMessage(state.messages, event.messageId, {
+          content,
+          processingStatus: "streaming",
+        }),
+        runnerMessages: patchRunnerMessage(state.runnerMessages, event.messageId, {
           content,
           processingStatus: "streaming",
         }),
@@ -186,6 +281,10 @@ export function chatStateReducer(state: ChatUIState, event: RunStreamEvent): Cha
       return {
         ...state,
         messages: patchMessage(state.messages, event.messageId, {
+          content: event.content,
+          processingStatus: "completed",
+        }),
+        runnerMessages: patchRunnerMessage(state.runnerMessages, event.messageId, {
           content: event.content,
           processingStatus: "completed",
         }),

@@ -1147,6 +1147,8 @@ export function ProjectDetailPage() {
                   <div className="min-h-0 flex-1 overflow-hidden">
                     <ProjectMessagesPanel
                       messages={messages}
+                      runnerMessages={chatState.runnerMessages}
+                      onExpandRunner={agentStream.fetchRunnerMessages}
                       activeRunId={chatState.activeRun?.runId ?? null}
                       skeleton={
                         chatState.activeRun?.skeleton ??

@@ -26,6 +26,7 @@ import { ProjectRunService } from "@/server/services/project-run-service";
 import { getDb } from "@/db/client";
 import { PgProjectFileNodeRepository } from "@/server/repositories/file-node-repository";
 import { PgProjectMessageRepository } from "@/server/repositories/message-repository";
+import { PgRunnerMessageRepository } from "@/server/repositories/runner-message-repository";
 import { PgProjectRepository } from "@/server/repositories/project-repository";
 import { PgAgentRunRepository } from "@/server/repositories/agent-run-repository";
 import { PgProjectSnapshotRepository } from "@/server/repositories/project-snapshot-repository";
@@ -127,6 +128,7 @@ export async function getProjectServices() {
   const db = getDb();
   const projectRepo = new PgProjectRepository(db);
   const messageRepo = new PgProjectMessageRepository(db);
+  const runnerMessageRepo = new PgRunnerMessageRepository(db);
   const fileNodeRepo = new PgProjectFileNodeRepository(db);
   const projectStateRepo = new PgProjectStateRepository(db);
   const agentRunRepo = new PgAgentRunRepository(db);
@@ -182,11 +184,12 @@ export async function getProjectServices() {
     startPreviewRouterOnce({ runtimeOrchestrator, tokenService: previewTokenService, publicHost: previewRuntimeConfig.publicHost! });
   }
   presenceService.setRuntimeOrchestrator(runtimeOrchestrator);
-  const projectService = new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore, runtimeService, envWriter, runtimeOrchestrator, runStore, agentRunRepo);
+  const projectService = new ProjectService(projectRepo, messageRepo, fileNodeRepo, undefined, processManager, projectStateStore, runtimeService, envWriter, runtimeOrchestrator, runStore, agentRunRepo, runnerMessageRepo);
 
   return {
     projectService,
     projectRepository: projectRepo,
+    runnerMessageRepository: runnerMessageRepo,
     projectStateStore,
     previewTokenService,
     projectRunService: new ProjectRunService(projectRepo, runStore),

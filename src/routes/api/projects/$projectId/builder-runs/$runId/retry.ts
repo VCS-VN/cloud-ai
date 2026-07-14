@@ -138,6 +138,7 @@ export const Route = createFileRoute(
             projectRepository,
             runStore,
             agentRunRepository: services.projectService["agentRunRepository"],
+            runnerMessageRepository: services.runnerMessageRepository,
           },
         });
 

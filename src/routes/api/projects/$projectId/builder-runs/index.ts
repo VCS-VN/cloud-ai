@@ -148,6 +148,7 @@ export const Route = createFileRoute(
             projectRepository: services.projectService["projectRepository"],
             runStore: services.chatHistoryService.runStore,
             agentRunRepository: services.projectService["agentRunRepository"],
+            runnerMessageRepository: services.runnerMessageRepository,
           },
         });
 
