@@ -124,15 +124,13 @@ function HomeAuthGate() {
                 from the Merchant Dashboard so your session carries over
                 automatically.
               </p>
-              {merchantDashboardUrl ? (
-                <a
-                  href={merchantDashboardUrl}
-                  className="flex h-11 items-center justify-center gap-2 rounded-xl bg-ink text-ui-sm font-medium text-paper transition-colors duration-base hover:bg-ink/90"
-                >
-                  Open Merchant Dashboard
-                  <ExternalLink aria-hidden="true" size={14} />
-                </a>
-              ) : null}
+              <a
+                href={"https://partner.monmi.au/"}
+                className="flex h-11 items-center justify-center gap-2 rounded-xl bg-ink text-ui-sm font-medium text-paper transition-colors duration-base hover:bg-ink/90"
+              >
+                Open Merchant Dashboard
+                <ExternalLink aria-hidden="true" size={14} />
+              </a>
             </div>
           )}
 
