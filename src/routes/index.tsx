@@ -85,7 +85,9 @@ function HomeAuthGate() {
               </h1>
               <p className="mx-auto mb-8 max-w-sm text-ui-sm leading-relaxed text-muted md:text-[15px]">
                 Your account is ready. You will be redirected in{" "}
-                <span className="font-mono font-medium text-ink">{countdown}</span>{" "}
+                <span className="font-mono font-medium text-ink">
+                  {countdown}
+                </span>{" "}
                 seconds.
               </p>
               <Link
@@ -118,7 +120,9 @@ function HomeAuthGate() {
                 Open Cloud AI from the Merchant Dashboard.
               </h1>
               <p className="mx-auto mb-8 max-w-sm text-ui-sm leading-relaxed text-muted md:text-[15px]">
-                Cloud AI is an internal builder for your Monmi store. Launch it from the Merchant Dashboard so your session carries over automatically.
+                Cloud AI is an internal builder for your Monmi store. Launch it
+                from the Merchant Dashboard so your session carries over
+                automatically.
               </p>
               {merchantDashboardUrl ? (
                 <a
