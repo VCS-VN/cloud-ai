@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { ExternalLink } from "lucide-react";
 import { getCurrentUser } from "@/server/functions/auth";
+
+const merchantDashboardUrl =
+  import.meta.env.VITE_MERCHANT_DASHBOARD_URL?.trim() ?? "";
 
 export const Route = createFileRoute("/")({
   loader: async () => {
@@ -53,9 +57,19 @@ function HomeAuthGate() {
           </span>
           <span className="font-semibold tracking-tight">Cloud AI</span>
         </Link>
-        <span className="text-ui-sm text-muted">
-          Open from Merchant Dashboard
-        </span>
+        {merchantDashboardUrl ? (
+          <a
+            href={merchantDashboardUrl}
+            className="inline-flex items-center gap-1.5 text-ui-sm font-medium text-muted transition-colors duration-base hover:text-ink"
+          >
+            Merchant Dashboard
+            <ExternalLink aria-hidden="true" size={13} />
+          </a>
+        ) : (
+          <span className="text-ui-sm text-muted">
+            Open from Merchant Dashboard
+          </span>
+        )}
       </header>
 
       <main className="relative z-10 flex min-h-[calc(100vh-56px)] items-center justify-center px-5 py-10">
@@ -106,6 +120,15 @@ function HomeAuthGate() {
               <p className="mx-auto mb-8 max-w-sm text-ui-sm leading-relaxed text-muted md:text-[15px]">
                 Cloud AI is an internal builder for your Monmi store. Launch it from the Merchant Dashboard so your session carries over automatically.
               </p>
+              {merchantDashboardUrl ? (
+                <a
+                  href={merchantDashboardUrl}
+                  className="flex h-11 items-center justify-center gap-2 rounded-xl bg-ink text-ui-sm font-medium text-paper transition-colors duration-base hover:bg-ink/90"
+                >
+                  Open Merchant Dashboard
+                  <ExternalLink aria-hidden="true" size={14} />
+                </a>
+              ) : null}
             </div>
           )}
 
