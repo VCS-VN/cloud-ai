@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { agentRuns, projectToolExecutionLogs } from "@/db/schema";
 import type * as schema from "@/db/schema";
@@ -102,14 +102,31 @@ export type ReconcileOrphanRunsResult = {
 export class PgAgentRunRepository {
   constructor(private readonly db: AgentRunDatabase) {}
 
-  async save(run: AgentRun): Promise<AgentRun> {
+  async create(run: AgentRun): Promise<AgentRun> {
     const values = toValues(run);
     const [row] = await this.db
       .insert(agentRuns)
       .values(values)
-      .onConflictDoUpdate({ target: agentRuns.id, set: { ...values, id: undefined, createdAt: undefined } })
       .returning();
     return toRun(row);
+  }
+
+  async updateOwned(
+    run: AgentRun,
+    userId: string,
+    expectedStatuses: readonly AgentRunStatus[],
+  ): Promise<AgentRun | undefined> {
+    const values = toValues(run);
+    const [row] = await this.db
+      .update(agentRuns)
+      .set({ ...values, id: undefined, userId: undefined, createdAt: undefined })
+      .where(and(
+        eq(agentRuns.id, run.id),
+        eq(agentRuns.userId, userId),
+        inArray(agentRuns.status, [...expectedStatuses]),
+      ))
+      .returning();
+    return row ? toRun(row) : undefined;
   }
 
   async get(id: string, userId?: string): Promise<AgentRun | undefined> {
@@ -152,57 +169,80 @@ export class PgAgentRunRepository {
 
   async appendProgressTimelineEvent(
     runId: string,
+    userId: string,
     event: AgentRunProgressTimelineEvent,
-  ): Promise<void> {
-    const [row] = await this.db.select().from(agentRuns).where(eq(agentRuns.id, runId));
-    if (!row) return;
-    const existing = (row.progressTimeline as AgentRunProgressTimelineEvent[] | null) ?? [];
-    // todo_snapshot carries the full flattened todo list on every update, so
-    // only the latest snapshot matters for archived replay. Drop prior
-    // todo_snapshot entries before appending the new one to keep the timeline
-    // bounded and avoid replaying stale intermediate lists.
-    const filtered =
-      event.kind === "todo_snapshot"
-        ? existing.filter((item) => item.kind !== "todo_snapshot")
-        : existing;
-    const next = [...filtered, event];
-    const trimmed =
-      next.length > MAX_PROGRESS_TIMELINE_EVENTS
-        ? next.slice(next.length - MAX_PROGRESS_TIMELINE_EVENTS)
-        : next;
-    await this.db
-      .update(agentRuns)
-      .set({ progressTimeline: trimmed, updatedAt: new Date() })
-      .where(eq(agentRuns.id, runId));
+  ): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const ownershipFilter = and(eq(agentRuns.id, runId), eq(agentRuns.userId, userId));
+      const [row] = await tx.select().from(agentRuns).where(ownershipFilter).for("update");
+      if (!row) return false;
+      const existing = (row.progressTimeline as AgentRunProgressTimelineEvent[] | null) ?? [];
+      const filtered =
+        event.kind === "todo_snapshot"
+          ? existing.filter((item) => item.kind !== "todo_snapshot")
+          : existing;
+      const next = [...filtered, event];
+      const trimmed =
+        next.length > MAX_PROGRESS_TIMELINE_EVENTS
+          ? next.slice(next.length - MAX_PROGRESS_TIMELINE_EVENTS)
+          : next;
+      const updated = await tx
+        .update(agentRuns)
+        .set({ progressTimeline: trimmed, updatedAt: new Date() })
+        .where(ownershipFilter)
+        .returning({ id: agentRuns.id });
+      return updated.length === 1;
+    });
   }
 
-  async setPlanPhase(runId: string, planPhase: AgentRunPlanPhase | null): Promise<void> {
-    await this.db
+  async setPlanPhase(
+    runId: string,
+    userId: string,
+    planPhase: AgentRunPlanPhase | null,
+    expectedStatuses: readonly AgentRunStatus[],
+  ): Promise<boolean> {
+    const updated = await this.db
       .update(agentRuns)
       .set({ planPhase, updatedAt: new Date() })
-      .where(eq(agentRuns.id, runId));
+      .where(and(
+        eq(agentRuns.id, runId),
+        eq(agentRuns.userId, userId),
+        inArray(agentRuns.status, [...expectedStatuses]),
+      ))
+      .returning({ id: agentRuns.id });
+    return updated.length === 1;
   }
 
   async setClarificationSnapshot(
     runId: string,
+    userId: string,
     snapshot: AgentRunClarificationSnapshot | null,
-  ): Promise<void> {
-    await this.db
+    expectedStatuses: readonly AgentRunStatus[],
+  ): Promise<boolean> {
+    const updated = await this.db
       .update(agentRuns)
       .set({ clarificationSnapshot: snapshot, updatedAt: new Date() })
-      .where(eq(agentRuns.id, runId));
+      .where(and(
+        eq(agentRuns.id, runId),
+        eq(agentRuns.userId, userId),
+        inArray(agentRuns.status, [...expectedStatuses]),
+      ))
+      .returning({ id: agentRuns.id });
+    return updated.length === 1;
   }
 
   async setStatus(
     runId: string,
+    userId: string,
     status: AgentRunStatus,
+    expectedStatuses: readonly AgentRunStatus[],
     failureCode?: AgentRunFailureCode,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const completedAt =
       status === "completed" || status === "failed" || status === "stopped" || status === "interrupted"
         ? new Date()
         : null;
-    await this.db
+    const updated = await this.db
       .update(agentRuns)
       .set({
         status,
@@ -210,14 +250,31 @@ export class PgAgentRunRepository {
         completedAt: completedAt ?? undefined,
         updatedAt: new Date(),
       })
-      .where(eq(agentRuns.id, runId));
+      .where(and(
+        eq(agentRuns.id, runId),
+        eq(agentRuns.userId, userId),
+        inArray(agentRuns.status, [...expectedStatuses]),
+      ))
+      .returning({ id: agentRuns.id });
+    return updated.length === 1;
   }
 
-  async setKind(runId: string, kind: AgentRunKind): Promise<void> {
-    await this.db
+  async setKind(
+    runId: string,
+    userId: string,
+    kind: AgentRunKind,
+    expectedStatuses: readonly AgentRunStatus[],
+  ): Promise<boolean> {
+    const updated = await this.db
       .update(agentRuns)
       .set({ kind, updatedAt: new Date() })
-      .where(eq(agentRuns.id, runId));
+      .where(and(
+        eq(agentRuns.id, runId),
+        eq(agentRuns.userId, userId),
+        inArray(agentRuns.status, [...expectedStatuses]),
+      ))
+      .returning({ id: agentRuns.id });
+    return updated.length === 1;
   }
 
   async reconcileOrphanRuns(input: {

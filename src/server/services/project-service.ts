@@ -138,15 +138,20 @@ export class ProjectService {
     model?: string,
   ): Promise<CreateProjectFromPromptResult> {
     const initialPrompt = assertPrompt(prompt);
+    if (!userId) {
+      return {
+        ok: false,
+        code: "episcloud_not_activated",
+        message: "Activate EpisCloud to run AI builds on your account.",
+      };
+    }
 
     // Block BEFORE creating the project row when the user hasn't activated Epis
     // Cloud — the codex init build authenticates against the user's Epis Cloud
     // key. Checking here (not just inside the dispatcher) avoids leaving an
     // orphaned project + message + run row stuck "processing".
     const { getAuthService } = await import("@/auth/auth-service");
-    const episCloudApiKey = userId
-      ? await getAuthService().getEpisCloudApiKeyForUserId(userId)
-      : null;
+    const episCloudApiKey = await getAuthService().getEpisCloudApiKeyForUserId(userId);
     if (!episCloudApiKey) {
       return {
         ok: false,

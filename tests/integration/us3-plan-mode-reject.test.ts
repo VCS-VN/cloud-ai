@@ -90,7 +90,7 @@ function makeFakeRepo() {
   const planPhases: unknown[] = [];
   return {
     planPhases,
-    setPlanPhase: vi.fn(async (_runId: string, phase: unknown) => {
+    setPlanPhase: vi.fn(async (_runId: string, _userId: string, phase: unknown) => {
       planPhases.push(phase);
     }),
     setClarificationSnapshot: vi.fn(async () => undefined),
@@ -113,7 +113,12 @@ describe("US3 — plan turn → reject flow", () => {
       stage: "plan_rejected",
       planMarkdown: "## plan markdown",
     });
-    expect(repo.setClarificationSnapshot).toHaveBeenCalledWith("run-1", null);
+    expect(repo.setClarificationSnapshot).toHaveBeenCalledWith(
+      "run-1",
+      "u",
+      null,
+      ["awaiting_input"],
+    );
   });
 
   it("plan turn that produces a file_change item is hard-rejected with blocked_request (T055 abort guard)", async () => {

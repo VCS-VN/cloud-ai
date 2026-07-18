@@ -95,10 +95,10 @@ function makeFakeRepo() {
   return {
     planPhases,
     snapshots,
-    setPlanPhase: vi.fn(async (_runId: string, phase: unknown) => {
+    setPlanPhase: vi.fn(async (_runId: string, _userId: string, phase: unknown) => {
       planPhases.push(phase);
     }),
-    setClarificationSnapshot: vi.fn(async (_runId: string, snap: unknown) => {
+    setClarificationSnapshot: vi.fn(async (_runId: string, _userId: string, snap: unknown) => {
       snapshots.push(snap);
     }),
   };

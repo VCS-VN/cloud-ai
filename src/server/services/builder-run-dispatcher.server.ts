@@ -455,10 +455,13 @@ export async function startBuilderRunForChat(
           outcome.persist,
         );
       }
-      if (ctxPersistence?.agentRunRepository && outcome.timeline) {
-        await persistTimeline(ctxPersistence.agentRunRepository, runId, outcome.timeline).catch(
-          () => undefined,
-        );
+      if (ctxPersistence?.agentRunRepository && outcome.timeline && input.userId) {
+        await persistTimeline(
+          ctxPersistence.agentRunRepository,
+          runId,
+          input.userId,
+          outcome.timeline,
+        ).catch(() => undefined);
       }
       if (ctxPersistence && outcome.terminal) {
         await persistRunTerminal(
@@ -858,10 +861,11 @@ async function finalizeRunnerCard(
 async function persistTimeline(
   agentRunRepository: PgAgentRunRepository,
   runId: string,
+  userId: string,
   directive: ProgressTimelineDirective,
 ): Promise<void> {
   const ev = directive as { kind: string; [k: string]: unknown };
-  await agentRunRepository.appendProgressTimelineEvent(runId, {
+  await agentRunRepository.appendProgressTimelineEvent(runId, userId, {
     at: Date.now(),
     ...ev,
   } as never);

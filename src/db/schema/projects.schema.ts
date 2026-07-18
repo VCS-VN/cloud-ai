@@ -12,6 +12,7 @@ export const projects = pgTable("projects", {
   processingStartedAt: timestamp("processing_started_at"),
   currentRevisionId: text("current_revision_id"),
   selectedStoreSlug: text("selected_store_slug"),
+  thumbnailUpdatedAt: timestamp("thumbnail_updated_at"),
   data: jsonb("data").notNull(),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),

@@ -118,14 +118,16 @@ export async function runPlanTurn(
 
   const planMarkdown = summary.finalResponse.trim();
   const planThreadId = thread.threadId ?? "";
-  if (deps.agentRunRepository) {
+  if (deps.agentRunRepository && ctx.userId) {
     const planPhase: AgentRunPlanPhase = {
       stage: "plan_ready",
       planMarkdown,
       planTurnDoneAt: Date.now(),
       planThreadId,
     };
-    await deps.agentRunRepository.setPlanPhase(ctx.runId, planPhase).catch(() => undefined);
+    await deps.agentRunRepository
+      .setPlanPhase(ctx.runId, ctx.userId, planPhase, ["streaming"])
+      .catch(() => undefined);
     const snapshot: AgentRunClarificationSnapshot = {
       questionType: "plan_review",
       planMarkdown,
@@ -133,7 +135,7 @@ export async function runPlanTurn(
       originalRunPrompt: ctx.userPrompt,
     };
     await deps.agentRunRepository
-      .setClarificationSnapshot(ctx.runId, snapshot)
+      .setClarificationSnapshot(ctx.runId, ctx.userId, snapshot, ["streaming", "awaiting_input"])
       .catch(() => undefined);
   }
 
@@ -170,27 +172,27 @@ export async function resolvePlan(
   planMarkdown: string,
   deps: PlanResolutionDeps,
 ): Promise<void> {
-  if (!deps.agentRunRepository) return;
+  if (!deps.agentRunRepository || !ctx.userId) return;
   if (resolution === "reject") {
     await deps.agentRunRepository
-      .setPlanPhase(ctx.runId, {
+      .setPlanPhase(ctx.runId, ctx.userId, {
         stage: "plan_rejected",
         planMarkdown,
         rejectedAt: Date.now(),
-      })
+      }, ["awaiting_input"])
       .catch(() => undefined);
     await deps.agentRunRepository
-      .setClarificationSnapshot(ctx.runId, null)
+      .setClarificationSnapshot(ctx.runId, ctx.userId, null, ["awaiting_input"])
       .catch(() => undefined);
     return;
   }
   await deps.agentRunRepository
-    .setPlanPhase(ctx.runId, {
+    .setPlanPhase(ctx.runId, ctx.userId, {
       stage: "executing",
       planMarkdown,
       executeThreadId: "",
       approvedAt: Date.now(),
-    })
+    }, ["awaiting_input"])
     .catch(() => undefined);
 }
 

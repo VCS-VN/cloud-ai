@@ -1,23 +1,3 @@
-import createDOMPurify from "dompurify";
-
-const SANITIZE_CONFIG = {
-  ALLOWED_TAGS: [
-    "h1",
-    "h2",
-    "h3",
-    "p",
-    "ul",
-    "ol",
-    "li",
-    "strong",
-    "em",
-    "code",
-    "pre",
-    "br",
-  ],
-  ALLOWED_ATTR: [],
-};
-
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -116,15 +96,6 @@ function markdownToHtml(markdown: string) {
   return html.join("");
 }
 
-function sanitizeHtml(html: string) {
-  if (typeof window === "undefined") {
-    return html;
-  }
-
-  const DOMPurify = createDOMPurify(window);
-  return DOMPurify.sanitize(html, SANITIZE_CONFIG);
-}
-
 export function dumprify(markdown: string) {
-  return sanitizeHtml(markdownToHtml(markdown));
+  return markdownToHtml(markdown);
 }

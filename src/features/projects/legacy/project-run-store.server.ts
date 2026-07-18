@@ -4,7 +4,7 @@ import type { AgentRun, AgentRunStatus, ProjectMessageRunState, ProjectToolExecu
 export type CreateAgentRunInput = {
   id?: string;
   projectId: string;
-  userId?: string;
+  userId: string;
   parentMessageId?: string;
   retryOfRunId?: string;
   userPrompt: string;
@@ -19,7 +19,7 @@ export class ProjectRunStore {
 
   async create(input: CreateAgentRunInput): Promise<AgentRun> {
     const now = new Date().toISOString();
-    return this.repository.save({
+    return this.repository.create({
       id: input.id ?? crypto.randomUUID(),
       projectId: input.projectId,
       userId: input.userId,
@@ -52,11 +52,22 @@ export class ProjectRunStore {
   }
 
   async update(run: AgentRun, updates: Partial<AgentRun>): Promise<AgentRun> {
-    return this.repository.save({
+    return this.updateOwned(run, updates, [run.status]);
+  }
+
+  private async updateOwned(
+    run: AgentRun,
+    updates: Partial<AgentRun>,
+    expectedStatuses: readonly AgentRunStatus[],
+  ): Promise<AgentRun> {
+    if (!run.userId) throw new Error("Agent run owner is required for mutation.");
+    const updated = await this.repository.updateOwned({
       ...run,
       ...updates,
       updatedAt: new Date().toISOString(),
-    });
+    }, run.userId, expectedStatuses);
+    if (!updated) throw new Error("Agent run mutation rejected by ownership or status guard.");
+    return updated;
   }
 
   async saveThinking(run: AgentRun, thinking: NonNullable<AgentRun["thinking"]>): Promise<AgentRun> {
@@ -72,28 +83,24 @@ export class ProjectRunStore {
   }
 
   async waitForClarification(run: AgentRun, updates: Partial<AgentRun> = {}): Promise<AgentRun> {
-    return this.repository.save({
-      ...run,
+    return this.updateOwned(run, {
       ...updates,
       thinking: updates.thinking ?? run.thinking,
       status: "awaiting_input",
       completedAt: undefined,
-      updatedAt: new Date().toISOString(),
-    });
+    }, ["streaming"]);
   }
 
   async complete(run: AgentRun, updates: Partial<AgentRun> = {}): Promise<AgentRun> {
     const now = new Date().toISOString();
-    return this.repository.save({
-      ...run,
+    return this.updateOwned(run, {
       ...updates,
       affectedFiles: updates.affectedFiles ?? run.affectedFiles,
       validationResult: updates.validationResult ?? run.validationResult,
       thinking: updates.thinking ?? run.thinking,
       status: "completed",
       completedAt: now,
-      updatedAt: now,
-    });
+    }, ["streaming", "awaiting_input"]);
   }
 
   async saveValidationStatus(run: AgentRun, validationResult: NonNullable<AgentRun["validationResult"]>): Promise<AgentRun> {
@@ -102,8 +109,7 @@ export class ProjectRunStore {
 
   async waitForHumanReview(run: AgentRun, input: { reason: string; affectedFiles?: string[] }): Promise<AgentRun> {
     const now = new Date().toISOString();
-    return this.repository.save({
-      ...run,
+    return this.updateOwned(run, {
       affectedFiles: input.affectedFiles ?? run.affectedFiles,
       status: "completed",
       completedAt: now,
@@ -112,8 +118,7 @@ export class ProjectRunStore {
         message: input.reason,
         recoverable: true,
       },
-      updatedAt: now,
-    });
+    }, ["streaming", "awaiting_input"]);
   }
 
   async saveMessageRunState(run: AgentRun, state: ProjectMessageRunState): Promise<AgentRun> {
@@ -130,19 +135,16 @@ export class ProjectRunStore {
 
   async stop(run: AgentRun, updates: Partial<AgentRun> = {}): Promise<AgentRun> {
     const now = new Date().toISOString();
-    return this.repository.save({
-      ...run,
+    return this.updateOwned(run, {
       ...updates,
       status: "stopped",
       completedAt: now,
-      updatedAt: now,
-    });
+    }, ["streaming", "awaiting_input"]);
   }
 
   async fail(run: AgentRun, error: NonNullable<AgentRun["error"]>, updates: Partial<AgentRun> = {}): Promise<AgentRun> {
     const now = new Date().toISOString();
-    return this.repository.save({
-      ...run,
+    return this.updateOwned(run, {
       ...updates,
       affectedFiles: updates.affectedFiles ?? run.affectedFiles,
       validationResult: updates.validationResult ?? run.validationResult,
@@ -150,7 +152,6 @@ export class ProjectRunStore {
       status: "failed",
       error,
       completedAt: now,
-      updatedAt: now,
-    });
+    }, ["streaming", "awaiting_input"]);
   }
 }

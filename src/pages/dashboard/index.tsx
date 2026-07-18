@@ -166,7 +166,7 @@ export function DashboardPage() {
         onToggle={() => setIsSidebarExpanded((current) => !current)}
       />
 
-      <main className="dashboard-layout-offset mx-auto max-w-[1280px] px-6 py-10 lg:px-8">
+      <main className="dashboard-layout-offset mx-auto max-w-[1440px] px-6 py-10 lg:px-8">
         <header className="mx-auto mb-12 max-w-[760px] pt-4 text-center">
           <p className="mb-3 font-mono text-ui-sm tracking-wide text-muted">
             {formatDashboardDate()}
