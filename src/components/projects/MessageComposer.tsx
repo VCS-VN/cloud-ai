@@ -295,7 +295,7 @@ export function MessageComposer({
   return (
     <form className="composer" onSubmit={handleSubmit}>
       {/* Top row: mode toggle + reasoning effort */}
-      <div className="flex items-center justify-between gap-2 border-b border-hairline/70 px-2.5 pb-1 pt-2">
+      <div className="composer-toolbar">
         <div
           role="tablist"
           aria-label="Mode"
@@ -327,7 +327,7 @@ export function MessageComposer({
           </Button>
         </div>
 
-        <div className="flex min-w-0 items-center gap-1">
+        <div className="composer-toolbar-controls">
           <ModelPicker
             selectedModel={selectedModel}
             disabled={sending || disabled}
@@ -344,7 +344,7 @@ export function MessageComposer({
               className="composer-effort-trigger shrink-0"
             >
               <Clock aria-hidden="true" size={12} className="shrink-0" />
-              <span className="hidden sm:inline">Reasoning:</span>{" "}
+              <span className="composer-effort-label">Reasoning:</span>{" "}
               <span className="text-ink">
                 {EFFORT_META[reasoningEffort].label}
               </span>

@@ -17,8 +17,8 @@ export type PreviewTokenState = {
 export const CHAT_WIDTH_KEY = "project-detail-chat-width";
 export const CHAT_VISIBLE_KEY = "project-detail-chat-visible";
 export const SELECTED_MODEL_KEY = "project-detail-selected-model";
-export const DEFAULT_CHAT_WIDTH = 420;
-export const MIN_CHAT_WIDTH = 320;
+export const DEFAULT_CHAT_WIDTH = 360;
+export const MIN_CHAT_WIDTH = 300;
 
 export const statusLabel: Record<Project["status"], string> = {
   0: "Inactive",
